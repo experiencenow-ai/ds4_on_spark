@@ -21,15 +21,17 @@ FINISH_REASONS = {"max_tokens", "stop_token", "logits_only", "error", "blocked"}
 CONSTRAINED_RATE_TOK_S = 629.183
 FULL_VOCAB_RATE_TOK_S = 260.973
 FINITE_LOGITS_ROWS_S = 631.672
-MISSING_PREFIX_KV_RUNTIME_HOOKS = (
-	"ds4_runtime_prefix_prepare",
-	"ds4_runtime_prefix_pin",
-	"ds4_runtime_prefix_fork",
-	"ds4_runtime_session_append",
-	"ds4_runtime_session_decode",
-	"ds4_runtime_session_release",
-	"ds4_runtime_prefix_release",
+RUNTIME_HOOK_FILE = "scripts/ds4_batch_generate.py"
+MISSING_PREFIX_KV_RUNTIME_HOOKS_BY_OPERATION = (
+	("prefix_prepare", "ds4_runtime_prefix_prepare"),
+	("prefix_pin", "ds4_runtime_prefix_pin"),
+	("prefix_fork", "ds4_runtime_prefix_fork"),
+	("session_append", "ds4_runtime_session_append"),
+	("session_decode", "ds4_runtime_session_decode"),
+	("session_release", "ds4_runtime_session_release"),
+	("prefix_release", "ds4_runtime_prefix_release"),
 )
+MISSING_PREFIX_KV_RUNTIME_HOOKS = tuple(hook for _, hook in MISSING_PREFIX_KV_RUNTIME_HOOKS_BY_OPERATION)
 
 
 class Ds4BatchGenerateError(ValueError):
@@ -329,12 +331,36 @@ def _validate_runtime_hook_status(errors: list[str], telemetry: dict[str, Any]) 
 	if telemetry.get("blocker_kind") != "missing_prefix_kv_runtime_hook":
 		return
 	_expect_string(errors, telemetry, "blocking_runtime_hook")
+	_expect_string(errors, telemetry, "blocking_runtime_file")
+	_expect_string(errors, telemetry, "blocking_runtime_function")
 	_expect_string_list(errors, telemetry, "missing_runtime_hooks")
 	hooks = telemetry.get("missing_runtime_hooks", [])
 	if isinstance(hooks, list):
 		missing = [hook for hook in MISSING_PREFIX_KV_RUNTIME_HOOKS if hook not in hooks]
 		if missing:
 			errors.append("missing_prefix_kv_runtime_hook must name all required prefix/session hooks")
+	_validate_missing_runtime_hook_details(errors, telemetry)
+
+
+def _validate_missing_runtime_hook_details(errors: list[str], telemetry: dict[str, Any]) -> None:
+	details = telemetry.get("missing_runtime_hook_details")
+	if not isinstance(details, list) or len(details) == 0:
+		errors.append("missing_prefix_kv_runtime_hook must include missing_runtime_hook_details")
+		return
+	by_hook = {str(item.get("api_hook")): item for item in details if isinstance(item, dict)}
+	for operation, hook in MISSING_PREFIX_KV_RUNTIME_HOOKS_BY_OPERATION:
+		detail = by_hook.get(hook)
+		if not isinstance(detail, dict):
+			errors.append(f"missing_runtime_hook_details must name {hook}")
+			continue
+		if detail.get("operation") != operation:
+			errors.append(f"{hook} detail operation must be {operation}")
+		if detail.get("file") != RUNTIME_HOOK_FILE:
+			errors.append(f"{hook} detail file must be {RUNTIME_HOOK_FILE}")
+		if detail.get("function") != hook:
+			errors.append(f"{hook} detail function must be {hook}")
+		if detail.get("status") != "missing":
+			errors.append(f"{hook} detail status must be missing")
 
 
 def validate_documents(objs: list[dict[str, Any]]) -> list[tuple[dict[str, Any], list[str]]]:
@@ -467,6 +493,19 @@ def _prefix_handle_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 	]
 
 
+def _missing_runtime_hook_details() -> list[dict[str, str]]:
+	return [
+		{
+			"operation": operation,
+			"api_hook": hook,
+			"file": RUNTIME_HOOK_FILE,
+			"function": hook,
+			"status": "missing",
+		}
+		for operation, hook in MISSING_PREFIX_KV_RUNTIME_HOOKS_BY_OPERATION
+	]
+
+
 def _build_missing_prefix_kv_runtime_result(request: dict[str, Any]) -> dict[str, Any]:
 	rows = request["rows"]
 	result_rows = [
@@ -527,7 +566,10 @@ def _build_missing_prefix_kv_runtime_result(request: dict[str, Any]) -> dict[str
 			"live_callable_status": "blocked",
 			"batch_generate_surface": "scripts/ds4_batch_generate",
 			"blocking_runtime_hook": "ds4_runtime_prefix_prepare",
+			"blocking_runtime_file": RUNTIME_HOOK_FILE,
+			"blocking_runtime_function": "ds4_runtime_prefix_prepare",
 			"missing_runtime_hooks": list(MISSING_PREFIX_KV_RUNTIME_HOOKS),
+			"missing_runtime_hook_details": _missing_runtime_hook_details(),
 			"blocker_kind": "missing_prefix_kv_runtime_hook",
 			"blocker_detail": (
 				"repo-owned callable runtime hook is missing for ds4_runtime_prefix_prepare, "

@@ -59,6 +59,22 @@ class PrefixKvTest(unittest.TestCase):
 		obj = prefix_kv.load_json(FIX / "session_decode_blocked_missing_runtime.example.json")
 		self.assertEqual(obj["runtime_hook"], "ds4_runtime_session_decode")
 
+	def test_all_required_prefix_kv_operations_have_exact_blocker_hooks(self) -> None:
+		cases = {
+			"prefix_prepare_blocked_missing_runtime.example.json": ("prefix_prepare", "ds4_runtime_prefix_prepare"),
+			"prefix_pin_blocked_missing_runtime.example.json": ("prefix_pin", "ds4_runtime_prefix_pin"),
+			"prefix_fork_blocked_missing_runtime.example.json": ("prefix_fork", "ds4_runtime_prefix_fork"),
+			"session_append_blocked_missing_runtime.example.json": ("session_append", "ds4_runtime_session_append"),
+			"session_decode_blocked_missing_runtime.example.json": ("session_decode", "ds4_runtime_session_decode"),
+			"session_release_blocked_missing_runtime.example.json": ("session_release", "ds4_runtime_session_release"),
+			"prefix_release_blocked_missing_runtime.example.json": ("prefix_release", "ds4_runtime_prefix_release"),
+		}
+		for fixture, (operation, hook) in cases.items():
+			with self.subTest(fixture=fixture):
+				obj = prefix_kv.load_json(FIX / fixture)
+				self.assertEqual(obj["operation"], operation)
+				self.assertEqual(obj["runtime_hook"], hook)
+
 
 if __name__ == "__main__":
 	unittest.main()
