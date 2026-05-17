@@ -105,8 +105,13 @@ class BatchGenerateTest(unittest.TestCase):
 		self.assertEqual(result["status"], "blocked")
 		self.assertEqual(result["telemetry"]["blocker_kind"], "missing_prefix_kv_runtime_hook")
 		self.assertEqual(result["telemetry"]["blocking_runtime_hook"], "ds4_runtime_prefix_prepare")
+		self.assertEqual(result["telemetry"]["blocking_runtime_file"], "scripts/ds4_batch_generate.py")
+		self.assertEqual(result["telemetry"]["blocking_runtime_function"], "ds4_runtime_prefix_prepare")
 		self.assertIn("ds4_runtime_prefix_pin", result["telemetry"]["missing_runtime_hooks"])
 		self.assertIn("ds4_runtime_session_decode", result["telemetry"]["missing_runtime_hooks"])
+		details = {item["api_hook"]: item for item in result["telemetry"]["missing_runtime_hook_details"]}
+		self.assertEqual(details["ds4_runtime_prefix_pin"]["file"], "scripts/ds4_batch_generate.py")
+		self.assertEqual(details["ds4_runtime_prefix_pin"]["function"], "ds4_runtime_prefix_pin")
 		self.assertFalse(result["telemetry"]["production_generation_eligible"])
 
 	def test_missing_prefix_runtime_hooks_block_production_eligibility(self) -> None:
@@ -118,6 +123,13 @@ class BatchGenerateTest(unittest.TestCase):
 		result["telemetry"]["blocker_detail"] = ""
 		errors = batch.validate_result(result, request)
 		self.assertTrue(any("missing_runtime_hooks" in error for error in errors))
+
+	def test_missing_prefix_runtime_hook_details_are_required(self) -> None:
+		request = batch.load_json(FIX / "live_smoke_b512_constrained_1tok_request.example.json")
+		result = copy.deepcopy(batch.load_json(FIX / "live_smoke_b512_constrained_1tok_result.example.json"))
+		result["telemetry"].pop("missing_runtime_hook_details")
+		errors = batch.validate_result(result, request)
+		self.assertTrue(any("missing_runtime_hook_details" in error for error in errors))
 
 	def test_live_smoke_mixed_modes_split_when_blocked(self) -> None:
 		result = batch.load_json(FIX / "live_smoke_mixed_output_modes_result.example.json")
