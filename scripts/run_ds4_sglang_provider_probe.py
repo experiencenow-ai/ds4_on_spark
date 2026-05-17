@@ -157,6 +157,18 @@ def _acquisition_attempts(args: argparse.Namespace) -> list[dict[str, Any]]:
     return attempts
 
 
+def _reachability_report_ref(path_text: str) -> dict[str, str] | None:
+    if not path_text:
+        return None
+    path = Path(path_text)
+    obj = json.loads(path.read_text(encoding="utf-8"))
+    return {
+        "path": path_text,
+        "sha256": str(obj.get("artifact_sha256", "")),
+        "format": str(obj.get("format", "")),
+    }
+
+
 def _benchmark_results(blocker_kind: str, blocker_detail: str) -> list[dict[str, Any]]:
     rows = []
     for case_id, batch_size, output_mode, recipe, mtp_enabled in CASE_DEFS:
@@ -221,6 +233,7 @@ def build_probe(args: argparse.Namespace) -> dict[str, Any]:
         "load_success": blocker_kind == "none",
         "api_health_status": _api_health_status(args, blocker_kind, blocker_detail),
         "acquisition_attempts": _acquisition_attempts(args),
+        "reachability_report_ref": _reachability_report_ref(args.reachability_report_path),
         "benchmark_results": _benchmark_results(blocker_kind, blocker_detail),
         "blocker_kind": blocker_kind,
         "blocker_detail": blocker_detail,
@@ -278,6 +291,7 @@ def main() -> int:
     parser.add_argument("--api-health-error-override", default="")
     parser.add_argument("--api-health-endpoint", default="http://127.0.0.1:30000/v1/chat/completions")
     parser.add_argument("--acquisition-attempt-json", action="append", default=[])
+    parser.add_argument("--reachability-report-path", default="")
     args = parser.parse_args()
     probe = build_probe(args)
     errors = validate_probe(probe)
