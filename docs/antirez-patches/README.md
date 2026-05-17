@@ -138,18 +138,19 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - makes the DeepSeek-shaped K=2 verifier the default path: preserve the current target hidden state, draft two future tokens from it, append `[target_token, draft0, draft1]`, and run one target suffix verifier over all three positions
     - captures prefix-1 and prefix-2 verifier frontiers, so a row0-only match can still commit `[target_token, draft0]` without replaying serial target decode
     - preloads the MTP sidecar before the decode timer so first-draft lazy tensor caching does not poison generation TPS
-    - uses the CUDA Q8 output-head top1 primitive by default for row0/row1 accept checking; row2 remains full logits for exact greedy continuation, and `DS4_MTP_ROW0_FULL_LOGITS=1` restores full-vocab verifier rows for A/B testing
+    - defaults row0/row1 verifier accept checks to full logits for exactness; `DS4_MTP_ROW0_TOP1_HEAD=1` enables the experimental CUDA Q8 top1 primitive for row0/row1, and `DS4_MTP_ROW0_FULL_LOGITS=1` remains a hard full-vocab override for A/B testing
     - carries the GPU-selected row2 continuation argmax into the next loop iteration, avoiding a CPU full-vocab argmax scan per accepted group
     - reads the already-materialized row2 logits only when trace/debug output needs host logits; the unsafe row2 no-readback escape hatch is intentionally absent because lazy readback is now tied to the valid pending continuation token instead of a free env knob
     - keeps the experimental row2 top1-only continuation path behind `DS4_MTP_ROW2_TOP1_CONT=1`; the measured experiment lowered acceptance, so it is not the default exact path
     - keeps partial-accept top1-only continuation behind `DS4_MTP_PARTIAL_TOP1_CONT=1`; the default still materializes exact continuation logits on partial accepts
     - stops the direct generation loop once `n_generated >= n_predict`, so multi-token commits do not run extra serial iterations after the requested output budget
     - uses top1-only MTP draft heads when draft logits are not requested; `DS4_MTP_DRAFT_FULL_LOGITS=1` restores full-vocab draft logits for diagnostics
+    - adds `DS4_MTP_SUFFIX_LOCAL_RAW=1` as a scoped diagnostic for K=2 MTP raw-cache isolation; it keeps verifier state exact while proving whether low acceptance comes from suffix-local MTP state or process/cache drift
     - adds `DS4_SUPPRESS_OUTPUT=1` for model-throughput benchmarks that still commit tokens but skip per-token CLI text rendering and stdout flush
     - keeps `DS4_MTP_SERIAL_SUFFIX=1` only as a diagnostic escape hatch for comparing against the older serial decode verifier
     - emits verifier invocation/position/head-row accounting; the intended fast path reports `verifier_calls=1`, `target_positions=3`, and `first_eval=0.000 ms` for full K=2 accepts
     - requires repeated timing evidence for direction-setting claims: build `ds4-mtp-timing-samples-v1` from at least 10 same-command samples before treating a K=2 t/s delta as stable
-    - provides `scripts/run_antirez_ds4_mtp_timing_samples_spark.sh` to run 10 baseline controls plus 10 MTP samples and emit a median comparison summary; the summary marks high-CV timing as `unstable` rather than treating a noisy median as a clean decision
+    - provides `DS4_MTP_BENCH_REPEATS=N` plus `scripts/run_antirez_ds4_mtp_timing_samples_spark.sh` so timing samples use one loaded-engine setup per phase and then repeat generation in-process; the summary marks high-CV timing as `unstable` rather than treating a noisy median as a clean decision
     - prototypes the next K=3 direct verifier first: `--mtp-draft 3` drafts three tokens, verifies `[target_token,draft0,draft1,draft2]` in one 4-row target suffix job, uses top1 rows 0-2 plus full continuation logits on row3, and reports `target_positions=4` on full accepts
     - adds a prefix-3 verifier frontier, so a row0+row1 K=3 partial accept can commit `[target_token,draft0,draft1]` and materialize row2 continuation logits without serial target replay
 

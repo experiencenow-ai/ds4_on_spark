@@ -21,12 +21,13 @@ single_runner="$repo_root/scripts/run_antirez_ds4_mtp_multitoken_acceptance_prob
 samples_builder="$repo_root/scripts/build_ds4_mtp_timing_samples.py"
 samples_summary_builder="$repo_root/scripts/build_ds4_mtp_timing_samples_summary.py"
 samples_validator="$repo_root/scripts/validate_ds4_mtp_timing_samples.py"
+repeat_splitter="$repo_root/scripts/split_ds4_mtp_repeat_samples.py"
 
 if [ "$SAMPLE_COUNT" -lt 10 ]; then
 	echo "SAMPLE_COUNT must be >= 10 for direction-setting timing evidence" 1>&2
 	exit 2
 fi
-if [ ! -x "$single_runner" ] || [ ! -r "$samples_builder" ] || [ ! -r "$samples_summary_builder" ] || [ ! -r "$samples_validator" ]; then
+if [ ! -x "$single_runner" ] || [ ! -r "$samples_builder" ] || [ ! -r "$samples_summary_builder" ] || [ ! -r "$samples_validator" ] || [ ! -r "$repeat_splitter" ]; then
 	echo "missing runner or timing-sample scripts under $repo_root" 1>&2
 	exit 3
 fi
@@ -36,39 +37,38 @@ baseline_root="$run_root/baseline"
 mtp_root="$run_root/mtp"
 mkdir -p "$baseline_root" "$mtp_root"
 
-run_phase_sample()
+run_phase_repeated()
 {
 	phase="$1"
-	idx="$2"
-	phase_root="$3"
-	phase_extra="$4"
-	gate_env="$5"
-	remote_env="$gate_env $REMOTE_COMMON_ENV $phase_extra N_PREDICT=$N_PREDICT MTP_DRAFT=$MTP_DRAFT CTX=$CTX SEED=$SEED PROMPT=$(printf "%s" "$PROMPT" | python3 -c 'import shlex,sys; print(shlex.quote(sys.stdin.read()))')"
-	echo "== $phase sample $idx/$SAMPLE_COUNT =="
-	OUT_ROOT="$phase_root" \
-	RUN_ID="$RUN_ID-$phase-$idx" \
+	phase_root="$2"
+	phase_extra="$3"
+	gate_env="$4"
+	combined_root="$phase_root/_combined"
+	rm -rf "$combined_root"
+	mkdir -p "$combined_root"
+	remote_env="$gate_env $REMOTE_COMMON_ENV $phase_extra DS4_MTP_BENCH_REPEATS=$SAMPLE_COUNT N_PREDICT=$N_PREDICT MTP_DRAFT=$MTP_DRAFT CTX=$CTX SEED=$SEED PROMPT=$(printf "%s" "$PROMPT" | python3 -c 'import shlex,sys; print(shlex.quote(sys.stdin.read()))')"
+	echo "== $phase repeated sample run 1x setup + $SAMPLE_COUNT generations =="
+	OUT_ROOT="$combined_root" \
+	RUN_ID="$RUN_ID-$phase-combined" \
 	MTP_DRAFT="$MTP_DRAFT" \
 	PROMPT="$PROMPT" \
 	REMOTE_ANTIREZ_DS4_MTP_ACCEPT_ENV="$remote_env" \
 	"$single_runner" "$target"
+	combined_dir="$(find "$combined_root" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)"
+	if [ "$combined_dir" = "" ]; then
+		echo "missing combined run dir for $phase under $combined_root" 1>&2
+		exit 4
+	fi
+	python3 "$repeat_splitter" \
+		--log "$combined_dir/remote_probe_stdout.txt" \
+		--log "$combined_dir/remote_probe_stderr.txt" \
+		--out-dir "$phase_root" \
+		--expected-count "$SAMPLE_COUNT" \
+		>"$phase_root/repeat_split_stdout.json"
 }
 
-i=1
-while [ "$i" -le "$SAMPLE_COUNT" ]; do
-	if [ "$i" -eq 1 ]; then
-		gate_env="$REMOTE_PREP_ENV"
-	else
-		gate_env="$REMOTE_RUN_ENV"
-	fi
-	run_phase_sample "baseline" "$i" "$baseline_root" "$REMOTE_BASELINE_EXTRA_ENV" "$gate_env"
-	i=$((i + 1))
-done
-
-i=1
-while [ "$i" -le "$SAMPLE_COUNT" ]; do
-	run_phase_sample "mtp" "$i" "$mtp_root" "$REMOTE_MTP_EXTRA_ENV" "$REMOTE_RUN_ENV"
-	i=$((i + 1))
-done
+run_phase_repeated "baseline" "$baseline_root" "$REMOTE_BASELINE_EXTRA_ENV" "$REMOTE_PREP_ENV"
+run_phase_repeated "mtp" "$mtp_root" "$REMOTE_MTP_EXTRA_ENV" "$REMOTE_RUN_ENV"
 
 baseline_report="$run_root/baseline_timing_samples.json"
 mtp_report="$run_root/mtp_timing_samples.json"
