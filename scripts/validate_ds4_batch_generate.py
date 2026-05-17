@@ -23,6 +23,7 @@ FULL_VOCAB_RATE_TOK_S = 260.973
 FINITE_LOGITS_ROWS_S = 631.672
 MISSING_PREFIX_KV_RUNTIME_HOOKS = (
 	"ds4_runtime_prefix_prepare",
+	"ds4_runtime_prefix_pin",
 	"ds4_runtime_prefix_fork",
 	"ds4_runtime_session_append",
 	"ds4_runtime_session_decode",
@@ -530,7 +531,8 @@ def _build_missing_prefix_kv_runtime_result(request: dict[str, Any]) -> dict[str
 			"blocker_kind": "missing_prefix_kv_runtime_hook",
 			"blocker_detail": (
 				"repo-owned callable runtime hook is missing for ds4_runtime_prefix_prepare, "
-				"ds4_runtime_prefix_fork, ds4_runtime_session_append, ds4_runtime_session_decode, "
+				"ds4_runtime_prefix_pin, ds4_runtime_prefix_fork, "
+				"ds4_runtime_session_append, ds4_runtime_session_decode, "
 				"ds4_runtime_session_release, and ds4_runtime_prefix_release; "
 				"scripts/ds4_batch_generate remains fixture-backed"
 			),

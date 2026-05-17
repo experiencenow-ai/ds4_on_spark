@@ -105,6 +105,7 @@ class BatchGenerateTest(unittest.TestCase):
 		self.assertEqual(result["status"], "blocked")
 		self.assertEqual(result["telemetry"]["blocker_kind"], "missing_prefix_kv_runtime_hook")
 		self.assertEqual(result["telemetry"]["blocking_runtime_hook"], "ds4_runtime_prefix_prepare")
+		self.assertIn("ds4_runtime_prefix_pin", result["telemetry"]["missing_runtime_hooks"])
 		self.assertIn("ds4_runtime_session_decode", result["telemetry"]["missing_runtime_hooks"])
 		self.assertFalse(result["telemetry"]["production_generation_eligible"])
 
@@ -123,6 +124,20 @@ class BatchGenerateTest(unittest.TestCase):
 		groups = {group["output_mode"]: group for group in result["telemetry"]["output_mode_groups"]}
 		self.assertEqual(groups["constrained_candidate"]["row_count"], 384)
 		self.assertEqual(groups["full_vocab"]["row_count"], 128)
+
+	def test_one_full_vocab_row_does_not_force_constrained_rows_to_full_vocab_rate(self) -> None:
+		request = copy.deepcopy(batch.load_json(FIX / "b512_constrained_numeric_request.example.json"))
+		request["request_id"] = "req_511_constrained_one_full_vocab"
+		request["rows"][511]["output_mode"] = "full_vocab"
+		request["rows"][511].pop("candidate_token_ids", None)
+		result = batch.build_result_from_request(request)
+		groups = {group["output_mode"]: group for group in result["telemetry"]["output_mode_groups"]}
+		self.assertEqual(groups["constrained_candidate"]["row_count"], 511)
+		self.assertEqual(groups["full_vocab"]["row_count"], 1)
+		self.assertEqual(groups["constrained_candidate"]["selected_rate_source"], "constrained_candidate_commit")
+		self.assertEqual(groups["full_vocab"]["selected_rate_source"], "full_vocab_output_head")
+		self.assertGreater(result["telemetry"]["constrained_commit_ms"], result["telemetry"]["full_vocab_commit_ms"])
+		self.assertLess(result["telemetry"]["full_vocab_commit_ms"], 4.0)
 
 	def test_live_smoke_multi_prefix_groups_are_not_rejected(self) -> None:
 		result = batch.load_json(FIX / "live_smoke_multi_prefix_constrained_result.example.json")
