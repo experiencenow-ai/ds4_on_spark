@@ -226,6 +226,17 @@ def validate_acquisition_attempts(attempts: Any, errors: list[str]) -> None:
             _err(errors, f"acquisition_attempts[{index}].error must be a string when present")
 
 
+def validate_artifact_ref(ref: Any, key: str, errors: list[str]) -> None:
+    if ref is None:
+        return
+    if not isinstance(ref, dict):
+        _err(errors, f"{key} must be an object when present")
+        return
+    for field in ("path", "sha256", "format"):
+        if not isinstance(ref.get(field), str) or not ref[field].strip():
+            _err(errors, f"{key}.{field} must be a non-empty string")
+
+
 def validate_probe(obj: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     for field in REQUIRED_FIELDS:
@@ -258,6 +269,7 @@ def validate_probe(obj: dict[str, Any]) -> list[str]:
         _err(errors, "load_success must be a bool")
     validate_api_health_status(obj.get("api_health_status"), errors)
     validate_acquisition_attempts(obj.get("acquisition_attempts"), errors)
+    validate_artifact_ref(obj.get("reachability_report_ref"), "reachability_report_ref", errors)
     if not isinstance(obj.get("benchmark_results"), list):
         _err(errors, "benchmark_results must be a list")
     else:

@@ -18,10 +18,11 @@ class SglangProviderProbeTest(unittest.TestCase):
     def test_probe_records_checkpoint_source_and_api_health(self) -> None:
         probe = validator.load_json(SPARK_FIXTURE)
         self.assertEqual(probe["checkpoint_source"]["status"], "blocked")
-        self.assertIn("reachability is blocked", probe["checkpoint_source"]["detail"])
+        self.assertIn("reachability report", probe["checkpoint_source"]["detail"])
         self.assertEqual(probe["api_health_status"]["status"], "blocked")
-        self.assertIn("No route to host", probe["api_health_status"]["error"])
+        self.assertIn("no Spark host accepted SSH", probe["api_health_status"]["error"])
         self.assertEqual(probe["hardware"]["status"], "unreachable")
+        self.assertEqual(probe["reachability_report_ref"]["format"], "ds4-spark-reachability-report-v1")
         self.assertGreaterEqual(len(probe["acquisition_attempts"]), 1)
         self.assertEqual(
             set(probe["custom_ds4_comparison"]),
@@ -123,6 +124,7 @@ class SglangProviderProbeTest(unittest.TestCase):
             api_health_error_override = ""
             api_health_endpoint = "http://127.0.0.1:30000/v1/chat/completions"
             acquisition_attempt_json: list[str] = []
+            reachability_report_path = ""
 
         probe = runner.build_probe(Args())
         self.assertIn(probe["blocker_kind"], {"sglang_not_installed", "model_checkpoint_missing"})
