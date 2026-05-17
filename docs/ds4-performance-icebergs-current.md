@@ -317,6 +317,15 @@ eligibility. It now also records `request_shape=b512_separate_rows`,
 full-vocab controls, row-token suffix probes, derived KV-loop artifacts, and any
 one-giant-prompt/B=1 shape.
 
+Production B512 batch status is still blocked, not fixture-successful:
+`scripts/ds4_batch_generate` exposes the `ds4-batch-generate-request-v1` /
+`ds4-batch-generate-result-v1` callable surface, but live routing is blocked
+until the repo exposes `ds4_runtime_prefix_prepare`,
+`ds4_runtime_prefix_fork`, `ds4_runtime_session_append`,
+`ds4_runtime_session_decode`, `ds4_runtime_session_release`, and
+`ds4_runtime_prefix_release`. Blocked live-smoke results now carry those hook
+names in `telemetry.missing_runtime_hooks`.
+
 Constrained candidate-set sweep:
 
 | Candidate tokens | Kind | Output tok/s | Commit ms | Runtime-enforced set | Token hash | Status |

@@ -47,6 +47,18 @@ class PrefixKvTest(unittest.TestCase):
 		errors = prefix_kv.validate_artifact(obj)
 		self.assertTrue(any("fragment KV concatenation" in error for error in errors))
 
+	def test_blocked_prefix_op_names_exact_runtime_hook(self) -> None:
+		obj = prefix_kv.load_json(FIX / "prefix_prepare_blocked_missing_runtime.example.json")
+		self.assertEqual(obj["runtime_hook"], "ds4_runtime_prefix_prepare")
+		obj = copy.deepcopy(obj)
+		obj["runtime_hook"] = "ds4_runtime_session_decode"
+		errors = prefix_kv.validate_artifact(obj)
+		self.assertTrue(any("runtime_hook must be ds4_runtime_prefix_prepare" in error for error in errors))
+
+	def test_blocked_session_decode_names_exact_runtime_hook(self) -> None:
+		obj = prefix_kv.load_json(FIX / "session_decode_blocked_missing_runtime.example.json")
+		self.assertEqual(obj["runtime_hook"], "ds4_runtime_session_decode")
+
 
 if __name__ == "__main__":
 	unittest.main()

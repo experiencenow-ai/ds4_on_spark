@@ -21,6 +21,14 @@ FINISH_REASONS = {"max_tokens", "stop_token", "logits_only", "error", "blocked"}
 CONSTRAINED_RATE_TOK_S = 629.183
 FULL_VOCAB_RATE_TOK_S = 260.973
 FINITE_LOGITS_ROWS_S = 631.672
+MISSING_PREFIX_KV_RUNTIME_HOOKS = (
+	"ds4_runtime_prefix_prepare",
+	"ds4_runtime_prefix_fork",
+	"ds4_runtime_session_append",
+	"ds4_runtime_session_decode",
+	"ds4_runtime_session_release",
+	"ds4_runtime_prefix_release",
+)
 
 
 class Ds4BatchGenerateError(ValueError):
@@ -78,6 +86,14 @@ def _expect_int_list(errors: list[str], obj: dict[str, Any], key: str, required:
 	value = obj.get(key)
 	if not isinstance(value, list) or not all(isinstance(v, int) and v >= 0 for v in value):
 		errors.append(f"{key} must be a list of non-negative integers")
+
+
+def _expect_string_list(errors: list[str], obj: dict[str, Any], key: str, required: bool = True) -> None:
+	if key not in obj and not required:
+		return
+	value = obj.get(key)
+	if not isinstance(value, list) or not all(isinstance(v, str) and v.strip() != "" for v in value):
+		errors.append(f"{key} must be a list of non-empty strings")
 
 
 def validate_request(obj: dict[str, Any]) -> list[str]:
@@ -266,6 +282,7 @@ def validate_result(obj: dict[str, Any], request: dict[str, Any] | None = None) 
 	_expect_bool(errors, telemetry, "production_generation_eligible")
 	_expect_string(errors, telemetry, "blocker_kind", allow_empty=True)
 	_expect_string(errors, telemetry, "blocker_detail", allow_empty=True)
+	_validate_runtime_hook_status(errors, telemetry)
 	_validate_output_mode_groups(errors, telemetry, rows)
 	modes = {group.get("output_mode") for group in telemetry.get("output_mode_groups", []) if isinstance(group, dict)}
 	if "full_vocab" in modes and float(telemetry.get("full_vocab_commit_ms", 0.0)) <= 0.0:
@@ -292,6 +309,8 @@ def validate_result(obj: dict[str, Any], request: dict[str, Any] | None = None) 
 			errors.append("production_generation_eligible requires real shared-prefix/suffix runtime path or prefix_kv_runtime_path=not_required")
 		if not all(isinstance(row, dict) and row.get("committed_token_ids") and row.get("token_hash") for row in rows):
 			errors.append("production_generation_eligible requires committed token IDs and token_hash for every row")
+		if telemetry.get("missing_runtime_hooks"):
+			errors.append("production_generation_eligible requires no missing_runtime_hooks")
 	else:
 		if telemetry.get("blocker_kind") in ("", None):
 			errors.append("non-eligible result must report blocker_kind")
@@ -303,6 +322,18 @@ def validate_result(obj: dict[str, Any], request: dict[str, Any] | None = None) 
 			if not full_groups or not constrained_groups:
 				errors.append("mixed full_vocab/constrained_candidate request must keep separate output mode groups")
 	return errors
+
+
+def _validate_runtime_hook_status(errors: list[str], telemetry: dict[str, Any]) -> None:
+	if telemetry.get("blocker_kind") != "missing_prefix_kv_runtime_hook":
+		return
+	_expect_string(errors, telemetry, "blocking_runtime_hook")
+	_expect_string_list(errors, telemetry, "missing_runtime_hooks")
+	hooks = telemetry.get("missing_runtime_hooks", [])
+	if isinstance(hooks, list):
+		missing = [hook for hook in MISSING_PREFIX_KV_RUNTIME_HOOKS if hook not in hooks]
+		if missing:
+			errors.append("missing_prefix_kv_runtime_hook must name all required prefix/session hooks")
 
 
 def validate_documents(objs: list[dict[str, Any]]) -> list[tuple[dict[str, Any], list[str]]]:
@@ -492,10 +523,15 @@ def _build_missing_prefix_kv_runtime_result(request: dict[str, Any]) -> dict[str
 			"shared_prefix_suffix_runtime_used": False,
 			"prefix_kv_runtime_path": "missing",
 			"prefix_kv_required": True,
+			"live_callable_status": "blocked",
+			"batch_generate_surface": "scripts/ds4_batch_generate",
+			"blocking_runtime_hook": "ds4_runtime_prefix_prepare",
+			"missing_runtime_hooks": list(MISSING_PREFIX_KV_RUNTIME_HOOKS),
 			"blocker_kind": "missing_prefix_kv_runtime_hook",
 			"blocker_detail": (
-				"repo-owned callable runtime hook is missing for prefix_prepare, prefix_pin, "
-				"prefix_fork, session_append, session_decode, session_release, and prefix_release; "
+				"repo-owned callable runtime hook is missing for ds4_runtime_prefix_prepare, "
+				"ds4_runtime_prefix_fork, ds4_runtime_session_append, ds4_runtime_session_decode, "
+				"ds4_runtime_session_release, and ds4_runtime_prefix_release; "
 				"scripts/ds4_batch_generate remains fixture-backed"
 			),
 		},

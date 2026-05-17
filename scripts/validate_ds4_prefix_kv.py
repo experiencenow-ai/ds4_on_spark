@@ -18,6 +18,15 @@ PREFIX_OPS = {"prefix_prepare", "prefix_pin", "prefix_fork", "prefix_release"}
 SESSION_OPS = {"session_append", "session_decode", "session_release"}
 STATUS_VALUES = {"prepared", "pinned", "forked", "released", "appended", "decoded", "blocked", "rejected", "miss"}
 MISS_POLICIES = {"none", "defer", "reject"}
+RUNTIME_HOOKS = {
+	"prefix_prepare": "ds4_runtime_prefix_prepare",
+	"prefix_pin": "ds4_runtime_prefix_pin",
+	"prefix_fork": "ds4_runtime_prefix_fork",
+	"prefix_release": "ds4_runtime_prefix_release",
+	"session_append": "ds4_runtime_session_append",
+	"session_decode": "ds4_runtime_session_decode",
+	"session_release": "ds4_runtime_session_release",
+}
 
 IDENTITY_FIELDS = (
 	"model_id",
@@ -64,6 +73,16 @@ def _validate_identity_match(errors: list[str], obj: dict[str, Any]) -> None:
 			errors.append(f"cache identity mismatch: {key}")
 
 
+def _validate_runtime_hook(errors: list[str], obj: dict[str, Any]) -> None:
+	operation = obj.get("operation")
+	if obj.get("blocker_kind") != "missing_prefix_kv_runtime_hook":
+		return
+	_expect_string(errors, obj, "runtime_hook")
+	expected = RUNTIME_HOOKS.get(str(operation))
+	if expected is not None and obj.get("runtime_hook") != expected:
+		errors.append(f"runtime_hook must be {expected} for {operation}")
+
+
 def validate_prefix_manifest(obj: dict[str, Any]) -> list[str]:
 	errors: list[str] = []
 	if obj.get("format") != PREFIX_MANIFEST_FORMAT:
@@ -104,6 +123,7 @@ def validate_prefix_cache_status(obj: dict[str, Any]) -> list[str]:
 			errors.append("prefix_required=true with cache miss must explicitly defer or reject")
 	if obj.get("status") in {"blocked", "rejected"} and str(obj.get("blocker_detail", "")).strip() == "":
 		errors.append("blocked/rejected prefix cache status requires blocker_detail")
+	_validate_runtime_hook(errors, obj)
 	return errors
 
 
@@ -133,6 +153,7 @@ def validate_session_append_status(obj: dict[str, Any]) -> list[str]:
 			errors.append("decoded session requires sha256 token_hash")
 	if obj.get("status") in {"blocked", "rejected"} and str(obj.get("blocker_detail", "")).strip() == "":
 		errors.append("blocked/rejected session status requires blocker_detail")
+	_validate_runtime_hook(errors, obj)
 	return errors
 
 
