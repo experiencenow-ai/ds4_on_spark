@@ -20,6 +20,10 @@ class AntirezDs4MtpAcceptanceProbePatchTest(unittest.TestCase):
 		self.assertIn('DS4_MTP_TIMING="${DS4_MTP_TIMING:-0}"', text)
 		self.assertIn('"DS4_MTP_MEASURED_MODE"', text)
 
+	def test_perf_env_hash_excludes_removed_skip_readback_knob(self) -> None:
+		text = SCRIPT.read_text(encoding="utf-8")
+		self.assertNotIn('"DS4_MTP_ROW2_SKIP_LOGITS_READBACK"', text)
+
 
 if __name__ == "__main__":
 	unittest.main()

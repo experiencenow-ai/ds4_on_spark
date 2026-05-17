@@ -47,6 +47,16 @@ class AntirezDs4MtpTargetSuffixVerifyPatchTest(unittest.TestCase):
 		errors = verify.validate_patch_text(text)
 		self.assertTrue(any("trace_top ? NULL" in item for item in errors))
 
+	def test_rejects_k2_without_lazy_continuation_readback_guard(self) -> None:
+		text = PATCH.read_text(encoding="utf-8").replace("if (need_logits) {", "")
+		errors = verify.validate_patch_text(text)
+		self.assertTrue(any("need_logits" in item for item in errors))
+
+	def test_rejects_k2_without_gpu_selected_continuation(self) -> None:
+		text = PATCH.read_text(encoding="utf-8").replace("metal_graph_read_selected_token(g, 2, next_token_out)", "")
+		errors = verify.validate_patch_text(text)
+		self.assertTrue(any("metal_graph_read_selected_token" in item for item in errors))
+
 
 if __name__ == "__main__":
 	unittest.main()
