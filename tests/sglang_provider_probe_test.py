@@ -23,6 +23,10 @@ class SglangProviderProbeTest(unittest.TestCase):
         self.assertIn("No route to host", probe["api_health_status"]["error"])
         self.assertEqual(probe["hardware"]["status"], "unreachable")
         self.assertGreaterEqual(len(probe["acquisition_attempts"]), 1)
+        self.assertEqual(
+            set(probe["custom_ds4_comparison"]),
+            {"custom_ds4_constrained_b512", "custom_ds4_full_vocab_b512", "custom_ds4_mtp_k2"},
+        )
 
     def test_required_benchmark_cases_are_present(self) -> None:
         probe = validator.load_json(FIXTURE)
@@ -76,6 +80,18 @@ class SglangProviderProbeTest(unittest.TestCase):
             bad.pop(key)
             errors = validator.validate_probe(bad)
             self.assertTrue(any(f"missing required field: {key}" in item for item in errors))
+
+    def test_dependency_conflict_is_a_valid_precise_blocker(self) -> None:
+        probe = validator.load_json(FIXTURE)
+        probe["blocker_kind"] = "dependency_conflict"
+        probe["blocker_detail"] = "SGLang install resolved incompatible dependency versions."
+        for case in probe["benchmark_results"]:
+            case["blocker_kind"] = "dependency_conflict"
+            case["blocker_detail"] = probe["blocker_detail"]
+        probe["api_health_status"]["error"] = probe["blocker_detail"]
+        probe["artifact_sha256"] = validator.artifact_sha256(probe)
+        probe["artifact_hash"] = probe["artifact_sha256"]
+        self.assertEqual(validator.validate_probe(probe), [])
 
     def test_runner_builds_not_installed_blocker_without_live_launch(self) -> None:
         class Args:

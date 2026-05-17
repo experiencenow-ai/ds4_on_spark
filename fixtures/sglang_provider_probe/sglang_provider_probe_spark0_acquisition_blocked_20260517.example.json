@@ -31,10 +31,11 @@
     "http_status": null,
     "latency_ms": null,
     "output_token_count": null,
+    "response_hash": null,
     "status": "blocked"
   },
-  "artifact_hash": "sha256:75a3f98ed6ad5da402e6a7fe4ff3ac0a7d2271330ab7cbeed84eda63dac83568",
-  "artifact_sha256": "sha256:75a3f98ed6ad5da402e6a7fe4ff3ac0a7d2271330ab7cbeed84eda63dac83568",
+  "artifact_hash": "sha256:fb60e88f1116216b9c85180354a66a59059421bfb2e432a7f78459ac88621416",
+  "artifact_sha256": "sha256:fb60e88f1116216b9c85180354a66a59059421bfb2e432a7f78459ac88621416",
   "benchmark_results": [
     {
       "batch_size": 1,
@@ -161,9 +162,20 @@
     "status": "blocked"
   },
   "custom_ds4_comparison": {
-    "custom_constrained_b512_tok_s_class": "620-650",
-    "custom_full_vocab_b512_tok_s_class": "260",
-    "custom_mtp_k2_direct_path": "measured separately; compare only after SGLang MTP artifact exists"
+    "custom_ds4_constrained_b512": {
+      "reference_tok_s_class": "620-650",
+      "scope": "custom DS4 constrained output only; not transferable to SGLang",
+      "summary": "custom DS4 constrained B512 class"
+    },
+    "custom_ds4_full_vocab_b512": {
+      "reference_tok_s_class": "260",
+      "scope": "custom DS4 full-vocab output only; compare after SGLang full-vocab artifact exists",
+      "summary": "custom DS4 full-vocab B512 class"
+    },
+    "custom_ds4_mtp_k2": {
+      "scope": "measured separately; compare after SGLang MTP artifact exists",
+      "summary": "custom DS4 MTP K=2 direct path"
+    }
   },
   "dp_size": 1,
   "format": "ds4-sglang-provider-probe-v1",
@@ -216,7 +228,7 @@
   "provider_id": "sglang-ds4-spark0",
   "recipe": "balanced",
   "recommendation": "blocked",
-  "run_id": "sglang-provider-probe-spark0-20260517",
+  "run_id": "sglang-provider-probe-spark0-20260517-retry",
   "runtime_id": "sglang-v0.5.12-spark0-probe",
   "sglang_version": "not_checked",
   "tp_size": 1

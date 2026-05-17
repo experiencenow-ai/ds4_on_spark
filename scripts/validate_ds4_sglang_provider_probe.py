@@ -29,6 +29,7 @@ BLOCKER_KINDS = {
     "insufficient_memory",
     "unsupported_gpu",
     "runtime_install_failed",
+    "dependency_conflict",
     "launch_not_run_requires_explicit_allow_launch",
     "launch_failed",
     "api_health_failed",
@@ -200,6 +201,8 @@ def validate_api_health_status(status_obj: Any, errors: list[str]) -> None:
         value = status_obj.get(key)
         if value is not None and (not isinstance(value, (int, float)) or isinstance(value, bool) or float(value) < 0.0):
             _err(errors, f"api_health_status.{key} must be a non-negative number or null")
+    if "response_hash" in status_obj and status_obj["response_hash"] is not None and not isinstance(status_obj["response_hash"], str):
+        _err(errors, "api_health_status.response_hash must be a string or null when present")
     if status in {"failed", "blocked"} and not isinstance(status_obj.get("error"), str):
         _err(errors, "api_health_status failed/blocked requires error")
 
@@ -273,8 +276,13 @@ def validate_probe(obj: dict[str, Any]) -> list[str]:
             _err(errors, "load_success=false requires blocker_kind")
         if not isinstance(obj.get("blocker_detail"), str) or not obj.get("blocker_detail", "").strip():
             _err(errors, "load_success=false requires blocker_detail")
-    if "custom_ds4_comparison" in obj and not isinstance(obj["custom_ds4_comparison"], dict):
-        _err(errors, "custom_ds4_comparison must be an object")
+    if "custom_ds4_comparison" in obj:
+        if not isinstance(obj["custom_ds4_comparison"], dict):
+            _err(errors, "custom_ds4_comparison must be an object")
+        else:
+            for key in ("custom_ds4_constrained_b512", "custom_ds4_full_vocab_b512", "custom_ds4_mtp_k2"):
+                if key not in obj["custom_ds4_comparison"]:
+                    _err(errors, f"custom_ds4_comparison missing {key}")
     if "launch_environment" in obj and not isinstance(obj["launch_environment"], dict):
         _err(errors, "launch_environment must be an object")
     if "recommendation" in obj and obj["recommendation"] not in {"replace", "replace_candidate", "complement", "blocked", "retest"}:
