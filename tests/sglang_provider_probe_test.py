@@ -17,14 +17,15 @@ class SglangProviderProbeTest(unittest.TestCase):
 
     def test_probe_records_checkpoint_source_and_api_health(self) -> None:
         probe = validator.load_json(SPARK_FIXTURE)
-        self.assertEqual(probe["checkpoint_source"]["status"], "missing")
+        self.assertEqual(probe["checkpoint_source"]["status"], "blocked")
         self.assertIn("DeepSeek-V4-Flash", probe["checkpoint_source"]["detail"])
         self.assertEqual(probe["api_health_status"]["status"], "blocked")
-        self.assertIn("lacks the sglang Python package", probe["api_health_status"]["error"])
-        self.assertEqual(probe["blocker_kind"], "sglang_not_installed")
+        self.assertIn("lacks an approved DeepSeek-V4-Flash checkpoint", probe["api_health_status"]["error"])
+        self.assertEqual(probe["blocker_kind"], "checkpoint_unavailable")
         self.assertEqual(probe["sglang_version"], "not_installed")
         self.assertEqual(probe["hardware"]["status"], "spark0_reachable")
         self.assertEqual(probe["launch_command"][0], "python3")
+        self.assertEqual(probe["spark_access_contract_ref"]["format"], "ds4-spark-access-contract-v1")
         self.assertEqual(probe["reachability_report_ref"]["format"], "ds4-spark-reachability-report-v1")
         self.assertGreaterEqual(len(probe["acquisition_attempts"]), 4)
         self.assertEqual(
@@ -128,6 +129,7 @@ class SglangProviderProbeTest(unittest.TestCase):
             api_health_error_override = ""
             api_health_endpoint = "http://127.0.0.1:30000/v1/chat/completions"
             acquisition_attempt_json: list[str] = []
+            spark_access_contract_path = ""
             reachability_report_path = ""
 
         probe = runner.build_probe(Args())

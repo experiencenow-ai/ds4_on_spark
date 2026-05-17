@@ -9,8 +9,8 @@
     "response_hash": null,
     "status": "blocked"
   },
-  "artifact_hash": "sha256:3a7944e761e20338b25ca5e3836494eaa98840139b50047b5875c7fc500b5703",
-  "artifact_sha256": "sha256:3a7944e761e20338b25ca5e3836494eaa98840139b50047b5875c7fc500b5703",
+  "artifact_hash": "sha256:a1c96c6ea78ee7365c31bd90e5ebce766903bb83afcefe05cb140e50bba2f4b9",
+  "artifact_sha256": "sha256:a1c96c6ea78ee7365c31bd90e5ebce766903bb83afcefe05cb140e50bba2f4b9",
   "benchmark_results": [
     {
       "batch_size": 1,
@@ -129,10 +129,10 @@
   "blocker_kind": "sglang_not_installed",
   "checkpoint_format": "huggingface",
   "checkpoint_source": {
-    "detail": "checkpoint path does not exist: /models/deepseek-v4-flash",
+    "detail": "checkpoint path does not exist: /path/that/does/not/exist",
     "hf_token_present": false,
     "kind": "huggingface",
-    "local_path": "/models/deepseek-v4-flash",
+    "local_path": "/path/that/does/not/exist",
     "repo_id": "deepseek-ai/DeepSeek-V4-Flash",
     "status": "missing"
   },
@@ -157,15 +157,15 @@
   "hardware": {
     "gpus": [],
     "machine": "arm64",
-    "platform": "macOS-26.2-arm64-arm-64bit",
-    "python": "3.9.6"
+    "platform": "macOS-14.6-arm64-arm-64bit-Mach-O",
+    "python": "3.14.4"
   },
   "launch_command": [
-    "/Library/Developer/CommandLineTools/usr/bin/python3",
+    "/opt/homebrew/opt/python@3.14/bin/python3.14",
     "-m",
     "sglang.launch_server",
     "--model-path",
-    "/models/deepseek-v4-flash",
+    "/path/that/does/not/exist",
     "--served-model-name",
     "deepseek-ai/DeepSeek-V4-Flash",
     "--tp-size",
@@ -183,7 +183,7 @@
       "HUGGING_FACE_HUB_TOKEN"
     ],
     "hf_token_present": false,
-    "python_executable": "/Library/Developer/CommandLineTools/usr/bin/python3",
+    "python_executable": "/opt/homebrew/opt/python@3.14/bin/python3.14",
     "target_host": "local"
   },
   "load_success": false,
@@ -197,10 +197,12 @@
   },
   "pp_size": 1,
   "provider_id": "sglang-ds4-local",
+  "reachability_report_ref": null,
   "recipe": "custom",
   "recommendation": "blocked",
-  "run_id": "sglang-provider-probe-local-20260517",
+  "run_id": "sglang-provider-probe-local-blocked",
   "runtime_id": "sglang-local-probe",
   "sglang_version": "not_installed",
+  "spark_access_contract_ref": null,
   "tp_size": 1
 }

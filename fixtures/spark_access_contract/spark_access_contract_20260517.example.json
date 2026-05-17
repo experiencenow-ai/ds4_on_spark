@@ -1,0 +1,82 @@
+{
+  "access_mode": "known_good_ssh",
+  "access_ok": true,
+  "artifact_hash": "sha256:955cabee945e4f4b089e75a598a0da9b84be4e71de32859e7819cc9e6912ee90",
+  "artifact_sha256": "sha256:955cabee945e4f4b089e75a598a0da9b84be4e71de32859e7819cc9e6912ee90",
+  "blocker_detail": "Known-good Spark0 SSH and spark_probe.sh access checks passed.",
+  "blocker_kind": "none",
+  "checked_at": "2026-05-17T07:33:49Z",
+  "discovery_partial": false,
+  "discovery_results": {
+    "random_local_discovery": {
+      "command": [],
+      "error": "Known-good Spark0 access path is authoritative for this probe; random .local discovery was not used as an access gate.",
+      "status": "not_run"
+    }
+  },
+  "format": "ds4-spark-access-contract-v1",
+  "known_good_commands": [
+    {
+      "command": [
+        "ssh",
+        "spark0@aitopatom-9ab9.local",
+        "hostname"
+      ],
+      "label": "spark0_known_good_ssh"
+    },
+    {
+      "command": [
+        "./scripts/spark_probe.sh",
+        "aitopatom-9ab9.local"
+      ],
+      "env": {
+        "REDACT": "1",
+        "SPARK_KNOWN_HOSTS_PER_HOST": "1",
+        "SPARK_SSH_USER": "spark0"
+      },
+      "label": "spark0_spark_probe"
+    }
+  ],
+  "probe_results": {
+    "spark_probe_aitopatom_9ab9_local": {
+      "command": [
+        "./scripts/spark_probe.sh",
+        "aitopatom-9ab9.local"
+      ],
+      "elapsed_ms": 1946.066,
+      "error": "",
+      "returncode": 0,
+      "status": "success",
+      "stderr": "",
+      "stderr_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_truncated": false,
+      "stdout": "== local meta ==\nSun May 17 07:33:47 UTC 2026\ngit: 93cc51c\nprobe args: aitopatom-9ab9.local\nresolved targets: spark0@aitopatom-9ab9.local\nssh opts: -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2\nknown_hosts: spark0@aitopatom-9ab9.local -> /private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local\n\n== target: spark0@aitopatom-9ab9.local ==\n== probe meta ==\nSun May 17 07:33:47 UTC 2026\ntarget user: spark0\n\n== identity ==\naitopatom-9ab9\nuid=1000(spark0) gid=1000(spark0) groups=1000(spark0),4(adm),27(sudo),29(audio),30(dip),\n<snip>\n  580.142\nsrcversion:     C4BC8E95CA62E8363647ABA\nvermagic:       6.17.0-1014-nvidia SMP preempt mod_unload modversions aarch64\n\n== /dev nvidia nodes ==\ncrw-rw-rw- 1 root root 195, 254 May 14 00:16 /dev/nvidia-modeset\ncrw-rw-rw- 1 root root 499,   0 May 14 00:16 /dev/nvidia-uvm\ncrw-rw-rw- 1 root root 499,   1 May 14 00:16 /dev/nvidia-uvm-tools\ncrw-rw-rw- 1 root root 195,   0 May 14 00:16 /dev/nvidia0\ncrw-rw-rw- 1 root root 195, 255 May 14 00:16 /dev/nvidiactl\n\n/dev/nvidia-caps:\ntotal 0\ncr-------- 1 root root 502, 1 May 14 00:21 nvidia-cap1\ncr--r--r-- 1 root root 502, 2 May 14 00:21 nvidia-cap2",
+      "stdout_sha256": "sha256:7b10f3c2424b5f18785bb3045a9f8f3b8903a9c9b936cb7c82f6660805be4ff5",
+      "stdout_truncated": true
+    }
+  },
+  "run_id": "spark-access-contract-20260517-sglang-launch-probe",
+  "ssh_results": {
+    "spark0@aitopatom-9ab9.local": {
+      "command": [
+        "ssh",
+        "spark0@aitopatom-9ab9.local",
+        "hostname"
+      ],
+      "elapsed_ms": 311.1,
+      "error": "",
+      "returncode": 0,
+      "status": "success",
+      "stderr": "",
+      "stderr_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_truncated": false,
+      "stdout": "aitopatom-9ab9",
+      "stdout_sha256": "sha256:2c87916eaf680fe29eb5f74fc2ace2ac90ad78bc6c4a0270369b43f2579bcfc5",
+      "stdout_truncated": false
+    }
+  },
+  "targets_checked": [
+    "spark0@aitopatom-9ab9.local",
+    "aitopatom-9ab9.local"
+  ]
+}

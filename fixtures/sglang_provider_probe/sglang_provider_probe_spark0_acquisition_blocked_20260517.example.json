@@ -3,24 +3,13 @@
     {
       "command": [
         "python3",
-        "scripts/run_ds4_spark_reachability_report.py",
+        "scripts/run_ds4_spark_access_contract.py",
         "--out",
-        "fixtures/spark_reachability/spark_reachability_report_20260517.example.json"
+        "fixtures/spark_access_contract/spark_access_contract_20260517.example.json"
       ],
-      "error": "Spark0 host aitopatom-9ab9.local accepted SSH; spark0.local/spark1/spark2 inventory aliases remain unresolved or unreachable.",
+      "error": "Known-good SSH and spark_probe.sh checks passed; access_ok=true.",
       "status": "success",
-      "step": "spark_reachability_report"
-    },
-    {
-      "command": [
-        "ssh",
-        "spark0@aitopatom-9ab9.local",
-        "python3",
-        "-V"
-      ],
-      "error": "Python 3.12.3",
-      "status": "success",
-      "step": "remote_python_version"
+      "step": "spark_access_contract"
     },
     {
       "command": [
@@ -38,31 +27,55 @@
       "command": [
         "ssh",
         "spark0@aitopatom-9ab9.local",
+        "python3",
+        "-c",
+        "import os; print(bool(os.getenv(\"HF_TOKEN\") or os.getenv(\"HUGGING_FACE_HUB_TOKEN\")))"
+      ],
+      "error": "False",
+      "status": "blocked",
+      "step": "remote_hf_token_presence"
+    },
+    {
+      "command": [
+        "ssh",
+        "spark0@aitopatom-9ab9.local",
         "test",
         "-e",
         "/home/spark0/models/sglang/DeepSeek-V4-Flash"
       ],
-      "error": "checkpoint path does not exist",
+      "error": "Checkpoint absent at /home/spark0/models/sglang/DeepSeek-V4-Flash, /home/spark0/models/DeepSeek-V4-Flash, and /home/spark0/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-V4-Flash",
       "status": "blocked",
-      "step": "remote_checkpoint_path"
+      "step": "remote_checkpoint_paths"
+    },
+    {
+      "command": [
+        "ssh",
+        "spark0@aitopatom-9ab9.local",
+        "df",
+        "-h",
+        "/home/spark0"
+      ],
+      "error": "3.2T available on /home/spark0",
+      "status": "success",
+      "step": "remote_storage_check"
     }
   ],
   "api_health_status": {
     "endpoint": "http://127.0.0.1:30000/v1/chat/completions",
-    "error": "SGLang launch was not attempted because Spark0 lacks the sglang Python package and the DeepSeek-V4-Flash checkpoint path.",
+    "error": "SGLang API smoke was not attempted: Spark0 lacks an approved DeepSeek-V4-Flash checkpoint and lacks the sglang Python package.",
     "http_status": null,
     "latency_ms": null,
     "output_token_count": null,
     "response_hash": null,
     "status": "blocked"
   },
-  "artifact_hash": "sha256:974aa3695074f144a60cce9d29240b1cd391a7498b59fb053f261e7318f4cdac",
-  "artifact_sha256": "sha256:974aa3695074f144a60cce9d29240b1cd391a7498b59fb053f261e7318f4cdac",
+  "artifact_hash": "sha256:1f180d2cd15e59298d96449f829f3f326d2f5ec9f7834dfb5df397f6ec6493ae",
+  "artifact_sha256": "sha256:1f180d2cd15e59298d96449f829f3f326d2f5ec9f7834dfb5df397f6ec6493ae",
   "benchmark_results": [
     {
       "batch_size": 1,
-      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
-      "blocker_kind": "sglang_not_installed",
+      "blocker_detail": "Spark0 access is OK. SGLang launch is blocked because the DeepSeek-V4-Flash checkpoint is not present and no remote HF token is configured for acquisition; the sglang Python package is also not installed. Package/model acquisition was not attempted because the repo manifest says not to download weights without human approval.",
+      "blocker_kind": "checkpoint_unavailable",
       "case_id": "b1_full_vocab_chat",
       "constrained_scoring": "unsupported",
       "custom_ds4_speedup_inferred": false,
@@ -75,8 +88,8 @@
     },
     {
       "batch_size": 4,
-      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
-      "blocker_kind": "sglang_not_installed",
+      "blocker_detail": "Spark0 access is OK. SGLang launch is blocked because the DeepSeek-V4-Flash checkpoint is not present and no remote HF token is configured for acquisition; the sglang Python package is also not installed. Package/model acquisition was not attempted because the repo manifest says not to download weights without human approval.",
+      "blocker_kind": "checkpoint_unavailable",
       "case_id": "b4_q_numbered_full_vocab_rows",
       "constrained_scoring": "unsupported",
       "custom_ds4_speedup_inferred": false,
@@ -89,8 +102,8 @@
     },
     {
       "batch_size": 16,
-      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
-      "blocker_kind": "sglang_not_installed",
+      "blocker_detail": "Spark0 access is OK. SGLang launch is blocked because the DeepSeek-V4-Flash checkpoint is not present and no remote HF token is configured for acquisition; the sglang Python package is also not installed. Package/model acquisition was not attempted because the repo manifest says not to download weights without human approval.",
+      "blocker_kind": "checkpoint_unavailable",
       "case_id": "b16_full_vocab_rows",
       "constrained_scoring": "unsupported",
       "custom_ds4_speedup_inferred": false,
@@ -103,8 +116,8 @@
     },
     {
       "batch_size": 512,
-      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
-      "blocker_kind": "sglang_not_installed",
+      "blocker_detail": "Spark0 access is OK. SGLang launch is blocked because the DeepSeek-V4-Flash checkpoint is not present and no remote HF token is configured for acquisition; the sglang Python package is also not installed. Package/model acquisition was not attempted because the repo manifest says not to download weights without human approval.",
+      "blocker_kind": "checkpoint_unavailable",
       "case_id": "b512_full_vocab_one_token",
       "constrained_scoring": "unsupported",
       "custom_ds4_speedup_inferred": false,
@@ -117,8 +130,8 @@
     },
     {
       "batch_size": 512,
-      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
-      "blocker_kind": "sglang_not_installed",
+      "blocker_detail": "Spark0 access is OK. SGLang launch is blocked because the DeepSeek-V4-Flash checkpoint is not present and no remote HF token is configured for acquisition; the sglang Python package is also not installed. Package/model acquisition was not attempted because the repo manifest says not to download weights without human approval.",
+      "blocker_kind": "checkpoint_unavailable",
       "case_id": "b512_constrained_structured_output",
       "constrained_scoring": "unknown",
       "custom_ds4_speedup_inferred": false,
@@ -131,8 +144,8 @@
     },
     {
       "batch_size": 1,
-      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
-      "blocker_kind": "sglang_not_installed",
+      "blocker_detail": "Spark0 access is OK. SGLang launch is blocked because the DeepSeek-V4-Flash checkpoint is not present and no remote HF token is configured for acquisition; the sglang Python package is also not installed. Package/model acquisition was not attempted because the repo manifest says not to download weights without human approval.",
+      "blocker_kind": "checkpoint_unavailable",
       "case_id": "mtp_low_latency",
       "constrained_scoring": "unsupported",
       "custom_ds4_speedup_inferred": false,
@@ -145,8 +158,8 @@
     },
     {
       "batch_size": 4,
-      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
-      "blocker_kind": "sglang_not_installed",
+      "blocker_detail": "Spark0 access is OK. SGLang launch is blocked because the DeepSeek-V4-Flash checkpoint is not present and no remote HF token is configured for acquisition; the sglang Python package is also not installed. Package/model acquisition was not attempted because the repo manifest says not to download weights without human approval.",
+      "blocker_kind": "checkpoint_unavailable",
       "case_id": "mtp_balanced",
       "constrained_scoring": "unsupported",
       "custom_ds4_speedup_inferred": false,
@@ -159,8 +172,8 @@
     },
     {
       "batch_size": 512,
-      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
-      "blocker_kind": "sglang_not_installed",
+      "blocker_detail": "Spark0 access is OK. SGLang launch is blocked because the DeepSeek-V4-Flash checkpoint is not present and no remote HF token is configured for acquisition; the sglang Python package is also not installed. Package/model acquisition was not attempted because the repo manifest says not to download weights without human approval.",
+      "blocker_kind": "checkpoint_unavailable",
       "case_id": "max_throughput_mtp_disabled",
       "constrained_scoring": "unsupported",
       "custom_ds4_speedup_inferred": false,
@@ -172,16 +185,16 @@
       "tokens_per_second": null
     }
   ],
-  "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
-  "blocker_kind": "sglang_not_installed",
+  "blocker_detail": "Spark0 access is OK. SGLang launch is blocked because the DeepSeek-V4-Flash checkpoint is not present and no remote HF token is configured for acquisition; the sglang Python package is also not installed. Package/model acquisition was not attempted because the repo manifest says not to download weights without human approval.",
+  "blocker_kind": "checkpoint_unavailable",
   "checkpoint_format": "huggingface",
   "checkpoint_source": {
-    "detail": "Spark0 accepted SSH, but /home/spark0/models/sglang/DeepSeek-V4-Flash, /home/spark0/models/DeepSeek-V4-Flash, and the Hugging Face cache path for DeepSeek-V4-Flash were absent.",
+    "detail": "Spark0 access contract passed, but no DeepSeek-V4-Flash checkpoint exists at /home/spark0/models/sglang/DeepSeek-V4-Flash, /home/spark0/models/DeepSeek-V4-Flash, or the Hugging Face cache path; remote HF_TOKEN/HUGGING_FACE_HUB_TOKEN is absent.",
     "hf_token_present": false,
     "kind": "huggingface",
     "local_path": "/home/spark0/models/sglang/DeepSeek-V4-Flash",
     "repo_id": "deepseek-ai/DeepSeek-V4-Flash",
-    "status": "missing"
+    "status": "blocked"
   },
   "custom_ds4_comparison": {
     "custom_ds4_constrained_b512": {
@@ -204,14 +217,20 @@
   "hardware": {
     "gpus": [
       {
-        "memory_total_mib": "N/A",
+        "compute_cap": "12.1",
+        "driver_version": "580.142",
         "name": "NVIDIA GB10"
       }
     ],
     "platform": "remote-linux",
     "python": "Python 3.12.3",
     "remote_host": "spark0@aitopatom-9ab9.local",
-    "status": "spark0_reachable"
+    "status": "spark0_reachable",
+    "storage": {
+      "home_available": "3.2T",
+      "home_filesystem": "/dev/nvme0n1p2",
+      "home_size": "3.7T"
+    }
   },
   "launch_command": [
     "python3",
@@ -257,8 +276,13 @@
   },
   "recipe": "balanced",
   "recommendation": "blocked",
-  "run_id": "sglang-provider-probe-spark0-20260517-operational-blocked",
+  "run_id": "sglang-provider-probe-spark0-20260517-access-ok-checkpoint-blocked",
   "runtime_id": "sglang-v0.5.12-spark0-probe",
   "sglang_version": "not_installed",
+  "spark_access_contract_ref": {
+    "format": "ds4-spark-access-contract-v1",
+    "path": "fixtures/spark_access_contract/spark_access_contract_20260517.example.json",
+    "sha256": "sha256:955cabee945e4f4b089e75a598a0da9b84be4e71de32859e7819cc9e6912ee90"
+  },
   "tp_size": 1
 }

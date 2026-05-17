@@ -104,16 +104,18 @@ def _python_executable(args: argparse.Namespace) -> str:
     return sys.executable
 
 
-def _reachability_report(path_text: str) -> dict[str, Any] | None:
+def _json_artifact(path_text: str) -> dict[str, Any] | None:
     if not path_text:
         return None
     path = Path(path_text)
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _blocker(args: argparse.Namespace, version_blocker: str | None, reachability: dict[str, Any] | None) -> tuple[str, str]:
+def _blocker(args: argparse.Namespace, version_blocker: str | None, access_contract: dict[str, Any] | None, reachability: dict[str, Any] | None) -> tuple[str, str]:
     if args.blocker_kind_override:
         return args.blocker_kind_override, args.blocker_detail_override
+    if access_contract is not None and access_contract.get("access_ok") is not True:
+        return "host_unreachable", "Spark access contract blocked SGLang launch: " + str(access_contract.get("blocker_detail") or "")
     if reachability is not None and reachability.get("blocker_kind") != "none":
         return "host_unreachable", "Spark reachability report blocked SGLang launch: " + str(reachability.get("blocker_detail") or "")
     if version_blocker:
@@ -175,10 +177,10 @@ def _acquisition_attempts(args: argparse.Namespace) -> list[dict[str, Any]]:
     return attempts
 
 
-def _reachability_report_ref(path_text: str) -> dict[str, str] | None:
+def _artifact_ref(path_text: str) -> dict[str, str] | None:
     if not path_text:
         return None
-    obj = _reachability_report(path_text)
+    obj = _json_artifact(path_text)
     path = Path(path_text)
     return {
         "path": path_text,
@@ -219,8 +221,9 @@ def _benchmark_results(blocker_kind: str, blocker_detail: str) -> list[dict[str,
 
 def build_probe(args: argparse.Namespace) -> dict[str, Any]:
     sglang_version, version_blocker = _sglang_version(args.sglang_version_override)
-    reachability = _reachability_report(args.reachability_report_path)
-    blocker_kind, blocker_detail = _blocker(args, version_blocker, reachability)
+    access_contract = _json_artifact(args.spark_access_contract_path)
+    reachability = _json_artifact(args.reachability_report_path)
+    blocker_kind, blocker_detail = _blocker(args, version_blocker, access_contract, reachability)
     hf_token_present = bool(os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN"))
     if not args.hf_token_present:
         args.hf_token_present = hf_token_present
@@ -252,7 +255,8 @@ def build_probe(args: argparse.Namespace) -> dict[str, Any]:
         "load_success": blocker_kind == "none",
         "api_health_status": _api_health_status(args, blocker_kind, blocker_detail),
         "acquisition_attempts": _acquisition_attempts(args),
-        "reachability_report_ref": _reachability_report_ref(args.reachability_report_path),
+        "spark_access_contract_ref": _artifact_ref(args.spark_access_contract_path),
+        "reachability_report_ref": _artifact_ref(args.reachability_report_path),
         "benchmark_results": _benchmark_results(blocker_kind, blocker_detail),
         "blocker_kind": blocker_kind,
         "blocker_detail": blocker_detail,
@@ -311,6 +315,7 @@ def main() -> int:
     parser.add_argument("--api-health-error-override", default="")
     parser.add_argument("--api-health-endpoint", default="http://127.0.0.1:30000/v1/chat/completions")
     parser.add_argument("--acquisition-attempt-json", action="append", default=[])
+    parser.add_argument("--spark-access-contract-path", default="")
     parser.add_argument("--reachability-report-path", default="")
     args = parser.parse_args()
     probe = build_probe(args)

@@ -62,6 +62,7 @@ REQUIRED_FIELDS = (
     "load_success",
     "api_health_status",
     "benchmark_results",
+    "spark_access_contract_ref",
     "blocker_kind",
     "blocker_detail",
 )
@@ -271,6 +272,7 @@ def validate_probe(obj: dict[str, Any]) -> list[str]:
         _err(errors, "load_success must be a bool")
     validate_api_health_status(obj.get("api_health_status"), errors)
     validate_acquisition_attempts(obj.get("acquisition_attempts"), errors)
+    validate_artifact_ref(obj.get("spark_access_contract_ref"), "spark_access_contract_ref", errors)
     validate_artifact_ref(obj.get("reachability_report_ref"), "reachability_report_ref", errors)
     if not isinstance(obj.get("benchmark_results"), list):
         _err(errors, "benchmark_results must be a list")
