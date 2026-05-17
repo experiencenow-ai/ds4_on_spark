@@ -17,13 +17,16 @@ class SglangProviderProbeTest(unittest.TestCase):
 
     def test_probe_records_checkpoint_source_and_api_health(self) -> None:
         probe = validator.load_json(SPARK_FIXTURE)
-        self.assertEqual(probe["checkpoint_source"]["status"], "blocked")
-        self.assertIn("reachability report", probe["checkpoint_source"]["detail"])
+        self.assertEqual(probe["checkpoint_source"]["status"], "missing")
+        self.assertIn("DeepSeek-V4-Flash", probe["checkpoint_source"]["detail"])
         self.assertEqual(probe["api_health_status"]["status"], "blocked")
-        self.assertIn("no Spark host accepted SSH", probe["api_health_status"]["error"])
-        self.assertEqual(probe["hardware"]["status"], "unreachable")
+        self.assertIn("lacks the sglang Python package", probe["api_health_status"]["error"])
+        self.assertEqual(probe["blocker_kind"], "sglang_not_installed")
+        self.assertEqual(probe["sglang_version"], "not_installed")
+        self.assertEqual(probe["hardware"]["status"], "spark0_reachable")
+        self.assertEqual(probe["launch_command"][0], "python3")
         self.assertEqual(probe["reachability_report_ref"]["format"], "ds4-spark-reachability-report-v1")
-        self.assertGreaterEqual(len(probe["acquisition_attempts"]), 1)
+        self.assertGreaterEqual(len(probe["acquisition_attempts"]), 4)
         self.assertEqual(
             set(probe["custom_ds4_comparison"]),
             {"custom_ds4_constrained_b512", "custom_ds4_full_vocab_b512", "custom_ds4_mtp_k2"},
@@ -114,6 +117,7 @@ class SglangProviderProbeTest(unittest.TestCase):
             pp_size = 1
             dp_size = 1
             allow_launch = False
+            python_executable = ""
             hf_token_present = False
             target_host = "local"
             sglang_version_override = ""

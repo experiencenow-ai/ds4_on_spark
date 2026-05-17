@@ -18,10 +18,12 @@ REQUIRED_FIELDS = (
     "checked_at",
     "local_host",
     "expected_hosts",
+    "configured_inventory_hosts",
     "dns_results",
     "mdns_results",
     "ping_results",
     "ssh_results",
+    "direct_ip_results",
     "known_hosts_status",
     "network_interface_summary",
     "blocker_kind",
@@ -108,6 +110,9 @@ def validate_report(obj: dict[str, Any]) -> list[str]:
     if not isinstance(expected, list) or not expected or not all(isinstance(item, str) and item for item in expected):
         _err(errors, "expected_hosts must be a non-empty list of strings")
         expected = []
+    configured = obj.get("configured_inventory_hosts")
+    if not isinstance(configured, list) or not all(isinstance(item, str) and item for item in configured):
+        _err(errors, "configured_inventory_hosts must be a list of strings")
     for key in ("dns_results", "mdns_results", "ping_results", "ssh_results", "known_hosts_status"):
         _result_map(obj, key, errors)
         result_map = obj.get(key)
@@ -115,6 +120,13 @@ def validate_report(obj: dict[str, Any]) -> list[str]:
             for host in expected:
                 if host not in result_map:
                     _err(errors, f"{key} missing expected host: {host}")
+    _result_map(obj, "direct_ip_results", errors)
+    direct = obj.get("direct_ip_results")
+    if isinstance(direct, dict):
+        for host in expected:
+            if any(char == "." for char in host) and all(part.isdigit() for part in host.split(".") if part):
+                if host not in direct:
+                    _err(errors, f"direct_ip_results missing expected IP host: {host}")
     if not isinstance(obj.get("network_interface_summary"), dict):
         _err(errors, "network_interface_summary must be an object")
     if obj.get("artifact_sha256") is not None and obj.get("artifact_sha256") != artifact_sha256(obj):

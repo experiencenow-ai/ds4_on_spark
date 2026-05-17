@@ -28,6 +28,8 @@ BLOCKER_KINDS = {
     "insufficient_disk",
     "insufficient_memory",
     "unsupported_gpu",
+    "host_unreachable",
+    "spark_reachability_blocked",
     "runtime_install_failed",
     "dependency_conflict",
     "launch_not_run_requires_explicit_allow_launch",

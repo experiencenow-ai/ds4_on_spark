@@ -7,27 +7,62 @@
         "--out",
         "fixtures/spark_reachability/spark_reachability_report_20260517.example.json"
       ],
-      "error": "blocker_kind=ssh_unreachable",
-      "status": "blocked",
+      "error": "Spark0 host aitopatom-9ab9.local accepted SSH; spark0.local/spark1/spark2 inventory aliases remain unresolved or unreachable.",
+      "status": "success",
       "step": "spark_reachability_report"
+    },
+    {
+      "command": [
+        "ssh",
+        "spark0@aitopatom-9ab9.local",
+        "python3",
+        "-V"
+      ],
+      "error": "Python 3.12.3",
+      "status": "success",
+      "step": "remote_python_version"
+    },
+    {
+      "command": [
+        "ssh",
+        "spark0@aitopatom-9ab9.local",
+        "python3",
+        "-c",
+        "import importlib.metadata as m; print(m.version(\"sglang\"))"
+      ],
+      "error": "importlib.metadata.PackageNotFoundError: No package metadata was found for sglang",
+      "status": "blocked",
+      "step": "remote_sglang_import"
+    },
+    {
+      "command": [
+        "ssh",
+        "spark0@aitopatom-9ab9.local",
+        "test",
+        "-e",
+        "/home/spark0/models/sglang/DeepSeek-V4-Flash"
+      ],
+      "error": "checkpoint path does not exist",
+      "status": "blocked",
+      "step": "remote_checkpoint_path"
     }
   ],
   "api_health_status": {
     "endpoint": "http://127.0.0.1:30000/v1/chat/completions",
-    "error": "Spark reachability report blocked SGLang acquisition before install/acquire: Spark hostnames did not resolve through DNS/mDNS, inventory direct IPs were checked but no Spark host accepted SSH.",
+    "error": "SGLang launch was not attempted because Spark0 lacks the sglang Python package and the DeepSeek-V4-Flash checkpoint path.",
     "http_status": null,
     "latency_ms": null,
     "output_token_count": null,
     "response_hash": null,
     "status": "blocked"
   },
-  "artifact_hash": "sha256:a294905e7aba99a42bddc4b7f804a1c209ab92bc1d2c55a26389db1d8dfaf8b5",
-  "artifact_sha256": "sha256:a294905e7aba99a42bddc4b7f804a1c209ab92bc1d2c55a26389db1d8dfaf8b5",
+  "artifact_hash": "sha256:974aa3695074f144a60cce9d29240b1cd391a7498b59fb053f261e7318f4cdac",
+  "artifact_sha256": "sha256:974aa3695074f144a60cce9d29240b1cd391a7498b59fb053f261e7318f4cdac",
   "benchmark_results": [
     {
       "batch_size": 1,
-      "blocker_detail": "Spark reachability report blocked SGLang acquisition before install/acquire: Spark hostnames did not resolve through DNS/mDNS, inventory direct IPs were checked but no Spark host accepted SSH.",
-      "blocker_kind": "other",
+      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
+      "blocker_kind": "sglang_not_installed",
       "case_id": "b1_full_vocab_chat",
       "constrained_scoring": "unsupported",
       "custom_ds4_speedup_inferred": false,
@@ -40,8 +75,8 @@
     },
     {
       "batch_size": 4,
-      "blocker_detail": "Spark reachability report blocked SGLang acquisition before install/acquire: Spark hostnames did not resolve through DNS/mDNS, inventory direct IPs were checked but no Spark host accepted SSH.",
-      "blocker_kind": "other",
+      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
+      "blocker_kind": "sglang_not_installed",
       "case_id": "b4_q_numbered_full_vocab_rows",
       "constrained_scoring": "unsupported",
       "custom_ds4_speedup_inferred": false,
@@ -54,8 +89,8 @@
     },
     {
       "batch_size": 16,
-      "blocker_detail": "Spark reachability report blocked SGLang acquisition before install/acquire: Spark hostnames did not resolve through DNS/mDNS, inventory direct IPs were checked but no Spark host accepted SSH.",
-      "blocker_kind": "other",
+      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
+      "blocker_kind": "sglang_not_installed",
       "case_id": "b16_full_vocab_rows",
       "constrained_scoring": "unsupported",
       "custom_ds4_speedup_inferred": false,
@@ -68,8 +103,8 @@
     },
     {
       "batch_size": 512,
-      "blocker_detail": "Spark reachability report blocked SGLang acquisition before install/acquire: Spark hostnames did not resolve through DNS/mDNS, inventory direct IPs were checked but no Spark host accepted SSH.",
-      "blocker_kind": "other",
+      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
+      "blocker_kind": "sglang_not_installed",
       "case_id": "b512_full_vocab_one_token",
       "constrained_scoring": "unsupported",
       "custom_ds4_speedup_inferred": false,
@@ -82,8 +117,8 @@
     },
     {
       "batch_size": 512,
-      "blocker_detail": "Spark reachability report blocked SGLang acquisition before install/acquire: Spark hostnames did not resolve through DNS/mDNS, inventory direct IPs were checked but no Spark host accepted SSH.",
-      "blocker_kind": "other",
+      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
+      "blocker_kind": "sglang_not_installed",
       "case_id": "b512_constrained_structured_output",
       "constrained_scoring": "unknown",
       "custom_ds4_speedup_inferred": false,
@@ -96,8 +131,8 @@
     },
     {
       "batch_size": 1,
-      "blocker_detail": "Spark reachability report blocked SGLang acquisition before install/acquire: Spark hostnames did not resolve through DNS/mDNS, inventory direct IPs were checked but no Spark host accepted SSH.",
-      "blocker_kind": "other",
+      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
+      "blocker_kind": "sglang_not_installed",
       "case_id": "mtp_low_latency",
       "constrained_scoring": "unsupported",
       "custom_ds4_speedup_inferred": false,
@@ -110,8 +145,8 @@
     },
     {
       "batch_size": 4,
-      "blocker_detail": "Spark reachability report blocked SGLang acquisition before install/acquire: Spark hostnames did not resolve through DNS/mDNS, inventory direct IPs were checked but no Spark host accepted SSH.",
-      "blocker_kind": "other",
+      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
+      "blocker_kind": "sglang_not_installed",
       "case_id": "mtp_balanced",
       "constrained_scoring": "unsupported",
       "custom_ds4_speedup_inferred": false,
@@ -124,8 +159,8 @@
     },
     {
       "batch_size": 512,
-      "blocker_detail": "Spark reachability report blocked SGLang acquisition before install/acquire: Spark hostnames did not resolve through DNS/mDNS, inventory direct IPs were checked but no Spark host accepted SSH.",
-      "blocker_kind": "other",
+      "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
+      "blocker_kind": "sglang_not_installed",
       "case_id": "max_throughput_mtp_disabled",
       "constrained_scoring": "unsupported",
       "custom_ds4_speedup_inferred": false,
@@ -137,16 +172,16 @@
       "tokens_per_second": null
     }
   ],
-  "blocker_detail": "Spark reachability report blocked SGLang acquisition before install/acquire: Spark hostnames did not resolve through DNS/mDNS, inventory direct IPs were checked but no Spark host accepted SSH.",
-  "blocker_kind": "other",
+  "blocker_detail": "Spark0 is reachable over SSH, but python3 importlib.metadata reports package sglang is not installed; expected DeepSeek-V4-Flash checkpoint paths are also absent. Remote package/model acquisition was not attempted by this repo PR.",
+  "blocker_kind": "sglang_not_installed",
   "checkpoint_format": "huggingface",
   "checkpoint_source": {
-    "detail": "Spark reachability report shows no Spark target accepted SSH, so SGLang package state, Hugging Face checkpoint presence, and model acquisition could not be checked on hardware.",
+    "detail": "Spark0 accepted SSH, but /home/spark0/models/sglang/DeepSeek-V4-Flash, /home/spark0/models/DeepSeek-V4-Flash, and the Hugging Face cache path for DeepSeek-V4-Flash were absent.",
     "hf_token_present": false,
     "kind": "huggingface",
     "local_path": "/home/spark0/models/sglang/DeepSeek-V4-Flash",
     "repo_id": "deepseek-ai/DeepSeek-V4-Flash",
-    "status": "blocked"
+    "status": "missing"
   },
   "custom_ds4_comparison": {
     "custom_ds4_constrained_b512": {
@@ -167,17 +202,19 @@
   "dp_size": 1,
   "format": "ds4-sglang-provider-probe-v1",
   "hardware": {
-    "observed_errors": [
-      "spark hostnames did not resolve through DNS/mDNS",
-      "inventory direct IPs were checked but no Spark host accepted SSH",
-      "no Spark host accepted SSH"
+    "gpus": [
+      {
+        "memory_total_mib": "N/A",
+        "name": "NVIDIA GB10"
+      }
     ],
-    "reachability_report": "fixtures/spark_reachability/spark_reachability_report_20260517.example.json",
-    "status": "unreachable",
-    "target_host": "spark0@aitopatom-9ab9.local"
+    "platform": "remote-linux",
+    "python": "Python 3.12.3",
+    "remote_host": "spark0@aitopatom-9ab9.local",
+    "status": "spark0_reachable"
   },
   "launch_command": [
-    "/Library/Developer/CommandLineTools/usr/bin/python3",
+    "python3",
     "-m",
     "sglang.launch_server",
     "--model-path",
@@ -199,7 +236,7 @@
       "HUGGING_FACE_HUB_TOKEN"
     ],
     "hf_token_present": false,
-    "python_executable": "/Library/Developer/CommandLineTools/usr/bin/python3",
+    "python_executable": "python3",
     "target_host": "spark0@aitopatom-9ab9.local"
   },
   "load_success": false,
@@ -216,12 +253,12 @@
   "reachability_report_ref": {
     "format": "ds4-spark-reachability-report-v1",
     "path": "fixtures/spark_reachability/spark_reachability_report_20260517.example.json",
-    "sha256": "sha256:53de12065a91fd5a82714e088fa0d547b5c8444544baea2cfda4a261ec6b378b"
+    "sha256": "sha256:0d18d21e7ac1747c29552eccc71b7212f3a97cfb227aec1e9fc9bbae0090d886"
   },
   "recipe": "balanced",
   "recommendation": "blocked",
-  "run_id": "sglang-provider-probe-spark0-20260517-reachability-blocked",
+  "run_id": "sglang-provider-probe-spark0-20260517-operational-blocked",
   "runtime_id": "sglang-v0.5.12-spark0-probe",
-  "sglang_version": "not_checked",
+  "sglang_version": "not_installed",
   "tp_size": 1
 }

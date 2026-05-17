@@ -22,13 +22,16 @@ class SparkReachabilityReportTest(unittest.TestCase):
             self.assertIn(host, report["ping_results"])
             self.assertIn(host, report["ssh_results"])
             self.assertIn(host, report["known_hosts_status"])
+        self.assertIn("spark0@spark0.local", report["configured_inventory_hosts"])
+        self.assertIn("192.0.2.11", report["direct_ip_results"])
+        self.assertIn("192.0.2.12", report["direct_ip_results"])
         self.assertIn(report["blocker_kind"], validator.BLOCKER_KINDS)
         self.assertIn("Spark", report["recommended_fix"])
 
     def test_artifact_hash_detects_tampering(self) -> None:
         report = validator.load_json(FIXTURE)
         tampered = copy.deepcopy(report)
-        tampered["blocker_kind"] = "none"
+        tampered["blocker_kind"] = "host_unreachable"
         errors = validator.validate_report(tampered)
         self.assertTrue(any("artifact_sha256" in item for item in errors))
 

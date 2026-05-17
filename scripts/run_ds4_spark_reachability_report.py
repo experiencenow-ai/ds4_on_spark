@@ -24,6 +24,16 @@ except ModuleNotFoundError:
 
 FORMAT = "ds4-spark-reachability-report-v1"
 DEFAULT_HOSTS = ("aitopatom-9ab9.local", "spark0.local", "spark1.local", "spark2.local")
+PRIVATE_IPV4_RE = re.compile(r"\b(?:10(?:\.[0-9]{1,3}){3}|192\.168(?:\.[0-9]{1,3}){2}|172\.(?:1[6-9]|2[0-9]|3[0-1])(?:\.[0-9]{1,3}){2})\b")
+LINK_LOCAL_IPV6_RE = re.compile(r"\bfe80:[0-9A-Fa-f:%]+\b")
+SSH_KEY_RE = re.compile(r"\b(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256) [A-Za-z0-9+/=]+")
+
+
+def _redact_probe_text(text: str) -> str:
+    text = PRIVATE_IPV4_RE.sub("<private-ipv4>", text)
+    text = LINK_LOCAL_IPV6_RE.sub("<link-local-ipv6>", text)
+    text = SSH_KEY_RE.sub(r"\1 <known-host-key-redacted>", text)
+    return text
 
 
 def _run(command: list[str], timeout_s: float) -> dict[str, Any]:
@@ -40,16 +50,16 @@ def _run(command: list[str], timeout_s: float) -> dict[str, Any]:
         return {
             "command": command,
             "returncode": proc.returncode,
-            "stdout": proc.stdout.strip(),
-            "stderr": proc.stderr.strip(),
+            "stdout": _redact_probe_text(proc.stdout.strip()),
+            "stderr": _redact_probe_text(proc.stderr.strip()),
             "elapsed_ms": round((time.time() - started) * 1000.0, 3),
         }
     except subprocess.TimeoutExpired as exc:
         return {
             "command": command,
             "returncode": None,
-            "stdout": (exc.stdout or "").strip() if isinstance(exc.stdout, str) else "",
-            "stderr": (exc.stderr or "").strip() if isinstance(exc.stderr, str) else "",
+            "stdout": _redact_probe_text((exc.stdout or "").strip()) if isinstance(exc.stdout, str) else "",
+            "stderr": _redact_probe_text((exc.stderr or "").strip()) if isinstance(exc.stderr, str) else "",
             "elapsed_ms": round((time.time() - started) * 1000.0, 3),
             "timeout": True,
         }
@@ -58,7 +68,7 @@ def _run(command: list[str], timeout_s: float) -> dict[str, Any]:
             "command": command,
             "returncode": None,
             "stdout": "",
-            "stderr": str(exc),
+            "stderr": _redact_probe_text(str(exc)),
             "elapsed_ms": round((time.time() - started) * 1000.0, 3),
         }
 
@@ -85,8 +95,32 @@ def _user_for_target(target: str, default: str) -> str:
     return target.split("@", 1)[0] if "@" in target else default
 
 
-def _read_inventory_targets(root: Path, default_user: str) -> dict[str, str]:
+def _record_target(targets: dict[str, str], configured_hosts: set[str], target: str, default_user: str) -> None:
+    if not target or "<" in target or ">" in target:
+        return
+    host = _host_only(target)
+    user = _user_for_target(target, default_user)
+    targets[host] = target if "@" in target else f"{user}@{target}"
+    configured_hosts.add(target)
+
+
+def _read_line_inventory(root: Path, default_user: str, targets: dict[str, str], configured_hosts: set[str]) -> None:
+    for path in sorted((root / "deploy" / "config").glob("inventory.ds4*.example")):
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            item = line.strip()
+            if not item or item.startswith("#"):
+                continue
+            _record_target(targets, configured_hosts, item, default_user)
+
+
+def _read_inventory_targets(root: Path, default_user: str) -> tuple[dict[str, str], list[str]]:
     targets = {host: f"{default_user}@{host}" for host in DEFAULT_HOSTS}
+    configured_hosts: set[str] = set()
+    _read_line_inventory(root, default_user, targets, configured_hosts)
     manifest_dir = root / "fixtures" / "stage_handoff_manifests"
     for path in sorted(manifest_dir.glob("*.json")):
         try:
@@ -97,14 +131,13 @@ def _read_inventory_targets(root: Path, default_user: str) -> dict[str, str]:
             if not isinstance(stage, dict) or not isinstance(stage.get("host"), str):
                 continue
             host_target = stage["host"]
-            host = _host_only(host_target)
             user = _user_for_target(host_target, default_user)
-            targets[host] = host_target
+            _record_target(targets, configured_hosts, host_target, default_user)
             if isinstance(stage.get("proxy"), str):
-                targets[_host_only(stage["proxy"])] = stage["proxy"]
+                _record_target(targets, configured_hosts, stage["proxy"], default_user)
             if isinstance(stage.get("listen_ip"), str):
-                targets[stage["listen_ip"]] = f"{user}@{stage['listen_ip']}"
-    return targets
+                _record_target(targets, configured_hosts, f"{user}@{stage['listen_ip']}", default_user)
+    return targets, sorted(configured_hosts)
 
 
 def _dns_result(host: str, timeout_s: float) -> dict[str, Any]:
@@ -184,11 +217,31 @@ def _network_interfaces() -> dict[str, Any]:
     }
 
 
+def _direct_ip_results(ip_hosts: list[str], ping_results: dict[str, Any], ssh_results: dict[str, Any]) -> dict[str, Any]:
+    results: dict[str, Any] = {}
+    for host in ip_hosts:
+        ping_status = ping_results.get(host, {}).get("status", "missing")
+        ssh_status = ssh_results.get(host, {}).get("status", "missing")
+        status = "success" if ssh_status == "success" else ("partial" if ping_status == "success" else "failed")
+        results[host] = {
+            "status": status,
+            "ping_status": ping_status,
+            "ssh_status": ssh_status,
+            "error": "" if status == "success" else f"ping={ping_status}; ssh={ssh_status}",
+        }
+    return results
+
+
 def build_report(args: argparse.Namespace) -> dict[str, Any]:
     root = Path(args.root)
-    targets = _read_inventory_targets(root, args.ssh_user) if args.include_inventory else {host: f"{args.ssh_user}@{host}" for host in DEFAULT_HOSTS}
+    if args.include_inventory:
+        targets, configured_inventory_hosts = _read_inventory_targets(root, args.ssh_user)
+    else:
+        targets = {host: f"{args.ssh_user}@{host}" for host in DEFAULT_HOSTS}
+        configured_inventory_hosts = []
     for host in args.host:
         targets[_host_only(host)] = host if "@" in host else f"{args.ssh_user}@{host}"
+        configured_inventory_hosts.append(host)
     expected_hosts = sorted(host for host in targets if host)
     dns_results = {host: _dns_result(host, args.lookup_timeout_s) for host in expected_hosts}
     mdns_results = {host: _mdns_result(host, args.lookup_timeout_s) for host in expected_hosts}
@@ -201,6 +254,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     any_hostname_dns = any(dns_results[host].get("status") == "success" for host in hostname_hosts)
     any_hostname_mdns = any(mdns_results[host].get("status") == "success" for host in hostname_hosts)
     any_ip_literal = bool(ip_literal_hosts)
+    direct_ip_results = _direct_ip_results(ip_literal_hosts, ping_results, ssh_results)
     if not expected_hosts:
         blocker_kind = "no_expected_hosts"
         blocker_detail = "No Spark hosts were supplied or discovered."
@@ -222,10 +276,12 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "local_host": {"hostname": socket.gethostname(), "platform": platform.platform()},
         "expected_hosts": expected_hosts,
+        "configured_inventory_hosts": sorted(set(configured_inventory_hosts)),
         "dns_results": dns_results,
         "mdns_results": mdns_results,
         "ping_results": ping_results,
         "ssh_results": ssh_results,
+        "direct_ip_results": direct_ip_results,
         "known_hosts_status": known_hosts_status,
         "network_interface_summary": _network_interfaces(),
         "blocker_kind": blocker_kind,
