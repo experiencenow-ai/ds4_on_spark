@@ -24,7 +24,6 @@ FINITE_LOGITS_ROWS_S = 631.672
 RUNTIME_HOOK_FILE = "scripts/ds4_batch_generate.py"
 MISSING_PREFIX_KV_RUNTIME_HOOKS_BY_OPERATION = (
 	("prefix_prepare", "ds4_runtime_prefix_prepare"),
-	("prefix_pin", "ds4_runtime_prefix_pin"),
 	("prefix_fork", "ds4_runtime_prefix_fork"),
 	("session_append", "ds4_runtime_session_append"),
 	("session_decode", "ds4_runtime_session_decode"),
@@ -339,6 +338,9 @@ def _validate_runtime_hook_status(errors: list[str], telemetry: dict[str, Any]) 
 		missing = [hook for hook in MISSING_PREFIX_KV_RUNTIME_HOOKS if hook not in hooks]
 		if missing:
 			errors.append("missing_prefix_kv_runtime_hook must name all required prefix/session hooks")
+		extra = [hook for hook in hooks if hook not in MISSING_PREFIX_KV_RUNTIME_HOOKS]
+		if extra:
+			errors.append("missing_prefix_kv_runtime_hook names unknown runtime hooks")
 	_validate_missing_runtime_hook_details(errors, telemetry)
 
 
@@ -348,6 +350,9 @@ def _validate_missing_runtime_hook_details(errors: list[str], telemetry: dict[st
 		errors.append("missing_prefix_kv_runtime_hook must include missing_runtime_hook_details")
 		return
 	by_hook = {str(item.get("api_hook")): item for item in details if isinstance(item, dict)}
+	extra = [hook for hook in by_hook if hook not in MISSING_PREFIX_KV_RUNTIME_HOOKS]
+	if extra:
+		errors.append("missing_runtime_hook_details names unknown runtime hooks")
 	for operation, hook in MISSING_PREFIX_KV_RUNTIME_HOOKS_BY_OPERATION:
 		detail = by_hook.get(hook)
 		if not isinstance(detail, dict):
@@ -573,8 +578,7 @@ def _build_missing_prefix_kv_runtime_result(request: dict[str, Any]) -> dict[str
 			"blocker_kind": "missing_prefix_kv_runtime_hook",
 			"blocker_detail": (
 				"repo-owned callable runtime hook is missing for ds4_runtime_prefix_prepare, "
-				"ds4_runtime_prefix_pin, ds4_runtime_prefix_fork, "
-				"ds4_runtime_session_append, ds4_runtime_session_decode, "
+				"ds4_runtime_prefix_fork, ds4_runtime_session_append, ds4_runtime_session_decode, "
 				"ds4_runtime_session_release, and ds4_runtime_prefix_release; "
 				"scripts/ds4_batch_generate remains fixture-backed"
 			),

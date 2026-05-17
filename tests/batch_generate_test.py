@@ -107,11 +107,12 @@ class BatchGenerateTest(unittest.TestCase):
 		self.assertEqual(result["telemetry"]["blocking_runtime_hook"], "ds4_runtime_prefix_prepare")
 		self.assertEqual(result["telemetry"]["blocking_runtime_file"], "scripts/ds4_batch_generate.py")
 		self.assertEqual(result["telemetry"]["blocking_runtime_function"], "ds4_runtime_prefix_prepare")
-		self.assertIn("ds4_runtime_prefix_pin", result["telemetry"]["missing_runtime_hooks"])
+		self.assertNotIn("ds4_runtime_prefix_pin", result["telemetry"]["missing_runtime_hooks"])
 		self.assertIn("ds4_runtime_session_decode", result["telemetry"]["missing_runtime_hooks"])
 		details = {item["api_hook"]: item for item in result["telemetry"]["missing_runtime_hook_details"]}
-		self.assertEqual(details["ds4_runtime_prefix_pin"]["file"], "scripts/ds4_batch_generate.py")
-		self.assertEqual(details["ds4_runtime_prefix_pin"]["function"], "ds4_runtime_prefix_pin")
+		self.assertNotIn("ds4_runtime_prefix_pin", details)
+		self.assertEqual(details["ds4_runtime_prefix_fork"]["file"], "scripts/ds4_batch_generate.py")
+		self.assertEqual(details["ds4_runtime_prefix_fork"]["function"], "ds4_runtime_prefix_fork")
 		self.assertFalse(result["telemetry"]["production_generation_eligible"])
 
 	def test_missing_prefix_runtime_hooks_block_production_eligibility(self) -> None:
@@ -130,6 +131,20 @@ class BatchGenerateTest(unittest.TestCase):
 		result["telemetry"].pop("missing_runtime_hook_details")
 		errors = batch.validate_result(result, request)
 		self.assertTrue(any("missing_runtime_hook_details" in error for error in errors))
+
+	def test_missing_prefix_runtime_hook_list_rejects_unknown_hook_drift(self) -> None:
+		request = batch.load_json(FIX / "live_smoke_b512_constrained_1tok_request.example.json")
+		result = copy.deepcopy(batch.load_json(FIX / "live_smoke_b512_constrained_1tok_result.example.json"))
+		result["telemetry"]["missing_runtime_hooks"].append("ds4_runtime_prefix_pin")
+		result["telemetry"]["missing_runtime_hook_details"].append({
+			"operation": "prefix_pin",
+			"api_hook": "ds4_runtime_prefix_pin",
+			"file": "scripts/ds4_batch_generate.py",
+			"function": "ds4_runtime_prefix_pin",
+			"status": "missing",
+		})
+		errors = batch.validate_result(result, request)
+		self.assertTrue(any("unknown runtime hooks" in error for error in errors))
 
 	def test_live_smoke_mixed_modes_split_when_blocked(self) -> None:
 		result = batch.load_json(FIX / "live_smoke_mixed_output_modes_result.example.json")
