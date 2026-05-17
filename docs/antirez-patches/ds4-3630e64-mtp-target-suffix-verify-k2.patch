@@ -713,7 +713,7 @@ index 9871775..72da52f 100644
          ok = ds4_gpu_indexer_topk_tensor(g->comp_selected,
                                             g->logits,
                                             DS4_N_VOCAB,
-@@ -12797,6 +13364,556 @@ static bool metal_graph_eval_mtp_draft(
+@@ -12797,6 +13364,584 @@ static bool metal_graph_eval_mtp_draft(
                                                top_id);
  }
 
@@ -788,6 +788,10 @@ index 9871775..72da52f 100644
 +    const bool continuation_top1_head =
 +        row0_top1_head &&
 +        getenv("DS4_MTP_ROW2_TOP1_CONT") != NULL &&
++        getenv("DS4_MTP_ROW2_FULL_LOGITS") == NULL;
++    const bool partial_top1_cont =
++        row0_top1_head &&
++        getenv("DS4_MTP_PARTIAL_TOP1_CONT") != NULL &&
 +        getenv("DS4_MTP_ROW2_FULL_LOGITS") == NULL;
 +    const double t0 = mtp_timing ? now_sec() : 0.0;
 +    const int start = checkpoint->len;
@@ -976,30 +980,42 @@ index 9871775..72da52f 100644
 +        checkpoint->len = start;
 +        if (!ok)
 +            return -1;
-+        if (!metal_graph_read_suffix_logits_or_top1(g, model, weights, 1, logits))
-+            return -1;
++        double readback_ms = 0.0;
++        const bool read_logits = need_logits || !partial_top1_cont;
++        if (read_logits) {
++            const double t_read0 = mtp_timing ? now_sec() : 0.0;
++            ok = metal_graph_read_suffix_logits_or_top1(g, model, weights, 1, logits);
++            const double t_read1 = mtp_timing ? now_sec() : 0.0;
++            readback_ms = (t_read1 - t_read0) * 1000.0;
++            if (!ok)
++                return -1;
++            if (stats && row0_top1_head) {
++                stats->head_calls++;
++                stats->head_rows++;
++                stats->full_vocab_rows++;
++            }
++        } else if (next_token_out) {
++            *next_token_out = row_tops[1];
++        }
 +        if (!metal_graph_commit_batch_hc_row_to_current(g, 1))
 +            return -1;
-+        if (stats && row0_top1_head) {
-+            stats->head_calls++;
-+            stats->head_rows++;
-+            stats->full_vocab_rows++;
-+        }
 +        token_vec_push(checkpoint, first_token);
 +        token_vec_push(checkpoint, drafts[0]);
 +        if (stats) stats->emitted += 2;
 +        accepted[0] = first_token;
 +        accepted[1] = drafts[0];
 +        if (mtp_timing) {
++            const int readback_head_calls = (read_logits && row0_top1_head) ? 1 : 0;
 +            fprintf(stderr,
-+                    "ds4: mtp timing suffix2 drafted=2 committed=1 first_eval=0.000 ms draft=%.3f ms snapshot=0.000 ms verify=%.3f ms prefix=%.3f ms target=%.3f ms head=0.000 ms verifier_calls=1 target_positions=3 target_calls=1 head_calls=%d head_rows=%d full_vocab_rows=%d top1_rows=%d draft_calls=2 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=2 total=%.3f ms\n",
++                    "ds4: mtp timing suffix2 drafted=2 committed=1 first_eval=0.000 ms draft=%.3f ms snapshot=0.000 ms verify=%.3f ms prefix=%.3f ms target=%.3f ms head=0.000 ms readback=%.3f ms verifier_calls=1 target_positions=3 target_calls=1 head_calls=%d head_rows=%d full_vocab_rows=%d top1_rows=%d draft_calls=2 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=2 total=%.3f ms\n",
 +                    (t_after_draft - t_draft0) * 1000.0,
 +                    (t_suffix1 - t_suffix0) * 1000.0,
 +                    (t_prefix1 - t_prefix0) * 1000.0,
 +                    (t_suffix1 - t_suffix0) * 1000.0,
-+                    row0_top1_head ? 2 : 1,
-+                    row0_top1_head ? 4 : 3,
-+                    row0_top1_head ? 2 : 3,
++                    readback_ms,
++                    1 + readback_head_calls,
++                    3 + readback_head_calls,
++                    row0_top1_head ? (1 + readback_head_calls) : 3,
 +                    row0_top1_head ? 2 : 0,
 +                    (now_sec() - t0) * 1000.0);
 +        }
@@ -1015,28 +1031,40 @@ index 9871775..72da52f 100644
 +    checkpoint->len = start;
 +    if (!ok)
 +        return -1;
-+    if (!metal_graph_read_suffix_logits_or_top1(g, model, weights, 0, logits))
-+        return -1;
++    double readback_ms = 0.0;
++    const bool read_logits = need_logits || !partial_top1_cont;
++    if (read_logits) {
++        const double t_read0 = mtp_timing ? now_sec() : 0.0;
++        ok = metal_graph_read_suffix_logits_or_top1(g, model, weights, 0, logits);
++        const double t_read1 = mtp_timing ? now_sec() : 0.0;
++        readback_ms = (t_read1 - t_read0) * 1000.0;
++        if (!ok)
++            return -1;
++        if (stats && row0_top1_head) {
++            stats->head_calls++;
++            stats->head_rows++;
++            stats->full_vocab_rows++;
++        }
++    } else if (next_token_out) {
++        *next_token_out = row_tops[0];
++    }
 +    if (!metal_graph_commit_batch_hc_row_to_current(g, 0))
 +        return -1;
-+    if (stats && row0_top1_head) {
-+        stats->head_calls++;
-+        stats->head_rows++;
-+        stats->full_vocab_rows++;
-+    }
 +    token_vec_push(checkpoint, first_token);
 +    if (stats) stats->emitted += 1;
 +    accepted[0] = first_token;
 +    if (mtp_timing) {
++        const int readback_head_calls = (read_logits && row0_top1_head) ? 1 : 0;
 +        fprintf(stderr,
-+                "ds4: mtp timing suffix2 drafted=2 committed=0 first_eval=0.000 ms draft=%.3f ms snapshot=0.000 ms verify=%.3f ms prefix=%.3f ms target=%.3f ms head=0.000 ms verifier_calls=1 target_positions=3 target_calls=1 head_calls=%d head_rows=%d full_vocab_rows=%d top1_rows=%d draft_calls=2 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=1 total=%.3f ms\n",
++                "ds4: mtp timing suffix2 drafted=2 committed=0 first_eval=0.000 ms draft=%.3f ms snapshot=0.000 ms verify=%.3f ms prefix=%.3f ms target=%.3f ms head=0.000 ms readback=%.3f ms verifier_calls=1 target_positions=3 target_calls=1 head_calls=%d head_rows=%d full_vocab_rows=%d top1_rows=%d draft_calls=2 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=1 total=%.3f ms\n",
 +                (t_after_draft - t_draft0) * 1000.0,
 +                (t_suffix1 - t_suffix0) * 1000.0,
 +                (t_prefix1 - t_prefix0) * 1000.0,
 +                (t_suffix1 - t_suffix0) * 1000.0,
-+                row0_top1_head ? 2 : 1,
-+                row0_top1_head ? 4 : 3,
-+                row0_top1_head ? 2 : 3,
++                readback_ms,
++                1 + readback_head_calls,
++                3 + readback_head_calls,
++                row0_top1_head ? (1 + readback_head_calls) : 3,
 +                row0_top1_head ? 2 : 0,
 +                (now_sec() - t0) * 1000.0);
 +    }

@@ -142,11 +142,13 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - carries the GPU-selected row2 continuation argmax into the next loop iteration, avoiding a CPU full-vocab argmax scan per accepted group
     - reads the already-materialized row2 logits only when trace/debug output needs host logits; the unsafe row2 no-readback escape hatch is intentionally absent because lazy readback is now tied to the valid pending continuation token instead of a free env knob
     - keeps the experimental row2 top1-only continuation path behind `DS4_MTP_ROW2_TOP1_CONT=1`; the measured experiment lowered acceptance, so it is not the default exact path
+    - keeps partial-accept top1-only continuation behind `DS4_MTP_PARTIAL_TOP1_CONT=1`; the default still materializes exact continuation logits on partial accepts
     - stops the direct generation loop once `n_generated >= n_predict`, so multi-token commits do not run extra serial iterations after the requested output budget
     - uses top1-only MTP draft heads when draft logits are not requested; `DS4_MTP_DRAFT_FULL_LOGITS=1` restores full-vocab draft logits for diagnostics
     - adds `DS4_SUPPRESS_OUTPUT=1` for model-throughput benchmarks that still commit tokens but skip per-token CLI text rendering and stdout flush
     - keeps `DS4_MTP_SERIAL_SUFFIX=1` only as a diagnostic escape hatch for comparing against the older serial decode verifier
     - emits verifier invocation/position/head-row accounting; the intended fast path reports `verifier_calls=1`, `target_positions=3`, and `first_eval=0.000 ms` for full K=2 accepts
+    - requires repeated timing evidence for direction-setting claims: build `ds4-mtp-timing-samples-v1` from at least 10 same-command samples before treating a K=2 t/s delta as stable
     - prototypes the next K=3 direct verifier first: `--mtp-draft 3` drafts three tokens, verifies `[target_token,draft0,draft1,draft2]` in one 4-row target suffix job, uses top1 rows 0-2 plus full continuation logits on row3, and reports `target_positions=4` on full accepts
     - adds a prefix-3 verifier frontier, so a row0+row1 K=3 partial accept can commit `[target_token,draft0,draft1]` and materialize row2 continuation logits without serial target replay
 
