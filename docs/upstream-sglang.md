@@ -23,6 +23,24 @@ SGLang is a high-performance serving framework that includes explicit DeepSeek-V
 
 - This repo’s automation loop does **not** run SGLang builds or GPU tests; treat upstream as a reference unless a human approves Spark time + fixtures.
 
+## Provider probe status
+
+`scripts/run_ds4_sglang_provider_probe.py` emits `ds4-sglang-provider-probe-v1` artifacts for the required DS4
+serving comparison matrix: B=1, B=4, B=16, B=512 full-vocab, B=512 structured output, low-latency MTP,
+balanced MTP, and max-throughput MTP-disabled cases. The probe records the intended launch command, detected
+SGLang version, hardware summary, benchmark rows, and custom DS4 comparison anchors without replacing the custom
+runtime path.
+
+Current local fixture:
+
+- `fixtures/sglang_provider_probe/sglang_provider_probe_local_blocked.example.json`
+- result: `blocked`
+- blocker: `sglang_not_installed`
+- recommendation: `blocked`
+
+No SGLang throughput or constrained-output speedup should be inferred from this fixture. Structured output remains
+`constrained_scoring: unknown` until SGLang proves candidate-only scoring or an equivalent measured artifact.
+
 ## DFlash model-card PR pin (reference)
 
 Z Lab DFlash model cards reference SGLang at `refs/pull/20547/head` (`e67a0d488d905661e621342912874bc7893f1d94`). We pin this PR ref separately in `docs/upstream-manifest.md` for reproducible inspection.
