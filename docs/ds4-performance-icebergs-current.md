@@ -39,6 +39,8 @@ not pay a CPU full-vocab argmax scan.
 | True K=2 suffix + GPU continuation top1 | 126 | 11.02 | 20.55 | 1.865x | 84/84 | 42 | 84 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_true_suffix_k2_pendingtop/20260516T142212Z/mtp_verifier_economics.baseline1102.json` |
 | K=2 guarded exact continuation rerun | 126 | 11.02 | 20.08 | 1.822x | 84/84 | 42 | 84 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k2_guarded_default/20260516T235321Z/mtp_verifier_economics.json` |
 | K=2 row2 top1-only continuation experiment | 126 | 11.02 | 11.59 | 1.052x | 70/112 | 62 | 137 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k2_top1_cont_pendingtop/20260516T234714Z/mtp_verifier_economics.json` |
+| K=2 exact row2 readback without rematerialize | 126 | 11.00 | 20.26 | 1.842x | 84/84 | 42 | 84 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k2_samebinary_no_oldenv/20260517T021332Z/mtp_verifier_economics.json` |
+| K=2 row2 no-readback experiment | 126 | 11.00 | 11.34 | 1.031x | 70/108 | 83 | 108 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k2_exact_no_readback/20260517T015728Z/mtp_verifier_economics.json` |
 | K=3 suffix prototype | 128 | 11.01 | 7.42 | 0.674x | 49/174 | 114 | 174 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k3_prototype/20260516T154041Z/mtp_verifier_economics.json` |
 | K=3 suffix + prefix-3 frontier | 128 | 11.01 | 11.19 | 1.016x | 75/153 | 97 | 153 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k3_prefix3/20260516T232454Z/mtp_verifier_economics.json` |
 
@@ -48,14 +50,18 @@ measured 20.55 t/s. The verifier accounting is the DeepSeek-shaped case:
 `target_positions_per_invocation=3.0`, `target_verifier_invocation_count=42`,
 `target_positions_verified=126`, `output_head_invocation_count=42`,
 `full_vocab_logits_rows=42`, `top1_only_rows=84`, `accept_rate=1.0`, and
-`target_next_mismatch_events=0`. A K=2 row2 top1-only continuation experiment
-removed the full-vocab continuation row but changed the continuation path enough
-to drop acceptance to 70/112 and 11.59 t/s, so it remains opt-in only via
-`DS4_MTP_ROW2_TOP1_CONT=1`. The exact next K=2 performance change is an exact
-top1 continuation primitive that matches the full-logits/indexer argmax before
-removing row2 full logits from the default path. Tail handling for output
-lengths outside the 3-token target/draft/draft group remains a separate
-production-completeness blocker.
+`target_next_mismatch_events=0`. Reading the already-materialized row2 logits
+instead of rematerializing them preserved exact acceptance at 20.26 t/s and
+exposed `logits_readback_ms=0.463` total. A K=2 row2 top1-only continuation
+experiment removed the full-vocab continuation row but changed the continuation
+path enough to drop acceptance to 70/112 and 11.59 t/s, so it remains opt-in
+only via `DS4_MTP_ROW2_TOP1_CONT=1`. A no-readback experiment also changed the
+trajectory, dropping acceptance to 70/108 and 11.34 t/s, so
+`DS4_MTP_ROW2_SKIP_LOGITS_READBACK=1` is diagnostic-only. The exact next K=2
+performance change is an exact top1 continuation primitive that matches the
+full-logits/indexer argmax before removing row2 full logits from the default
+path. Tail handling for output lengths outside the 3-token target/draft/draft
+group remains a separate production-completeness blocker.
 
 K selection is not power-of-two constrained. The verifier group needs one
 normal target row plus `K` extra drafted rows, so the scheduler should only

@@ -37,6 +37,11 @@ class AntirezDs4MtpTargetSuffixVerifyPatchTest(unittest.TestCase):
 		errors = verify.validate_patch_text(text)
 		self.assertTrue(any("metal_graph_encode_output_head_suffix3_top3" in item for item in errors))
 
+	def test_rejects_k2_without_exact_continuation_readback_gate(self) -> None:
+		text = PATCH.read_text(encoding="utf-8").replace("DS4_MTP_ROW2_SKIP_LOGITS_READBACK", "")
+		errors = verify.validate_patch_text(text)
+		self.assertTrue(any("DS4_MTP_ROW2_SKIP_LOGITS_READBACK" in item for item in errors))
+
 
 if __name__ == "__main__":
 	unittest.main()
