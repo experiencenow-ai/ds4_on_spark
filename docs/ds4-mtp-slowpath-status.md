@@ -1,5 +1,13 @@
 # DS4 MTP Slowpath Status
 
+## 2026-05-18 corrected K=2 status
+
+- The earlier K=2 84/84 acceptance and 1.8x speedup fixtures are superseded. The verifier top-k call was inverted: it requested top-3 candidates from one row and treated them as top-1 from three verifier rows.
+- Corrected Spark0 trace: `DS4_MTP_EXACT_SUFFIX3=1` with the top-k row/count fix is token-identical to greedy baseline for an 80-token trace.
+- Current controlled repeats after one warmup: baseline median 15.83 t/s; MTP K=2 median 7.86 t/s; accept rate 41/78 = 0.525641; speedup 0.496526x.
+- Slowest component/blocker: verifier output head economics. The corrected K=2 run verifies 117 target positions in 39 verifier invocations, but still computes 117 full-vocabulary verifier rows.
+- Next exact code change: implement a strict verifier top-1 head that matches full-logits argmax numerically, then keep only the continuation row full-vocab when needed. MTP remains paused as a speed path until corrected MTP beats baseline.
+
 ## K=2 direct verifier status
 
 - PR #1125 changed K=2 materially: the original controlled run used baseline greedy 11.02 t/s and MTP draft=2 20.55 t/s, a 1.865x speedup, with 84/84 accepted draft tokens and 0 target-next mismatches.

@@ -4,8 +4,8 @@
   "accounted_timing_ms": 6217.456,
   "attempted_draft_tokens": 84,
   "baseline_tps": 11.0,
-  "blocker_detail": "",
-  "blocker_kind": "none",
+  "blocker_detail": "Superseded by 20260518 top-k row/count inversion fix: this run used the invalid verifier row accounting that treated top-3 from one row as top-1 from three rows, so the 84/84 acceptance and 1.84x speedup are not valid MTP evidence.",
+  "blocker_kind": "superseded_invalid_topk_row_count",
   "cache_sync_count": 0,
   "draft_eval_ms": 765.47,
   "emitted_tokens": 126,
@@ -36,5 +36,6 @@
   "timing_coverage_rate": 0.999727448888889,
   "token_commit_ms": 0.0,
   "top1_only_rows": 84,
-  "unaccounted_generation_wall_ms": 1.695036525172327
+  "unaccounted_generation_wall_ms": 1.695036525172327,
+  "validity_status": "superseded_by_20260518_topk_row_count_fix"
 }

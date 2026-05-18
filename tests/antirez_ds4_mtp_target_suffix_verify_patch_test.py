@@ -67,6 +67,23 @@ class AntirezDs4MtpTargetSuffixVerifyPatchTest(unittest.TestCase):
 		errors = verify.validate_patch_text(text)
 		self.assertTrue(any("row_tops[1]" in item for item in errors))
 
+	def test_rejects_topk_row_count_inversion(self) -> None:
+		text = PATCH.read_text(encoding="utf-8").replace(
+			"+                                               top_rows,\n+                                               1) != 0",
+			"+                                               1,\n+                                               top_rows) != 0",
+		)
+		errors = verify.validate_patch_text(text)
+		self.assertTrue(any("top_rows" in item for item in errors))
+
+	def test_rejects_exact3_topk_row_count_inversion(self) -> None:
+		text = PATCH.read_text(encoding="utf-8").replace(
+			"+                                                       DS4_N_VOCAB,\n+                                                       3,\n+                                                       1",
+			"+                                                       DS4_N_VOCAB,\n+                                                       1,\n+                                                       3",
+			1,
+		)
+		errors = verify.validate_patch_text(text)
+		self.assertTrue(any("DS4_N_VOCAB" in item for item in errors))
+
 
 if __name__ == "__main__":
 	unittest.main()
