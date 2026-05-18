@@ -192,6 +192,8 @@ class Ds4MtpVerifierEconomicsTest(unittest.TestCase):
 		self.assertEqual(obj["full_vocab_logits_rows"], 42)
 		self.assertEqual(obj["top1_only_rows"], 84)
 		self.assertGreater(obj["speedup_vs_baseline"], 1.8)
+		self.assertEqual(obj["blocker_kind"], "superseded_invalid_topk_row_count")
+		self.assertEqual(obj["validity_status"], "superseded_by_20260518_topk_row_count_fix")
 		self.assertTrue(validate.validate_report(obj)["ok"])
 
 	def test_k2_exact_readback_no_rematerialize_preserves_acceptance(self) -> None:
@@ -205,6 +207,23 @@ class Ds4MtpVerifierEconomicsTest(unittest.TestCase):
 		self.assertEqual(obj["top1_only_rows"], 84)
 		self.assertGreater(obj["speedup_vs_baseline"], 1.8)
 		self.assertGreater(obj["logits_readback_ms"], 0.0)
+		self.assertEqual(obj["blocker_kind"], "superseded_invalid_topk_row_count")
+		self.assertEqual(obj["validity_status"], "superseded_by_20260518_topk_row_count_fix")
+		self.assertTrue(validate.validate_report(obj)["ok"])
+
+	def test_k2_topk_fixed_records_real_shortfall(self) -> None:
+		import json
+		path = FIX / "ds4_mtp_verifier_economics_k2_topk_fixed_20260518.example.json"
+		obj = json.loads(path.read_text(encoding="utf-8"))
+		self.assertAlmostEqual(obj["accept_rate"], 41.0 / 78.0)
+		self.assertEqual(obj["target_verifier_invocation_count"], 39)
+		self.assertEqual(obj["target_positions_verified"], 117)
+		self.assertAlmostEqual(obj["target_positions_per_invocation"], 3.0)
+		self.assertEqual(obj["output_head_invocation_count"], 39)
+		self.assertEqual(obj["full_vocab_logits_rows"], 117)
+		self.assertEqual(obj["top1_only_rows"], 0)
+		self.assertLess(obj["mtp_tps"], obj["baseline_tps"])
+		self.assertEqual(obj["blocker_kind"], "full_vocab_verifier_head_token_for_token")
 		self.assertTrue(validate.validate_report(obj)["ok"])
 
 	def test_k2_row2_no_readback_experiment_records_acceptance_drop(self) -> None:

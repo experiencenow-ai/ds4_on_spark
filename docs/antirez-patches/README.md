@@ -134,8 +134,18 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
   - Purpose:
     - introduces the target-suffix verifier API shape required for economical MTP verification:
       `target_suffix_verify(checkpoint_state, draft_tokens[2])`
+    - fixes the verifier top-k row/count inversion found on 2026-05-18: verifier batches must request
+      `top_k=1` across `top_rows` rows, not `top_rows` candidates from one row
+    - supersedes the earlier 84/84 acceptance and 1.8x K=2 fixtures; those runs used the inverted top-k
+      accounting and are not valid speedup evidence
+    - the corrected exact K=2 path is token-identical to greedy baseline on the 80-token Spark0 trace, but
+      remains slower: baseline median 15.83 t/s, MTP median 7.86 t/s, accept 41/78=0.526, speedup 0.497x
+    - the current blocker is verifier head economics: corrected K=2 verified 117 target positions in 39
+      invocations, but still ran 117 full-vocabulary verifier rows; the next code change is a strict
+      batched top-1 verifier head that numerically matches full logits while keeping only continuation rows
+      full-vocab
     - routes greedy `--mtp` through the direct argmax graph path by default; `DS4_MTP_SESSION=1` keeps the older session verifier path available for diagnostics
-    - makes the DeepSeek-shaped K=2 verifier the default path: preserve the current target hidden state, draft two future tokens from it, append `[target_token, draft0, draft1]`, and run one target suffix verifier over all three positions
+    - adds an opt-in DeepSeek-shaped K=2 exact verifier behind `DS4_MTP_EXACT_SUFFIX3=1`: preserve the current target hidden state, draft two future tokens from it, append `[target_token, draft0, draft1]`, and run one target suffix verifier over all three positions
     - captures prefix-1 and prefix-2 verifier frontiers, so a row0-only match can still commit `[target_token, draft0]` without replaying serial target decode
     - preloads the MTP sidecar before the decode timer so first-draft lazy tensor caching does not poison generation TPS
     - defaults row0/row1 verifier accept checks to full logits for exactness; `DS4_MTP_ROW0_TOP1_HEAD=1` enables the experimental CUDA Q8 top1 primitive for row0/row1, and `DS4_MTP_ROW0_FULL_LOGITS=1` remains a hard full-vocab override for A/B testing
