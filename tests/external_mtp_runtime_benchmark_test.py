@@ -6,12 +6,26 @@ from scripts import validate_ds4_external_mtp_runtime_benchmark as validator
 
 
 FIXTURE = Path("fixtures/external_mtp_runtime_bench/ds4_external_mtp_runtime_bench_spark0_20260517.example.json")
+SPARK012_FIXTURE = Path(
+    "fixtures/external_mtp_runtime_bench/ds4_external_mtp_runtime_bench_spark012_vllm_pp3_20260518.example.json"
+)
 
 
 class ExternalMtpRuntimeBenchmarkTest(unittest.TestCase):
     def test_fixture_validates(self) -> None:
         result = validator.validate_paths([FIXTURE])
         self.assertTrue(result["ok"], result["errors"])
+
+    def test_three_spark_vllm_fixture_is_blocked_without_speed_claim(self) -> None:
+        result = validator.validate_paths([SPARK012_FIXTURE])
+        self.assertTrue(result["ok"], result["errors"])
+        obj = validator.load_json(SPARK012_FIXTURE)
+        vllm = next(item for item in obj["runtime_attempts"] if item["runtime"] == "vllm")
+        self.assertEqual(vllm["benchmark_status"], "blocked")
+        self.assertEqual(vllm["blocker_kind"], "insufficient_gpu_count")
+        self.assertIsNone(vllm["baseline_generation_tps"])
+        self.assertIsNone(vllm["mtp_generation_tps"])
+        self.assertEqual(obj["spark_reachability"]["usable_gpu_count_for_external_ds4"], 3)
 
     def test_blocked_attempt_cannot_claim_speed(self) -> None:
         obj = validator.load_json(FIXTURE)
