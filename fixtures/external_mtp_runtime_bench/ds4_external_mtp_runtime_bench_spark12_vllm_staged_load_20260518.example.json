@@ -1,0 +1,172 @@
+{
+  "artifact_hash": "ff9f22c65c1ad9ee5713feb3933e2fbc4870007d555267e6908767672bc9063f",
+  "artifact_sha256": "ff9f22c65c1ad9ee5713feb3933e2fbc4870007d555267e6908767672bc9063f",
+  "checked_at": "2026-05-18T10:21:05Z",
+  "format": "ds4-external-mtp-runtime-benchmark-v1",
+  "model_artifact": {
+    "available_format_on_spark0": "hf_safetensors_fp4_fp8",
+    "available_format_on_spark1": "hf_safetensors_fp4_fp8",
+    "available_format_on_spark2": "hf_safetensors_fp4_fp8",
+    "base_hf_spark0": "/home/spark0/models/hf/deepseek-ai/DeepSeek-V4-Flash",
+    "base_hf_spark1": "/home/spark1/models/hf/deepseek-ai/DeepSeek-V4-Flash",
+    "base_hf_spark2": "/home/spark2/models/hf/deepseek-ai/DeepSeek-V4-Flash",
+    "hf_checkpoint_present_on_spark0": true,
+    "hf_checkpoint_present_on_spark1": true,
+    "hf_checkpoint_present_on_spark2": true,
+    "hf_checkpoint_repo": "deepseek-ai/DeepSeek-V4-Flash",
+    "hf_checkpoint_revision": "6976c7ff1b30a1b2cb7805021b8ba4684041f136",
+    "hf_checkpoint_safetensors_count": 46,
+    "hf_checkpoint_safetensors_total_bytes": 159617149040,
+    "hf_checkpoint_safetensors_gib": 148.66,
+    "spark1_vllm_symlink": "/tmp/ds4-hf-deepseek-v4-flash",
+    "spark2_vllm_symlink": "/tmp/ds4-hf-deepseek-v4-flash"
+  },
+  "prompt_sha256": "9bb098e9af0bd1aad2335fca85248a624a361637c523d0248e810a48353479d5",
+  "run_id": "ds4-external-mtp-runtime-bench-spark12-vllm-staged-load-20260518",
+  "runtime_attempts": [
+    {
+      "artifact_path": "",
+      "baseline_generation_tps": null,
+      "benchmark_status": "not_run",
+      "blocker_detail": "Spark1/Spark2 were used for the standard upstream vLLM load attempt. Upstream llama.cpp was not re-run in this pass; the prior Spark0 run already showed upstream MTP CLI support but no standard deepseek4 GGUF architecture loader.",
+      "blocker_kind": "benchmark_not_run",
+      "command": "not run; vLLM standard release selected for Spark1/Spark2 staged-checkpoint load",
+      "ds4_model_supported": false,
+      "model_format": "gguf",
+      "mtp_config": {
+        "selected_for_this_run": false,
+        "reason": "standard upstream llama.cpp DS4 GGUF plus MTP remains blocked by unsupported deepseek4 architecture"
+      },
+      "mtp_enabled": false,
+      "mtp_generation_tps": null,
+      "mtp_supported": true,
+      "runtime": "llama_cpp",
+      "runtime_commit": "",
+      "runtime_version": "not_selected",
+      "speedup_vs_baseline": null
+    },
+    {
+      "artifact_path": "",
+      "baseline_generation_tps": null,
+      "benchmark_status": "blocked",
+      "blocker_detail": "SGLang was not installed in this Spark1/Spark2 pass. Docker is present but the spark users cannot access /var/run/docker.sock without sudo. Official SGLang DeepSeek-V4-Flash recipes describe multi-GPU Blackwell deployments for the unmodified checkpoint; this pass selected upstream vLLM first because vLLM 0.21.0 was already installed and exposes DeepSeekV4MTPModel.",
+      "blocker_kind": "runtime_not_installed",
+      "command": "not run; candidate command would be SGLANG_ENABLE_SPEC_V2=1 sglang serve deepseek-ai/DeepSeek-V4-Flash",
+      "ds4_model_supported": true,
+      "model_format": "hf_safetensors_fp4_fp8",
+      "mtp_config": {
+        "official_recipe": "low-latency steps=3 draft-tokens=4 or balanced steps=1 draft-tokens=2",
+        "requires_env": "SGLANG_ENABLE_SPEC_V2=1"
+      },
+      "mtp_enabled": false,
+      "mtp_generation_tps": null,
+      "mtp_supported": true,
+      "runtime": "sglang",
+      "runtime_commit": "",
+      "runtime_version": "not_installed_on_spark1_or_spark2",
+      "source_refs": [
+        "https://docs.sglang.io/cookbook/autoregressive/DeepSeek/DeepSeek-V4"
+      ],
+      "speedup_vs_baseline": null
+    },
+    {
+      "artifact_path": "",
+      "baseline_generation_tps": null,
+      "benchmark_status": "blocked",
+      "blocker_detail": "The standard vLLM 0.21.0 path is now past the old checkpoint blocker: the full DeepSeek-V4-Flash HF checkpoint is staged on Spark1/Spark2, DeepseekV4ForCausalLM resolves, DeepSeekV4MTPModel is present, Ray sees two GB10 GPUs, and NCCL over the 10.10.5.x ring socket initializes after forcing the ring interfaces. The benchmark is blocked before baseline or MTP generation because the unmodified 148.66 GiB checkpoint cannot complete startup on two 120 GiB GB10 nodes. TP=2 with kv_cache_dtype=fp8 reached 38/46 checkpoint shards before Ray killed Spark2 at 118.76/119.69 GiB node memory. PP=2 loaded 46/46 shards but Ray killed Spark1 at 121.43/121.69 GiB before engine startup completed. No baseline_generation_tps or mtp_generation_tps was produced.",
+      "blocker_kind": "insufficient_gpu_count",
+      "command": "RAY_memory_usage_threshold=0.99 NCCL_IB_DISABLE=1 NCCL_P2P_DISABLE=1 NCCL_SOCKET_FAMILY=AF_INET GLOO_SOCKET_IFNAME=<ring-iface> NCCL_SOCKET_IFNAME=<ring-iface> VLLM_HOST_IP=<ring-ip> ray start ...; LLM(model='/tmp/ds4-hf-deepseek-v4-flash', tensor_parallel_size=2, distributed_executor_backend='ray', tokenizer_mode='deepseek_v4', trust_remote_code=True, max_model_len=1024, gpu_memory_utilization=0.70, kv_cache_dtype='fp8', disable_custom_all_reduce=True)",
+      "ds4_model_supported": true,
+      "load_attempts": [
+        {
+          "layout": "tp2",
+          "max_model_len": 1024,
+          "gpu_memory_utilization": 0.7,
+          "kv_cache_dtype": "fp8",
+          "ray_memory_usage_threshold": 0.99,
+          "startup_status": "failed",
+          "startup_detail": "Reached 38/46 checkpoint shards, then Ray killed the Spark2 TP1 worker at 118.76/119.69 GiB node memory (0.99217). Earlier TP=2 attempts established that Gloo loopback and NCCL socket binding were fixed, and that DeepSeek-V4 requires explicit kv_cache_dtype=fp8."
+        },
+        {
+          "layout": "pp2",
+          "max_model_len": 1024,
+          "gpu_memory_utilization": 0.7,
+          "kv_cache_dtype": "fp8",
+          "ray_memory_usage_threshold": 0.99,
+          "startup_status": "failed",
+          "startup_detail": "Loaded 46/46 checkpoint shards with hidden layers partitioned [22,21], then Ray killed the Spark1 PP0 worker at 121.43/121.69 GiB node memory (0.997828) before engine startup completed."
+        }
+      ],
+      "model_format": "hf_safetensors_fp4_fp8",
+      "mtp_config": {
+        "num_speculative_tokens": 1,
+        "runtime_model_arch": "DeepSeekV4MTPModel",
+        "speculative_method": "mtp"
+      },
+      "mtp_enabled": false,
+      "mtp_generation_tps": null,
+      "mtp_supported": true,
+      "network_config": {
+        "spark1_ring_ip": "10.10.5.1",
+        "spark1_socket_ifname": "enp1s0f1np1",
+        "spark2_ring_ip": "10.10.5.2",
+        "spark2_socket_ifname": "enp1s0f0np0"
+      },
+      "runtime": "vllm",
+      "runtime_commit": "",
+      "runtime_version": "0.21.0",
+      "spark_install": {
+        "ray_version": "2.54.0",
+        "spark1_cuda_device": "NVIDIA GB10",
+        "spark1_python": "/home/spark1/standard-runtimes/vllm-0.21.0/bin/python",
+        "spark1_torch_version": "2.11.0+cu130",
+        "spark2_cuda_device": "NVIDIA GB10",
+        "spark2_python": "/home/spark2/standard-runtimes/vllm-0.21.0/bin/python",
+        "spark2_torch_version": "2.11.0+cu130"
+      },
+      "speedup_vs_baseline": null
+    }
+  ],
+  "spark_reachability": {
+    "ray_cluster_probe": {
+      "available_gpu": 2.0,
+      "cluster_gpu": 2.0,
+      "node_ips": [
+        "10.10.5.1",
+        "10.10.5.2"
+      ],
+      "node_resource": "accelerator_type:GB10",
+      "status": "passed"
+    },
+    "spark0": {
+      "checkpoint_staged": true,
+      "gpu_count": 1,
+      "gpu_name": "NVIDIA GB10",
+      "ssh_status": "success",
+      "target": "spark0"
+    },
+    "spark1": {
+      "checkpoint_staged": true,
+      "gpu_count": 1,
+      "gpu_name": "NVIDIA GB10",
+      "ssh_status": "success",
+      "target": "spark1@edgexpert-d623.local"
+    },
+    "spark2": {
+      "checkpoint_staged": true,
+      "gpu_count": 1,
+      "gpu_name": "NVIDIA GB10",
+      "ssh_status": "success",
+      "target": "spark2 via DS4 SPARKNETWORK SSH alias"
+    },
+    "usable_gpu_count_for_external_ds4": 2
+  },
+  "summary": {
+    "best_external_speedup_vs_baseline": null,
+    "decision": "do_not_switch_runtime_yet",
+    "external_ds4_mtp_benchmark_completed": false,
+    "next_unblock": "Use a standard-runtime deployment with more memory headroom, likely the official multi-GB10/Blackwell topology for the unmodified HF checkpoint, or convert/use a smaller external-runtime checkpoint. Spark1/Spark2 alone cannot produce baseline or MTP TPS for standard vLLM.",
+    "successful_runtime_count": 0
+  },
+  "target_model_id": "deepseek-ai/DeepSeek-V4-Flash"
+}
