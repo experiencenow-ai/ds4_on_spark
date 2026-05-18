@@ -14,10 +14,13 @@ The repository starts from `docs/implementation-plan.md`; correctness gating rem
 ## Current Status
 
 - Repo bootstrap: in progress.
-- Spark discovery: one Spark is visible as `aitopatom-9ab9.local`.
-- SSH transport: port 22 is reachable by hostname/link-local IPv6.
-- SSH authentication: blocked until the `spark0` account password or key is fixed.
-- First implementation target: collect hardware and kernel compatibility data.
+- Spark ring map: see root `SPARKNETWORK.md`.
+- Spark0 SSH is verified as `spark0@aitopatom-9ab9.local`.
+- Spark1 SSH is verified as `spark1@edgexpert-d623.local`.
+- Spark2 is verified as `spark2@aitopatom-931a.local` over the 200G ring via
+  Spark0/Spark1 jump SSH; its direct Mac Wi-Fi SSH path still needs repair.
+- First implementation target: keep the ring inventory and redacted probe
+  snapshots current before multi-node Centaur runs.
 
 ## Near-Term Work
 
