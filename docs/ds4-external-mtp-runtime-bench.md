@@ -45,6 +45,12 @@ Latest patched three-Spark PP=3 OOM repro:
 Artifact:
 `fixtures/vllm_pp_runtime_probe/ds4_vllm_pp3_probe_gpumem045_monitor_off_20260519.example.json`
 
+Latest patched three-Spark PP=3 memory-lifecycle run:
+`ds4-vllm-pp3-layerwise-paramrefs-sm121-mhc-tiny-20260519`
+
+Artifact:
+`fixtures/vllm_pp_runtime_probe/ds4_vllm_pp3_layerwise_paramrefs_sm121_mhc_tiny_20260519.example.json`
+
 ## Result
 
 | Runtime | DS4 MTP result | Blocker |
@@ -96,10 +102,19 @@ and with a tiny decode config (`max_model_len=64`, `max_num_batched_tokens=64`,
 `Out of memory: Killed process ... ray::RayWorkerP` plus an NVIDIA `NVRM`
 allocation/copy-out failure.
 
-The remaining blocker is no longer Spark0 health and no longer avoidable
-non-local safetensors tensor materialization. It is the standard-vLLM
-DeepSeek-V4 PP loader/init peak for one 15-layer stage on a 128 GB unified-memory
-Spark node.
+The 15-layer PP stage OOM was fixed by finalizing MXFP4 MoE layers as soon as
+each layer's local experts are loaded and by deleting stale `params_dict`
+references to pre-conversion `layers.N.ffn.experts.*` parameters after each
+layer is converted. Without deleting those references, the per-layer conversion
+still retained old loaded tensors until `load_weights()` returned. With both
+fixes applied, PP=3 `[14,15,14]` reached model load on all ranks:
+PP0 `48.14 GiB`, PP1 `50.28 GiB`, PP2 `47.92 GiB`.
+
+The remaining blocker is after model load, during vLLM's
+`determine_available_memory()` dummy-forward/profile path. The failing stack is
+DeepSeek-V4 attention `fused_wqa_wkv` to `cutlass_scaled_mm`, ending in
+`Not yet supported ScalarType 44` from Torch stable IValue conversion. This is
+not the previous PP1 model-load OOM.
 
 ## Decision
 
@@ -108,8 +123,9 @@ This is not a throughput result and must not be treated as MTP speedup evidence.
 
 Exact next unblocks:
 
-1. Reduce the standard-vLLM DeepSeek-V4 15-layer PP stage init peak, or run with
-   four PP ranks so no stage owns 15 layers.
+1. Fix or bypass the standard-vLLM dummy-forward/profile path where
+   `fused_wqa_wkv` calls `cutlass_scaled_mm` with `ScalarType 44` after model
+   load.
 2. Start Ray with explicit 10G binding:
    `GLOO_SOCKET_IFNAME`, `NCCL_SOCKET_IFNAME`, `NCCL_IB_DISABLE=1`,
    `NCCL_P2P_DISABLE=1`, and `NCCL_SOCKET_FAMILY=AF_INET`.
