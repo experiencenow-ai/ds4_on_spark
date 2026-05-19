@@ -33,6 +33,12 @@ Latest PP=3 safetensors load-filter audit:
 Artifact:
 `fixtures/vllm_pp_safetensors_filter/ds4_vllm_pp3_safetensors_filter_spark1_20260519.example.json`
 
+Latest patched two-Spark control:
+`ds4-vllm-pp2-probe-20260519`
+
+Artifact:
+`fixtures/vllm_pp_runtime_probe/ds4_vllm_pp2_probe_20260519.example.json`
+
 ## Result
 
 | Runtime | DS4 MTP result | Blocker |
@@ -60,6 +66,25 @@ The patch adds a raw weight-name predicate to
 names to vLLM names, reject `mtp.` tensors, and reject PP-missing parameters
 before `safe_open(...).get_tensor(name)`.
 
+## Patched Runtime Probe
+
+The vLLM early-filter patch was applied to Spark0/Spark1/Spark2 runtime copies
+under `/home/spark*/standard-runtimes/vllm-0.21.0`. Ray 2.54 also needed a
+probe-only startup patch to skip Ray Client and dashboard/API-server startup
+before raylet creation; without it the head process stalled before raylet.
+
+Spark1/Spark2 then formed a healthy two-node Ray cluster on `10.20.0.11/12`.
+A PP=2 control with `VLLM_PP_LAYER_PARTITION=22,21` reached checkpoint loading
+and showed the memory drop expected from early filtering, but still failed after
+load because 22/21 layers leave too little headroom on 128 GB nodes. Ray killed
+the worker at `121.63 GiB / 121.69 GiB` used. This makes PP=2 close but not a
+stable standard-vLLM topology.
+
+Spark0 could not join the PP=3 rerun because its NVIDIA driver path was wedged:
+`nvidia-smi` timed out and left an uninterruptible process. The exact next step
+for the intended PP=3 test is a Spark0 reboot or driver reset, then rerun
+`VLLM_PP_LAYER_PARTITION=14,15,14`.
+
 ## Decision
 
 Do not switch to upstream vLLM on the current Spark0/Spark1/Spark2 topology yet.
@@ -67,13 +92,12 @@ This is not a throughput result and must not be treated as MTP speedup evidence.
 
 Exact next unblocks:
 
-1. Apply the safetensors early-filter patch to the Spark vLLM install, then
-   rerun PP=3. The measured blocker is current loader materialization of
-   PP-missing layer tensors, not the static 15-layer shard itself.
-2. Start Ray with explicit ring binding:
+1. Reboot or driver-reset Spark0 so `nvidia-smi` and Ray raylet startup work
+   again.
+2. Start Ray with explicit 10G binding:
    `GLOO_SOCKET_IFNAME`, `NCCL_SOCKET_IFNAME`, `NCCL_IB_DISABLE=1`,
    `NCCL_P2P_DISABLE=1`, and `NCCL_SOCKET_FAMILY=AF_INET`.
-3. Run vLLM target-only, then MTP with
+3. Rerun PP=3 target-only with `VLLM_PP_LAYER_PARTITION=14,15,14`, then MTP with
    `--speculative-config '{"method":"mtp","num_speculative_tokens":1}'`.
 4. Record baseline t/s, MTP t/s, acceptance counters, and blocker detail in the
    external runtime artifact before making any routing decision.
