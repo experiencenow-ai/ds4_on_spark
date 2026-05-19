@@ -3,7 +3,7 @@
 Load this file first for any Centaur/Spark networking work. It is the canonical
 Spark ring inventory and communication contract for this repo.
 
-Last verified: `2026-05-18T0008Z` UTC.
+Last verified: `2026-05-19T0834Z` UTC.
 
 ## Rule Zero
 
@@ -15,13 +15,75 @@ Do not confuse SSH login names with network hostnames.
 - Do not use `spark1.local` or `spark2.local` unless those aliases are
   deliberately pinned in DNS or `/etc/hosts`.
 
+## Current Office Topology
+
+The cluster is now in the office on a 5-port 10G switch shared by Mac Studio,
+Spark0, Spark1, Spark2, and the fiber modem. The sane control/sync layout is:
+
+| Node | Normal SSH | Hostname | 10G DHCP/control | 10G private sync |
+|------|------------|----------|------------------|------------------|
+| Mac Studio | local operator | `Mac-Studio.local` | `175.193.138.31/24` on `en0` | `10.20.0.1/24` alias on `en0` |
+| Spark0 | `ssh spark0` | `aitopatom-9ab9` | `175.193.138.80/24` on `enP7s7` | `10.20.0.10/24` on `enP7s7` |
+| Spark1 | `ssh spark1` | `edgexpert-d623` | `125.129.239.251/24` on `enP7s7` | `10.20.0.11/24` on `enP7s7` |
+| Spark2 | `ssh spark2` | `aitopatom-931a` | `175.193.138.108/24` on `enP7s7` | `10.20.0.12/24` on `enP7s7` |
+
+The Mac SSH config block maps `spark0`, `spark1`, and `spark2` to the current
+10G DHCP/control addresses. It also defines `spark0-10g`, `spark1-10g`, and
+`spark2-10g` for the private switch-local subnet. The Mac Studio alias should be
+installed as a `/24`; if it was installed as a broad `10/8`, replace it:
+
+```bash
+sudo ifconfig en0 -alias 10.20.0.1
+sudo ifconfig en0 inet 10.20.0.1 netmask 255.255.255.0 alias
+```
+
+The Sparks already verify each other on the private 10G switch subnet:
+
+```text
+spark0 -> 10.20.0.11, 10.20.0.12 OK
+spark1 -> 10.20.0.10, 10.20.0.12 OK
+spark2 -> 10.20.0.10, 10.20.0.11 OK
+```
+
+Keep the network planes separate:
+
+- `enP7s7` + DHCP: office/fiber control and internet.
+- `enP7s7` + `10.20.0.0/24`: private 10G switch-local Spark sync.
+- `wlP9s9` + `192.168.0.0/24`: Wi-Fi fallback only.
+- `10.10.x.x`: 200G Spark ring fabric; do not use this as the Mac control
+  plane.
+
+The wired/fiber path provides internet from all three Sparks. A quick Cloudflare
+download probe measured about `1.46 Gbit/s` from Spark0, `1.01 Gbit/s` from
+Spark1, and `1.15 Gbit/s` from Spark2. The TP-Link Wi-Fi LAN is connected but
+does not currently provide internet; the Spark defaults prefer `enP7s7`.
+
+## 200G Ring Fabric
+
+The 200G ring is fixed as six `/30` point-to-point links, two parallel links per
+ring edge. Every interface below reports `200000Mb/s`, jumbo MTU ping with
+`8972` bytes succeeds, and TCP/22 is reachable over each link.
+
+| Edge | Link | Spark A | Spark B |
+|------|------|---------|---------|
+| Spark0-Spark1 | A | Spark0 `enp1s0f1np1` `10.10.1.1/30` | Spark1 `enp1s0f1np1` `10.10.1.2/30` |
+| Spark0-Spark1 | B | Spark0 `enP2p1s0f1np1` `10.10.2.1/30` | Spark1 `enP2p1s0f1np1` `10.10.2.2/30` |
+| Spark1-Spark2 | A | Spark1 `enp1s0f0np0` `10.10.3.1/30` | Spark2 `enp1s0f0np0` `10.10.3.2/30` |
+| Spark1-Spark2 | B | Spark1 `enP2p1s0f0np0` `10.10.4.1/30` | Spark2 `enP2p1s0f0np0` `10.10.4.2/30` |
+| Spark2-Spark0 | A | Spark2 `enp1s0f1np1` `10.10.5.2/30` | Spark0 `enp1s0f0np0` `10.10.5.1/30` |
+| Spark2-Spark0 | B | Spark2 `enP2p1s0f1np1` `10.10.6.2/30` | Spark0 `enP2p1s0f0np0` `10.10.6.1/30` |
+
+`iperf3` sanity tests on one link per edge measured about `111 Gbit/s` TCP with
+four streams: Spark0 to Spark1 on `10.10.1.x`, Spark1 to Spark2 on `10.10.3.x`,
+and Spark2 to Spark0 on `10.10.5.x`.
+
 ## Canonical Ring Inventory
 
 | Ring role | SSH target | Network hostname | Current state |
 |-----------|------------|------------------|---------------|
-| `spark0` | `spark0@aitopatom-9ab9.local` | `aitopatom-9ab9.local` | Verified reachable |
-| `spark1` | `spark1@edgexpert-d623.local` | `edgexpert-d623.local` | Verified reachable |
-| `spark2` | `spark2@aitopatom-931a.local` | `aitopatom-931a.local` | Verified from Spark0/Spark1 over ring; Mac direct SSH blocked |
+| `spark0` | `spark0@175.193.138.80` | `aitopatom-9ab9.local` | Verified reachable over office 10G control |
+| `spark1` | `spark1@125.129.239.251` | `edgexpert-d623.local` | Verified reachable over office 10G control |
+| `spark2` | `spark2@175.193.138.108` | `aitopatom-931a.local` | Verified reachable over office 10G control |
 
 The physical/logical Centaur ring order is:
 
@@ -35,24 +97,8 @@ the neighbors are the previous and next entries in the ordered inventory.
 
 ## Verified Reach Commands
 
-Use per-host known-hosts files. This keeps probe state out of
-`~/.ssh/known_hosts` and makes repeated runs easier to reason about.
-
-```bash
-ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local spark0@aitopatom-9ab9.local hostname
-ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts.edgexpert-d623.local spark1@edgexpert-d623.local hostname
-```
-
-Spark2 is not currently reachable directly from the Mac by hostname or Wi-Fi SSH.
-Reach it through a verified ring neighbor:
-
-```bash
-ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts.aitopatom-931a.via-spark0 -o ProxyCommand='ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local -W %h:%p spark0@aitopatom-9ab9.local' spark2@10.10.2.232 hostname
-ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts.aitopatom-931a.via-spark1 -o ProxyCommand='ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts.edgexpert-d623.local -W %h:%p spark1@edgexpert-d623.local' spark2@10.10.5.2 hostname
-```
-
-The current Mac Studio has an installed `~/.ssh/config` block named
-`DS4 SPARKNETWORK`, so these short aliases work from the Mac:
+The Mac SSH config has a `DS4 SPARKNETWORK` block for the current office
+topology. These are the normal operator commands:
 
 ```bash
 ssh spark0 hostname
@@ -60,12 +106,22 @@ ssh spark1 hostname
 ssh spark2 hostname
 ```
 
-From Spark0 itself, `aitopatom-931a.local` resolves to the Spark0-Spark2 ring
-fabric. From Spark1 itself, the same hostname resolves to the Spark1-Spark2 ring
-fabric. From the Mac, use the jump commands above until Spark2 control-plane SSH
-is fixed.
+After Mac Studio has the `10.20.0.1/24` alias on `en0`, these private 10G
+switch-local commands should also work:
 
-## Current Probe Evidence
+```bash
+ssh spark0-10g hostname
+ssh spark1-10g hostname
+ssh spark2-10g hostname
+```
+
+Inside the Spark cluster, `/etc/hosts` pins `spark0-10g`, `spark1-10g`, and
+`spark2-10g` to `10.20.0.10`, `10.20.0.11`, and `10.20.0.12`.
+
+## Historical Probe Evidence
+
+The following probe evidence is from the pre-office topology and is kept for
+traceability. Prefer the current office topology above for live operations.
 
 Latest redacted snapshot set for Spark0/Spark1:
 
@@ -104,60 +160,54 @@ not see `aitopatom-931a SSH` from the Mac. Spark0 and Spark1 both see
 
 Mac Studio:
 
-- `en1`: Wi-Fi/control network `172.16.11.244/24`.
-- `en0`: direct wired path to Spark0, `192.168.100.1/16`.
-- Direct Mac SSH works to Spark0/Spark1. Direct Mac SSH does not currently work
-  to Spark2.
+- `en0`: office 10G switch and fiber path, `175.193.138.31/24`.
+- `en0`: private Spark switch alias, `10.20.0.1/24`. Verify this is not a
+  broad `10/8` route before long-running work.
+- Direct Mac SSH works to Spark0, Spark1, and Spark2 through `~/.ssh/config`.
 
 Spark0 (`aitopatom-9ab9`):
 
-- `wlP9s9`: Wi-Fi/control `172.16.11.228/24`, MTU 1500.
-- `enP7s7`: direct Mac wired `192.168.100.2/16` and `10.0.0.2/24`, 10G,
-  MTU 9000.
-- Spark0-Spark1 ring: `10.10.1.1/24` on the Spark0 side. Spark1 answers on
-  `10.10.1.248` and `10.10.1.252`.
-- Spark0-Spark2 ring: `10.10.2.1/24` on the Spark0 side. Spark2 answers on
-  `10.10.2.232` and `10.10.2.2`.
-- Additional up 200G interfaces currently configured as `10.10.3.1/24` and
-  `10.10.4.1/24`; no active SSH peer was verified on those subnets.
+- `enP7s7`: office 10G control `175.193.138.80/24` and private sync
+  `10.20.0.10/24`.
+- `wlP9s9`: Wi-Fi fallback `192.168.0.155/24`, no internet when forced.
+- 200G to Spark1: `enp1s0f1np1` `10.10.1.1/30`,
+  `enP2p1s0f1np1` `10.10.2.1/30`.
+- 200G to Spark2: `enp1s0f0np0` `10.10.5.1/30`,
+  `enP2p1s0f0np0` `10.10.6.1/30`.
 
 Spark1 (`edgexpert-d623`):
 
-- `enP7s7`: down.
-- `wlP9s9`: Wi-Fi/control `172.16.11.225/24`, MTU 1500.
-- Spark1-Spark0 ring: `10.10.1.248/24` and `10.10.1.252/24` on the Spark1
-  side. Spark0 answers on `10.10.1.1`.
-- Spark1-Spark2 ring: `10.10.5.1/24` and `10.10.6.1/24` on the Spark1 side.
-  Spark2 answers on `10.10.5.2` and `10.10.6.2`.
+- `enP7s7`: office 10G control `125.129.239.251/24` and private sync
+  `10.20.0.11/24`.
+- `wlP9s9`: Wi-Fi fallback `192.168.0.146/24`, no internet when forced.
+- 200G to Spark0: `enp1s0f1np1` `10.10.1.2/30`,
+  `enP2p1s0f1np1` `10.10.2.2/30`.
+- 200G to Spark2: `enp1s0f0np0` `10.10.3.1/30`,
+  `enP2p1s0f0np0` `10.10.4.1/30`.
 
 Spark2 (`aitopatom-931a`):
 
-- `enP7s7`: down.
-- `wlP9s9`: Wi-Fi/control `172.16.11.208/24`, MTU 1500. Mac direct TCP/22
-  timed out during verification, so do not depend on this as the current control
-  path.
-- Spark2-Spark0 ring: `10.10.2.232/24` and `10.10.2.2/24` on the Spark2 side.
-  Spark0 answers on `10.10.2.1`.
-- Spark2-Spark1 ring: `10.10.5.2/24` and `10.10.6.2/24` on the Spark2 side.
-  Spark1 answers on `10.10.5.1` and `10.10.6.1`.
+- `enP7s7`: office 10G control `175.193.138.108/24` and private sync
+  `10.20.0.12/24`.
+- `wlP9s9`: Wi-Fi fallback `192.168.0.116/24`, no internet when forced.
+- 200G to Spark1: `enp1s0f0np0` `10.10.3.2/30`,
+  `enP2p1s0f0np0` `10.10.4.2/30`.
+- 200G to Spark0: `enp1s0f1np1` `10.10.5.2/30`,
+  `enP2p1s0f1np1` `10.10.6.2/30`.
 
 ## Exact Communication Paths
 
 | From | To | Preferred command/path |
 |------|----|------------------------|
-| Mac | Spark0 | `spark0@aitopatom-9ab9.local` or `spark0@192.168.100.2` |
-| Mac | Spark1 | `spark1@edgexpert-d623.local` |
-| Mac | Spark2 | SSH jump through Spark0 to `spark2@10.10.2.232` or through Spark1 to `spark2@10.10.5.2` |
-| Spark0 | Spark1 | `spark1@edgexpert-d623.local`, resolves on Spark0 to ring address `10.10.1.248` |
-| Spark0 | Spark2 | `spark2@aitopatom-931a.local`, resolves on Spark0 to ring address `10.10.2.232` |
-| Spark1 | Spark0 | `spark0@aitopatom-9ab9.local`, resolves on Spark1 to ring address `10.10.1.1` |
-| Spark1 | Spark2 | `spark2@aitopatom-931a.local`, resolves on Spark1 to ring address `10.10.5.2` |
-| Spark2 | Spark0 | `spark0@aitopatom-9ab9.local`, resolves on Spark2 to ring address `10.10.2.1` |
-| Spark2 | Spark1 | `spark1@edgexpert-d623.local`, resolves on Spark2 to ring address `10.10.5.1` |
-
-Current Spark2 control-plane issue: Spark2's Wi-Fi address is present as
-`172.16.11.208/24`, but Mac direct TCP/22 timed out. Until that is fixed, use
-ring-neighbor jump SSH.
+| Mac | Spark0 | `ssh spark0` or `ssh spark0-10g` |
+| Mac | Spark1 | `ssh spark1` or `ssh spark1-10g` |
+| Mac | Spark2 | `ssh spark2` or `ssh spark2-10g` |
+| Spark0 | Spark1 | `spark1-10g` for control/sync; `10.10.1.2` or `10.10.2.2` for ring traffic |
+| Spark0 | Spark2 | `spark2-10g` for control/sync; `10.10.5.2` or `10.10.6.2` for ring traffic |
+| Spark1 | Spark0 | `spark0-10g` for control/sync; `10.10.1.1` or `10.10.2.1` for ring traffic |
+| Spark1 | Spark2 | `spark2-10g` for control/sync; `10.10.3.2` or `10.10.4.2` for ring traffic |
+| Spark2 | Spark0 | `spark0-10g` for control/sync; `10.10.5.1` or `10.10.6.1` for ring traffic |
+| Spark2 | Spark1 | `spark1-10g` for control/sync; `10.10.3.1` or `10.10.4.1` for ring traffic |
 
 ## Planes
 
@@ -207,12 +257,12 @@ Default ports:
 | HyoR controller HTTP | Spark0 | `8765` | Controller API |
 | HyoR agent HTTP | Spark0 | `8766` | Optional local agent |
 | HyoR agent HTTP | Spark1 | `8766` | Node API |
-| HyoR agent HTTP | Spark2 | `8766` | Node API; reach through ring path until Wi-Fi SSH/control is fixed |
+| HyoR agent HTTP | Spark2 | `8766` | Node API; prefer `spark2-10g`/`10.20.0.12` |
 
 Start controller on Spark0:
 
 ```bash
-ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local spark0@aitopatom-9ab9.local \
+ssh spark0 \
   'export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- ~/centaur-smoke/v73/run/hyor/controller 0.0.0.0 8765' \
   < ./scripts/centaur_spark_hyor_controller_http_v73.sh
 ```
@@ -220,16 +270,16 @@ ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o
 Start agent on Spark1:
 
 ```bash
-ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts.edgexpert-d623.local spark1@edgexpert-d623.local \
-  'export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; export CONTROLLER_URL=http://aitopatom-9ab9.local:8765; sh -s -- ~/centaur-smoke/v73/ring_node/hyor/node_spark1 spark1 "$CONTROLLER_URL" 0.0.0.0 8766' \
+ssh spark1 \
+  'export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; export CONTROLLER_URL=http://spark0-10g:8765; sh -s -- ~/centaur-smoke/v73/ring_node/hyor/node_spark1 spark1 "$CONTROLLER_URL" 0.0.0.0 8766' \
   < ./scripts/centaur_spark_hyor_agent_http_v73.sh
 ```
 
-Use the same pattern for Spark2 through a jump host:
+Use the same pattern for Spark2:
 
 ```bash
-ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts.aitopatom-931a.via-spark0 -o ProxyCommand='ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local -W %h:%p spark0@aitopatom-9ab9.local' spark2@10.10.2.232 \
-  'export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; export CONTROLLER_URL=http://aitopatom-9ab9.local:8765; sh -s -- ~/centaur-smoke/v73/ring_node/hyor/node_spark2 spark2 "$CONTROLLER_URL" 0.0.0.0 8766' \
+ssh spark2 \
+  'export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; export CONTROLLER_URL=http://spark0-10g:8765; sh -s -- ~/centaur-smoke/v73/ring_node/hyor/node_spark2 spark2 "$CONTROLLER_URL" 0.0.0.0 8766' \
   < ./scripts/centaur_spark_hyor_agent_http_v73.sh
 ```
 
@@ -310,22 +360,20 @@ Centaur-specific rule:
 
 1. Load `SPARKNETWORK.md`.
 2. Verify SSH to all known targets.
-3. Verify Spark2 through a ring-neighbor jump.
+3. Verify `spark0-10g`, `spark1-10g`, and `spark2-10g`.
 4. Run the direct-reachability snapshot:
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
-REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. SKIP_BW=1 ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" --topology ring spark0@aitopatom-9ab9.local spark1@edgexpert-d623.local
+REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. SKIP_BW=1 ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" --topology ring spark0 spark1 spark2
 ```
-
-The existing snapshot helper does not yet support per-target jump hosts, so run
-Spark2 facts through the explicit jump command until that helper is extended.
 
 5. Stage Centaur v73 to each directly reachable Spark:
 
 ```bash
-./scripts/centaur_spark_v73_stage.sh spark0@aitopatom-9ab9.local "~/centaur-smoke/v73"
-./scripts/centaur_spark_v73_stage.sh spark1@edgexpert-d623.local "~/centaur-smoke/v73"
+./scripts/centaur_spark_v73_stage.sh spark0 "~/centaur-smoke/v73"
+./scripts/centaur_spark_v73_stage.sh spark1 "~/centaur-smoke/v73"
+./scripts/centaur_spark_v73_stage.sh spark2 "~/centaur-smoke/v73"
 ```
 
 For Spark2, stream or rsync through Spark0/Spark1 until direct control-plane SSH
@@ -342,28 +390,27 @@ is fixed.
 8. Use ring-neighbor sync for root/object updates.
 9. Use SSH only as the debug escape hatch once `sparknetworkd` exists.
 
-## Spark2 Control-Plane Repair
+## Wi-Fi Fallback
 
-Spark2 is discovered as `aitopatom-931a.local` and verified over the ring. Its
-Wi-Fi/control-plane SSH path is still broken from the Mac. From the Spark2
-console:
+The TP-Link Wi-Fi LAN is visible and all three Sparks are associated:
 
-```bash
-hostname
-hostname -f
-ip -br addr
-systemctl is-active ssh
-systemctl is-active avahi-daemon
-sudo systemctl enable --now ssh
-sudo systemctl enable --now avahi-daemon
-```
+| Node | Active Wi-Fi SSID | Wi-Fi address | Internet when forced through Wi-Fi |
+|------|-------------------|---------------|------------------------------------|
+| Spark0 | `TP-Link_01A6` | `192.168.0.155/24` | no |
+| Spark1 | `TP-Link_01A6_5G` | `192.168.0.146/24` | no |
+| Spark2 | `TP-Link_01A6` | `192.168.0.116/24` | no |
 
-From the Mac, direct checks currently time out for `172.16.11.208:22`; after
-repair, this should show SSH reachable:
+Do not use Wi-Fi as the internet/control primary while the router has no WAN
+connectivity. Keep the wired `enP7s7` default route preferred. If a Spark loses
+wired control, Wi-Fi can still be used as a same-LAN fallback from another node
+on `192.168.0.0/24`.
+
+Useful checks:
 
 ```bash
-REDACT=1 PING_CHECK=0 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local edgexpert-d623.local aitopatom-931a.local
+nmcli -t -f ACTIVE,SSID,BSSID,DEVICE,SIGNAL dev wifi | grep '^yes'
+ip route get 1.1.1.1
+curl -4 --interface wlP9s9 --max-time 8 https://ifconfig.me
 ```
 
-If mDNS is unreliable, pin stable names with `/etc/hosts` on the Mac and on
-every Spark, then update this file.
+`curl --interface wlP9s9` should fail until the TP-Link router has WAN internet.
