@@ -39,6 +39,12 @@ Latest patched two-Spark control:
 Artifact:
 `fixtures/vllm_pp_runtime_probe/ds4_vllm_pp2_probe_20260519.example.json`
 
+Latest patched three-Spark PP=3 OOM repro:
+`ds4-vllm-pp3-probe-gpumem045-monitor-off-20260519`
+
+Artifact:
+`fixtures/vllm_pp_runtime_probe/ds4_vllm_pp3_probe_gpumem045_monitor_off_20260519.example.json`
+
 ## Result
 
 | Runtime | DS4 MTP result | Blocker |
@@ -80,10 +86,20 @@ load because 22/21 layers leave too little headroom on 128 GB nodes. Ray killed
 the worker at `121.63 GiB / 121.69 GiB` used. This makes PP=2 close but not a
 stable standard-vLLM topology.
 
-Spark0 could not join the PP=3 rerun because its NVIDIA driver path was wedged:
-`nvidia-smi` timed out and left an uninterruptible process. The exact next step
-for the intended PP=3 test is a Spark0 reboot or driver reset, then rerun
-`VLLM_PP_LAYER_PARTITION=14,15,14`.
+After Spark0 reboot, all three Sparks formed a healthy Ray cluster and PP=3 with
+`VLLM_PP_LAYER_PARTITION=14,15,14` reached per-stage model loading. The 14-layer
+PP0 and PP2 stages reported about `48 GiB` model memory, but the 15-layer PP1
+stage was killed during model initialization. This reproduced with Ray's memory
+monitor enabled, with the monitor disabled, with `gpu_memory_utilization=0.45`,
+and with a tiny decode config (`max_model_len=64`, `max_num_batched_tokens=64`,
+`gpu_memory_utilization=0.20`). Spark2's kernel log confirmed the hard failure:
+`Out of memory: Killed process ... ray::RayWorkerP` plus an NVIDIA `NVRM`
+allocation/copy-out failure.
+
+The remaining blocker is no longer Spark0 health and no longer avoidable
+non-local safetensors tensor materialization. It is the standard-vLLM
+DeepSeek-V4 PP loader/init peak for one 15-layer stage on a 128 GB unified-memory
+Spark node.
 
 ## Decision
 
@@ -92,12 +108,13 @@ This is not a throughput result and must not be treated as MTP speedup evidence.
 
 Exact next unblocks:
 
-1. Reboot or driver-reset Spark0 so `nvidia-smi` and Ray raylet startup work
-   again.
+1. Reduce the standard-vLLM DeepSeek-V4 15-layer PP stage init peak, or run with
+   four PP ranks so no stage owns 15 layers.
 2. Start Ray with explicit 10G binding:
    `GLOO_SOCKET_IFNAME`, `NCCL_SOCKET_IFNAME`, `NCCL_IB_DISABLE=1`,
    `NCCL_P2P_DISABLE=1`, and `NCCL_SOCKET_FAMILY=AF_INET`.
-3. Rerun PP=3 target-only with `VLLM_PP_LAYER_PARTITION=14,15,14`, then MTP with
+3. Rerun PP=3 target-only with `VLLM_PP_LAYER_PARTITION=14,15,14`, or PP=4 if a
+   fourth Spark is available, then MTP with
    `--speculative-config '{"method":"mtp","num_speculative_tokens":1}'`.
 4. Record baseline t/s, MTP t/s, acceptance counters, and blocker detail in the
    external runtime artifact before making any routing decision.
