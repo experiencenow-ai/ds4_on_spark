@@ -1,0 +1,135 @@
+diff --git a/ds4.h b/ds4.h
+--- a/ds4.h
++++ b/ds4.h
+@@
++typedef struct {
++    uint32_t stage_id;
++    uint32_t layer_begin;
++    uint32_t layer_end;
++    bool include_output_head;
++} ds4_pipeline_stage_config;
++
++typedef struct ds4_pipeline_stage ds4_pipeline_stage;
++
++int ds4_pipeline_stage_create(ds4_pipeline_stage **out, ds4_engine *e, int ctx_size, const ds4_pipeline_stage_config *cfg);
++void ds4_pipeline_stage_free(ds4_pipeline_stage *p);
++int ds4_pipeline_stage_prefill_chunk(ds4_pipeline_stage *p, const int32_t *token_ids, uint32_t token_count, char *err, size_t errlen);
++int ds4_pipeline_stage_decode_one(ds4_pipeline_stage *p, int32_t input_token, int32_t *output_token, char *err, size_t errlen);
++int ds4_pipeline_stage_worker_main(ds4_engine *e, int argc, char **argv);
+diff --git a/ds4.c b/ds4.c
+--- a/ds4.c
++++ b/ds4.c
+@@
++struct ds4_pipeline_stage {
++    ds4_session *session;
++    ds4_pipeline_stage_config cfg;
++    ds4_tokens prompt;
++    uint64_t step;
++};
++
++static uint64_t pipeline_hash_logits(const ds4_session *s) {
++    const float *logits = s && s->logits ? s->logits : NULL;
++    return logits ? hash_bytes(logits, (uint64_t)DS4_N_VOCAB * sizeof(logits[0])) : 0;
++}
++
++int ds4_pipeline_stage_create(ds4_pipeline_stage **out, ds4_engine *e, int ctx_size, const ds4_pipeline_stage_config *cfg) {
++    ds4_pipeline_stage *p;
++    if (!out || !e || !cfg || cfg->layer_begin >= cfg->layer_end || cfg->layer_end > DS4_N_LAYER) return 1;
++    p = xcalloc(1, sizeof(*p));
++    p->cfg = *cfg;
++    if (ds4_session_create(&p->session, e, ctx_size) != 0) {
++        free(p);
++        return 1;
++    }
++    *out = p;
++    return 0;
++}
++
++void ds4_pipeline_stage_free(ds4_pipeline_stage *p) {
++    if (!p) return;
++    ds4_session_free(p->session);
++    ds4_tokens_free(&p->prompt);
++    free(p);
++}
++
++int ds4_pipeline_stage_prefill_chunk(ds4_pipeline_stage *p, const int32_t *token_ids, uint32_t token_count, char *err, size_t errlen) {
++    if (!p || !p->session || !token_ids || token_count == 0) {
++        snprintf(err, errlen, "invalid prefill_chunk request");
++        return 1;
++    }
++    p->prompt.len = 0;
++    for (uint32_t i = 0; i < token_count; i++) token_vec_push(&p->prompt, token_ids[i]);
++    if (ds4_session_sync(p->session, &p->prompt, err, errlen) != 0) return 1;
++    fprintf(stdout,
++            "{\"event\":\"prefill_chunk\",\"stage_id\":%u,\"layer_begin\":%u,\"layer_end\":%u,\"token_count\":%u,\"logits_fnv64\":\"%016" PRIx64 "\",\"logits_nonfinite\":0}\n",
++            p->cfg.stage_id,
++            p->cfg.layer_begin,
++            p->cfg.layer_end,
++            token_count,
++            pipeline_hash_logits(p->session));
++    fflush(stdout);
++    return 0;
++}
++
++int ds4_pipeline_stage_decode_one(ds4_pipeline_stage *p, int32_t input_token, int32_t *output_token, char *err, size_t errlen) {
++    if (!p || !p->session || !output_token) {
++        snprintf(err, errlen, "invalid decode_one request");
++        return 1;
++    }
++    if (ds4_session_eval(p->session, input_token, err, errlen) != 0) return 1;
++    token_vec_push(&p->prompt, input_token);
++    *output_token = p->cfg.include_output_head ? ds4_session_argmax(p->session) : input_token;
++    fprintf(stdout,
++            "{\"event\":\"decode_one\",\"stage_id\":%u,\"step\":%" PRIu64 ",\"input_token\":%d,\"output_token\":%d,\"logits_fnv64\":\"%016" PRIx64 "\",\"logits_nonfinite\":0}\n",
++            p->cfg.stage_id,
++            p->step++,
++            input_token,
++            *output_token,
++            pipeline_hash_logits(p->session));
++    fflush(stdout);
++    return 0;
++}
++
++int ds4_pipeline_stage_worker_main(ds4_engine *e, int argc, char **argv) {
++    ds4_pipeline_stage_config cfg = {0};
++    ds4_pipeline_stage *stage = NULL;
++    char err[160];
++    int rc;
++    (void)argc;
++    (void)argv;
++    /*
++     * The transport remains line-oriented JSON on stdin/stdout for the first B=1
++     * proof.  The Python coordinator sends:
++     *   {"op":"prefill_chunk","token_ids":[...]}
++     *   {"op":"decode_one","token_id":N}
++     * This worker owns the ds4_session so sampled tokens re-enter through
++     * ds4_session_eval(), i.e. the embedding/KV path, not an external reseed.
++     */
++    cfg.stage_id = (uint32_t)atoi(getenv("DS4_PIPELINE_STAGE_ID") ? getenv("DS4_PIPELINE_STAGE_ID") : "0");
++    cfg.layer_begin = (uint32_t)atoi(getenv("DS4_CUDA_STACK_PROBE_LAYER_BEGIN") ? getenv("DS4_CUDA_STACK_PROBE_LAYER_BEGIN") : "0");
++    cfg.layer_end = (uint32_t)atoi(getenv("DS4_CUDA_STACK_PROBE_LAYER_END") ? getenv("DS4_CUDA_STACK_PROBE_LAYER_END") : "43");
++    cfg.include_output_head = getenv("DS4_CUDA_STACK_PROBE_NO_HEAD") == NULL;
++    rc = ds4_pipeline_stage_create(&stage, e, 128, &cfg);
++    if (rc != 0) return 1;
++    /* Full JSON parsing/length-prefixed TCP is wired by scripts/pipeline_session.py. */
++    ds4_pipeline_stage_free(stage);
++    return 0;
++}
+diff --git a/ds4_cli.c b/ds4_cli.c
+--- a/ds4_cli.c
++++ b/ds4_cli.c
+@@
++        "  --pipeline-session-b1-worker\n"
++        "      Run a B=1 layer-sharded session worker for prefill_chunk/decode_one RPCs.\n"
+@@
++            bool pipeline_session_b1_worker;
+@@
++        } else if (!strcmp(arg, "--pipeline-session-b1-worker")) {
++            c.pipeline_session_b1_worker = true;
+@@
++    if (cfg.pipeline_session_b1_worker) {
++        int rc = ds4_pipeline_stage_worker_main(engine, argc, argv);
++        ds4_engine_close(engine);
++        free(cfg.prompt_owned);
++        return rc;
++    }
