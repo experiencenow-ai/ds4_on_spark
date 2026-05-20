@@ -1,0 +1,321 @@
+
+===== request 1 2026-05-20 21:44:53 =====
+kind: completion
+model: deepseek-v4-flash
+stream: 0
+tools: 0
+think_mode: high
+prompt_tokens: 59
+effective_prompt_tokens: 59
+cached_tokens: 0
+max_tokens: 5
+temperature: 0.000
+top_k: 0
+top_p: 1.000
+min_p: 0.000
+seed: 0
+stream_include_usage: 0
+
+--- cache decision ---
+live_tokens_before: 0
+prompt_tokens: 59
+live_prompt_common: 0
+memory_token_reusable: 0
+memory_miss_reason: no-live-checkpoint
+tool_replay: mem=0 disk=0 canonical=0 missing_ids=0
+cache_source: none
+cached_tokens: 0
+disk_cached_tokens: 0
+
+--- raw request json ---
+{"model": "deepseek-v4-flash", "prompt": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word", "max_tokens": 5, "temperature": 0, "top_p": 1, "stream": false}
+
+--- rendered prompt ---
+<｜begin▁of▁sentence｜>You are a helpful assistant<｜User｜>word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word<｜Assistant｜><think>
+
+--- generated text ---
+
+
+--- trace: prefill done; decode_max=5 ctx_room=69 ---
+
+We have a user-prov
+
+--- parsed message ---
+finish: length
+generated_tokens: 5
+dsml_start: 0
+dsml_end: 0
+elapsed_sec: 1.631
+
+===== end request 1 =====
+
+===== request 2 2026-05-20 21:45:12 =====
+kind: completion
+model: deepseek-v4-flash
+stream: 0
+tools: 0
+think_mode: high
+prompt_tokens: 50
+effective_prompt_tokens: 50
+cached_tokens: 0
+max_tokens: 5
+temperature: 0.000
+top_k: 0
+top_p: 1.000
+min_p: 0.000
+seed: 0
+stream_include_usage: 0
+
+--- cache decision ---
+live_tokens_before: 64
+prompt_tokens: 50
+live_prompt_common: 48
+memory_token_reusable: 0
+memory_miss_reason: token-mismatch
+tool_replay: mem=0 disk=0 canonical=0 missing_ids=0
+cache_source: none
+cached_tokens: 0
+disk_cached_tokens: 0
+
+first_mismatch_token: 48
+token_window: [40..57)
+     40 ==          live 2004 " word" | prompt 2004 " word"
+     41 ==          live 2004 " word" | prompt 2004 " word"
+     42 ==          live 2004 " word" | prompt 2004 " word"
+     43 ==          live 2004 " word" | prompt 2004 " word"
+     44 ==          live 2004 " word" | prompt 2004 " word"
+     45 ==          live 2004 " word" | prompt 2004 " word"
+     46 ==          live 2004 " word" | prompt 2004 " word"
+     47 ==          live 2004 " word" | prompt 2004 " word"
+     48 !=          live 2004 " word" | prompt 128804 "<｜Assistant｜>"
+     49 !=          live 2004 " word" | prompt 128821 "<think>"
+     50 live-only   live 2004 " word" | prompt - <none>
+     51 live-only   live 2004 " word" | prompt - <none>
+     52 live-only   live 2004 " word" | prompt - <none>
+     53 live-only   live 2004 " word" | prompt - <none>
+     54 live-only   live 2004 " word" | prompt - <none>
+     55 live-only   live 2004 " word" | prompt - <none>
+     56 live-only   live 2004 " word" | prompt - <none>
+
+--- raw request json ---
+{"model": "deepseek-v4-flash", "prompt": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word", "max_tokens": 5, "temperature": 0, "top_p": 1, "stream": false}
+
+--- rendered prompt ---
+<｜begin▁of▁sentence｜>You are a helpful assistant<｜User｜>word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word<｜Assistant｜><think>
+
+--- generated text ---
+
+
+--- trace: prefill done; decode_max=5 ctx_room=78 ---
+
+We have a user input
+
+--- parsed message ---
+finish: length
+generated_tokens: 5
+dsml_start: 0
+dsml_end: 0
+elapsed_sec: 0.706
+
+===== end request 2 =====
+
+===== request 3 2026-05-20 21:45:26 =====
+kind: completion
+model: deepseek-v4-flash
+stream: 0
+tools: 0
+think_mode: high
+prompt_tokens: 50
+effective_prompt_tokens: 50
+cached_tokens: 50
+max_tokens: 5
+temperature: 0.000
+top_k: 0
+top_p: 1.000
+min_p: 0.000
+seed: 0
+stream_include_usage: 0
+
+--- cache decision ---
+live_tokens_before: 55
+prompt_tokens: 50
+live_prompt_common: 50
+memory_token_reusable: 0
+memory_miss_reason: token-mismatch
+tool_replay: mem=0 disk=0 canonical=0 missing_ids=0
+cache_source: disk-text
+cached_tokens: 50
+disk_cached_tokens: 50
+disk_cache_file: /tmp/lane_b_kv_1779280982/kv/fe3e32d08ca9d731d26a58191b3c5f1b8e23a178.kv
+
+first_mismatch_token: 50
+token_window: [42..55)
+     42 ==          live 2004 " word" | prompt 2004 " word"
+     43 ==          live 2004 " word" | prompt 2004 " word"
+     44 ==          live 2004 " word" | prompt 2004 " word"
+     45 ==          live 2004 " word" | prompt 2004 " word"
+     46 ==          live 2004 " word" | prompt 2004 " word"
+     47 ==          live 2004 " word" | prompt 2004 " word"
+     48 ==          live 128804 "<｜Assistant｜>" | prompt 128804 "<｜Assistant｜>"
+     49 ==          live 128821 "<think>" | prompt 128821 "<think>"
+     50 live-only   live 2581 "We" | prompt - <none>
+     51 live-only   live 611 " have" | prompt - <none>
+     52 live-only   live 260 " a" | prompt - <none>
+     53 live-only   live 3967 " user" | prompt - <none>
+     54 live-only   live 4346 " input" | prompt - <none>
+
+--- raw request json ---
+{"model": "deepseek-v4-flash", "prompt": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word", "max_tokens": 5, "temperature": 0, "top_p": 1, "stream": false}
+
+--- rendered prompt ---
+<｜begin▁of▁sentence｜>You are a helpful assistant<｜User｜>word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word<｜Assistant｜><think>
+
+--- generated text ---
+
+
+--- trace: prefill done; decode_max=5 ctx_room=78 ---
+
+We have a user who
+
+--- parsed message ---
+finish: length
+generated_tokens: 5
+dsml_start: 0
+dsml_end: 0
+elapsed_sec: 0.332
+
+===== end request 3 =====
+
+===== request 4 2026-05-20 21:45:57 =====
+kind: completion
+model: deepseek-v4-flash
+stream: 0
+tools: 0
+think_mode: none
+prompt_tokens: 50
+effective_prompt_tokens: 50
+cached_tokens: 0
+max_tokens: 5
+temperature: 0.000
+top_k: 0
+top_p: 1.000
+min_p: 0.000
+seed: 1
+stream_include_usage: 0
+
+--- cache decision ---
+live_tokens_before: 55
+prompt_tokens: 50
+live_prompt_common: 49
+memory_token_reusable: 0
+memory_miss_reason: token-mismatch
+tool_replay: mem=0 disk=0 canonical=0 missing_ids=0
+cache_source: none
+cached_tokens: 0
+disk_cached_tokens: 0
+
+first_mismatch_token: 49
+token_window: [41..55)
+     41 ==          live 2004 " word" | prompt 2004 " word"
+     42 ==          live 2004 " word" | prompt 2004 " word"
+     43 ==          live 2004 " word" | prompt 2004 " word"
+     44 ==          live 2004 " word" | prompt 2004 " word"
+     45 ==          live 2004 " word" | prompt 2004 " word"
+     46 ==          live 2004 " word" | prompt 2004 " word"
+     47 ==          live 2004 " word" | prompt 2004 " word"
+     48 ==          live 128804 "<｜Assistant｜>" | prompt 128804 "<｜Assistant｜>"
+     49 !=          live 128821 "<think>" | prompt 128822 "</think>"
+     50 live-only   live 2581 "We" | prompt - <none>
+     51 live-only   live 611 " have" | prompt - <none>
+     52 live-only   live 260 " a" | prompt - <none>
+     53 live-only   live 3967 " user" | prompt - <none>
+     54 live-only   live 995 " who" | prompt - <none>
+
+--- raw request json ---
+{"model": "deepseek-v4-flash", "prompt": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word", "max_tokens": 5, "temperature": 0, "top_p": 1, "seed": 1, "think": false, "stream": false}
+
+--- rendered prompt ---
+<｜begin▁of▁sentence｜>You are a helpful assistant<｜User｜>word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word<｜Assistant｜></think>
+
+--- generated text ---
+
+
+--- trace: prefill done; decode_max=5 ctx_room=78 ---
+
+I'm here to help
+
+--- parsed message ---
+finish: length
+generated_tokens: 5
+dsml_start: 0
+dsml_end: 0
+elapsed_sec: 0.705
+
+===== end request 4 =====
+
+===== request 5 2026-05-20 21:45:58 =====
+kind: completion
+model: deepseek-v4-flash
+stream: 0
+tools: 0
+think_mode: none
+prompt_tokens: 50
+effective_prompt_tokens: 50
+cached_tokens: 50
+max_tokens: 5
+temperature: 0.000
+top_k: 0
+top_p: 1.000
+min_p: 0.000
+seed: 1
+stream_include_usage: 0
+
+--- cache decision ---
+live_tokens_before: 55
+prompt_tokens: 50
+live_prompt_common: 50
+memory_token_reusable: 0
+memory_miss_reason: token-mismatch
+tool_replay: mem=0 disk=0 canonical=0 missing_ids=0
+cache_source: disk-text
+cached_tokens: 50
+disk_cached_tokens: 50
+disk_cache_file: /tmp/lane_b_kv_1779280982/kv/95e332eafa8e8c91fdb04e181b45674802a372f2.kv
+
+first_mismatch_token: 50
+token_window: [42..55)
+     42 ==          live 2004 " word" | prompt 2004 " word"
+     43 ==          live 2004 " word" | prompt 2004 " word"
+     44 ==          live 2004 " word" | prompt 2004 " word"
+     45 ==          live 2004 " word" | prompt 2004 " word"
+     46 ==          live 2004 " word" | prompt 2004 " word"
+     47 ==          live 2004 " word" | prompt 2004 " word"
+     48 ==          live 128804 "<｜Assistant｜>" | prompt 128804 "<｜Assistant｜>"
+     49 ==          live 128822 "</think>" | prompt 128822 "</think>"
+     50 live-only   live 43 "I" | prompt - <none>
+     51 live-only   live 4571 "'m" | prompt - <none>
+     52 live-only   live 2155 " here" | prompt - <none>
+     53 live-only   live 304 " to" | prompt - <none>
+     54 live-only   live 1694 " help" | prompt - <none>
+
+--- raw request json ---
+{"model": "deepseek-v4-flash", "prompt": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word", "max_tokens": 5, "temperature": 0, "top_p": 1, "seed": 1, "think": false, "stream": false}
+
+--- rendered prompt ---
+<｜begin▁of▁sentence｜>You are a helpful assistant<｜User｜>word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word<｜Assistant｜></think>
+
+--- generated text ---
+
+
+--- trace: prefill done; decode_max=5 ctx_room=78 ---
+
+I'm here to help
+
+--- parsed message ---
+finish: length
+generated_tokens: 5
+dsml_start: 0
+dsml_end: 0
+elapsed_sec: 0.329
+
+===== end request 5 =====

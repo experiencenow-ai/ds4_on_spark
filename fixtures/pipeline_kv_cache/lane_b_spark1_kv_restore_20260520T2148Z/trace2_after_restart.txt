@@ -1,0 +1,51 @@
+
+===== request 1 2026-05-20 21:48:05 =====
+kind: completion
+model: deepseek-v4-flash
+stream: 0
+tools: 0
+think_mode: none
+prompt_tokens: 50
+effective_prompt_tokens: 50
+cached_tokens: 50
+max_tokens: 5
+temperature: 0.000
+top_k: 0
+top_p: 1.000
+min_p: 0.000
+seed: 1
+stream_include_usage: 0
+
+--- cache decision ---
+live_tokens_before: 0
+prompt_tokens: 50
+live_prompt_common: 0
+memory_token_reusable: 0
+memory_miss_reason: no-live-checkpoint
+tool_replay: mem=0 disk=0 canonical=0 missing_ids=0
+cache_source: disk-text
+cached_tokens: 50
+disk_cached_tokens: 50
+disk_cache_file: /tmp/lane_b_kv_1779280982/kv/95e332eafa8e8c91fdb04e181b45674802a372f2.kv
+
+--- raw request json ---
+{"model": "deepseek-v4-flash", "prompt": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word", "max_tokens": 5, "temperature": 0, "top_p": 1, "seed": 1, "think": false, "stream": false}
+
+--- rendered prompt ---
+<｜begin▁of▁sentence｜>You are a helpful assistant<｜User｜>word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word<｜Assistant｜></think>
+
+--- generated text ---
+
+
+--- trace: prefill done; decode_max=5 ctx_room=78 ---
+
+I'm here to help
+
+--- parsed message ---
+finish: length
+generated_tokens: 5
+dsml_start: 0
+dsml_end: 0
+elapsed_sec: 0.345
+
+===== end request 1 =====

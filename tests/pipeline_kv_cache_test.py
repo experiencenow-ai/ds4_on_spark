@@ -9,6 +9,7 @@ from scripts import pipeline_kv_cache as kv
 
 
 PATCH = Path("docs/antirez-patches/ds4-3630e64-cuda-stage-kv-checkpoint.patch")
+LIVE_FIXTURE = Path("fixtures/pipeline_kv_cache/lane_b_spark1_kv_restore_20260520T2148Z")
 
 
 class PipelineKvCacheTest(unittest.TestCase):
@@ -193,6 +194,33 @@ class PipelineKvCacheTest(unittest.TestCase):
 				self.assertIn(needle, text)
 		self.assertNotIn("placeholder", text.lower())
 		self.assertNotIn("memset(buf, 0", text)
+
+	def test_live_spark1_kv_restore_fixture_has_cache_hit_after_restart(self) -> None:
+		server1 = (LIVE_FIXTURE / "server1.log").read_text(encoding="utf-8")
+		server2 = (LIVE_FIXTURE / "server2_after_restart.log").read_text(encoding="utf-8")
+		trace2 = (LIVE_FIXTURE / "trace2_after_restart.txt").read_text(encoding="utf-8")
+		self.assertIn("kv cache stored tokens=50", server1)
+		self.assertIn("kv cache hit text tokens=50", server1)
+		self.assertIn("shutdown requested", server1)
+		self.assertIn("kv cache hit text tokens=50", server2)
+		self.assertIn("completion ctx=50..50:0 prompt done 0.000s", server2)
+		self.assertIn("live_tokens_before: 0", trace2)
+		self.assertIn("cache_source: disk-text", trace2)
+		self.assertIn("disk_cached_tokens: 50", trace2)
+
+	def test_live_spark1_kv_restore_fixture_tokens_match(self) -> None:
+		def response_text(path: Path) -> str:
+			first = path.read_text(encoding="utf-8").splitlines()[0]
+			return json.loads(first)["choices"][0]["text"]
+
+		cold = response_text(LIVE_FIXTURE / "response_rendered50_nothink_1.txt")
+		hit = response_text(LIVE_FIXTURE / "response_rendered50_nothink_2_cachehit.txt")
+		after_restart = response_text(LIVE_FIXTURE / "response_rendered50_nothink_after_restart.txt")
+		self.assertEqual(cold, "I'm here to help")
+		self.assertEqual(hit, cold)
+		self.assertEqual(after_restart, cold)
+		token_dump = (LIVE_FIXTURE / "generated_text_token_ids.txt").read_text(encoding="utf-8")
+		self.assertIn("[43, 4571, 2155, 304, 1694]", token_dump)
 
 
 if __name__ == "__main__":

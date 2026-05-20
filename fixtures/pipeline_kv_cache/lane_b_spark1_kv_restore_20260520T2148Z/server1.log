@@ -1,0 +1,51 @@
+ds4: CUDA backend initialized on NVIDIA GB10 (sm_121)
+ds4: CUDA host registration skipped: operation not supported
+ds4: CUDA loading model tensors into device cache
+ds4: CUDA loading model tensors 11.09 GiB cached
+ds4: CUDA loading model tensors 16.02 GiB cached
+ds4: CUDA loading model tensors 23.76 GiB cached
+ds4: CUDA loading model tensors 29.65 GiB cached
+ds4: CUDA loading model tensors 32.06 GiB cached
+ds4: CUDA loading model tensors 36.99 GiB cached
+ds4: CUDA loading model tensors 45.56 GiB cached
+ds4: CUDA loading model tensors 48.02 GiB cached
+ds4: CUDA loading model tensors 55.31 GiB cached
+ds4: CUDA loading model tensors 64.06 GiB cached
+ds4: CUDA loading model tensors 75.18 GiB cached
+ds4: CUDA loading model tensors 80.04 GiB cached
+ds4: CUDA startup model cache prepared 80.76 GiB of tensor spans in 98.484s
+ds4: cuda backend initialized for graph diagnostics
+0520 21:44:41 ds4-server: context buffers 23.39 MiB (ctx=128, backend=cuda, prefill_chunk=128, raw_kv_rows=256, compressed_kv_rows=34)
+0520 21:44:41 ds4-server: KV disk cache /tmp/lane_b_kv_1779280982/kv (budget=4096 MiB, cross-quant=accept, min=50, cold_max=50, continued=0, trim=0, align=0)
+0520 21:44:41 ds4-server: tracing session to /tmp/lane_b_kv_1779280982/trace1.txt
+0520 21:44:41 ds4-server: listening on http://127.0.0.1:8187
+0520 21:44:53 ds4-server: completion ctx=0..59:59 prompt start
+0520 21:44:55 ds4-server: completion ctx=0..59:59 prompt done 1.301s
+0520 21:44:55 ds4-server: completion ctx=0..59:59 gen=5 THINKING decoding chunk=15.14 t/s avg=15.14 t/s 0.330s
+0520 21:44:55 ds4-server: completion ctx=0..59:59 gen=5 THINKING finish=length 1.631s
+0520 21:45:12 ds4-server: kv cache stored tokens=64 trimmed=0 reason=evict size=18.33 MiB save=32.5 ms
+0520 21:45:12 ds4-server: completion ctx=0..50:50 prompt start
+0520 21:45:13 ds4-server: completion ctx=0..50:50 prompt done 0.355s
+0520 21:45:13 ds4-server: kv cache stored tokens=50 trimmed=0 reason=cold size=16.95 MiB save=23.6 ms
+0520 21:45:13 ds4-server: completion ctx=0..50:50 gen=5 THINKING decoding chunk=15.26 t/s avg=15.26 t/s 0.328s
+0520 21:45:13 ds4-server: completion ctx=0..50:50 gen=5 THINKING finish=length 0.706s
+0520 21:45:26 ds4-server: kv cache stored tokens=55 trimmed=0 reason=evict size=17.42 MiB save=25.6 ms
+0520 21:45:26 ds4-server: kv cache hit text tokens=50 text=296 quant=2 load=17.8 ms file=/tmp/lane_b_kv_1779280982/kv/fe3e32d08ca9d731d26a58191b3c5f1b8e23a178.kv
+0520 21:45:26 ds4-server: completion ctx=50..50:0 prompt start
+0520 21:45:26 ds4-server: completion ctx=50..50:0 prompt done 0.000s
+0520 21:45:26 ds4-server: completion ctx=50..50:0 gen=5 THINKING decoding chunk=15.08 t/s avg=15.08 t/s 0.332s
+0520 21:45:26 ds4-server: completion ctx=50..50:0 gen=5 THINKING finish=length 0.332s
+0520 21:45:57 ds4-server: kv cache stored tokens=55 trimmed=0 reason=evict size=17.42 MiB save=26.4 ms
+0520 21:45:57 ds4-server: completion ctx=0..50:50 prompt start
+0520 21:45:58 ds4-server: completion ctx=0..50:50 prompt done 0.351s
+0520 21:45:58 ds4-server: kv cache stored tokens=50 trimmed=0 reason=cold size=16.95 MiB save=25.0 ms
+0520 21:45:58 ds4-server: completion ctx=0..50:50 gen=5 decoding chunk=15.21 t/s avg=15.21 t/s 0.329s
+0520 21:45:58 ds4-server: completion ctx=0..50:50 gen=5 finish=length 0.705s
+0520 21:45:58 ds4-server: kv cache stored tokens=55 trimmed=0 reason=evict size=17.42 MiB save=24.9 ms
+0520 21:45:58 ds4-server: kv cache hit text tokens=50 text=297 quant=2 load=18.5 ms file=/tmp/lane_b_kv_1779280982/kv/95e332eafa8e8c91fdb04e181b45674802a372f2.kv
+0520 21:45:58 ds4-server: completion ctx=50..50:0 prompt start
+0520 21:45:58 ds4-server: completion ctx=50..50:0 prompt done 0.000s
+0520 21:45:58 ds4-server: completion ctx=50..50:0 gen=5 decoding chunk=15.21 t/s avg=15.21 t/s 0.329s
+0520 21:45:58 ds4-server: completion ctx=50..50:0 gen=5 finish=length 0.329s
+0520 21:46:12 ds4-server: shutdown requested, draining requests
+0520 21:46:12 ds4-server: persisting current KV cache before shutdown tokens=55

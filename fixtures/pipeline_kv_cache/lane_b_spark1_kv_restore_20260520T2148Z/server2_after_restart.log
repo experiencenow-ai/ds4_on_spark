@@ -1,0 +1,24 @@
+ds4: CUDA backend initialized on NVIDIA GB10 (sm_121)
+ds4: CUDA host registration skipped: operation not supported
+ds4: CUDA loading model tensors into device cache
+ds4: CUDA loading model tensors 10.26 GiB cached
+ds4: CUDA loading model tensors 16.02 GiB cached
+ds4: CUDA loading model tensors 25.82 GiB cached
+ds4: CUDA loading model tensors 32.06 GiB cached
+ds4: CUDA loading model tensors 43.49 GiB cached
+ds4: CUDA loading model tensors 48.02 GiB cached
+ds4: CUDA loading model tensors 59.45 GiB cached
+ds4: CUDA loading model tensors 64.06 GiB cached
+ds4: CUDA loading model tensors 71.90 GiB cached
+ds4: CUDA loading model tensors 80.04 GiB cached
+ds4: CUDA startup model cache prepared 80.76 GiB of tensor spans in 82.540s
+ds4: cuda backend initialized for graph diagnostics
+0520 21:47:56 ds4-server: context buffers 23.39 MiB (ctx=128, backend=cuda, prefill_chunk=128, raw_kv_rows=256, compressed_kv_rows=34)
+0520 21:47:56 ds4-server: KV disk cache /tmp/lane_b_kv_1779280982/kv (budget=4096 MiB, cross-quant=accept, min=50, cold_max=50, continued=0, trim=0, align=0)
+0520 21:47:56 ds4-server: tracing session to /tmp/lane_b_kv_1779280982/trace2_after_restart.txt
+0520 21:47:56 ds4-server: listening on http://127.0.0.1:8187
+0520 21:48:05 ds4-server: kv cache hit text tokens=50 text=297 quant=2 load=21.9 ms file=/tmp/lane_b_kv_1779280982/kv/95e332eafa8e8c91fdb04e181b45674802a372f2.kv
+0520 21:48:05 ds4-server: completion ctx=50..50:0 prompt start
+0520 21:48:05 ds4-server: completion ctx=50..50:0 prompt done 0.000s
+0520 21:48:05 ds4-server: completion ctx=50..50:0 gen=5 decoding chunk=14.49 t/s avg=14.49 t/s 0.345s
+0520 21:48:05 ds4-server: completion ctx=50..50:0 gen=5 finish=length 0.345s

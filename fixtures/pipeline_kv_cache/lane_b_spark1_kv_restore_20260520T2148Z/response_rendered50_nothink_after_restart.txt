@@ -1,0 +1,4 @@
+{"id":"cmpl-1","object":"text_completion","created":1779281285,"model":"deepseek-v4-flash","choices":[{"text":"I'm here to help","index":0,"finish_reason":"length"}],"usage":{"prompt_tokens":50,"completion_tokens":5,"total_tokens":55}}
+
+HTTP_CODE:200
+TIME_TOTAL:0.368056
