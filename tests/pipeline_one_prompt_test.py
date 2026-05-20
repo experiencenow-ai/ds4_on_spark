@@ -37,20 +37,23 @@ class PipelineOnePromptTest(unittest.TestCase):
 		self.assertEqual(text, " 4")
 		self.assertEqual([s.token_id for s in steps], [10, 20])
 
-	def test_stage0_probe_command_uses_row_token_embedding_input(self) -> None:
+	def test_stage0_probe_command_uses_canonical_prompt_token_file(self) -> None:
 		session = ps.PipelineSession(stages=ps.default_stages())
-		cmd = session.build_stage_probe_command(ps.default_stages()[0], "run", 0, [128822], None, "/tmp/b01.bin")
+		cmd = session.build_stage_probe_command(ps.default_stages()[0], "run", 0, "/tmp/prompt.bin", None, "/tmp/stage0_out_%u.bin")
 		self.assertIn("DS4_CUDA_STACK_PROBE_EMBED_INPUT=1", cmd)
-		self.assertIn("DS4_CUDA_STACK_PROBE_ROW_TOKEN_IDS=128822,0,0,0", cmd)
+		self.assertIn("DS4_CUDA_MOE_SLICE_TILE8=1", cmd)
 		self.assertIn("--cuda-batch-stack-probe", cmd)
-		self.assertIn("--cuda-moe-tokens 4", cmd)
+		self.assertIn("--batch 1", cmd)
+		self.assertIn("--prompt-tokens-file /tmp/prompt.bin", cmd)
+		self.assertIn("--emit-output-head-argmax", cmd)
 		self.assertNotIn("DS4_CUDA_STACK_PROBE_BATCH_HEAD=1", cmd)
 
 	def test_stage2_probe_command_uses_single_row_head_argmax(self) -> None:
 		session = ps.PipelineSession(stages=ps.default_stages())
-		cmd = session.build_stage_probe_command(ps.default_stages()[2], "run", 0, [7] * 16, "/tmp/b12.bin", None)
-		self.assertIn("DS4_CUDA_STACK_PROBE_INPUT_HC_FILE=/tmp/b12.bin", cmd)
-		self.assertIn("--cuda-moe-tokens 16", cmd)
+		cmd = session.build_stage_probe_command(ps.default_stages()[2], "run", 0, "/tmp/prompt.bin", "/tmp/stage2_in_%u.bin", None)
+		self.assertIn("DS4_CUDA_STACK_PROBE_INPUT_HC_FILE=/tmp/stage2_in_%u.bin", cmd)
+		self.assertIn("--batch 1", cmd)
+		self.assertIn("--emit-output-head-argmax", cmd)
 		self.assertNotIn("DS4_CUDA_STACK_PROBE_BATCH_HEAD=1", cmd)
 		self.assertNotIn("DS4_CUDA_STACK_PROBE_NO_HEAD=1", cmd)
 
@@ -58,7 +61,7 @@ class PipelineOnePromptTest(unittest.TestCase):
 		stage = ps.StageConfig(0, "s", "spark1", "/d", "/m", 0, 1, False)
 		session = ps.PipelineSession(stages=[stage, dataclasses.replace(stage, stage_id=1)])
 		with tempfile.TemporaryDirectory() as d:
-			item = session.tcp_transfer_file(stage, stage, "/tmp/a", "/tmp/a", 19000, Path(d), "same", 4)
+			item = session.tcp_transfer_file(stage, stage, "/tmp/a", "/tmp/a", 19000, Path(d), "same")
 		self.assertEqual(item["transfer_kind"], "same_host_file")
 
 	def test_missing_probe_hook_blocks_pp3(self) -> None:
