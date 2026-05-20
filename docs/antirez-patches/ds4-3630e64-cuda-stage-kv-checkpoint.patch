@@ -1,0 +1,231 @@
+diff --git a/ds4.c b/ds4.c
+--- a/ds4.c
++++ b/ds4.c
+@@
++#define DS4_STAGE_KV_SHARD_MAGIC 0x4453344bU
++#define DS4_STAGE_KV_SHARD_VERSION 1U
++#define DS4_STAGE_KV_IO_CHUNK (1024U * 1024U)
++
++typedef struct
++{
++	uint32_t magic;
++	uint32_t version;
++	uint32_t layer_begin;
++	uint32_t layer_end;
++	uint32_t raw_cap;
++	uint32_t comp_cap;
++	uint32_t token_count;
++	uint32_t raw_live_rows;
++	uint32_t layers;
++	uint64_t payload_bytes;
++} ds4_stage_kv_shard_header;
++
++static uint32_t stage_kv_raw_live_rows(const ds4_gpu_graph *g,uint32_t token_count)
++{
++	uint32_t rows = g->raw_cap;
++	if ( rows > g->raw_cap )
++		rows = g->raw_cap;
++	if ( rows > token_count )
++		rows = token_count;
++	return(rows);
++}
++
++static uint64_t stage_kv_payload_live_tensor_bytes(const ds4_gpu_graph *g,uint32_t layer_begin,uint32_t layer_end,uint32_t token_count)
++{
++	uint64_t bytes = 0;
++	uint32_t il,raw_live,ratio;
++	raw_live = stage_kv_raw_live_rows(g,token_count);
++	for (il=layer_begin; il<layer_end; il++)
++	{
++		bytes += ((uint64_t)raw_live * DS4_N_HEAD_DIM * sizeof(float));
++		ratio = ds4_layer_compress_ratio(il);
++		if ( ratio == 0 )
++			continue;
++		bytes += ((uint64_t)g->layer_n_comp[il] * DS4_N_HEAD_DIM * sizeof(float));
++		bytes += ds4_gpu_tensor_bytes(g->layer_attn_state_kv[il]);
++		bytes += ds4_gpu_tensor_bytes(g->layer_attn_state_score[il]);
++		if ( ratio == 4 )
++		{
++			bytes += ((uint64_t)g->layer_n_index_comp[il] * DS4_N_INDEXER_HEAD_DIM * sizeof(float));
++			bytes += ds4_gpu_tensor_bytes(g->layer_index_state_kv[il]);
++			bytes += ds4_gpu_tensor_bytes(g->layer_index_state_score[il]);
++		}
++	}
++	return(bytes);
++}
++
++static bool stage_kv_write_tensor_span(FILE *fp,ds4_gpu_tensor *tensor,uint64_t off,uint64_t bytes,uint8_t *buf,uint64_t cap)
++{
++	uint64_t done,n;
++	done = 0;
++	while ( done < bytes )
++	{
++		n = (bytes - done) > cap ? cap : (bytes - done);
++		if ( ds4_gpu_tensor_read(tensor,off + done,buf,n) == 0 )
++			return(false);
++		if ( fwrite(buf,1,(size_t)n,fp) != (size_t)n )
++			return(false);
++		done += n;
++	}
++	return(true);
++}
++
++static bool stage_kv_read_tensor_span(FILE *fp,ds4_gpu_tensor *tensor,uint64_t off,uint64_t bytes,uint8_t *buf,uint64_t cap)
++{
++	uint64_t done,n;
++	done = 0;
++	while ( done < bytes )
++	{
++		n = (bytes - done) > cap ? cap : (bytes - done);
++		if ( fread(buf,1,(size_t)n,fp) != (size_t)n )
++			return(false);
++		if ( ds4_gpu_tensor_write(tensor,off + done,buf,n) == 0 )
++			return(false);
++		done += n;
++	}
++	return(true);
++}
++
++static bool stage_kv_save_graph(ds4_gpu_graph *g,uint32_t layer_begin,uint32_t layer_end,uint32_t token_count,const char *path)
++{
++	FILE *fp;
++	uint8_t *buf;
++	uint32_t il,r,raw_first,raw_live,phys,ratio;
++	ds4_stage_kv_shard_header h;
++	bool ok;
++	if ( g == NULL || path == NULL || layer_begin >= layer_end || layer_end > DS4_N_LAYER )
++		return(false);
++	if ( ds4_gpu_synchronize() == 0 )
++		return(false);
++	fp = fopen(path,"wb");
++	if ( fp == NULL )
++		return(false);
++	raw_live = stage_kv_raw_live_rows(g,token_count);
++	h = (ds4_stage_kv_shard_header){DS4_STAGE_KV_SHARD_MAGIC,DS4_STAGE_KV_SHARD_VERSION,layer_begin,layer_end,g->raw_cap,g->comp_cap,token_count,raw_live,(layer_end - layer_begin),0};
++	h.payload_bytes = stage_kv_payload_live_tensor_bytes(g,layer_begin,layer_end,token_count);
++	ok = fwrite(&h,1,sizeof(h),fp) == sizeof(h);
++	buf = xmalloc(DS4_STAGE_KV_IO_CHUNK);
++	raw_first = token_count - raw_live;
++	for (il=layer_begin; ok && il<layer_end; il++)
++	{
++		if ( fwrite(&g->layer_n_comp[il],1,sizeof(uint32_t),fp) != sizeof(uint32_t) )
++			ok = false;
++		if ( ok && fwrite(&g->layer_n_index_comp[il],1,sizeof(uint32_t),fp) != sizeof(uint32_t) )
++			ok = false;
++		for (r=0; ok && r<raw_live; r++)
++		{
++			phys = (raw_first + r) % g->raw_cap;
++			ok = stage_kv_write_tensor_span(fp,g->layer_raw_cache[il],(uint64_t)phys * DS4_N_HEAD_DIM * sizeof(float),(uint64_t)DS4_N_HEAD_DIM * sizeof(float),buf,DS4_STAGE_KV_IO_CHUNK);
++		}
++		ratio = ds4_layer_compress_ratio(il);
++		if ( ok && ratio != 0 )
++			ok = stage_kv_write_tensor_span(fp,g->layer_attn_comp_cache[il],0,(uint64_t)g->layer_n_comp[il] * DS4_N_HEAD_DIM * sizeof(float),buf,DS4_STAGE_KV_IO_CHUNK);
++		if ( ok && ratio != 0 )
++			ok = stage_kv_write_tensor_span(fp,g->layer_attn_state_kv[il],0,ds4_gpu_tensor_bytes(g->layer_attn_state_kv[il]),buf,DS4_STAGE_KV_IO_CHUNK);
++		if ( ok && ratio != 0 )
++			ok = stage_kv_write_tensor_span(fp,g->layer_attn_state_score[il],0,ds4_gpu_tensor_bytes(g->layer_attn_state_score[il]),buf,DS4_STAGE_KV_IO_CHUNK);
++		if ( ok && ratio == 4 )
++			ok = stage_kv_write_tensor_span(fp,g->layer_index_comp_cache[il],0,(uint64_t)g->layer_n_index_comp[il] * DS4_N_INDEXER_HEAD_DIM * sizeof(float),buf,DS4_STAGE_KV_IO_CHUNK);
++		if ( ok && ratio == 4 )
++			ok = stage_kv_write_tensor_span(fp,g->layer_index_state_kv[il],0,ds4_gpu_tensor_bytes(g->layer_index_state_kv[il]),buf,DS4_STAGE_KV_IO_CHUNK);
++		if ( ok && ratio == 4 )
++			ok = stage_kv_write_tensor_span(fp,g->layer_index_state_score[il],0,ds4_gpu_tensor_bytes(g->layer_index_state_score[il]),buf,DS4_STAGE_KV_IO_CHUNK);
++	}
++	free(buf);
++	if ( fclose(fp) != 0 )
++		ok = false;
++	return(ok);
++}
++
++static bool stage_kv_restore_graph(ds4_gpu_graph *g,uint32_t layer_begin,uint32_t layer_end,const char *path,uint32_t *out_token_count)
++{
++	FILE *fp;
++	uint8_t *buf;
++	uint32_t il,r,raw_first,phys,ratio,n_comp,n_index_comp;
++	ds4_stage_kv_shard_header h;
++	bool ok;
++	if ( g == NULL || path == NULL || layer_begin >= layer_end || layer_end > DS4_N_LAYER )
++		return(false);
++	fp = fopen(path,"rb");
++	if ( fp == NULL )
++		return(false);
++	memset(&h,0,sizeof(h));
++	ok = fread(&h,1,sizeof(h),fp) == sizeof(h);
++	if ( ok && (h.magic != DS4_STAGE_KV_SHARD_MAGIC || h.version != DS4_STAGE_KV_SHARD_VERSION) )
++		ok = false;
++	if ( ok && (h.layer_begin != layer_begin || h.layer_end != layer_end || h.raw_cap > g->raw_cap || h.raw_live_rows > h.token_count || h.raw_live_rows > g->raw_cap || h.comp_cap > g->comp_cap) )
++		ok = false;
++	buf = xmalloc(DS4_STAGE_KV_IO_CHUNK);
++	raw_first = h.token_count - h.raw_live_rows;
++	for (il=layer_begin; ok && il<layer_end; il++)
++	{
++		if ( fread(&n_comp,1,sizeof(uint32_t),fp) != sizeof(uint32_t) )
++			ok = false;
++		if ( ok && fread(&n_index_comp,1,sizeof(uint32_t),fp) != sizeof(uint32_t) )
++			ok = false;
++		if ( ok && (n_comp > g->comp_cap || n_index_comp > g->comp_cap) )
++			ok = false;
++		for (r=0; ok && r<h.raw_live_rows; r++)
++		{
++			phys = (raw_first + r) % g->raw_cap;
++			ok = stage_kv_read_tensor_span(fp,g->layer_raw_cache[il],(uint64_t)phys * DS4_N_HEAD_DIM * sizeof(float),(uint64_t)DS4_N_HEAD_DIM * sizeof(float),buf,DS4_STAGE_KV_IO_CHUNK);
++		}
++		ratio = ds4_layer_compress_ratio(il);
++		if ( ok && ratio != 0 )
++			ok = stage_kv_read_tensor_span(fp,g->layer_attn_comp_cache[il],0,(uint64_t)n_comp * DS4_N_HEAD_DIM * sizeof(float),buf,DS4_STAGE_KV_IO_CHUNK);
++		if ( ok && ratio != 0 )
++			ok = stage_kv_read_tensor_span(fp,g->layer_attn_state_kv[il],0,ds4_gpu_tensor_bytes(g->layer_attn_state_kv[il]),buf,DS4_STAGE_KV_IO_CHUNK);
++		if ( ok && ratio != 0 )
++			ok = stage_kv_read_tensor_span(fp,g->layer_attn_state_score[il],0,ds4_gpu_tensor_bytes(g->layer_attn_state_score[il]),buf,DS4_STAGE_KV_IO_CHUNK);
++		if ( ok && ratio == 4 )
++			ok = stage_kv_read_tensor_span(fp,g->layer_index_comp_cache[il],0,(uint64_t)n_index_comp * DS4_N_INDEXER_HEAD_DIM * sizeof(float),buf,DS4_STAGE_KV_IO_CHUNK);
++		if ( ok && ratio == 4 )
++			ok = stage_kv_read_tensor_span(fp,g->layer_index_state_kv[il],0,ds4_gpu_tensor_bytes(g->layer_index_state_kv[il]),buf,DS4_STAGE_KV_IO_CHUNK);
++		if ( ok && ratio == 4 )
++			ok = stage_kv_read_tensor_span(fp,g->layer_index_state_score[il],0,ds4_gpu_tensor_bytes(g->layer_index_state_score[il]),buf,DS4_STAGE_KV_IO_CHUNK);
++		if ( ok )
++		{
++			g->layer_n_comp[il] = n_comp;
++			g->layer_n_index_comp[il] = n_index_comp;
++		}
++	}
++	free(buf);
++	fclose(fp);
++	if ( ok && out_token_count != NULL )
++		*out_token_count = h.token_count;
++	if ( ok )
++		ok = ds4_gpu_synchronize() != 0;
++	return(ok);
++}
++
++static bool stage_save_kv(ds4_gpu_graph *g,uint32_t layer_begin,uint32_t layer_end,uint32_t token_count,const char *path)
++{
++	return(stage_kv_save_graph(g,layer_begin,layer_end,token_count,path));
++}
++
++static bool stage_restore_kv(ds4_gpu_graph *g,uint32_t layer_begin,uint32_t layer_end,const char *path,uint32_t *out_token_count)
++{
++	return(stage_kv_restore_graph(g,layer_begin,layer_end,path,out_token_count));
++}
+@@
++    const char *save_kv = getenv("DS4_CUDA_STAGE_SAVE_KV_PATH");
++    const char *restore_kv = getenv("DS4_CUDA_STAGE_RESTORE_KV_PATH");
++    bool kv_cache_hit = false;
++    uint32_t restored_token_count = 0;
++    if (restore_kv && restore_kv[0]) {
++        ok = stage_restore_kv(&g, layer_begin, layer_end, restore_kv, &restored_token_count);
++        kv_cache_hit = ok;
++    }
+@@
++    if (ok && save_kv && save_kv[0]) {
++        ok = stage_save_kv(&g, layer_begin, layer_end, n_tokens, save_kv);
++    }
+@@
+-        printf("{\"cuda_batch_stack_probe\":true,
++        printf("{\"cuda_batch_stack_probe\":true,
+@@
++        printf(",\"kv_cache_hit\":%s,\"stage_kv_save_path\":\"%s\",\"stage_kv_restore_path\":\"%s\",\"stage_kv_restored_token_count\":%u",
++               kv_cache_hit ? "true" : "false",
++               save_kv ? save_kv : "",
++               restore_kv ? restore_kv : "",
++               restored_token_count);
