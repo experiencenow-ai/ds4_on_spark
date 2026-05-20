@@ -1,0 +1,68 @@
+diff --git a/ds4.c b/ds4.c
+--- a/ds4.c
++++ b/ds4.c
+@@
++static uint32_t cuda_stack_probe_row_replacement_enabled(void) {
++    return getenv("DS4_CUDA_STACK_PROBE_ROW_REPLACEMENT") != NULL;
++}
++
++static uint32_t cuda_stack_probe_parse_slot_reset_rows(
++        uint32_t *rows,
++        uint32_t  cap) {
++    const char *env = getenv("DS4_CUDA_STACK_PROBE_SLOT_RESET_ROWS");
++    uint32_t n = 0;
++    if (!env || !env[0] || !rows || cap == 0) return 0;
++    while (*env && n < cap) {
++        while (*env == ',' || *env == ' ' || *env == '\t') env++;
++        if (!*env) break;
++        char *end = NULL;
++        unsigned long v = strtoul(env, &end, 10);
++        if (end == env || v > UINT32_MAX) break;
++        rows[n++] = (uint32_t)v;
++        env = end;
++    }
++    return n;
++}
++
++static bool cuda_stack_probe_reset_slot_row(
++        ds4_gpu_graph *g,
++        uint32_t       row,
++        uint32_t       n_tokens,
++        const float   *zero_hc) {
++    int32_t zero_token = 0;
++    const uint64_t token_off = (uint64_t)row * sizeof(zero_token);
++    const uint64_t hc_dim = (uint64_t)DS4_N_HC * DS4_N_EMBD;
++    const uint64_t hc_off = (uint64_t)row * hc_dim * sizeof(float);
++    if (!g || !zero_hc || row >= n_tokens) return false;
++    if (ds4_gpu_tensor_write(g->prefill_tokens, token_off, &zero_token, sizeof(zero_token)) == 0) return false;
++    if (ds4_gpu_tensor_write(g->batch_cur_hc, hc_off, zero_hc, hc_dim * sizeof(zero_hc[0])) == 0) return false;
++    return ds4_gpu_synchronize() != 0;
++}
+@@
+-    float *host_hc = xmalloc((size_t)hc_bytes);
++    float *host_hc = xmalloc((size_t)hc_bytes);
++    float *host_zero_hc = xmalloc((size_t)DS4_N_HC * (size_t)DS4_N_EMBD * sizeof(host_zero_hc[0]));
++    memset(host_zero_hc, 0, (size_t)DS4_N_HC * (size_t)DS4_N_EMBD * sizeof(host_zero_hc[0]));
+@@
+-        for (uint32_t step = 0; ok && step < decode_steps; step++) {
++        const bool row_replacement = cuda_stack_probe_row_replacement_enabled() != 0;
++        uint32_t reset_rows[512];
++        const uint32_t reset_row_count = row_replacement ?
++            cuda_stack_probe_parse_slot_reset_rows(reset_rows, n_tokens) : 0;
++        uint32_t reset_cursor = 0;
++        uint32_t row_replace_count = 0;
++        for (uint32_t step = 0; ok && step < decode_steps; step++) {
+             const uint32_t slot = (it * decode_steps) + step;
++            if (row_replacement && reset_cursor < reset_row_count) {
++                const uint32_t row = reset_rows[reset_cursor++];
++                ok = cuda_stack_probe_reset_slot_row(&g, row, n_tokens, host_zero_hc);
++                if (ok) row_replace_count++;
++            }
+             const double t0 = now_sec();
+             ok = cuda_batch_stack_probe_run(&g, model, weights, n_tokens, &token_profiles[slot]);
+@@
+-        printf("],\"decode_steps\":%u,\"kv_update_success\":%s", decode_steps, ok ? "true" : "false");
++        printf("],\"decode_steps\":%u,\"kv_update_success\":%s", decode_steps, ok ? "true" : "false");
++        printf(",\"row_replacement_enabled\":%s,\"row_replace_count\":%u", row_replacement ? "true" : "false", row_replace_count);
+@@
++    free(host_zero_hc);
