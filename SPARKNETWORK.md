@@ -20,7 +20,7 @@ Do not confuse SSH login names with network hostnames.
 
 ## Current Physical Topology
 
-The 200G fabric is currently an open line, not a closed ring:
+The 200G fabric follows the seven-node ring order:
 
 ```text
 spark0 -> spark1 -> spark2 -> spark3 -> spark4 -> spark5 -> spark6

@@ -38,14 +38,15 @@ scripts/spark_ring_fast_copy.py --engine python --parallel 16 spark3:/models/run
 scripts/spark_ring_fast_copy.py --dry-run spark5:/models/foo.gguf spark6:/models/
 ```
 
-The current seven-node line is:
+The current seven-node ring order is:
 
 ```text
 spark0 -> spark1 -> spark2 -> spark3 -> spark4 -> spark5 -> spark6
 ```
 
-So `spark2:/x -> spark3:/x` is valid, and `spark2:/x -> spark5:/x` is not a
-single high-speed copy. Stage it hop-by-hop:
+So `spark2:/x -> spark3:/x` is valid, and `spark2:/x -> spark5:/x` is a
+multi-hop transfer rather than one direct high-speed neighbor copy. Stage it
+hop-by-hop:
 
 ```bash
 scripts/spark_ring_fast_copy.py --engine native --parallel 32 --chunk-mib 512 spark2:/models/foo.gguf spark3:/models/
@@ -132,6 +133,28 @@ Verified on 2026-05-20:
 - Single-file writes to `/tmp` were slower than the network-only test. Treat
   that as a storage/write-path issue to fix, not as permission to use SSH for
   bulk payloads.
+
+## DS4 Standard Model Staging Evidence
+
+Artifact:
+`fixtures/spark_ring_fast_transfer/ds4_vllm_pp7_standard_model_stage_20260520.example.json`
+
+The standard DeepSeek-V4-Flash model and vLLM runtime were staged onto
+Spark3-Spark6 for PP=7 experiments. The full model payload is `159633386574`
+bytes across `55` files. SSH/rsync was abandoned after it left most of the 200G
+fabric idle; raw ring transfers completed the payload hops:
+
+| Hop | Path | Streams | Seconds | GiB/s |
+|-----|------|---------|---------|-------|
+| Spark2 -> Spark3 | `10.10.5.x` | single raw `tar | nc` | `148.25` | `1.003` |
+| Spark3 -> Spark4 | `10.10.7.x` + `10.10.8.x` | dual raw `tar | nc` | `97.81` | `1.520` |
+| Spark4 -> Spark5 | `10.10.9.x` + `10.10.10.x` | dual raw `tar | nc` | `93.03` | `1.598` |
+| Spark5 -> Spark6 | `10.10.11.x` + `10.10.12.x` | dual raw `tar | nc` | `135.48` | `1.097` |
+
+Every destination ended with `55` files and total size `159633386574` bytes.
+The next tuning target is more parallel file/chunk streams and cleaner receive
+workers, because observed model-copy throughput is storage/syscall limited well
+before the network-only ceiling.
 
 ## Why This Exists
 

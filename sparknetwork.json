@@ -127,7 +127,7 @@
     ]
   },
   "ring_200g": {
-    "state": "open-line",
+    "state": "seven-node-ring-order",
     "order": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6"],
     "missing_return_edge": {"from": "spark6", "to": "spark0", "reason": "200G cable too short"},
     "mtu": 9000,

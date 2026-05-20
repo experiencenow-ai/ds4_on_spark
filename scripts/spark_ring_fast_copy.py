@@ -380,6 +380,24 @@ print(json.dumps({"kind": kind, "size": st.st_size, "mode": st.st_mode & 0o777, 
     return remote_json(node, code, path)
 
 
+def dry_run_stat(src_path: str, engine: str, error: BaseException) -> dict[str, Any]:
+    kind = "dir" if src_path.endswith("/") else "file"
+    if engine == "native":
+        kind = "file"
+    basename = posixpath.basename(src_path.rstrip("/")) or "."
+    mode = 0o755 if kind == "dir" else 0o644
+    error_text = str(error).strip()
+    if "\n" in error_text:
+        error_text = error_text.splitlines()[-1]
+    return {
+        "kind": kind,
+        "size": 0,
+        "mode": mode,
+        "basename": basename,
+        "dry_run_stat_error": error_text,
+    }
+
+
 def remote_is_dir(node: str, path: str) -> bool:
     code = 'import json, os, sys; print(json.dumps(os.path.isdir(sys.argv[1])))'
     try:
@@ -523,7 +541,12 @@ def main() -> None:
     dst_node, dst_path = parse_spec(args.dst)
     topology = load_topology(args.topology)
     dst_ips = ring_dest_ips(topology, src_node, dst_node, args.link)
-    st = remote_stat(src_node, src_path)
+    try:
+        st = remote_stat(src_node, src_path)
+    except SystemExit as exc:
+        if not args.dry_run:
+            raise
+        st = dry_run_stat(src_path, args.engine, exc)
     if st["kind"] not in ("file", "dir"):
         raise SystemExit("source is not a regular file or directory: %s" % args.src)
     dst_base, root_name = dst_layout(dst_node, dst_path, st["basename"], st["kind"])
@@ -533,6 +556,8 @@ def main() -> None:
     print("plan: %s:%s -> %s:%s" % (src_node, src_path, dst_node, dst_path))
     print("ring destination IPs: %s" % ",".join(dst_ips))
     print("engine=%s streams=%d chunk_mib=%d dst_base=%s root_name=%s" % (engine, args.parallel, args.chunk_mib, dst_base, root_name))
+    if args.dry_run and "dry_run_stat_error" in st:
+        print("dry-run source stat skipped: %s" % st["dry_run_stat_error"])
     if args.dry_run:
         return
     if engine == "native":
