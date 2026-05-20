@@ -32,9 +32,14 @@ def main(argv: list[str]) -> int:
 	ap.add_argument("--max-tokens", type=int, default=8)
 	ap.add_argument("--out-dir", default=f"/private/tmp/ds4_lane_a_one_prompt_{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}")
 	ap.add_argument("--mode", choices=["pp3", "pp1", "all"], default="all")
+	ap.add_argument("--stage-manifest", default="")
 	ap.add_argument("--continue-after-pp3-blocker", action="store_true", help="Also run PP=1 baseline when PP=3 worker hook is blocked.")
 	args = ap.parse_args(argv)
-	session = PipelineSession()
+	stages = None
+	if args.stage_manifest:
+		from scripts.pipeline_session import load_stage_manifest
+		stages = load_stage_manifest(args.stage_manifest)
+	session = PipelineSession(stages=stages)
 	out_dir = Path(args.out_dir)
 	out_dir.mkdir(parents=True, exist_ok=True)
 	rc = 0
