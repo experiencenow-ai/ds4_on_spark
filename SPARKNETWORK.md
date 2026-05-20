@@ -20,7 +20,7 @@ Do not confuse SSH login names with network hostnames.
 
 ## Current Physical Topology
 
-The 200G fabric follows the seven-node ring order:
+The 200G fabric is currently an open line, not a closed ring:
 
 ```text
 spark0 -> spark1 -> spark2 -> spark3 -> spark4 -> spark5 -> spark6
@@ -141,6 +141,10 @@ For bulk data, prefer [`docs/spark-ring-fast-transfer.md`](docs/spark-ring-fast-
 and `scripts/spark_ring_fast_copy.py --engine native` for regular files. Use
 the Python engine for directory trees. SSH-based rsync/scp is a control-plane
 fallback, not the default for initial model/runtime payload movement.
+
+For model placement, load [`sparkmodels.json`](sparkmodels.json) and
+[`docs/spark-model-cache.md`](docs/spark-model-cache.md). The canonical cache is
+`/home/sparkN/models` on every Spark, mirrored hop-by-hop over the 200G ring.
 
 The low-bandwidth control service should expose only allowlisted operations:
 
