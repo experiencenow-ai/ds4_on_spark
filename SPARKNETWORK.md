@@ -137,12 +137,19 @@ Use separate planes for separate jobs:
 | Ring sync | Previous/next 200G neighbors only | Manifests, object sync, shard movement, high-volume transfers |
 | Data plane | 200G fabric | Runtime/model traffic |
 
+For bulk data, prefer [`docs/spark-ring-fast-transfer.md`](docs/spark-ring-fast-transfer.md)
+and `scripts/spark_ring_fast_copy.py --engine native` for regular files. Use
+the Python engine for directory trees. SSH-based rsync/scp is a control-plane
+fallback, not the default for initial model/runtime payload movement.
+
 The low-bandwidth control service should expose only allowlisted operations:
 
 - `health`: hostname, user, uptime, interfaces, disk, service versions.
 - `probe_links`: ping, jumbo ping, TCP/port checks for declared neighbors.
 - `stage_manifest`: receive a manifest/checksum list, not bulk model payloads.
-- `sync_pull` / `sync_push`: run bounded rsync/zstd jobs over 200G neighbor links.
+- `sync_pull` / `sync_push`: trigger bounded neighbor transfers over the 200G
+  ring using the fast-transfer path, with rsync reserved for final metadata or
+  delta validation.
 - `service`: start/stop/status allowlisted Centaur services.
 
 Do not send model payloads through the controller API. Use the ring sync plane.

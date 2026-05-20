@@ -154,7 +154,16 @@
       "Use SSH for break-glass only.",
       "Use the HTTP controller/agent plane for low-bandwidth commands and health.",
       "Use 200G neighbor links for manifests, object sync, and data movement.",
+      "Use raw TCP multi-stream transfer for initial bulk payload movement; reserve rsync over SSH for final metadata/delta checks.",
       "Never send model payloads through the controller API."
     ]
+  },
+  "bulk_transfer": {
+    "default_tool": "scripts/spark_ring_fast_copy.py",
+    "regular_file_engine": "native nc/dd workers over raw TCP ring IPs",
+    "directory_engine": "python helper over raw TCP ring IPs",
+    "neighbor_only": true,
+    "ssh_payload_copy": "fallback and final metadata/delta validation only",
+    "recommended_regular_file_args": ["--engine", "native", "--parallel", "32", "--chunk-mib", "512", "--link", "both"]
   }
 }
