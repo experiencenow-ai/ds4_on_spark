@@ -1,0 +1,19 @@
+ds4: context buffers 751.71 MiB (ctx=32768, backend=cuda, prefill_chunk=2048, raw_kv_rows=2304, compressed_kv_rows=8194)
+ds4: CUDA backend initialized on NVIDIA GB10 (sm_121)
+ds4: CUDA host registration skipped: operation not supported
+ds4: CUDA loading model tensors into device cache
+ds4: CUDA loading model tensors 11.62 GiB cached
+ds4: CUDA loading model tensors 16.02 GiB cached
+ds4: CUDA loading model tensors 27.32 GiB cached
+ds4: CUDA loading model tensors 32.06 GiB cached
+ds4: CUDA loading model tensors 42.70 GiB cached
+ds4: CUDA loading model tensors 47.63 GiB cached
+ds4: CUDA loading model tensors 48.02 GiB cached
+ds4: CUDA loading model tensors 56.01 GiB cached
+ds4: CUDA loading model tensors 64.06 GiB cached
+ds4: CUDA loading model tensors 72.88 GiB cached
+ds4: CUDA loading model tensors 80.04 GiB cached
+ds4: CUDA startup model cache prepared 80.76 GiB of tensor spans in 86.332s
+ds4: cuda backend initialized for graph diagnostics
+{"event":"prefill_chunk","stage_id":0,"layer_begin":0,"layer_end":43,"token_count":50,"logits_fnv64":"8126f4f352ec7b0b","logits_nonfinite":0}
+{"event":"live_decode","stage_id":0,"token_count":50,"decode_token_ids":[1162,344,260,73615,126664]}

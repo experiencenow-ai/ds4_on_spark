@@ -10,6 +10,7 @@ from scripts import pipeline_kv_cache as kv
 
 PATCH = Path("docs/antirez-patches/ds4-3630e64-cuda-stage-kv-checkpoint.patch")
 LIVE_FIXTURE = Path("fixtures/pipeline_kv_cache/lane_b_spark1_kv_restore_20260520T2148Z")
+SPARK2_STAGE_FIXTURE = Path("fixtures/pipeline_kv_cache/lane_b_spark2_stage0_kv_restore_20260520T2220Z")
 
 
 class PipelineKvCacheTest(unittest.TestCase):
@@ -166,34 +167,38 @@ class PipelineKvCacheTest(unittest.TestCase):
 	def test_stage_kv_checkpoint_patch_contract(self) -> None:
 		text = PATCH.read_text(encoding="utf-8")
 		required = [
-			"DS4_STAGE_KV_SHARD_MAGIC",
-			"DS4_STAGE_KV_SHARD_VERSION",
-			"DS4_STAGE_KV_IO_CHUNK",
-			"stage_kv_payload_live_tensor_bytes",
-			"stage_kv_save_graph",
-			"stage_kv_restore_graph",
-			"stage_save_kv",
-			"stage_restore_kv",
-			"save_kv",
-			"restore_kv",
-			"layer_raw_cache",
-			"layer_attn_comp_cache",
-			"layer_attn_state_kv",
-			"layer_attn_state_score",
-			"layer_index_comp_cache",
-			"layer_index_state_kv",
-			"layer_index_state_score",
-			"layer_n_comp",
-			"layer_n_index_comp",
-			"ds4_gpu_tensor_read",
-			"ds4_gpu_tensor_write",
-			"kv_cache_hit",
+			"DS4_PIPELINE_KV_MODE",
+			"DS4_PIPELINE_KV_PATH",
+			"DS4_PIPELINE_KV_TOKEN_IDS",
+			"pipeline_stage_save_kv",
+			"pipeline_stage_restore_kv",
+			"ds4_session_save_payload",
+			"ds4_session_load_payload",
+			"pipeline_stage_decode_argmax_tokens",
+			"restore_decode",
+			"live_decode",
+			"save_kv_waiting",
 		]
 		for needle in required:
 			with self.subTest(needle=needle):
 				self.assertIn(needle, text)
 		self.assertNotIn("placeholder", text.lower())
 		self.assertNotIn("memset(buf, 0", text)
+
+	def test_live_spark2_stage_restore_fixture_tokens_match(self) -> None:
+		live = (SPARK2_STAGE_FIXTURE / "live.log").read_text(encoding="utf-8")
+		save = (SPARK2_STAGE_FIXTURE / "save_wait.log").read_text(encoding="utf-8")
+		restore = (SPARK2_STAGE_FIXTURE / "restore.log").read_text(encoding="utf-8")
+		sha = (SPARK2_STAGE_FIXTURE / "stage0_50tok.kv.sha256").read_text(encoding="utf-8")
+		self.assertIn('"event":"prefill_chunk"', live)
+		self.assertIn('"logits_fnv64":"8126f4f352ec7b0b"', live)
+		self.assertIn('"event":"save_kv"', save)
+		self.assertIn('"bytes":17772116', save)
+		self.assertIn('"event":"save_kv_waiting"', save)
+		self.assertIn('"event":"restore_decode"', restore)
+		self.assertIn('"decode_token_ids":[1162,344,260,73615,126664]', live)
+		self.assertIn('"decode_token_ids":[1162,344,260,73615,126664]', restore)
+		self.assertIn("45acee5378108707dd22810e712c9c658034679f47d91115144bef7e0600ddf0", sha)
 
 	def test_live_spark1_kv_restore_fixture_has_cache_hit_after_restart(self) -> None:
 		server1 = (LIVE_FIXTURE / "server1.log").read_text(encoding="utf-8")
