@@ -54,6 +54,7 @@ class PipelineOnePromptTest(unittest.TestCase):
 		self.assertIn("DS4_CUDA_STACK_PROBE_INPUT_HC_FILE=/tmp/stage2_in_%u.bin", cmd)
 		self.assertIn("--batch 1", cmd)
 		self.assertIn("--emit-output-head-argmax", cmd)
+		self.assertNotIn("--prompt-tokens-file", cmd)
 		self.assertNotIn("DS4_CUDA_STACK_PROBE_BATCH_HEAD=1", cmd)
 		self.assertNotIn("DS4_CUDA_STACK_PROBE_NO_HEAD=1", cmd)
 
@@ -64,16 +65,28 @@ class PipelineOnePromptTest(unittest.TestCase):
 			item = session.tcp_transfer_file(stage, stage, "/tmp/a", "/tmp/a", 19000, Path(d), "same")
 		self.assertEqual(item["transfer_kind"], "same_host_file")
 
-	def test_missing_probe_hook_blocks_pp3(self) -> None:
+	def test_pp3_run_does_not_preflight_help_or_probe_hooks(self) -> None:
 		def runner(stage, command, ssh_config, known_hosts, timeout_s):
+			if "--help" in command:
+				return ps.CommandResult(["ssh"], 1, "", "unexpected preflight")
 			if "--dump-tokens" in command:
 				return ps.CommandResult(["ssh"], 0, "[1, 2, 3]\n", "")
-			return ps.CommandResult(["ssh"], 0, "Usage: ds4\n", "")
-		session = ps.PipelineSession(stages=ps.default_stages(), runner=runner)
+			if "prompt_step" in command and "python3 -c" in command:
+				return ps.CommandResult(["ssh"], 0, "", "")
+			if "--cuda-batch-stack-probe" in command and "DS4_CUDA_STACK_PROBE_LAYER_BEGIN=29" in command:
+				return ps.CommandResult(["ssh"], 0, json.dumps({"pipeline_argmax_token": 20, "logits_fnv64s": ["3"], "logits_nonfinites": [0]}) + "\n", "")
+			if "--cuda-batch-stack-probe" in command:
+				return ps.CommandResult(["ssh"], 0, json.dumps({"out_fnv64s": ["1"], "out_nonfinites": [0]}) + "\n", "")
+			return ps.CommandResult(["ssh"], 1, "", "unexpected command")
+		stages = [
+			ps.StageConfig(0, "stage0", "spark1", "/d", "/m", 0, 15, False),
+			ps.StageConfig(1, "stage1", "spark1", "/d", "/m", 15, 29, False),
+			ps.StageConfig(2, "stage2", "spark1", "/d", "/m", 29, 43, True),
+		]
+		session = ps.PipelineSession(stages=stages, runner=runner)
 		with tempfile.TemporaryDirectory() as d:
-			with self.assertRaises(ps.PipelineSessionError) as cm:
-				session.run_pp3("what is 2+2?", 8, Path(d))
-		self.assertIn("missing_cuda_batch_stack_probe", str(cm.exception))
+			run = session.run_pp3("what is 2+2?", 1, Path(d))
+		self.assertEqual(run.generated_token_ids, [20])
 
 	def test_decode_step_validation_requires_all_stage_hashes(self) -> None:
 		step = ps.GeneratedStep(0, 42, "4", [52], ["fnv64:1", "fnv64:2"], [0, 0])

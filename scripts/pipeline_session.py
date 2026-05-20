@@ -34,7 +34,6 @@ DEFAULT_BATCH = 1
 HC_MULT = 4
 HIDDEN_SIZE = 4096
 BOUNDARY_DTYPE_BYTES = 4
-PROBE_NEEDLE = "--cuda-batch-stack-probe"
 
 
 RECV_CODE = r"""
@@ -211,12 +210,12 @@ def run_command(command: list[str], timeout_s: int = 900) -> CommandResult:
 
 
 def run_remote(stage: StageConfig, remote_command: str, ssh_config: str, known_hosts: str, timeout_s: int = 900) -> CommandResult:
-	return run_command(ssh_base(stage.host, ssh_config, known_hosts) + [remote_command], timeout_s)
+	return run_command(ssh_base(stage.host, ssh_config, known_hosts) + [f"bash -lc {q(remote_command)}"], timeout_s)
 
 
 def popen_remote(stage: StageConfig, remote_command: str, ssh_config: str, known_hosts: str) -> subprocess.Popen[str]:
 	return subprocess.Popen(
-		ssh_base(stage.host, ssh_config, known_hosts) + [remote_command],
+		ssh_base(stage.host, ssh_config, known_hosts) + [f"bash -lc {q(remote_command)}"],
 		text=True,
 		stdout=subprocess.PIPE,
 		stderr=subprocess.PIPE,
@@ -343,44 +342,17 @@ class PipelineSession:
 
 	def tokenize_rendered_prompt(self, rendered_prompt: str) -> list[int]:
 		stage = self.stages[0]
-		cmd = f"cd {q(stage.ds4_dir)} && ./ds4 -m {q(stage.model)} --dump-tokens -p {q(rendered_prompt)}"
+		cmd = f"cd {q(stage.ds4_dir)} && PATH=.:$PATH ds4 -m {q(stage.model)} --dump-tokens -p {q(rendered_prompt)}"
 		rc = self.runner(stage, cmd, self.ssh_config, self.known_hosts, 300)
 		if rc.returncode != 0:
 			raise PipelineSessionError(f"ds4 tokenizer failed rc={rc.returncode}: {rc.stderr.strip()}")
 		return parse_token_dump(rc.stdout)
 
-	def check_probe_hooks(self) -> list[dict[str, Any]]:
-		results: list[dict[str, Any]] = []
-		for stage in self.stages:
-			cmd = f"cd {q(stage.ds4_dir)} && ./ds4 --help 2>&1"
-			rc = self.runner(stage, cmd, self.ssh_config, self.known_hosts, 120)
-			available = rc.returncode == 0 and PROBE_NEEDLE in (rc.stdout + rc.stderr)
-			results.append({
-				"stage_id": stage.stage_id,
-				"stage": stage.name,
-				"host": stage.host,
-				"hook": PROBE_NEEDLE,
-				"available": available,
-				"returncode": rc.returncode,
-				"stderr_tail": "\n".join(rc.stderr.splitlines()[-8:]),
-			})
-		return results
-
-	def require_probe_hooks(self) -> None:
-		results = self.check_probe_hooks()
-		missing = [item for item in results if not item["available"]]
-		if missing:
-			raise PipelineSessionError(json.dumps({
-				"blocker_kind": "missing_cuda_batch_stack_probe",
-				"blocker_detail": f"stage ds4 binaries must expose {PROBE_NEEDLE}",
-				"hook_status": results,
-			}, sort_keys=True))
-
 	def run_pp1_baseline(self, prompt: str, max_tokens: int, out_dir: Path, system: str = DEFAULT_SYSTEM) -> PromptRun:
 		out_dir.mkdir(parents=True, exist_ok=True)
 		stage = self.stages[0]
 		log_remote = f"/tmp/ds4_lane_a_pp1_{int(time.time())}.json"
-		cmd = "cd {} && ./ds4 -m {} -p {} --system {} --nothink --temp 0 --top-p 1 -n {} --ctx {} --dump-logprobs {} && cat {}".format(
+		cmd = "cd {} && PATH=.:$PATH ds4 -m {} -p {} --system {} --nothink --temp 0 --top-p 1 -n {} --ctx {} --dump-logprobs {} && cat {}".format(
 			q(stage.ds4_dir),
 			q(stage.model),
 			q(prompt),
@@ -424,18 +396,19 @@ class PipelineSession:
 			env.extend([f"DS4_CUDA_STACK_PROBE_INPUT_HC_FILE={q(input_file)}", "DS4_CUDA_STACK_PROBE_INPUT_WAIT_MS=30000"])
 		if output_file:
 			env.append(f"DS4_CUDA_STACK_PROBE_OUTPUT_HC_FILE={q(output_file)}")
-		cmd = " ".join(env + [
-			"./ds4",
+		argv = [
+			"ds4",
 			"-m",
 			q(stage.model),
 			"--cuda-batch-stack-probe",
 			"--batch",
 			str(DEFAULT_BATCH),
-			"--prompt-tokens-file",
-			q(prompt_file),
 			"--emit-output-head-argmax",
-		])
-		return f"mkdir -p {q(self.remote_step_dir(run_id, step))}; cd {q(stage.ds4_dir)}; env {cmd}"
+		]
+		if stage.stage_id == 0:
+			argv.extend(["--prompt-tokens-file", q(prompt_file)])
+		cmd = " ".join(env + argv)
+		return f"mkdir -p {q(self.remote_step_dir(run_id, step))}; cd {q(stage.ds4_dir)}; PATH=.:$PATH env {cmd}"
 
 	def run_stage_probe(self, stage: StageConfig, run_id: str, step: int, prompt_file: str, input_file: str | None, output_file: str | None, out_dir: Path) -> dict[str, Any]:
 		cmd = self.build_stage_probe_command(stage, run_id, step, prompt_file, input_file, output_file)
@@ -536,7 +509,6 @@ class PipelineSession:
 			raise PipelineSessionError("rendered prompt tokenization returned no tokens")
 		(out_dir / "rendered_prompt.txt").write_text(rendered, encoding="utf-8")
 		(out_dir / "prompt_token_ids.json").write_text(json.dumps(token_ids) + "\n", encoding="utf-8")
-		self.require_probe_hooks()
 		run_id = f"{int(time.time())}_{os.getpid()}"
 		context_ids = list(token_ids)
 		steps: list[GeneratedStep] = []
