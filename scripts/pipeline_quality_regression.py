@@ -408,6 +408,142 @@ def baseline_delta(record: dict[str, Any], baseline: dict[str, dict[str, Any]]) 
 	}
 
 
+def _parse_trace_fields(section: str) -> dict[str, str]:
+	fields: dict[str, str] = {}
+	for line in section.splitlines():
+		if not line or line.startswith(" ") or line.startswith("#"):
+			continue
+		if ":" not in line:
+			continue
+		key, value = line.split(":", 1)
+		if re.match(r"^[A-Za-z0-9_]+$", key):
+			fields[key] = value.strip()
+	return fields
+
+
+def _trace_model_output(section: str) -> str:
+	begin = re.search(r"^MODEL_OUTPUT_BEGIN bytes=\d+\s*$", section, flags=re.M)
+	if not begin:
+		return ""
+	content_start = section.find("\n", begin.end())
+	if content_start < 0:
+		return ""
+	content_start += 1
+	end = re.search(r"^MODEL_OUTPUT_END\s*$", section[content_start:], flags=re.M)
+	if not end:
+		return section[content_start:].rstrip("\n")
+	return section[content_start:content_start + end.start()].rstrip("\n")
+
+
+def _question_kind_from_trace(source: str, section: str) -> str:
+	if source == "COMPSEC":
+		return "compsec"
+	if re.search(r"^choices:\s*$", section, flags=re.M):
+		return "multiple_choice"
+	return "exact_integer"
+
+
+def _int_field(fields: dict[str, str], name: str) -> int:
+	try:
+		return int(fields.get(name, "0"))
+	except ValueError:
+		return 0
+
+
+def _float_field(fields: dict[str, str], name: str) -> float:
+	try:
+		return float(fields.get(name, "0"))
+	except ValueError:
+		return 0.0
+
+
+def load_ds4_eval_trace(path: Path, args: argparse.Namespace) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+	text = path.read_text(encoding="utf-8")
+	case_headers = list(re.finditer(r"^===== CASE (\d+)/(\d+) (.+) =====\s*$", text, flags=re.M))
+	if not case_headers:
+		raise ValueError(f"{path}: no ds4-eval case records found")
+	trace_artifact = args.ds4_eval_trace_artifact or str(path)
+	records: list[dict[str, Any]] = []
+	baseline = load_baseline(Path(args.baseline) if args.baseline else None)
+	total_tokens = 0
+	total_elapsed = 0.0
+	passed = 0
+	failed = 0
+	for pos, header in enumerate(case_headers):
+		section_start = header.end()
+		section_end = case_headers[pos + 1].start() if pos + 1 < len(case_headers) else text.find("===== SUMMARY =====", section_start)
+		if section_end < 0:
+			section_end = len(text)
+		section = text[section_start:section_end]
+		label = header.group(3)
+		source, case_id = label.rsplit("/", 1) if "/" in label else ("", label)
+		fields = _parse_trace_fields(section)
+		status = fields.get("status", "UNKNOWN")
+		ok = status == "PASSED"
+		generated = _trace_model_output(section)
+		prompt_tokens = _int_field(fields, "prompt_tokens")
+		generated_tokens = _int_field(fields, "generated_tokens")
+		elapsed_sec = _float_field(fields, "elapsed_sec")
+		total_tokens += generated_tokens
+		total_elapsed += elapsed_sec
+		passed += 1 if ok else 0
+		failed += 0 if ok else 1
+		record = {
+			"format": FORMAT,
+			"record_type": "question",
+			"run_id": args.run_id,
+			"backend_mode": args.backend_mode,
+			"runner_id": args.runner_id,
+			"case_index": int(header.group(1)),
+			"case_count": int(header.group(2)),
+			"source": fields.get("source", source),
+			"case_id": fields.get("id", case_id),
+			"domain": fields.get("domain", ""),
+			"title": fields.get("title", ""),
+			"question_kind": _question_kind_from_trace(fields.get("source", source), section),
+			"expected_answer": fields.get("expected", ""),
+			"observed_answer": fields.get("picked", "?"),
+			"passed": ok,
+			"ds4_eval_status": status,
+			"prompt_sha256": sha256_text(fields.get("source", source) + "/" + fields.get("id", case_id)),
+			"output_sha256": sha256_text(generated),
+			"generated_text": generated,
+			"token_ids": [],
+			"prompt_tokens": prompt_tokens,
+			"generated_tokens": generated_tokens,
+			"elapsed_sec": elapsed_sec,
+			"output_tokens_per_s": generated_tokens / elapsed_sec if elapsed_sec > 0 else 0.0,
+			"coordinator": {
+				"kind": "ds4-eval-trace",
+				"trace_path": trace_artifact,
+				"stdout_path": args.ds4_eval_stdout,
+				"command": args.ds4_eval_command,
+			},
+		}
+		delta = baseline_delta(record, baseline)
+		if delta is not None:
+			record["baseline_delta"] = delta
+		records.append(record)
+	summary = {
+		"format": FORMAT,
+		"record_type": "summary",
+		"run_id": args.run_id,
+		"backend_mode": args.backend_mode,
+		"runner_id": args.runner_id,
+		"question_count": len(records),
+		"passed": passed,
+		"failed": failed,
+		"generated_tokens": total_tokens,
+		"elapsed_sec": total_elapsed,
+		"aggregate_output_tokens_per_s": total_tokens / total_elapsed if total_elapsed > 0 else 0.0,
+		"baseline_path": args.baseline or "",
+		"ds4_eval_trace_path": trace_artifact,
+		"ds4_eval_stdout_path": args.ds4_eval_stdout,
+		"ds4_eval_command": args.ds4_eval_command,
+	}
+	return records, summary
+
+
 def build_long_context_case(path: Path | None, repeat: int, answer: str) -> EvalCase:
 	base = path.read_text(encoding="utf-8") if path else "Long context filler.\n"
 	if repeat > 1:
@@ -498,7 +634,11 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
 	ap = argparse.ArgumentParser()
-	ap.add_argument("--ds4-eval-source", required=True)
+	ap.add_argument("--ds4-eval-source", default="")
+	ap.add_argument("--ds4-eval-trace", default="")
+	ap.add_argument("--ds4-eval-trace-artifact", default="")
+	ap.add_argument("--ds4-eval-stdout", default="")
+	ap.add_argument("--ds4-eval-command", default="")
 	ap.add_argument("--command", default="")
 	ap.add_argument("--http-url", default="")
 	ap.add_argument("--http-timeout", type=float, default=600.0)
@@ -520,9 +660,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
 	args = build_parser().parse_args(argv)
-	if bool(args.command) == bool(args.http_url):
+	if args.ds4_eval_trace:
+		if args.command or args.http_url:
+			raise SystemExit("--ds4-eval-trace cannot be combined with --command or --http-url")
+		records, summary = load_ds4_eval_trace(Path(args.ds4_eval_trace), args)
+	elif bool(args.command) == bool(args.http_url):
 		raise SystemExit("provide exactly one of --command or --http-url")
-	records, summary = run_cases(args)
+	else:
+		if not args.ds4_eval_source:
+			raise SystemExit("--ds4-eval-source is required without --ds4-eval-trace")
+		records, summary = run_cases(args)
 	rows = records + [summary]
 	write_jsonl(Path(args.out), rows)
 	if args.summary_out:

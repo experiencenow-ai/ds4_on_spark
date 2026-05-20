@@ -75,6 +75,60 @@ print(json.dumps({"text": text, "token_ids": tokens, "elapsed_sec": 0.5}))
 """
 
 
+DS4_EVAL_TRACE = """# ds4-eval trace
+started_unix: 1
+model: ds4flash.gguf
+backend: cuda
+ctx: 512
+max_tokens: 32
+questions: 2
+temperature: 0
+top_p: 1
+min_p: 0.05
+seed: 1
+
+===== CASE 1/2 GPQA Diamond/mc-1 =====
+timestamp_unix: 2
+source: GPQA Diamond
+id: mc-1
+domain: Physics
+title: choice
+status: PASSED
+picked: B
+expected: B
+prompt_tokens: 10
+generated_tokens: 2
+elapsed_sec: 0.500
+choices:
+  A. alpha
+  B. beta
+MODEL_OUTPUT_BEGIN bytes=9
+Answer: B
+MODEL_OUTPUT_END
+
+===== CASE 2/2 COMPSEC/comp-1 =====
+timestamp_unix: 3
+source: COMPSEC
+id: comp-1
+domain: C
+title: line
+status: FAILED
+picked: 9
+expected: 10-14
+prompt_tokens: 20
+generated_tokens: 3
+elapsed_sec: 1.500
+MODEL_OUTPUT_BEGIN bytes=14
+Answer: line 9
+MODEL_OUTPUT_END
+
+===== SUMMARY =====
+passed: 1
+failed: 1
+total: 2
+"""
+
+
 class PipelineQualityRegressionTest(unittest.TestCase):
 	def test_extracts_cases_from_ds4_eval_initializer(self) -> None:
 		with tempfile.TemporaryDirectory() as d:
@@ -154,6 +208,29 @@ class PipelineQualityRegressionTest(unittest.TestCase):
 		self.assertIsNotNone(delta)
 		self.assertEqual(delta["delta_status"], "token_divergence")
 		self.assertFalse(delta["token_ids_match"])
+
+	def test_imports_ds4_eval_trace_records(self) -> None:
+		with tempfile.TemporaryDirectory() as d:
+			root = Path(d)
+			trace = root / "ds4_eval.trace"
+			out = root / "quality.jsonl"
+			trace.write_text(DS4_EVAL_TRACE, encoding="utf-8")
+			with redirect_stdout(io.StringIO()):
+				rc = quality.main([
+					"--ds4-eval-trace", str(trace),
+					"--run-id", "trace-run",
+					"--runner-id", "spark0-ds4-eval",
+					"--backend-mode", "pp1",
+					"--out", str(out),
+				])
+			self.assertEqual(rc, 0)
+			rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+			self.assertEqual(rows[-1]["passed"], 1)
+			self.assertEqual(rows[-1]["failed"], 1)
+			self.assertEqual(rows[-1]["aggregate_output_tokens_per_s"], 2.5)
+			self.assertEqual(rows[0]["question_kind"], "multiple_choice")
+			self.assertEqual(rows[1]["question_kind"], "compsec")
+			self.assertEqual(rows[0]["generated_text"], "Answer: B")
 
 
 if __name__ == "__main__":
