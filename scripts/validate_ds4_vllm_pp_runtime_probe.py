@@ -10,6 +10,7 @@ from typing import Any
 
 
 FORMAT = "ds4-vllm-pp-runtime-probe-v1"
+WARM_FORMAT = "ds4-vllm-pp-warm-runtime-probe-v1"
 REQUIRED_FIELDS = (
     "format",
     "status",
@@ -35,6 +36,38 @@ PASSED_FIELDS = (
     "generation_tps",
     "token_ids",
     "token_hash",
+)
+WARM_REQUIRED_FIELDS = (
+    "format",
+    "status",
+    "model",
+    "pipeline_parallel_size",
+    "tensor_parallel_size",
+    "warm_tokens",
+    "measure_tokens",
+    "max_model_len",
+    "max_num_seqs",
+    "max_num_batched_tokens",
+    "gpu_memory_utilization",
+    "kv_cache_dtype",
+    "prompt_sha256",
+    "vllm_host_ip",
+    "ray_address",
+    "vllm_pp_layer_partition",
+    "enforce_eager",
+)
+WARM_PASSED_FIELDS = (
+    "load_s",
+    "warm_s",
+    "measure_s",
+    "total_s",
+    "warm_generated_tokens",
+    "measured_generated_tokens",
+    "warm_tps",
+    "measured_tps",
+    "warm_token_ids",
+    "measured_token_ids",
+    "measured_token_hash",
 )
 
 
@@ -70,13 +103,15 @@ def _str(obj: dict[str, Any], key: str, path: Path, errors: list[str]) -> str:
     return value
 
 
-def validate_artifact(obj: dict[str, Any], path: Path) -> list[str]:
-    errors: list[str] = []
-    for field in REQUIRED_FIELDS:
+def _validate_common(
+    obj: dict[str, Any],
+    path: Path,
+    errors: list[str],
+    required_fields: tuple[str, ...],
+) -> str:
+    for field in required_fields:
         if field not in obj:
             errors.append(err(path, f"missing required field: {field}"))
-    if obj.get("format") != FORMAT:
-        errors.append(err(path, f"format must be {FORMAT}"))
     status = obj.get("status")
     if status not in {"started", "passed", "failed"}:
         errors.append(err(path, "status must be started, passed, or failed"))
@@ -87,29 +122,90 @@ def validate_artifact(obj: dict[str, Any], path: Path) -> list[str]:
     _str(obj, "vllm_pp_layer_partition", path, errors)
     _num(obj, "pipeline_parallel_size", path, errors, positive=True)
     _num(obj, "tensor_parallel_size", path, errors, positive=True)
-    _num(obj, "max_tokens", path, errors, positive=True)
     _num(obj, "max_model_len", path, errors, positive=True)
     _num(obj, "max_num_seqs", path, errors, positive=True)
     _num(obj, "max_num_batched_tokens", path, errors, positive=True)
     _num(obj, "gpu_memory_utilization", path, errors, positive=True)
+    if status == "failed":
+        _str(obj, "error_type", path, errors)
+        _str(obj, "error", path, errors)
+    return str(status)
+
+
+def _validate_token_ids(
+    obj: dict[str, Any],
+    path: Path,
+    errors: list[str],
+    *,
+    count_key: str,
+    ids_key: str,
+) -> int:
+    generated = int(_num(obj, count_key, path, errors, positive=True))
+    token_ids = obj.get(ids_key)
+    if not isinstance(token_ids, list) or not all(isinstance(item, int) for item in token_ids):
+        errors.append(err(path, f"{ids_key} must be a list of integers"))
+    elif len(token_ids) != generated:
+        errors.append(err(path, f"{ids_key} length must equal {count_key}"))
+    return generated
+
+
+def _validate_runtime_artifact(obj: dict[str, Any], path: Path) -> list[str]:
+    errors: list[str] = []
+    status = _validate_common(obj, path, errors, REQUIRED_FIELDS)
+    _num(obj, "max_tokens", path, errors, positive=True)
     if status == "passed":
         for field in PASSED_FIELDS:
             if field not in obj:
                 errors.append(err(path, f"missing passed field: {field}"))
-        generated = int(_num(obj, "generated_tokens", path, errors, positive=True))
+        _validate_token_ids(obj, path, errors, count_key="generated_tokens", ids_key="token_ids")
         _num(obj, "generation_tps", path, errors, positive=True)
         _num(obj, "load_s", path, errors, positive=True)
         _num(obj, "generate_s", path, errors, positive=True)
-        token_ids = obj.get("token_ids")
-        if not isinstance(token_ids, list) or not all(isinstance(item, int) for item in token_ids):
-            errors.append(err(path, "token_ids must be a list of integers"))
-        elif len(token_ids) != generated:
-            errors.append(err(path, "token_ids length must equal generated_tokens"))
         _str(obj, "token_hash", path, errors)
-    if status == "failed":
-        _str(obj, "error_type", path, errors)
-        _str(obj, "error", path, errors)
     return errors
+
+
+def _validate_warm_artifact(obj: dict[str, Any], path: Path) -> list[str]:
+    errors: list[str] = []
+    status = _validate_common(obj, path, errors, WARM_REQUIRED_FIELDS)
+    _num(obj, "warm_tokens", path, errors, positive=True)
+    _num(obj, "measure_tokens", path, errors, positive=True)
+    if not isinstance(obj.get("enforce_eager"), bool):
+        errors.append(err(path, "enforce_eager must be a boolean"))
+    if status == "passed":
+        for field in WARM_PASSED_FIELDS:
+            if field not in obj:
+                errors.append(err(path, f"missing passed field: {field}"))
+        _validate_token_ids(
+            obj,
+            path,
+            errors,
+            count_key="warm_generated_tokens",
+            ids_key="warm_token_ids",
+        )
+        _validate_token_ids(
+            obj,
+            path,
+            errors,
+            count_key="measured_generated_tokens",
+            ids_key="measured_token_ids",
+        )
+        _num(obj, "load_s", path, errors, positive=True)
+        _num(obj, "warm_s", path, errors, positive=True)
+        _num(obj, "measure_s", path, errors, positive=True)
+        _num(obj, "warm_tps", path, errors, positive=True)
+        _num(obj, "measured_tps", path, errors, positive=True)
+        _str(obj, "measured_token_hash", path, errors)
+    return errors
+
+
+def validate_artifact(obj: dict[str, Any], path: Path) -> list[str]:
+    fmt = obj.get("format")
+    if fmt == FORMAT:
+        return _validate_runtime_artifact(obj, path)
+    if fmt == WARM_FORMAT:
+        return _validate_warm_artifact(obj, path)
+    return [err(path, f"format must be {FORMAT} or {WARM_FORMAT}")]
 
 
 def load_json(path: Path) -> dict[str, Any]:

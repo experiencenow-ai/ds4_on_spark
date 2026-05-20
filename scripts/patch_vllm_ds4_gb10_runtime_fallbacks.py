@@ -224,6 +224,83 @@ def patch_deepseek_v4_attention(text: str) -> str:
 """,
         "FlashMLA sparse prefill GB10 fallback",
     )
+    text, _ = _replace(
+        text,
+        """        # We treat queries in the same seq as different queries
+        # and later we only attend by generated indices.
+        # q arrives pre-padded to self.padded_heads by the outer wrapper.
+        q = q.unsqueeze(1)
+""",
+        """        fallback_q = q
+        fallback_kv_cache = kv_cache
+
+        # We treat queries in the same seq as different queries
+        # and later we only attend by generated indices.
+        # q arrives pre-padded to self.padded_heads by the outer wrapper.
+        q = q.unsqueeze(1)
+""",
+        "FlashMLA sparse decode fallback inputs",
+    )
+    text, _ = _replace(
+        text,
+        """        out, _ = flash_mla_with_kvcache(
+            q=q,
+            k_cache=swa_cache,
+            block_table=None,
+            head_dim_v=512,
+            tile_scheduler_metadata=tile_metadata,
+            cache_seqlens=None,
+            is_fp8_kvcache=True,
+            indices=swa_indices,
+            topk_length=swa_lens,
+            softmax_scale=self.scale,
+            attn_sink=self.attn_sink,
+            extra_k_cache=kv_cache if not swa_only else None,
+            extra_indices_in_kvcache=topk_indices,
+            extra_topk_length=topk_lens,
+            out=output.unsqueeze(1),
+        )
+""",
+        """        try:
+            out, _ = flash_mla_with_kvcache(
+                q=q,
+                k_cache=swa_cache,
+                block_table=None,
+                head_dim_v=512,
+                tile_scheduler_metadata=tile_metadata,
+                cache_seqlens=None,
+                is_fp8_kvcache=True,
+                indices=swa_indices,
+                topk_length=swa_lens,
+                softmax_scale=self.scale,
+                attn_sink=self.attn_sink,
+                extra_k_cache=kv_cache if not swa_only else None,
+                extra_indices_in_kvcache=topk_indices,
+                extra_topk_length=topk_lens,
+                out=output.unsqueeze(1),
+            )
+        except RuntimeError as e:
+            if "Unsupported architecture for sparse decode fwd" not in str(e):
+                raise
+            rocm_forward_decode_fallback(
+                q=fallback_q,
+                kv_cache=fallback_kv_cache,
+                swa_k_cache=self.swa_cache_layer.kv_cache,
+                swa_only=swa_only,
+                topk_indices=topk_indices,
+                topk_lens=topk_lens,
+                swa_indices=swa_indices,
+                swa_lens=swa_lens,
+                attn_sink=self.attn_sink,
+                scale=self.scale,
+                head_dim=self.head_dim,
+                nope_head_dim=self.nope_head_dim,
+                rope_head_dim=self.rope_head_dim,
+                output=output,
+            )
+""",
+        "FlashMLA sparse decode unsupported-architecture fallback",
+    )
     return text
 
 
@@ -295,16 +372,43 @@ def patch_sparse_attn_indexer(text: str) -> str:
     return text
 
 
+def patch_mla_indexer_backend(text: str) -> str:
+    old = """            if current_platform.is_cuda() and has_deep_gemm():
+                self.scheduler_metadata_buffer[:] = get_paged_mqa_logits_metadata(
+                    seq_lens,
+                    self.kv_cache_spec.storage_block_size,
+                    self.num_sms,
+                )
+"""
+    new = """            if current_platform.is_cuda() and has_deep_gemm():
+                try:
+                    self.scheduler_metadata_buffer[:] = get_paged_mqa_logits_metadata(
+                        seq_lens,
+                        self.kv_cache_spec.storage_block_size,
+                        self.num_sms,
+                    )
+                except RuntimeError as err:
+                    if "Unsupported architecture" not in str(err):
+                        raise
+                    self.scheduler_metadata_buffer.zero_()
+"""
+    text, _ = _replace(text, old, new, "paged MQA metadata unsupported-architecture fallback")
+    return text
+
+
 def apply_patch(package_dir: Path, *, backup_suffix: str, write: bool) -> dict[str, Any]:
     attention_path = package_dir / "model_executor" / "layers" / "deepseek_v4_attention.py"
-    indexer_path = package_dir / "model_executor" / "layers" / "sparse_attn_indexer.py"
-    for path in (attention_path, indexer_path):
+    sparse_indexer_path = package_dir / "model_executor" / "layers" / "sparse_attn_indexer.py"
+    mla_indexer_path = package_dir / "v1" / "attention" / "backends" / "mla" / "indexer.py"
+    for path in (attention_path, sparse_indexer_path, mla_indexer_path):
         if not path.exists():
             raise PatchError(f"missing target file: {path}")
     attention_original = attention_path.read_text(encoding="utf-8")
     attention_patched = patch_deepseek_v4_attention(attention_original)
-    indexer_original = indexer_path.read_text(encoding="utf-8")
-    indexer_patched = patch_sparse_attn_indexer(indexer_original)
+    sparse_indexer_original = sparse_indexer_path.read_text(encoding="utf-8")
+    sparse_indexer_patched = patch_sparse_attn_indexer(sparse_indexer_original)
+    mla_indexer_original = mla_indexer_path.read_text(encoding="utf-8")
+    mla_indexer_patched = patch_mla_indexer_backend(mla_indexer_original)
     files = {
         "deepseek_v4_attention": _write(
             attention_path,
@@ -314,9 +418,16 @@ def apply_patch(package_dir: Path, *, backup_suffix: str, write: bool) -> dict[s
             write=write,
         ),
         "sparse_attn_indexer": _write(
-            indexer_path,
-            indexer_original,
-            indexer_patched,
+            sparse_indexer_path,
+            sparse_indexer_original,
+            sparse_indexer_patched,
+            backup_suffix=backup_suffix,
+            write=write,
+        ),
+        "mla_indexer_backend": _write(
+            mla_indexer_path,
+            mla_indexer_original,
+            mla_indexer_patched,
             backup_suffix=backup_suffix,
             write=write,
         ),
