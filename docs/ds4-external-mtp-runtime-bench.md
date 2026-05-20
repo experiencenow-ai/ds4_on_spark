@@ -51,6 +51,12 @@ Latest patched three-Spark PP=3 memory-lifecycle run:
 Artifact:
 `fixtures/vllm_pp_runtime_probe/ds4_vllm_pp3_layerwise_paramrefs_sm121_mhc_tiny_20260519.example.json`
 
+Latest patched three-Spark PP=3 SM121 runtime run:
+`ds4-vllm-pp3-python-headers-fixed-tiny-20260520`
+
+Artifact:
+`fixtures/vllm_pp_runtime_probe/ds4_vllm_pp3_python_headers_fixed_tiny_20260520.example.json`
+
 ## Result
 
 | Runtime | DS4 MTP result | Blocker |
@@ -110,11 +116,22 @@ still retained old loaded tensors until `load_weights()` returned. With both
 fixes applied, PP=3 `[14,15,14]` reached model load on all ranks:
 PP0 `48.14 GiB`, PP1 `50.28 GiB`, PP2 `47.92 GiB`.
 
-The remaining blocker is after model load, during vLLM's
-`determine_available_memory()` dummy-forward/profile path. The failing stack is
-DeepSeek-V4 attention `fused_wqa_wkv` to `cutlass_scaled_mm`, ending in
-`Not yet supported ScalarType 44` from Torch stable IValue conversion. This is
-not the previous PP1 model-load OOM.
+Two SM121 dummy-forward blockers were cleared after model load. First,
+DeepSeek-V4 attention `fused_wqa_wkv` hit `cutlass_scaled_mm` with
+`Not yet supported ScalarType 44` from Torch stable IValue conversion; the
+probe patch catches that exact SM12x failure and falls back to a dequantized
+torch matmul. Second, Triton JIT could not compile its CUDA launcher because
+`/usr/include/python3.12/Python.h` was absent and passwordless sudo is not
+available on the Sparks. The no-sudo setup downloads and extracts
+`python3.12-dev` and `libpython3.12-dev` under `/tmp/ds4-python312-dev`; Ray and
+the probe must then set `C_INCLUDE_PATH` and `CPATH` to
+`/tmp/ds4-python312-dev/usr/include:/tmp/ds4-python312-dev/usr/include/python3.12:/tmp/ds4-python312-dev/usr/include/aarch64-linux-gnu/python3.12`.
+
+With those fixes, PP=3 `[14,15,14]` again reaches model load on all ranks and
+gets past the previous `ScalarType 44` and `Python.h` failures. The current
+blocker is now a DeepGEMM layout assertion during dummy forward:
+`/workspace/.deps/deepgemm-src/.../utils/layout.hpp:39: t.dim() == N`. This is
+not a model-load OOM and not the previous Triton/Python-header failure.
 
 ## Decision
 
@@ -123,14 +140,16 @@ This is not a throughput result and must not be treated as MTP speedup evidence.
 
 Exact next unblocks:
 
-1. Fix or bypass the standard-vLLM dummy-forward/profile path where
-   `fused_wqa_wkv` calls `cutlass_scaled_mm` with `ScalarType 44` after model
-   load.
+1. Fix or bypass the DeepGEMM dummy-forward layout assertion
+   `layout.hpp:39: t.dim() == N` after SM121 ScalarType44 and Triton header
+   setup are applied.
 2. Start Ray with explicit 10G binding:
    `GLOO_SOCKET_IFNAME`, `NCCL_SOCKET_IFNAME`, `NCCL_IB_DISABLE=1`,
    `NCCL_P2P_DISABLE=1`, and `NCCL_SOCKET_FAMILY=AF_INET`.
-3. Rerun PP=3 target-only with `VLLM_PP_LAYER_PARTITION=14,15,14`, or PP=4 if a
+3. Start Ray/probe with the extracted Python header include path from
+   `scripts/prepare_ds4_vllm_python_headers.py`.
+4. Rerun PP=3 target-only with `VLLM_PP_LAYER_PARTITION=14,15,14`, or PP=4 if a
    fourth Spark is available, then MTP with
    `--speculative-config '{"method":"mtp","num_speculative_tokens":1}'`.
-4. Record baseline t/s, MTP t/s, acceptance counters, and blocker detail in the
+5. Record baseline t/s, MTP t/s, acceptance counters, and blocker detail in the
    external runtime artifact before making any routing decision.
