@@ -79,6 +79,61 @@ class BatchedPrepareAndFinalize:
             b_type = a1.dtype
         else:
             b_type = quant_config.quant_dtype
+
+        for expert_id in range(first_expert, last_expert):
+            topks = torch.any(topk_ids == expert_id, dim=1).flatten()
+            rows = torch.count_nonzero(topks.flatten())
+            if rows == 0:
+                continue
+            idx = expert_id - first_expert
+            tokens_per_expert[idx] = rows
+            rhs = a1[: topks.numel()][topks]
+            if quant_config.quant_dtype is not None:
+                if a1_scale is not None:
+                    if quant_config.is_per_act_token:
+                        rhs_a1_scale = a1_scale[: topks.numel()][topks]
+                    else:
+                        rhs_a1_scale = a1_scale
+                else:
+                    rhs_a1_scale = None
+                b_a1[idx, :rows, :], b_s = moe_kernel_quantize_input(
+                    rhs,
+                    rhs_a1_scale,
+                    quant_config.quant_dtype,
+                    quant_config.per_act_token_quant,
+                    quant_config.block_shape,
+                )
+                assert b_s is not None
+                if quant_config.is_per_act_token:
+                    b_a1_scale[idx, :rows] = b_s[:rows]
+                else:
+                    b_a1_scale[idx, : b_s.shape[0]] = b_s
+            else:
+                b_a1[idx, :rows, :] = rhs
+"""
+
+
+TOPK_WEIGHT_AND_REDUCE = """import torch
+
+
+class TopKWeightAndReduceNaiveBatched:
+    def apply(self, output, fused_expert_output, topk_weights, topk_ids, apply_router_weight_on_input):
+        assert fused_expert_output.ndim == 3
+        num_tokens = topk_ids.size(0)
+        num_local_experts = fused_expert_output.size(0)
+        K = fused_expert_output.size(-1)
+
+        first_expert = num_local_experts * self.rank
+        last_expert = first_expert + num_local_experts
+
+        for expert_id in range(first_expert, last_expert):
+            matching_tokens = topk_ids == expert_id
+            topks = torch.any(matching_tokens, dim=1).flatten()
+            rows = torch.count_nonzero(topks)
+            rhs = fused_expert_output[expert_id - first_expert, :rows, :]
+            if not apply_router_weight_on_input:
+                rhs.mul_(topk_weights[matching_tokens].view(rhs.size(0), 1))
+            output[topks] = output[topks] + rhs
 """
 
 
@@ -134,6 +189,17 @@ class PatchVllmDs4NoDpBatchedMarlinTest(unittest.TestCase):
 		self.assertIn("token_counter_experts", once)
 		self.assertIn("num_local_experts", once)
 		self.assertIn("DS4_VLLM_FORCE_NO_DP_BATCHED_MARLIN", once)
+		self.assertIn("scatter_add_", once)
+		self.assertNotIn("if rows == 0", once)
+
+	def test_topk_reduce_patch_removes_dynamic_slice_under_flag(self) -> None:
+		once = patcher.patch_topk_weight_and_reduce(TOPK_WEIGHT_AND_REDUCE)
+		twice = patcher.patch_topk_weight_and_reduce(once)
+		self.assertEqual(once, twice)
+		self.assertIn("import os", once)
+		self.assertIn("DS4_VLLM_FORCE_NO_DP_BATCHED_MARLIN", once)
+		self.assertIn("index_select", once)
+		self.assertIn("output.add_", once)
 
 	def test_patch_package_dir_writes_backups(self) -> None:
 		with tempfile.TemporaryDirectory() as tmp:
@@ -143,12 +209,14 @@ class PatchVllmDs4NoDpBatchedMarlinTest(unittest.TestCase):
 			all2all = root / "model_executor" / "layers" / "fused_moe" / "all2all_utils.py"
 			marlin = root / "model_executor" / "layers" / "fused_moe" / "experts" / "marlin_moe.py"
 			batched = root / "model_executor" / "layers" / "fused_moe" / "prepare_finalize" / "batched.py"
+			topk = root / "model_executor" / "layers" / "fused_moe" / "topk_weight_and_reduce.py"
 			marlin.parent.mkdir(parents=True)
 			batched.parent.mkdir(parents=True)
 			config.write_text(CONFIG, encoding="utf-8")
 			all2all.write_text(ALL2ALL_UTILS, encoding="utf-8")
 			marlin.write_text(MARLIN_MOE, encoding="utf-8")
 			batched.write_text(BATCHED_PREPARE_FINALIZE, encoding="utf-8")
+			topk.write_text(TOPK_WEIGHT_AND_REDUCE, encoding="utf-8")
 			result = patcher.apply_patch(root, backup_suffix=".bak", write=True)
 			self.assertTrue(result["changed"])
 			self.assertTrue((config.with_name(config.name + ".bak")).exists())
@@ -156,6 +224,7 @@ class PatchVllmDs4NoDpBatchedMarlinTest(unittest.TestCase):
 			self.assertFalse(result["files"]["marlin_moe"]["changed"])
 			self.assertFalse((marlin.with_name(marlin.name + ".bak")).exists())
 			self.assertTrue((batched.with_name(batched.name + ".bak")).exists())
+			self.assertTrue((topk.with_name(topk.name + ".bak")).exists())
 			result2 = patcher.apply_patch(root, backup_suffix=".bak", write=True)
 			self.assertFalse(result2["changed"])
 

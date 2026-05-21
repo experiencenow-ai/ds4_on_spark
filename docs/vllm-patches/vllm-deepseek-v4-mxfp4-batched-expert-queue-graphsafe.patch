@@ -1,0 +1,199 @@
+diff --git a/vllm/model_executor/layers/fused_moe/all2all_utils.py b/vllm/model_executor/layers/fused_moe/all2all_utils.py
+index 2a6f0c7..397ab6b 100644
+--- a/vllm/model_executor/layers/fused_moe/all2all_utils.py
++++ b/vllm/model_executor/layers/fused_moe/all2all_utils.py
+@@ -1,6 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
++import os
+ from typing import Any
+
+ import torch
+@@ -126,6 +127,30 @@ def maybe_make_prepare_finalize(
+                 use_monolithic=use_monolithic,
+             )
+         else:
++            if (
++                os.environ.get("DS4_VLLM_FORCE_NO_DP_BATCHED_MARLIN") == "1"
++                and not use_monolithic
++                and moe.dp_size == 1
++            ):
++                from vllm.model_executor.layers.fused_moe.prepare_finalize.batched import (
++                    BatchedPrepareAndFinalize,
++                )
++
++                logger.warning_once(
++                    "DS4 forcing no-DP BatchedPrepareAndFinalize for MXFP4 MoE "
++                    "prototype: global_experts=%d local_experts=%d ep_rank=%d "
++                    "max_tokens=%d",
++                    moe.num_experts,
++                    moe.num_local_experts,
++                    moe.ep_rank,
++                    moe.max_num_tokens,
++                )
++                return BatchedPrepareAndFinalize(
++                    max_num_tokens=moe.max_num_tokens,
++                    num_local_experts=moe.num_local_experts,
++                    num_dispatchers=1,
++                    rank=moe.ep_rank,
++                )
+             return make_moe_prepare_and_finalize_no_dp_ep(use_monolithic)
+
+     device_communicator = get_ep_group().device_communicator
+diff --git a/vllm/model_executor/layers/fused_moe/config.py b/vllm/model_executor/layers/fused_moe/config.py
+index d543526..f68a174 100644
+--- a/vllm/model_executor/layers/fused_moe/config.py
++++ b/vllm/model_executor/layers/fused_moe/config.py
+@@ -1,6 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+ from dataclasses import dataclass
++import os
+ from enum import IntEnum
+ from typing import Union
+
+@@ -1050,7 +1051,15 @@ class FusedMoEParallelConfig:
+
+     @property
+     def use_batched_activation_format(self):
+-        return self.use_deepep_ll_kernels or self.use_nixl_ep_kernels
++        return (
++            self.use_deepep_ll_kernels
++            or self.use_nixl_ep_kernels
++            or (
++                os.environ.get("DS4_VLLM_FORCE_NO_DP_BATCHED_MARLIN") == "1"
++                and not self.use_all2all_kernels
++                and self.dp_size == 1
++            )
++        )
+
+     @property
+     def needs_round_robin_routing_tables(self):
+diff --git a/vllm/model_executor/layers/fused_moe/prepare_finalize/batched.py b/vllm/model_executor/layers/fused_moe/prepare_finalize/batched.py
+index 9430277..7dccb6b 100644
+--- a/vllm/model_executor/layers/fused_moe/prepare_finalize/batched.py
++++ b/vllm/model_executor/layers/fused_moe/prepare_finalize/batched.py
+@@ -1,6 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
++import os
+ import torch
+
+ import vllm.model_executor.layers.fused_moe.modular_kernel as mk
+@@ -82,9 +83,17 @@ class BatchedPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
+         num_tokens, hidden_dim = a1.size()
+         topk = topk_ids.size(1)
+
+-        tokens_per_expert = torch.zeros(num_experts, dtype=torch.int, device=a1.device)
+-
+         num_local_experts = self.num_local_experts
++        token_counter_experts = (
++            num_local_experts
++            if os.environ.get("DS4_VLLM_FORCE_NO_DP_BATCHED_MARLIN") == "1"
++            else num_experts
++        )
++        tokens_per_expert = torch.zeros(
++            token_counter_experts,
++            dtype=torch.int,
++            device=a1.device,
++        )
+
+         if quant_config.quant_dtype is None:
+             b_type = a1.dtype
+@@ -112,15 +121,29 @@ class BatchedPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
+
+         a1_scale = normalize_scales_shape(quant_config.a1_scale)
+
++        if (
++            os.environ.get("DS4_VLLM_FORCE_NO_DP_BATCHED_MARLIN") == "1"
++            and quant_config.quant_dtype is not None
++        ):
++            raise NotImplementedError(
++                "DS4 no-DP BatchedMarlin prototype only supports unquantized "
++                "activation input for CUDA-graph-safe prepare"
++            )
++
+         for expert_id in range(first_expert, last_expert):
+-            topks = torch.any(topk_ids == expert_id, dim=1).flatten()
+-            rows = torch.count_nonzero(topks.flatten())
+-            if rows == 0:
+-                continue
+             idx = expert_id - first_expert
++            topks = torch.any(topk_ids == expert_id, dim=1).flatten()
++            topks_i32 = topks.to(torch.int32)
++            rows = torch.sum(topks_i32)
+             tokens_per_expert[idx] = rows
+-            rhs = a1[: topks.numel()][topks]
++            row_indices = torch.cumsum(topks_i32, dim=0) - 1
++            row_indices = torch.where(
++                topks,
++                row_indices,
++                torch.zeros_like(row_indices),
++            ).to(torch.long)
+             if quant_config.quant_dtype is not None:
++                rhs = a1[: topks.numel()][topks]
+                 if a1_scale is not None:
+                     if quant_config.is_per_act_token:
+                         rhs_a1_scale = a1_scale[: topks.numel()][topks]
+@@ -140,7 +163,14 @@ class BatchedPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
+                     b_a1_scale[idx, :rows] = b_s[:rows]
+                 else:
+                     b_a1_scale[idx, : b_s.shape[0]] = b_s
++            elif os.environ.get("DS4_VLLM_FORCE_NO_DP_BATCHED_MARLIN") == "1":
++                b_a1[idx].scatter_add_(
++                    0,
++                    row_indices.view(num_tokens, 1).expand(num_tokens, hidden_dim),
++                    a1 * topks.to(a1.dtype).view(num_tokens, 1),
++                )
+             else:
++                rhs = a1[: topks.numel()][topks]
+                 b_a1[idx, :rows, :] = rhs
+
+         assert b_a1_scale is None or b_a1_scale.ndim == 3
+diff --git a/vllm/model_executor/layers/fused_moe/topk_weight_and_reduce.py b/vllm/model_executor/layers/fused_moe/topk_weight_and_reduce.py
+index 837c149..4cd2c88 100644
+--- a/vllm/model_executor/layers/fused_moe/topk_weight_and_reduce.py
++++ b/vllm/model_executor/layers/fused_moe/topk_weight_and_reduce.py
+@@ -2,6 +2,7 @@
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
+
++import os
+ import torch
+
+ import vllm._custom_ops as ops
+@@ -167,10 +168,27 @@ class TopKWeightAndReduceNaiveBatched(mk.TopKWeightAndReduce):
+         for expert_id in range(first_expert, last_expert):
+             matching_tokens = topk_ids == expert_id
+             topks = torch.any(matching_tokens, dim=1).flatten()
+-            rows = torch.count_nonzero(topks)
+-            rhs = fused_expert_output[expert_id - first_expert, :rows, :]
+-            if not apply_router_weight_on_input:
+-                rhs.mul_(topk_weights[matching_tokens].view(rhs.size(0), 1))
+-            output[topks] = output[topks] + rhs
++            if os.environ.get("DS4_VLLM_FORCE_NO_DP_BATCHED_MARLIN") == "1":
++                idx = expert_id - first_expert
++                topks_i32 = topks.to(torch.int32)
++                row_indices = torch.cumsum(topks_i32, dim=0) - 1
++                row_indices = torch.where(
++                    topks,
++                    row_indices,
++                    torch.zeros_like(row_indices),
++                ).to(torch.long)
++                rhs = fused_expert_output[idx].index_select(0, row_indices)
++                if not apply_router_weight_on_input:
++                    expert_weights = (
++                        topk_weights * matching_tokens.to(topk_weights.dtype)
++                    ).sum(dim=1, keepdim=True)
++                    rhs = rhs * expert_weights.to(rhs.dtype)
++                output.add_(rhs * topks.to(rhs.dtype).view(num_tokens, 1))
++            else:
++                rows = torch.count_nonzero(topks)
++                rhs = fused_expert_output[expert_id - first_expert, :rows, :]
++                if not apply_router_weight_on_input:
++                    rhs.mul_(topk_weights[matching_tokens].view(rhs.size(0), 1))
++                output[topks] = output[topks] + rhs
+
+         return output
