@@ -490,18 +490,34 @@ def _float_field(fields: dict[str, str], name: str) -> float:
 		return 0.0
 
 
+def _optional_rc(path_text: str) -> int | None:
+	if not path_text:
+		return None
+	text = Path(path_text).read_text(encoding="utf-8").strip()
+	if not re.match(r"^-?\d+$", text):
+		raise ValueError(f"{path_text}: rc file must contain one integer")
+	return int(text)
+
+
 def load_ds4_eval_trace(path: Path, args: argparse.Namespace) -> tuple[list[dict[str, Any]], dict[str, Any]]:
 	text = path.read_text(encoding="utf-8")
 	case_headers = list(re.finditer(r"^===== CASE (\d+)/(\d+) (.+) =====\s*$", text, flags=re.M))
 	if not case_headers:
 		raise ValueError(f"{path}: no ds4-eval case records found")
+	header_fields = _parse_trace_fields(text[:case_headers[0].start()])
 	trace_artifact = args.ds4_eval_trace_artifact or str(path)
+	rc_artifact = args.ds4_eval_rc_artifact or args.ds4_eval_rc
+	returncode = _optional_rc(args.ds4_eval_rc)
 	records: list[dict[str, Any]] = []
 	baseline = load_baseline(Path(args.baseline) if args.baseline else None)
 	total_tokens = 0
 	total_elapsed = 0.0
 	passed = 0
 	failed = 0
+	started_unix = _int_field(header_fields, "started_unix")
+	first_case_started_unix = 0
+	last_case_started_unix = 0
+	last_case_completed_unix = 0.0
 	for pos, header in enumerate(case_headers):
 		section_start = header.end()
 		section_end = case_headers[pos + 1].start() if pos + 1 < len(case_headers) else text.find("===== SUMMARY =====", section_start)
@@ -517,6 +533,12 @@ def load_ds4_eval_trace(path: Path, args: argparse.Namespace) -> tuple[list[dict
 		prompt_tokens = _int_field(fields, "prompt_tokens")
 		generated_tokens = _int_field(fields, "generated_tokens")
 		elapsed_sec = _float_field(fields, "elapsed_sec")
+		timestamp_unix = _int_field(fields, "timestamp_unix")
+		if first_case_started_unix == 0 and timestamp_unix > 0:
+			first_case_started_unix = timestamp_unix
+		last_case_started_unix = max(last_case_started_unix, timestamp_unix)
+		if timestamp_unix > 0:
+			last_case_completed_unix = max(last_case_completed_unix, timestamp_unix + elapsed_sec)
 		total_tokens += generated_tokens
 		total_elapsed += elapsed_sec
 		passed += 1 if ok else 0
@@ -570,6 +592,14 @@ def load_ds4_eval_trace(path: Path, args: argparse.Namespace) -> tuple[list[dict
 		"elapsed_sec": total_elapsed,
 		"aggregate_output_tokens_per_s": total_tokens / total_elapsed if total_elapsed > 0 else 0.0,
 		"domain_breakdown": summarize_domains(records),
+		"trace_started_unix": started_unix,
+		"first_case_started_unix": first_case_started_unix,
+		"last_case_started_unix": last_case_started_unix,
+		"last_case_completed_unix": last_case_completed_unix,
+		"trace_wall_elapsed_sec": last_case_completed_unix - started_unix if started_unix > 0 and last_case_completed_unix > 0 else 0.0,
+		"startup_elapsed_sec": first_case_started_unix - started_unix if started_unix > 0 and first_case_started_unix > 0 else 0,
+		"ds4_eval_returncode": returncode,
+		"ds4_eval_rc_path": rc_artifact,
 		"baseline_path": args.baseline or "",
 		"ds4_eval_trace_path": trace_artifact,
 		"ds4_eval_stdout_path": args.ds4_eval_stdout,
@@ -673,6 +703,8 @@ def build_parser() -> argparse.ArgumentParser:
 	ap.add_argument("--ds4-eval-trace", default="")
 	ap.add_argument("--ds4-eval-trace-artifact", default="")
 	ap.add_argument("--ds4-eval-stdout", default="")
+	ap.add_argument("--ds4-eval-rc", default="")
+	ap.add_argument("--ds4-eval-rc-artifact", default="")
 	ap.add_argument("--ds4-eval-command", default="")
 	ap.add_argument("--command", default="")
 	ap.add_argument("--http-url", default="")

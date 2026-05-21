@@ -65,6 +65,7 @@ def summarize(path: Path) -> dict[str, Any]:
 	questions = [row for row in records if row.get("record_type") == "question"]
 	if not questions:
 		raise ValueError(f"{path}: no question records")
+	run_summary = next((row for row in records if row.get("record_type") == "summary"), {})
 	generated_tokens = sum(int(row.get("generated_tokens") or 0) for row in questions)
 	elapsed_sec = sum(float(row.get("elapsed_sec") or 0.0) for row in questions)
 	passed = sum(1 for row in questions if row.get("passed") is True)
@@ -80,6 +81,9 @@ def summarize(path: Path) -> dict[str, Any]:
 		"generated_tokens": generated_tokens,
 		"elapsed_sec": elapsed_sec,
 		"aggregate_output_tokens_per_s": generated_tokens / elapsed_sec if elapsed_sec > 0.0 else 0.0,
+		"trace_wall_elapsed_sec": run_summary.get("trace_wall_elapsed_sec", 0.0),
+		"startup_elapsed_sec": run_summary.get("startup_elapsed_sec", 0),
+		"ds4_eval_returncode": run_summary.get("ds4_eval_returncode"),
 		"domain_breakdown": summarize_domains(questions),
 		"case_tokens_per_s": [
 			{

@@ -233,6 +233,12 @@ class PipelineQualityRegressionTest(unittest.TestCase):
 			self.assertEqual(rows[-1]["passed"], 1)
 			self.assertEqual(rows[-1]["failed"], 1)
 			self.assertEqual(rows[-1]["aggregate_output_tokens_per_s"], 2.5)
+			self.assertEqual(rows[-1]["trace_started_unix"], 1)
+			self.assertEqual(rows[-1]["startup_elapsed_sec"], 1)
+			self.assertEqual(rows[-1]["first_case_started_unix"], 2)
+			self.assertEqual(rows[-1]["last_case_started_unix"], 3)
+			self.assertEqual(rows[-1]["last_case_completed_unix"], 4.5)
+			self.assertEqual(rows[-1]["trace_wall_elapsed_sec"], 3.5)
 			self.assertEqual(
 				[(item["source"], item["domain"], item["passed"], item["failed"]) for item in rows[-1]["domain_breakdown"]],
 				[("COMPSEC", "C", 0, 1), ("GPQA Diamond", "Physics", 1, 0)],
