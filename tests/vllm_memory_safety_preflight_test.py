@@ -9,6 +9,7 @@ from scripts import vllm_memory_safety_preflight as preflight
 SAFE_SCRIPT = """#!/bin/bash
 vllm serve /models/deepseek-v4-flash \\
   --tokenizer-mode deepseek_v4 \\
+  --tensor-parallel-size 2 \\
   --max-model-len 200000 \\
   --max-num-seqs 512 \\
   --max-num-batched-tokens 8192 \\

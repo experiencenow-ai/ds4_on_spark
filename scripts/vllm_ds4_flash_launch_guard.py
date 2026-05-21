@@ -20,6 +20,7 @@ DS4_FLASH_BASE_RESIDENT_GIB = 78.0
 DS4_FLASH_BATCH_KV_GIB_AT_8192_TP2 = 4.0
 DS4_FLASH_SEQUENCE_OVERHEAD_GIB = 0.004
 DS4_FLASH_DEFAULT_MIN_HEADROOM_GIB = 8.0
+DS4_FLASH_REQUIRED_BLOCK_SIZE = 128
 
 
 def strip_value(raw: str) -> str:
@@ -162,8 +163,8 @@ def add_issue(issues: list[dict[str, str]], kind: str, blocker_kind: str, detail
 	})
 
 
-def estimate_memory(defaults: dict[str, Any], max_num_batched_tokens: int, max_num_seqs: int, gpu_memory_utilization: float) -> dict[str, Any]:
-	tp = max(int_default(defaults, "tensor_parallel_size", 2), 1)
+def estimate_memory(defaults: dict[str, Any], max_num_batched_tokens: int, max_num_seqs: int, gpu_memory_utilization: float, tensor_parallel_size: int) -> dict[str, Any]:
+	tp = max(tensor_parallel_size, 1)
 	total_gib = float_default(defaults, "total_gpu_memory_gib", DS4_FLASH_SPARK_GB10_TOTAL_GIB)
 	util = gpu_memory_utilization if gpu_memory_utilization > 0.0 else float_default(defaults, "gpu_memory_utilization", 0.8)
 	utilized_gib = (total_gib * util)
@@ -199,16 +200,20 @@ def validate_command(path: Path, defaults: dict[str, Any], command: str) -> dict
 	max_model_len = int_flag(flags, "--max-model-len", int(defaults.get("max_model_len", 0) or 0))
 	max_num_seqs = int_flag(flags, "--max-num-seqs", int(defaults.get("max_num_seqs", 0) or 0))
 	max_num_batched_tokens = int_flag(flags, "--max-num-batched-tokens", int(defaults.get("max_num_batched_tokens", 0) or 0))
+	block_size = int_flag(flags, "--block-size", int(defaults.get("block_size", 0) or 0))
 	gpu_memory_utilization = float_flag(flags, "--gpu-memory-utilization", float(defaults.get("gpu_memory_utilization", 0.0) or 0.0))
 	nnodes = int_flag(flags, "--nnodes", int(defaults.get("nnodes", 1) or 1))
 	tensor_parallel_size = int_flag(flags, "--tensor-parallel-size", int(defaults.get("tensor_parallel_size", 1) or 1))
+	pipeline_parallel_size = int_flag(flags, "--pipeline-parallel-size", int(defaults.get("pipeline_parallel_size", 1) or 1))
 	issues: list[dict[str, str]] = []
 	warnings: list[dict[str, str]] = []
 	dupes = {k: v for k, v in flags.items() if len(v) > 1}
 	if "--max-num-batched-tokens" in dupes:
 		add_issue(issues, "duplicate_max_num_batched_tokens", "ambiguous_duplicate_max_num_batched_tokens", "duplicate --max-num-batched-tokens makes the effective graph/KV profile ambiguous", "remove the duplicate flag and keep exactly one measured scheduler-token value")
-	memory = estimate_memory(defaults, max_num_batched_tokens, max_num_seqs, gpu_memory_utilization)
+	memory = estimate_memory(defaults, max_num_batched_tokens, max_num_seqs, gpu_memory_utilization, tensor_parallel_size)
 	if is_dsv4_flash(command):
+		if block_size not in (0, DS4_FLASH_REQUIRED_BLOCK_SIZE):
+			add_issue(issues, "ds4_flash_block_size_mismatch", "unsupported_block_size", f"DeepSeek-V4-Flash inference constants require block_size={DS4_FLASH_REQUIRED_BLOCK_SIZE}; observed launch --block-size {block_size}, matching the known 256 == 128 assertion path", f"set --block-size {DS4_FLASH_REQUIRED_BLOCK_SIZE} or omit the flag before launching DS4 Flash")
 		if prefix != "disabled":
 			add_issue(issues, "prefix_cache_c512_rank0_kill_risk", "prefix_enabled_c512_risk", "DeepSeek-V4-Flash Spark4/Spark5 c512 stress reproduced rank0/API death unless --no-enable-prefix-caching is explicit", "add --no-enable-prefix-caching before retrying c512 or long-context DS4 Flash profiles")
 		if max_model_len >= 200000 and max_num_batched_tokens <= 512:
@@ -235,9 +240,11 @@ def validate_command(path: Path, defaults: dict[str, Any], command: str) -> dict
 			"max_model_len": max_model_len,
 			"max_num_seqs": max_num_seqs,
 			"max_num_batched_tokens": max_num_batched_tokens,
+			"block_size": block_size,
 			"gpu_memory_utilization": gpu_memory_utilization,
 			"nnodes": nnodes,
 			"tensor_parallel_size": tensor_parallel_size,
+			"pipeline_parallel_size": pipeline_parallel_size,
 		},
 		"memory_estimate": memory,
 		"issues": issues,

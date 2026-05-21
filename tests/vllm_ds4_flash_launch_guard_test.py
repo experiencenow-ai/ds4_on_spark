@@ -13,9 +13,11 @@ defaults:
   max_num_batched_tokens: 8192
   max_num_seqs: 512
   gpu_memory_utilization: 0.8
+  tensor_parallel_size: 2
 command: |
   vllm serve /models/deepseek-v4-flash \\
     --tokenizer-mode deepseek_v4 \\
+    --tensor-parallel-size {tensor_parallel_size} \\
     --max-model-len {max_model_len} \\
     --max-num-seqs {max_num_seqs} \\
     --max-num-batched-tokens {max_num_batched_tokens} \\
@@ -80,6 +82,21 @@ class VllmDs4FlashLaunchGuardTest(unittest.TestCase):
 		path = self.write_tmp(text)
 		result = guard.validate_path(path)
 		self.assertEqual(result["status"], guard.OK, result)
+
+	def test_ds4_flash_rejects_bad_block_size(self) -> None:
+		text = GOOD_RECIPE.replace("--no-enable-prefix-caching", "--block-size 256 --no-enable-prefix-caching")
+		path = self.write_tmp(text)
+		result = guard.validate_path(path)
+		self.assertEqual(result["status"], guard.BAD)
+		self.assertEqual(result["effective"]["block_size"], 256)
+		self.assertTrue(any(i["kind"] == "ds4_flash_block_size_mismatch" for i in result["issues"]))
+
+	def test_ds4_flash_accepts_required_block_size(self) -> None:
+		text = GOOD_RECIPE.replace("--no-enable-prefix-caching", "--block-size 128 --no-enable-prefix-caching")
+		path = self.write_tmp(text)
+		result = guard.validate_path(path)
+		self.assertEqual(result["status"], guard.OK, result)
+		self.assertEqual(result["effective"]["block_size"], 128)
 
 
 if __name__ == "__main__":
