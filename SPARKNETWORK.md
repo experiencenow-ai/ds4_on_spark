@@ -4,7 +4,7 @@ Load this file first for any Centaur/Spark networking work. The machine-readable
 source of truth is [`sparknetwork.json`](sparknetwork.json); this document is the
 human runbook derived from it.
 
-Last verified: `2026-05-21T0537Z` UTC.
+Last verified: `2026-05-21T1228Z` UTC.
 
 ## Rule Zero
 
@@ -164,8 +164,16 @@ control plane:
   `~/.ds4-rescue/token`; do not commit or print it.
 - Persistence: `loginctl enable-linger` is enabled for `spark2` through
   `spark6`, so the user service can start at boot without an active SSH login.
-- SSH self-heal: `ds4-sshd-watchdog.timer` runs every minute as root and
-  restarts SSH only when the local banner probe fails.
+- Local self-heal: `ds4-sshd-watchdog.timer` runs every minute as root. If the
+  local SSH banner probe fails, it restarts SSH, then kills allowlisted heavy
+  runtimes if SSH still does not recover.
+- Allowlisted heavy-runtime kills: Docker containers named
+  `vllm_deepseek_v4_flash`, `vllm_*`, `ds4_vllm_*`, or `centaur_vllm_*`, plus
+  process command lines matching `vllm serve` / `VLLM::`. Ray kills are disabled
+  unless `DS4_WATCHDOG_KILL_RAY=1` is set in the timer environment.
+- Reboot escalation is available but disabled by default. Set
+  `DS4_WATCHDOG_REBOOT_AFTER=N` to reboot after `N` consecutive failed rescue
+  attempts.
 - Narrow sudo: `/etc/sudoers.d/ds4-sshd-rescue` allows only `systemctl restart
   ssh`, `systemctl restart sshd`, and `/usr/local/sbin/ds4-sshd-watchdog`.
 
@@ -175,11 +183,19 @@ Use the checked-in client from Mac Studio:
 python3 scripts/ds4_rescue_client.py 10.20.0.12 health
 python3 scripts/ds4_rescue_client.py 10.20.0.12 ssh-probe
 python3 scripts/ds4_rescue_client.py 10.20.0.12 restart-ssh
+python3 scripts/ds4_rescue_client.py 10.20.0.12 self-rescue
 ```
 
 Replace the last octet for `spark3` through `spark6`. `spark0` and `spark1`
 did not receive this layer yet because they were not SSH-reachable during the
 2026-05-21 deployment.
+
+For spark4-style wedges where TCP accepts but SSH and HTTP do not answer, the
+remote client will not help because the agent cannot respond. The local root
+timer is the intended recovery path: it must be deployed before the node wedges.
+The 2026-05-21 heavy-runtime kill escalation was deployed live to `spark2`,
+`spark3`, `spark5`, and `spark6`; `spark4` still needs this update after a
+physical reboot restores SSH.
 
 Deploy or refresh it on reachable nodes with:
 

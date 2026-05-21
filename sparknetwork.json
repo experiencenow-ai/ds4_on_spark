@@ -1,6 +1,6 @@
 {
   "schema": "ds4.sparknetwork.v1",
-  "last_verified_utc": "2026-05-21T0537Z",
+  "last_verified_utc": "2026-05-21T1228Z",
   "operator": {
     "name": "Mac Studio",
     "hostname": "Mac-Studio.local",
@@ -184,8 +184,12 @@
   },
   "rescue_control": {
     "schema": "ds4.rescue.v1",
-    "verified_utc": "2026-05-21T0537Z",
+    "verified_utc": "2026-05-21T1228Z",
     "deployed_nodes": ["spark2", "spark3", "spark4", "spark5", "spark6"],
+    "self_rescue_escalation_deployed_nodes": ["spark2", "spark3", "spark5", "spark6"],
+    "self_rescue_escalation_pending_nodes": [
+      {"node": "spark4", "reason": "TCP responds but SSH and rescue HTTP do not complete requests; install after physical reboot"}
+    ],
     "not_deployed_nodes": [
       {"node": "spark0", "reason": "not SSH-reachable during deployment"},
       {"node": "spark1", "reason": "not SSH-reachable during deployment"}
@@ -200,12 +204,32 @@
       "type": "user systemd",
       "unit": "ds4-rescue-agent.service",
       "linger_enabled": true,
-      "endpoints": ["/health", "/status", "/ssh-probe", "/action restart_ssh"]
+      "endpoints": ["/health", "/status", "/ssh-probe", "/action restart_ssh", "/action self_rescue"]
     },
     "sshd_watchdog": {
       "unit": "ds4-sshd-watchdog.timer",
       "frequency": "1 minute",
       "root_script": "/usr/local/sbin/ds4-sshd-watchdog",
+      "local_escalation": [
+        "restart ssh",
+        "kill allowlisted vllm containers and processes",
+        "restart ssh again",
+        "optional reboot if DS4_WATCHDOG_REBOOT_AFTER is set"
+      ],
+      "allowlisted_container_patterns": [
+        "vllm_deepseek_v4_flash",
+        "vllm_*",
+        "ds4_vllm_*",
+        "centaur_vllm_*"
+      ],
+      "allowlisted_process_patterns": [
+        "/usr/local/bin/vllm serve",
+        "/usr/bin/python3 /usr/local/bin/vllm serve",
+        "vllm serve /models/",
+        "VLLM::"
+      ],
+      "ray_kill_default": false,
+      "reboot_after_default": 0,
       "sudoers": "/etc/sudoers.d/ds4-sshd-rescue",
       "allowed_sudo": [
         "/usr/bin/systemctl restart ssh",
