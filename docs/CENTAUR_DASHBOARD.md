@@ -1,6 +1,12 @@
 # Centaur system dashboard
 
-> Last meaningful update: **2026-05-21T12:00Z** (anti-stall protocol added to LANES.md; stall ledger added so behavioral patterns are visible; the "I wrote a blocker comment so I'm done" failure mode is now structurally invalid)
+> Last meaningful update: **2026-05-21T12:30Z** (track-vs-component naming collision fixed; "Track 1/2/3/4" agent slots are not the same as Centaur workstream Components 1/2/3/4; cross-track claiming is now the explicit default in LANES.md)
+
+> **Naming note.** The Centaur vision document names four *workstream components* (factory core, memory domain, providers, product/UI). The coordination system uses agent *track slots* (`track:1`, `track:2`, `track:3`, `track:4`). These are not the same thing despite the unfortunate number overlap. **Any track slot may work on any workstream component.** A track is an agent handle with accumulated PR history; it is not a job description. This dashboard reports component progress; the stall ledger reports per-track-slot behavior.
+
+---
+
+
 >
 > Percentages are deliberate approximations. They reflect "what fraction of this component is built and working end-to-end against real hardware/data" — not lines of code, not number of files, not roadmap-checklist position. A 70% component means the happy path works for one well-known input; a 90% component means it has been exercised at scale.
 
@@ -19,7 +25,7 @@ The product target is `a machine that creates machines that solves domains effic
 
 ---
 
-## Track 1 — State-machine factory core (overall **45%**)
+## Component 1 — State-machine factory core (overall **45%**)
 
 | Component | % | Status | Source |
 |---|---:|---|---|
@@ -34,7 +40,7 @@ The product target is `a machine that creates machines that solves domains effic
 
 ---
 
-## Track 2 — Memory / Trimind / LongMem domain (overall **40%**)
+## Component 2 — Memory / Trimind / LongMem domain (overall **40%**)
 
 | Component | % | Status | Source |
 |---|---:|---|---|
@@ -48,7 +54,7 @@ The product target is `a machine that creates machines that solves domains effic
 
 ---
 
-## Track 3 — Provider + model portfolio (overall **45%**)
+## Component 3 — Provider + model portfolio (overall **45%**)
 
 | Tier | % | Provider(s) live | Notes |
 |---|---:|---|---|
@@ -64,7 +70,7 @@ The product target is `a machine that creates machines that solves domains effic
 
 ---
 
-## Track 4 — Product API / UI / debug / release (overall **35%**)
+## Component 4 — Product API / UI / debug / release (overall **35%**)
 
 | Component | % | Status |
 |---|---:|---|
@@ -165,27 +171,29 @@ Sustained merge cadence since protocol landed: track:1 most productive (3 merges
 
 ## Stall ledger
 
-Track-by-track behavioral pattern, updated alongside material observation. Stalls are visible so the pattern is hard to ignore. This is not moralizing — it's a scoreboard that says where the autonomous protocol is and is not working.
+Track-by-track behavioral pattern, updated alongside material observation. Stalls are visible so the pattern is hard to ignore. Cross-track claims shipped are also visible — high counts mean the autonomous system is fluid; low counts mean a track is acting like a specialist rather than a team member.
 
-| Track | Sessions observed | Idle exits | Blocker comments | `/release-stalled` events received | Notes |
-|---|---:|---:|---:|---:|---|
-| track:1 | 2 | 0 | 0 | 0 | Highest-output. Working closely with user. |
-| track:2 | 1 | 1 | 0 | 0 | One full session silent. Reassigned-watch. |
-| track:3 | 2 | 1 | 1 | 0 | Self-blocked an `hw:none` paper task at #1197 — would have been invalid under new five-question gate (no real external block). |
-| track:4 | 2 | 0 | 0 | 0 | Saved #1192 cross-track. Currently real-work on #1194. |
+| Track slot | Sessions observed | Idle exits | Blocker comments | `/release-stalled` received | Cross-track claims shipped | Notes |
+|---|---:|---:|---:|---:|---:|---|
+| track:1 | 3 | 0 | 0 | 0 | 2 | Highest-output. Has worked across vLLM throughput (#1183), MoE audit (#1204), MoE queue projection (#1206), and coordination infrastructure (#1201/#1202). Model team-player. |
+| track:2 | 2 | 1 | 0 | 0 | 0 | One session silent. Has not yet claimed anything outside the area named in its original assignment. |
+| track:3 | 2 | 1 | 1 | 0 | 0 | Self-blocked an `hw:none` paper task at #1197 (now invalid under five-question gate). Has not claimed outside the original ds4 PP=3 area. |
+| track:4 | 3 | 0 | 0 | 0 | 1 | Saved #1192 cross-track when track:2 was silent. Real work on #1194. One genuine cross-track claim, good. |
 
-**Anti-pattern callouts (from observed behavior, public so the pattern is unambiguous):**
+**Anti-pattern callouts (from observed behavior):**
 
-- "Posted blocker comment, done" with no five-question gate and no alternative attempted — observed at least once on each of track:2, track:3, track:4. After this dashboard update + new LANES.md rules land, this is forbidden.
-- Self-blocking `hw:none` work because the *external* world wasn't ready (e.g. blocking the paper task on a hardware availability that the paper task doesn't need) — observed at track:3 on #1197. Self-corrected by manager.
-- Idle-exit without backlog-claim attempt — would be invalid under new rules.
+- "Posted blocker comment, done" with no five-question gate and no alternative attempted — addressed by 12:00Z anti-stall protocol.
+- Refusing to claim outside the "track:N matches workstream N" mental model — addressed by 12:30Z track-vs-component naming fix + cross-track-claiming-is-default rule.
+- "Stepped outside my track, did one small thing, declared blocked or done" — addressed by partial-work-as-blocker rule.
+
+The goal of these structural changes is not punishment. It is to make the silent-specialist failure mode visible and the team-player behavior structurally easier than the alternatives.
 
 
 
-- **Track 1:** Centaur evolves a candidate state machine on a domain it hasn't seen before, beats prior baseline by measurable economics, and the win is replayable from the bundle.
-- **Track 2:** LongMem oracle accuracy ≥96.6% sustained when reached via a Centaur-orchestrated candidate (not the hand-tuned HWM config).
-- **Track 3:** Every router tier has measured cost/quality/latency; strength-reduction routing demonstrably picks the cheapest sufficient tier on a held-out workload.
-- **Track 4:** An operator can inspect a run bundle, replay it, compare it to another candidate, and trace why one was promoted — all from the API/UI without reading logs.
+- **Component 1:** Centaur evolves a candidate state machine on a domain it hasn't seen before, beats prior baseline by measurable economics, and the win is replayable from the bundle.
+- **Component 2:** LongMem oracle accuracy ≥96.6% sustained when reached via a Centaur-orchestrated candidate (not the hand-tuned HWM config).
+- **Component 3:** Every router tier has measured cost/quality/latency; strength-reduction routing demonstrably picks the cheapest sufficient tier on a held-out workload.
+- **Component 4:** An operator can inspect a run bundle, replay it, compare it to another candidate, and trace why one was promoted — all from the API/UI without reading logs.
 
 ---
 

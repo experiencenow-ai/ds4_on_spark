@@ -71,9 +71,13 @@ Specific anti-patterns for this work item. Examples:
 **Depends on:** <!-- #N (must be closed first) -->
 **Blocks:** <!-- #N (cannot proceed without this) -->
 
-## Track affinity hint
+## Claim guidance (advisory only)
 
 <!--
-Which track's accumulated context fits best? This is a hint, not a binding.
-Any track may claim if hardware is compatible and dependencies clear.
+Any track may claim this issue. If one track has materially relevant past PRs,
+note that as an advisory hint here. This is NOT a reservation. Cross-track
+claiming is the default per .github/LANES.md.
+Examples:
+- "track:1 has the most vLLM context from PRs #1183/#1206; not reserved."
+- "No specific affinity; first available track should claim."
 -->
