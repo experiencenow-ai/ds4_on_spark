@@ -1,6 +1,6 @@
 # Centaur system dashboard
 
-> Last meaningful update: **2026-05-21T17:00Z** (Spark4 back up — three P0 throughput investigations unblocked: #1208 regression, #1209 MoE queue, #1198 prefix cache; #1196 PP=3 sweep also live again)
+> Last meaningful update: **2026-05-21T22:07Z** (Spark4 back up — three P0 throughput investigations unblocked; Lane D failure analysis found corrected Spark6 73/92 is dominated by 13/19 hard 16000-token truncations; small-model qualification chain complete; track:2 silent and recommended retired)
 
 > **Naming note.** The Centaur vision document names four *workstream components* (factory core, memory domain, providers, product/UI). The coordination system uses agent *track slots* (`track:1`, `track:2`, `track:3`, `track:4`). These are not the same thing despite the unfortunate number overlap. **Any track slot may work on any workstream component.** A track is an agent handle with accumulated PR history; it is not a job description. This dashboard reports component progress; the stall ledger reports per-track-slot behavior.
 
@@ -67,6 +67,19 @@ The product target is `a machine that creates machines that solves domains effic
 | Strength-reduction routing | 25 | Router structure exists with 5 tiers | Only 1 tier (`near_frontier_local`) has real live qualification; others fictitious until #1200 lands |
 
 **Bottleneck:** Four of five tiers lack real qualification. #1200 captures the qualification work. **The 310 → 106 tok/s vLLM regression (#1208) is the most pressing single number to resolve before downstream economics are correct.**
+
+### DS4 eval calibration
+
+Spark6 PP=1 `ds4-eval` corrected baseline remains the active comparison fixture at 73/92 and 13.896 output tok/s, but #1240's failure analysis changes how to read that number. The executed fixture `fixtures/pipeline_quality/lane-d-pp1-redo-20260521T0412Z.failure_analysis.json` classifies the 19 failures as:
+
+| Failure class | Count | Meaning |
+|---|---:|---|
+| truncation | 13 | Failed row generated exactly 16000 tokens, the ds4-eval ceiling |
+| wrong_answer | 5 | Finished below the ceiling and selected the wrong answer |
+| format_error | 1 | Finished below the ceiling but no parseable final answer |
+| refusal | 0 | No refusal-pattern failures |
+
+Largest lead: truncation is 13/19 failures, so the 79.3% baseline should be treated as materially affected by eval termination/control, not as a pure model-quality ceiling. By source, failures are AIME2025 10 (9 truncation, 1 format), GPQA Diamond 5 (4 truncation, 1 wrong answer), SuperGPQA 3 (all wrong answer), and COMPSEC 1 (wrong answer).
 
 ---
 
