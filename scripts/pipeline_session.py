@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Coordinate a B=1 DS4 PP=3 prompt-token loop through CUDA stage probes.
+"""Coordinate a B=1 DS4 PP=3 prompt-token loop through resident CUDA stages.
 
 This module intentionally has no fixture fallback.  It drives the existing
-`--cuda-batch-stack-probe` path on Spark0/Spark1/Spark2, moves real boundary
-activation files between stages, reads the stage2 argmax token, and feeds that
-token back into Spark0's row-token input for the next step.
+layer-range CUDA path on Spark0/Spark1/Spark2, moves real boundary activation
+files between resident stage workers, reads the stage2 argmax token, and feeds
+that token back into Spark0's embedding path for the next exact decode step.
 """
 
 from __future__ import annotations
@@ -285,6 +285,14 @@ def prompt_tokens_file(run_dir: str, step: int) -> str:
 	return f"{run_dir}/prompt_step{step:03d}.bin"
 
 
+def session_prompt_tokens_file(run_dir: str) -> str:
+	return f"{run_dir}/prompt.bin"
+
+
+def session_token_pattern(run_dir: str) -> str:
+	return f"{run_dir}/token_%u.bin"
+
+
 def pattern_path(run_dir: str, name: str) -> str:
 	return f"{run_dir}/{name}_%u.bin"
 
@@ -381,6 +389,24 @@ class PipelineSession:
 		rc = self.runner(stage, cmd, self.ssh_config, self.known_hosts, 120)
 		if rc.returncode != 0:
 			raise PipelineSessionError(f"{stage.name} prompt token file write failed rc={rc.returncode}: {rc.stderr.strip()}")
+
+	def read_remote_token(self, stage: StageConfig, pattern: str, step: int) -> int:
+		path = actual_pattern_file(pattern, step)
+		code = (
+			"import os,struct,sys,time; path=sys.argv[1]; wait=float(sys.argv[2]); t=time.time();"
+			"\nwhile not (os.path.exists(path) and os.path.getsize(path)==4):"
+			"\n    assert time.time()-t <= wait, 'timeout waiting for token file'"
+			"\n    time.sleep(0.01)"
+			"\nprint(struct.unpack('<i', open(path,'rb').read(4))[0])"
+		)
+		cmd = "python3 -c {} {} {}".format(q(code), q(path), q("300"))
+		rc = self.runner(stage, cmd, self.ssh_config, self.known_hosts, 360)
+		if rc.returncode != 0:
+			raise PipelineSessionError(f"{stage.name} token read failed rc={rc.returncode}: {rc.stderr.strip()}")
+		try:
+			return int(rc.stdout.strip().splitlines()[-1])
+		except (IndexError, ValueError) as exc:
+			raise PipelineSessionError(f"{stage.name} token read returned malformed stdout: {rc.stdout!r}") from exc
 
 	def build_stage_probe_command(self, stage: StageConfig, run_id: str, step: int, prompt_file: str, input_file: str | None, output_file: str | None, token_count: int) -> str:
 		env = [
@@ -485,6 +511,111 @@ class PipelineSession:
 			return ids[-1]
 		raise PipelineSessionError("stage2 did not emit pipeline_argmax_token or committed_token_ids[-1]")
 
+	def build_session_worker_command(self, stage: StageConfig, run_id: str, prompt_file: str, max_tokens: int) -> str:
+		run_dir = self.remote_step_dir(run_id, 0).rsplit("/", 1)[0]
+		env = [
+			f"DS4_PIPELINE_STAGE_ID={stage.stage_id}",
+			f"DS4_CUDA_STACK_PROBE_LAYER_BEGIN={stage.layer_begin}",
+			f"DS4_CUDA_STACK_PROBE_LAYER_END={stage.layer_end}",
+			"DS4_CUDA_SKIP_STARTUP_MODEL_CACHE=1",
+			"DS4_CUDA_STACK_PROBE_PRELOAD_STAGE=1",
+			"DS4_CUDA_MOE_SLICE_TILE8=1",
+			f"DS4_PIPELINE_SESSION_PROMPT_TOKENS_FILE={q(prompt_file)}",
+			f"DS4_PIPELINE_SESSION_MAX_TOKENS={max_tokens}",
+			f"DS4_PIPELINE_SESSION_CTX={DEFAULT_CTX}",
+			"DS4_PIPELINE_SESSION_INPUT_WAIT_MS=300000",
+		]
+		token_pattern = session_token_pattern(run_dir)
+		if not stage.include_head:
+			env.append("DS4_CUDA_STACK_PROBE_NO_HEAD=1")
+			env.append(f"DS4_PIPELINE_SESSION_OUTPUT_HC_FILE={q(pattern_path(run_dir, f'stage{stage.stage_id}_out'))}")
+		if stage.stage_id != 0:
+			env.append(f"DS4_PIPELINE_SESSION_INPUT_HC_FILE={q(pattern_path(run_dir, f'stage{stage.stage_id}_in'))}")
+		if stage.stage_id in (0, 1):
+			env.append(f"DS4_PIPELINE_SESSION_TOKEN_IN_FILE={q(token_pattern)}")
+		if stage.include_head:
+			env.append(f"DS4_PIPELINE_SESSION_TOKEN_OUT_FILE={q(token_pattern)}")
+		cmd = " ".join(env + [
+			"ds4",
+			"-m",
+			q(stage.model),
+			"--pipeline-session-b1-worker",
+		])
+		return f"mkdir -p {q(run_dir)}; cd {q(stage.ds4_dir)}; PATH=.:$PATH env {cmd}"
+
+	def launch_session_workers(self, run_id: str, prompt_files: dict[int, str], max_tokens: int) -> dict[int, subprocess.Popen[str]]:
+		procs: dict[int, subprocess.Popen[str]] = {}
+		for stage in self.stages:
+			cmd = self.build_session_worker_command(stage, run_id, prompt_files[stage.stage_id], max_tokens)
+			procs[stage.stage_id] = popen_remote(stage, cmd, self.ssh_config, self.known_hosts)
+			time.sleep(0.25)
+		return procs
+
+	def collect_session_workers(self, procs: dict[int, subprocess.Popen[str]], out_dir: Path) -> dict[int, list[dict[str, Any]]]:
+		events: dict[int, list[dict[str, Any]]] = {}
+		for stage in self.stages:
+			proc = procs[stage.stage_id]
+			stdout, stderr = proc.communicate(timeout=900)
+			(out_dir / f"worker_stage{stage.stage_id}.out").write_text(stdout or "", encoding="utf-8")
+			(out_dir / f"worker_stage{stage.stage_id}.err").write_text(stderr or "", encoding="utf-8")
+			if proc.returncode != 0:
+				raise PipelineSessionError(f"{stage.name} pipeline session worker failed rc={proc.returncode}: {(stderr or '').strip()[-2000:]}")
+			items: list[dict[str, Any]] = []
+			for line in (stdout or "").splitlines():
+				line = line.strip()
+				if line.startswith("{") and line.endswith("}"):
+					obj = json.loads(line)
+					if obj.get("event") in ("pipeline_session_step", "pipeline_session_token"):
+						items.append(obj)
+			events[stage.stage_id] = items
+		return events
+
+	def build_session_steps(self, events: dict[int, list[dict[str, Any]]], tokens: list[int]) -> list[GeneratedStep]:
+		steps: list[GeneratedStep] = []
+		for step, token_id in enumerate(tokens):
+			hashes: list[str] = []
+			nonfinites: list[int] = []
+			for stage in self.stages:
+				matches = [item for item in events.get(stage.stage_id, []) if item.get("event") == "pipeline_session_step" and int(item.get("step", -1)) == step]
+				if len(matches) != 1:
+					raise PipelineSessionError(f"stage {stage.stage_id} missing session event for step {step}")
+				item = matches[0]
+				hashes.append(format_fnv(item.get("hc_or_logits_fnv64")))
+				nonfinites.append(int(item.get("nonfinite", 0)))
+			token_events = [item for item in events.get(self.stages[-1].stage_id, []) if item.get("event") == "pipeline_session_token" and int(item.get("step", -1)) == step]
+			raw_bytes = token_events[0].get("token_bytes", []) if token_events else []
+			if not isinstance(raw_bytes, list) or not all(isinstance(v, int) for v in raw_bytes):
+				raw_bytes = []
+			steps.append(GeneratedStep(step, token_id, bytes_to_text(raw_bytes), raw_bytes, hashes, nonfinites))
+		return steps
+
+	def decode_session_workers(self, run_id: str, token_ids: list[int], max_tokens: int, out_dir: Path) -> list[GeneratedStep]:
+		run_dir = self.remote_step_dir(run_id, 0).rsplit("/", 1)[0]
+		prompt_files = {stage.stage_id: session_prompt_tokens_file(run_dir) for stage in self.stages}
+		for stage in self.stages:
+			self.write_remote_prompt_tokens(stage, prompt_files[stage.stage_id], token_ids)
+		procs = self.launch_session_workers(run_id, prompt_files, max_tokens)
+		stage0, stage1, stage2 = self.stages
+		token_pattern = session_token_pattern(run_dir)
+		generated: list[int] = []
+		for step in range(max_tokens):
+			rows = len(token_ids) if step == 0 else 1
+			stage0_out = actual_pattern_file(pattern_path(run_dir, "stage0_out"), step)
+			stage1_in = actual_pattern_file(pattern_path(run_dir, "stage1_in"), step)
+			stage1_out = actual_pattern_file(pattern_path(run_dir, "stage1_out"), step)
+			stage2_in = actual_pattern_file(pattern_path(run_dir, "stage2_in"), step)
+			self.tcp_transfer_file(stage0, stage1, stage0_out, stage1_in, 19100 + step, out_dir, f"session_step{step}_stage0_to_stage1", rows)
+			self.tcp_transfer_file(stage1, stage2, stage1_out, stage2_in, 19200 + step, out_dir, f"session_step{step}_stage1_to_stage2", rows)
+			token = self.read_remote_token(stage2, token_pattern, step)
+			generated.append(token)
+			if step + 1 < max_tokens:
+				self.write_remote_prompt_tokens(stage0, actual_pattern_file(token_pattern, step), [token])
+				self.write_remote_prompt_tokens(stage1, actual_pattern_file(token_pattern, step), [token])
+		events = self.collect_session_workers(procs, out_dir)
+		steps = self.build_session_steps(events, generated)
+		validate_decode_steps(steps, len(self.stages))
+		return steps
+
 	def decode_one(self, run_id: str, step: int, token_ids: list[int], out_dir: Path) -> GeneratedStep:
 		stage0, stage1, stage2 = self.stages
 		run_dir = self.remote_step_dir(run_id, step)
@@ -518,18 +649,12 @@ class PipelineSession:
 		(out_dir / "rendered_prompt.txt").write_text(rendered, encoding="utf-8")
 		(out_dir / "prompt_token_ids.json").write_text(json.dumps(token_ids) + "\n", encoding="utf-8")
 		run_id = f"{int(time.time())}_{os.getpid()}"
-		context_ids = list(token_ids)
-		steps: list[GeneratedStep] = []
-		generated_ids: list[int] = []
-		for step in range(max_tokens):
-			item = self.decode_one(run_id, step, context_ids, out_dir)
-			steps.append(item)
-			generated_ids.append(item.token_id)
-			context_ids.append(item.token_id)
-		validate_decode_steps(steps, len(self.stages))
+		steps = self.decode_session_workers(run_id, token_ids, max_tokens, out_dir)
+		generated_ids = [item.token_id for item in steps]
 		raw_path = out_dir / "pp3_steps.json"
 		raw_path.write_text(json.dumps([dataclasses.asdict(s) for s in steps], indent=2, sort_keys=True) + "\n", encoding="utf-8")
-		return PromptRun("pp3", prompt, rendered, token_ids, generated_ids, "", steps, str(raw_path))
+		text = bytes([b for step in steps for b in step.bytes]).decode("utf-8", errors="replace")
+		return PromptRun("pp3", prompt, rendered, token_ids, generated_ids, text, steps, str(raw_path))
 
 
 def main_args(argv: list[str]) -> int:
