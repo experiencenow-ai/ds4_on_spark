@@ -1,6 +1,6 @@
 # Centaur system dashboard
 
-> Last meaningful update: **2026-05-21T11:00Z** (Claude in chat, after PR #1201/#1202 coordination protocol landed and centaur PR #100 made vLLM the first live local provider)
+> Last meaningful update: **2026-05-21T11:30Z** (small-model qualification workstream added: #1213 harness + #1214 batch + #1215 router wire; Spark2 dedicated; `local_small`/`local_coder` tier gap is no longer un-tracked)
 >
 > Percentages are deliberate approximations. They reflect "what fraction of this component is built and working end-to-end against real hardware/data" — not lines of code, not number of files, not roadmap-checklist position. A 70% component means the happy path works for one well-known input; a 90% component means it has been exercised at scale.
 
@@ -53,8 +53,8 @@ The product target is `a machine that creates machines that solves domains effic
 | Tier | % | Provider(s) live | Notes |
 |---|---:|---|---|
 | `deterministic` | 60 | Internal deterministic tools | Existing test fixtures pass; not formally qualified |
-| `local_small` | 30 | None live | llama.cpp work older; no current binding |
-| `local_coder` | 30 | None live | Same; SGLang lane stale |
+| `local_small` | 30 | None live | Planned: #1213 (harness) → #1214 (batch) → #1215 (router wire). Spark2 now dedicated to this work. |
+| `local_coder` | 30 | None live | Same planned chain; #1215 wires both tiers in one PR |
 | `near_frontier_local` | 60 | **vLLM PP=2 TP=2 on Spark4/5 LIVE** (centaur PR #100, merged 10:54Z) | Live measured at 106 tok/s c=64. Sweep claimed 310 tok/s — under investigation #1208. Topline 566 tok/s aggregate at c=512 (PR #1183). |
 | `frontier_api` | 50 | Anthropic / OpenAI integration exists | Used by qualification escalation; not load-tested |
 | ds4 PP=3 (parity provider) | 35 | Spark0/1/2 layouts; currently Spark2/3/4 due to outage | Logits parity proven (May 16); **economic throughput proven nonviable** (PR #1203 K=618 projection) — **demote to parity-verification only** |
@@ -85,7 +85,7 @@ The product target is `a machine that creates machines that solves domains effic
 |---|---|---|---|---|
 | spark-0 | DOWN | — | — | SSH banner timeout since ~2026-05-20 late |
 | spark-1 | DOWN | — | — | Same |
-| spark-2 | UP | (free) | PP=3 stage candidate | Available, no current claimant |
+| spark-2 | UP | dedicated (backlog) | Small-model qualification only — claim via #1213/#1214 | |
 | spark-3 | UP | track:1 | vLLM TP=2 spare / sweep launcher | |
 | spark-4 | UP | track:1 | vLLM TP=2 node A | Live provider here |
 | spark-5 | UP | track:1 | vLLM TP=2 node B | Live provider here |
@@ -142,6 +142,13 @@ The product target is `a machine that creates machines that solves domains effic
 2. #1209 implements MoE batched queue — measured 1.85–3× e2e if projection holds
 3. #1198 prefix cache hit rate on Centaur-shaped workload — possible additional multiplier
 4. #1196 vLLM PP=3 — possible additional capacity but contested
+
+**Small-model qualification workstream (Spark2 dedicated):**
+1. #1213 — qualification harness + Spark2 inventory (P1, `hw:spark-2`)
+2. #1214 — run harness against all preloaded models (P1, `hw:spark-2`, depends on #1213)
+3. #1215 — wire qualified models into Centaur `local_small`/`local_coder` tiers (P1, `hw:none`, depends on #1214)
+
+This chain takes `local_small` and `local_coder` from 30% (no live providers) toward ~75% (qualified models routable). It does not unblock memory_evolution_alpha directly, but **does** make the eventual evolution loop economical: short/trivial nodes route to cheap qualified small models instead of burning vLLM capacity. Strength reduction needs cheap tiers to reduce *to*.
 
 ---
 
