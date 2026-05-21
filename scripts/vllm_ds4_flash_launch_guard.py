@@ -200,6 +200,8 @@ def validate_command(path: Path, defaults: dict[str, Any], command: str) -> dict
 	max_num_seqs = int_flag(flags, "--max-num-seqs", int(defaults.get("max_num_seqs", 0) or 0))
 	max_num_batched_tokens = int_flag(flags, "--max-num-batched-tokens", int(defaults.get("max_num_batched_tokens", 0) or 0))
 	gpu_memory_utilization = float_flag(flags, "--gpu-memory-utilization", float(defaults.get("gpu_memory_utilization", 0.0) or 0.0))
+	nnodes = int_flag(flags, "--nnodes", int(defaults.get("nnodes", 1) or 1))
+	tensor_parallel_size = int_flag(flags, "--tensor-parallel-size", int(defaults.get("tensor_parallel_size", 1) or 1))
 	issues: list[dict[str, str]] = []
 	warnings: list[dict[str, str]] = []
 	dupes = {k: v for k, v in flags.items() if len(v) > 1}
@@ -220,6 +222,8 @@ def validate_command(path: Path, defaults: dict[str, Any], command: str) -> dict
 				"kind": "high_sequence_budget",
 				"detail": "c512 at 200k context must be stress-tested after launch; this is a queueing/throughput profile, not a safe default chat profile",
 			})
+		if nnodes > 1 and tensor_parallel_size > 1 and "GLOO_SOCKET_IFNAME" not in command:
+			add_issue(issues, "missing_gloo_socket_ifname", "cross_node_gloo_loopback", "cross-node TP uses a Gloo CPU process group; without GLOO_SOCKET_IFNAME it can pick 127.0.0.1 and fail before serving", "set GLOO_SOCKET_IFNAME to the Spark fabric interface used for the cross-node TP launch")
 	status = BAD if issues else OK
 	return({
 		"format": FORMAT,
@@ -232,6 +236,8 @@ def validate_command(path: Path, defaults: dict[str, Any], command: str) -> dict
 			"max_num_seqs": max_num_seqs,
 			"max_num_batched_tokens": max_num_batched_tokens,
 			"gpu_memory_utilization": gpu_memory_utilization,
+			"nnodes": nnodes,
+			"tensor_parallel_size": tensor_parallel_size,
 		},
 		"memory_estimate": memory,
 		"issues": issues,
