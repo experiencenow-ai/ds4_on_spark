@@ -22,7 +22,14 @@ When in doubt about target repo, read the issue body. Do not assume the work is 
 
 ## Track identity
 
-There are four persistent tracks: `track:1`, `track:2`, `track:3`, `track:4`. Tracks are stable identifiers; the work assigned to a track changes over time. When you start a session, you have been told your track. Run the autonomous loop below — do not wait for human instructions.
+There are four persistent track slots: `track:1`, `track:2`, `track:3`, `track:4`. These are **agent handles**, not job descriptions. Each track is one xhigh agent slot with continuity of past PRs and accumulated context. That context is useful for picking up familiar repos or familiar bugs, but **it does not assign you to a workstream**.
+
+### What track:N means
+
+- **Yes:** you are the xhigh agent currently working under handle `track:N`. Your past PRs are associated with this handle.
+- **Yes:** when you have a `status:claimed` or `status:in-progress` issue carrying your label, that issue is yours to finish.
+- **No:** `track:N` does not map to one of the four Centaur workstream components. The Centaur vision document names Components 1–4 (factory core, memory domain, providers, product/UI). **These are not the same as agent track slots, despite the unfortunate naming collision.** Any track may work on any component.
+- **No:** you are not a specialist. When your current claim merges or genuinely blocks, you claim the top backlog item that's hardware-compatible, regardless of which component it touches.
 
 If you do not know your track, post a comment on the coordination issue saying so and wait. Do not guess.
 
@@ -71,7 +78,23 @@ On every runtime, run these steps in order. Stop at the first one that produces 
    like the available work" branch.
 ```
 
-## Claim atomicity
+## Cross-track claiming is the default
+
+When your current `status:in-progress` issue merges, blocks, or completes, your next action is **claim from backlog** — and the backlog is *shared across all tracks*. The autonomous loop step 3 has no filter for "issues that match my track's past area." Hardware compatibility and dependency status are the only filters.
+
+This is normal and expected. Every track will routinely work on issues outside the area they have past PRs in. The continuity-of-context benefit of having a stable track handle is real but limited; the cost of refusing cross-area work is much larger (idle agents, slow throughput, the manager getting frustrated and replacing you with a fresh slot).
+
+**A track that has only ever claimed `domain:provider` issues will, on any given session, find that the top backlog item is `domain:centaur` or `domain:harness` or `domain:memory`.** Claim it. The "Track affinity hint" field in the issue body is *advisory* — it names which agent slot has the most relevant past context — but it is not reserved seating. If you have free capacity and the issue is hardware-compatible, you can claim it.
+
+### Cross-track claims are tracked as positive signals
+
+The dashboard's stall ledger now records `cross_track_claims_shipped` per track. This is a good metric — high counts mean the autonomous system is fluid, not siloed. Tracks that consistently claim only from one area, even when other-area items sit higher in priority, will see their stall ledger reflect that pattern.
+
+### Partial-work-as-blocker is not allowed
+
+Doing one piece of an issue, hitting the second piece, and posting `/block` is **not** a valid use of the blocker label. If you got far enough to do any work at all, the work is `status:in-progress` until acceptance gates are met. To apply `status:blocked`, the obstacle must prevent *all* further progress on the issue, and the five-question gate (Anti-stall protocol section) must be answered.
+
+The pattern "stepped outside my track, did one small thing, declared blocked or done" is forbidden. The acceptance gates of an issue are what determine completion, not your sense that you've engaged enough with it.
 
 GitHub's label edits are not transactional. The protocol is:
 
@@ -175,6 +198,9 @@ Fixtures you authored by hand are not evidence. Fixtures that are the artifact-o
 
 ## Forbidden patterns
 
+- **Treating `track:N` as a job description or workstream specialty.** Track is an agent slot handle, not a role. Backlog claiming is cross-area by default. See "Cross-track claiming is the default."
+- **Refusing to claim a hardware-compatible top-priority backlog issue because it's outside the area you have past PRs in.** Not a legitimate exit. Idle is only legitimate when `lane_claim_next.sh` returns `none`.
+- **Doing one small piece of work on an issue, then posting `/block` or declaring done.** Acceptance gates determine completion, not your sense of engagement. If you began work, the work is `status:in-progress` until gates pass.
 - **Writing "vXX notes," "iteration N status," "lane progress ledger" documents.** These are the dogfood-anti-pattern. The work is the deliverable.
 - **Treating `status:blocked` as a completion state.** It is a handoff request. See the Anti-stall protocol. Posting a blocker comment and stopping is abandonment with paperwork.
 - **Calling code/logic problems "blocked."** If the build error is confusing, that is `status:in-progress with a stuck note`, not blocked. Blocked is reserved for genuine external dependencies (hardware down, unmerged dep, missing credential).
