@@ -1,0 +1,6 @@
+{"event":"pipeline_session_step","stage_id":1,"step":0,"path_kind":"restore","layer_begin":15,"layer_end":29,"token_count":50,"hc_or_logits_fnv64":"e4a726d398cee7f2","nonfinite":0,"pipeline_argmax_token":-1}
+{"event":"restore_kv","stage_id":1,"path":"/tmp/ds4_lane_a_pp3_lane_b_kv_1779336029_13319/stage1.kv","token_count":50}
+{"event":"pipeline_session_step","stage_id":1,"step":1,"path_kind":"decode","layer_begin":15,"layer_end":29,"token_count":1,"input_token":22,"hc_or_logits_fnv64":"075c080b03eba68b","nonfinite":0,"pipeline_argmax_token":-1}
+{"event":"pipeline_session_step","stage_id":1,"step":2,"path_kind":"decode","layer_begin":15,"layer_end":29,"token_count":1,"input_token":1,"hc_or_logits_fnv64":"3b9c60bd110f02c3","nonfinite":0,"pipeline_argmax_token":-1}
+{"event":"pipeline_session_step","stage_id":1,"step":3,"path_kind":"decode","layer_begin":15,"layer_end":29,"token_count":1,"input_token":0,"hc_or_logits_fnv64":"f9d0e1d4b0bcb7e4","nonfinite":0,"pipeline_argmax_token":-1}
+{"event":"pipeline_session_step","stage_id":1,"step":4,"path_kind":"decode","layer_begin":15,"layer_end":29,"token_count":1,"input_token":5,"hc_or_logits_fnv64":"4f73dcd773f730fc","nonfinite":0,"pipeline_argmax_token":-1}

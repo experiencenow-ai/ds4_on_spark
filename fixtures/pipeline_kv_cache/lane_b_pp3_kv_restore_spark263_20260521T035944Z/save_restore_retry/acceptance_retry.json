@@ -1,0 +1,19 @@
+{
+  "artifact": "lane_b_pp3_restore_retry",
+  "live_token_ids": [
+    22,
+    1,
+    0,
+    5,
+    223
+  ],
+  "restore_token_ids": [
+    22,
+    1,
+    0,
+    5,
+    223
+  ],
+  "run_id": "lane_b_kv_1779336029_13319",
+  "tokens_match": true
+}

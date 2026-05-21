@@ -1,0 +1,38 @@
+[
+  {
+    "stage_id": 0,
+    "name": "spark2_stage0",
+    "host": "spark2",
+    "ds4_dir": "/home/spark2/src/ds4",
+    "model": "/home/spark2/models/ds4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+    "layer_begin": 0,
+    "layer_end": 15,
+    "include_head": false,
+    "listen": "",
+    "proxy": ""
+  },
+  {
+    "stage_id": 1,
+    "name": "spark6_stage1",
+    "host": "spark6",
+    "ds4_dir": "/home/spark6/src/ds4",
+    "model": "/home/spark6/models/ds4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+    "layer_begin": 15,
+    "layer_end": 29,
+    "include_head": false,
+    "listen": "10.20.0.16",
+    "proxy": ""
+  },
+  {
+    "stage_id": 2,
+    "name": "spark3_stage2",
+    "host": "spark3",
+    "ds4_dir": "/home/spark3/src/ds4",
+    "model": "/home/spark3/models/ds4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+    "layer_begin": 29,
+    "layer_end": 43,
+    "include_head": true,
+    "listen": "10.20.0.13",
+    "proxy": ""
+  }
+]

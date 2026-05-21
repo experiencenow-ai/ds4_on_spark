@@ -1,0 +1,10 @@
+{"event":"pipeline_session_step","stage_id":2,"step":0,"path_kind":"prefill","layer_begin":29,"layer_end":43,"token_count":50,"hc_or_logits_fnv64":"69f324c7d06cf47e","nonfinite":0,"pipeline_argmax_token":22}
+{"event":"pipeline_session_token","stage_id":2,"step":0,"token_id":22,"token_bytes":[52]}
+{"event":"pipeline_session_step","stage_id":2,"step":1,"path_kind":"decode","layer_begin":29,"layer_end":43,"token_count":1,"input_token":22,"hc_or_logits_fnv64":"74fa6cee74f35ac7","nonfinite":0,"pipeline_argmax_token":1}
+{"event":"pipeline_session_token","stage_id":2,"step":1,"token_id":1,"token_bytes":[60,239,189,156,101,110,100,226,150,129,111,102,226,150,129,115,101,110,116,101,110,99,101,239,189,156,62]}
+{"event":"pipeline_session_step","stage_id":2,"step":2,"path_kind":"decode","layer_begin":29,"layer_end":43,"token_count":1,"input_token":1,"hc_or_logits_fnv64":"dfcc39cb3cfcdd65","nonfinite":0,"pipeline_argmax_token":0}
+{"event":"pipeline_session_token","stage_id":2,"step":2,"token_id":0,"token_bytes":[60,239,189,156,98,101,103,105,110,226,150,129,111,102,226,150,129,115,101,110,116,101,110,99,101,239,189,156,62]}
+{"event":"pipeline_session_step","stage_id":2,"step":3,"path_kind":"decode","layer_begin":29,"layer_end":43,"token_count":1,"input_token":0,"hc_or_logits_fnv64":"1eaab807d4fadf33","nonfinite":0,"pipeline_argmax_token":5}
+{"event":"pipeline_session_token","stage_id":2,"step":3,"token_id":5,"token_bytes":[35]}
+{"event":"pipeline_session_step","stage_id":2,"step":4,"path_kind":"decode","layer_begin":29,"layer_end":43,"token_count":1,"input_token":5,"hc_or_logits_fnv64":"3502874fe2ad54f5","nonfinite":0,"pipeline_argmax_token":223}
+{"event":"pipeline_session_token","stage_id":2,"step":4,"token_id":223,"token_bytes":[32]}

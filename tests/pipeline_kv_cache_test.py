@@ -11,6 +11,7 @@ from scripts import pipeline_kv_cache as kv
 PATCH = Path("docs/antirez-patches/ds4-3630e64-cuda-stage-kv-checkpoint.patch")
 LIVE_FIXTURE = Path("fixtures/pipeline_kv_cache/lane_b_spark1_kv_restore_20260520T2148Z")
 SPARK2_STAGE_FIXTURE = Path("fixtures/pipeline_kv_cache/lane_b_spark2_stage0_kv_restore_20260520T2220Z")
+PP3_RESTORE_FIXTURE = Path("fixtures/pipeline_kv_cache/lane_b_pp3_kv_restore_spark263_20260521T035944Z")
 
 
 class PipelineKvCacheTest(unittest.TestCase):
@@ -167,16 +168,15 @@ class PipelineKvCacheTest(unittest.TestCase):
 	def test_stage_kv_checkpoint_patch_contract(self) -> None:
 		text = PATCH.read_text(encoding="utf-8")
 		required = [
-			"DS4_PIPELINE_KV_MODE",
-			"DS4_PIPELINE_KV_PATH",
-			"DS4_PIPELINE_KV_TOKEN_IDS",
-			"pipeline_stage_save_kv",
-			"pipeline_stage_restore_kv",
-			"ds4_session_save_payload",
-			"ds4_session_load_payload",
-			"pipeline_stage_decode_argmax_tokens",
-			"restore_decode",
-			"live_decode",
+			"DS4_PIPELINE_SESSION_SAVE_KV_PATH",
+			"DS4_PIPELINE_SESSION_RESTORE_KV_PATH",
+			"DS4_PIPELINE_SESSION_WAIT_AFTER_SAVE",
+			"DS4_PIPELINE_STAGE_KV_MAGIC",
+			"ds4_pipeline_stage_kv_header",
+			"pipeline_stage_kv_save",
+			"pipeline_stage_kv_restore",
+			"raw_live_rows",
+			"pipeline_session_step",
 			"save_kv_waiting",
 		]
 		for needle in required:
@@ -199,6 +199,15 @@ class PipelineKvCacheTest(unittest.TestCase):
 		self.assertIn('"decode_token_ids":[1162,344,260,73615,126664]', live)
 		self.assertIn('"decode_token_ids":[1162,344,260,73615,126664]', restore)
 		self.assertIn("45acee5378108707dd22810e712c9c658034679f47d91115144bef7e0600ddf0", sha)
+
+	def test_live_pp3_stage_kv_restore_fixture_tokens_match(self) -> None:
+		acceptance = json.loads((PP3_RESTORE_FIXTURE / "acceptance.json").read_text(encoding="utf-8"))
+		self.assertEqual(acceptance["prompt_token_count"], 50)
+		self.assertTrue(acceptance["tokens_match"])
+		self.assertEqual(acceptance["live_token_ids"], acceptance["restore_token_ids"])
+		self.assertEqual(acceptance["live_token_ids"], [22, 1, 0, 5, 223])
+		for stage_id in ("0", "1", "2"):
+			self.assertGreater(acceptance["kv_shards"][stage_id]["bytes"], 0)
 
 	def test_live_spark1_kv_restore_fixture_has_cache_hit_after_restart(self) -> None:
 		server1 = (LIVE_FIXTURE / "server1.log").read_text(encoding="utf-8")

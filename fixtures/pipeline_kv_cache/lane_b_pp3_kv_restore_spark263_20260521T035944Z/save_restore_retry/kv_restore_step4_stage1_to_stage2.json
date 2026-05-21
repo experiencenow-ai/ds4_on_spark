@@ -1,0 +1,9 @@
+{
+  "bytes": 65536,
+  "dst": "spark3_stage2",
+  "label": "kv_restore_step4_stage1_to_stage2",
+  "peer": "10.20.0.16",
+  "sha256": "8efb84b987b3d5d55b8d140f3092d379213ff6070bdf04bb7c8f139750b89c46",
+  "src": "spark6_stage1",
+  "transfer_ms": 0.4203319549560547
+}

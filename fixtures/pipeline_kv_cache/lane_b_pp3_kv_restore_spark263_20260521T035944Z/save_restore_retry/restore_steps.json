@@ -1,0 +1,146 @@
+[
+  {
+    "bytes": [
+      52
+    ],
+    "stage_logits_hashes": [
+      "fnv64:afb66bf39d2ee660",
+      "fnv64:e4a726d398cee7f2",
+      "fnv64:69f324c7d06cf47e"
+    ],
+    "stage_logits_nonfinite": [
+      0,
+      0,
+      0
+    ],
+    "step": 0,
+    "text": "4",
+    "token_id": 22
+  },
+  {
+    "bytes": [
+      60,
+      239,
+      189,
+      156,
+      101,
+      110,
+      100,
+      226,
+      150,
+      129,
+      111,
+      102,
+      226,
+      150,
+      129,
+      115,
+      101,
+      110,
+      116,
+      101,
+      110,
+      99,
+      101,
+      239,
+      189,
+      156,
+      62
+    ],
+    "stage_logits_hashes": [
+      "fnv64:c2369c3a6e4e3ea6",
+      "fnv64:075c080b03eba68b",
+      "fnv64:74fa6cee74f35ac7"
+    ],
+    "stage_logits_nonfinite": [
+      0,
+      0,
+      0
+    ],
+    "step": 1,
+    "text": "<\uff5cend\u2581of\u2581sentence\uff5c>",
+    "token_id": 1
+  },
+  {
+    "bytes": [
+      60,
+      239,
+      189,
+      156,
+      98,
+      101,
+      103,
+      105,
+      110,
+      226,
+      150,
+      129,
+      111,
+      102,
+      226,
+      150,
+      129,
+      115,
+      101,
+      110,
+      116,
+      101,
+      110,
+      99,
+      101,
+      239,
+      189,
+      156,
+      62
+    ],
+    "stage_logits_hashes": [
+      "fnv64:980143c12167e831",
+      "fnv64:3b9c60bd110f02c3",
+      "fnv64:dfcc39cb3cfcdd65"
+    ],
+    "stage_logits_nonfinite": [
+      0,
+      0,
+      0
+    ],
+    "step": 2,
+    "text": "<\uff5cbegin\u2581of\u2581sentence\uff5c>",
+    "token_id": 0
+  },
+  {
+    "bytes": [
+      35
+    ],
+    "stage_logits_hashes": [
+      "fnv64:941553dfbd8aebb0",
+      "fnv64:f9d0e1d4b0bcb7e4",
+      "fnv64:1eaab807d4fadf33"
+    ],
+    "stage_logits_nonfinite": [
+      0,
+      0,
+      0
+    ],
+    "step": 3,
+    "text": "#",
+    "token_id": 5
+  },
+  {
+    "bytes": [
+      32
+    ],
+    "stage_logits_hashes": [
+      "fnv64:3252a0a5bbfb0916",
+      "fnv64:4f73dcd773f730fc",
+      "fnv64:3502874fe2ad54f5"
+    ],
+    "stage_logits_nonfinite": [
+      0,
+      0,
+      0
+    ],
+    "step": 4,
+    "text": " ",
+    "token_id": 223
+  }
+]

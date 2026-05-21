@@ -1,0 +1,9 @@
+{
+  "bytes": 3276800,
+  "dst": "spark6_stage1",
+  "label": "session_step0_stage0_to_stage1",
+  "peer": "10.20.0.12",
+  "sha256": "672d3e8eff209d945f5294e76c7615d2dc2ba588da0db8c13f2cecc1d1077334",
+  "src": "spark2_stage0",
+  "transfer_ms": 4.999637603759766
+}

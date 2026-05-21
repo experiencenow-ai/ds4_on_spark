@@ -1,0 +1,9 @@
+{
+  "bytes": 3276800,
+  "dst": "spark3_stage2",
+  "label": "kv_save_stage1_to_stage2",
+  "peer": "10.20.0.16",
+  "sha256": "a4ede6583cb8be8074d030e053495873566a1b5b36c6b44dff8fceaeb6158306",
+  "src": "spark6_stage1",
+  "transfer_ms": 4.3201446533203125
+}

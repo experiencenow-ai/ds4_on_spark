@@ -1,212 +1,302 @@
 --- a/ds4.c
 +++ b/ds4.c
-@@ -15457,3 +15457,202 @@
+@@ -15506,8 +15506,176 @@
+             pipeline_hash_logits(p->session));
      fflush(stdout);
-+    return 0;
-+}
-+
-+
-+static int pipeline_stage_parse_token_ids(const char *csv, int32_t *out, uint32_t cap, uint32_t *count, char *err, size_t errlen) {
-+    const char *p;
-+    uint32_t n = 0;
-+    if (!csv || !csv[0] || !out || !count) {
-+        pipeline_stage_set_err(err, errlen, "missing DS4_PIPELINE_KV_TOKEN_IDS");
-+        return 1;
-+    }
-+    p = csv;
-+    while (*p) {
-+        char *end = NULL;
-+        long v;
-+        if (n >= cap) {
-+            pipeline_stage_set_err(err, errlen, "too many pipeline KV token ids");
-+            return 1;
-+        }
-+        errno = 0;
-+        v = strtol(p, &end, 10);
-+        if (errno != 0 || end == p || v < INT32_MIN || v > INT32_MAX) {
-+            pipeline_stage_set_err(err, errlen, "invalid pipeline KV token id");
-+            return 1;
-+        }
-+        out[n++] = (int32_t)v;
-+        if (*end == ',') p = end + 1;
-+        else if (*end == '\0') p = end;
-+        else {
-+            pipeline_stage_set_err(err, errlen, "invalid pipeline KV token id separator");
-+            return 1;
-+        }
-+    }
-+    *count = n;
-+    return 0;
-+}
-+
-+static uint32_t pipeline_stage_env_u32(const char *name, uint32_t fallback) {
-+    const char *env = getenv(name);
-+    char *end = NULL;
-+    long v;
-+    if (!env || !env[0]) return fallback;
-+    errno = 0;
-+    v = strtol(env, &end, 10);
-+    if (errno != 0 || end == env || *end != '\0' || v < 0 || v > UINT32_MAX) return fallback;
-+    return (uint32_t)v;
-+}
-+
-+static int pipeline_stage_save_kv(ds4_pipeline_stage *p, const char *path, char *err, size_t errlen) {
-+    FILE *fp;
-+    int rc;
-+    if (!p || !p->session || !path || !path[0]) {
-+        pipeline_stage_set_err(err, errlen, "invalid save_kv request");
-+        return 1;
-+    }
-+    fp = fopen(path, "wb");
-+    if (!fp) {
-+        pipeline_stage_set_err(err, errlen, "failed to open save_kv file");
-+        return 1;
-+    }
-+    rc = ds4_session_save_payload(p->session, fp, err, errlen);
-+    if (fclose(fp) != 0 && rc == 0) {
-+        pipeline_stage_set_err(err, errlen, "failed to close save_kv file");
-+        return 1;
-+    }
-+    return rc;
-+}
-+
-+static int pipeline_stage_restore_kv(ds4_pipeline_stage *p, const char *path, char *err, size_t errlen) {
-+    struct stat st;
-+    FILE *fp;
-+    const ds4_tokens *tokens;
-+    int rc;
-+    if (!p || !p->session || !path || !path[0]) {
-+        pipeline_stage_set_err(err, errlen, "invalid restore_kv request");
-+        return 1;
-+    }
-+    if (stat(path, &st) != 0 || st.st_size <= 0) {
-+        pipeline_stage_set_err(err, errlen, "restore_kv file is missing or empty");
-+        return 1;
-+    }
-+    fp = fopen(path, "rb");
-+    if (!fp) {
-+        pipeline_stage_set_err(err, errlen, "failed to open restore_kv file");
-+        return 1;
-+    }
-+    rc = ds4_session_load_payload(p->session, fp, (uint64_t)st.st_size, err, errlen);
-+    if (fclose(fp) != 0 && rc == 0) {
-+        pipeline_stage_set_err(err, errlen, "failed to close restore_kv file");
-+        return 1;
-+    }
-+    if (rc != 0) return rc;
-+    tokens = ds4_session_tokens(p->session);
-+    p->prompt.len = 0;
-+    if (tokens) {
-+        for (int i = 0; i < tokens->len; i++) token_vec_push(&p->prompt, tokens->v[i]);
-+    }
-+    return 0;
-+}
-+
-+static int pipeline_stage_decode_argmax_tokens(ds4_pipeline_stage *p, uint32_t n, int32_t *out, char *err, size_t errlen) {
-+    int32_t token;
-+    if (!p || !p->session || !out || n == 0) {
-+        pipeline_stage_set_err(err, errlen, "invalid decode_argmax request");
-+        return 1;
-+    }
-+    token = ds4_session_argmax(p->session);
-+    for (uint32_t i = 0; i < n; i++) {
-+        out[i] = token;
-+        token_vec_push(&p->prompt, token);
-+        if (i + 1u == n) break;
-+        if (ds4_session_eval(p->session, token, err, errlen) != 0) return 1;
-+        token = ds4_session_argmax(p->session);
-+    }
      return 0;
 +}
 +
-+static void pipeline_stage_print_i32_array(const int32_t *v, uint32_t n) {
-+    printf("[");
-+    for (uint32_t i = 0; i < n; i++) printf("%s%d", i ? "," : "", v[i]);
-+    printf("]");
++
++
++#define DS4_PIPELINE_STAGE_KV_MAGIC UINT32_C(0x4b563450)
++#define DS4_PIPELINE_STAGE_KV_VERSION UINT32_C(1)
++#define DS4_PIPELINE_STAGE_KV_IO_CHUNK (8u * 1024u * 1024u)
++
++typedef struct {
++    uint32_t magic;
++    uint32_t version;
++    uint32_t stage_id;
++    uint32_t layer_begin;
++    uint32_t layer_end;
++    uint32_t raw_cap;
++    uint32_t raw_window;
++    uint32_t comp_cap;
++    uint32_t token_count;
++    uint32_t raw_live_rows;
++    uint32_t hc_dim;
++    uint32_t has_last_hc;
++    uint64_t payload_bytes;
++} ds4_pipeline_stage_kv_header;
++
++static uint32_t pipeline_stage_kv_raw_live_rows(const ds4_gpu_graph *g, uint32_t token_count) {
++    uint32_t rows = g->raw_window ? g->raw_window : DS4_N_SWA;
++    if (rows > g->raw_cap) rows = g->raw_cap;
++    if (rows > token_count) rows = token_count;
++    return rows;
 +}
 +
-+static int pipeline_stage_kv_smoke(ds4_pipeline_stage *stage) {
-+    const char *mode = getenv("DS4_PIPELINE_KV_MODE");
-+    const char *path = getenv("DS4_PIPELINE_KV_PATH");
-+    const uint32_t n_decode = pipeline_stage_env_u32("DS4_PIPELINE_KV_DECODE_TOKENS", 5);
-+    int32_t prompt_ids[4096];
-+    int32_t decoded[256];
-+    uint32_t prompt_count = 0;
-+    char err[256] = {0};
-+    struct stat st;
-+    if (!mode || !mode[0]) return 0;
-+    if (n_decode == 0 || n_decode > 256) {
-+        fprintf(stderr, "ds4: invalid DS4_PIPELINE_KV_DECODE_TOKENS=%u\n", n_decode);
-+        return 1;
-+    }
-+    if (!strcmp(mode, "live") || !strcmp(mode, "save")) {
-+        if (pipeline_stage_parse_token_ids(getenv("DS4_PIPELINE_KV_TOKEN_IDS"), prompt_ids, 4096, &prompt_count, err, sizeof(err)) != 0) {
-+            fprintf(stderr, "ds4: pipeline KV token parse failed: %s\n", err);
-+            return 1;
-+        }
-+        if (ds4_pipeline_stage_prefill_chunk(stage, prompt_ids, prompt_count, err, sizeof(err)) != 0) {
-+            fprintf(stderr, "ds4: pipeline KV prefill failed: %s\n", err);
-+            return 1;
++static uint64_t pipeline_stage_kv_payload_bytes(const ds4_gpu_graph *g, uint32_t layer_begin, uint32_t layer_end, uint32_t token_count) {
++    uint64_t bytes = (uint64_t)DS4_N_HC * DS4_N_EMBD * sizeof(float);
++    const uint32_t raw_live = pipeline_stage_kv_raw_live_rows(g, token_count);
++    for (uint32_t il = layer_begin; il < layer_end; il++) {
++        bytes += sizeof(uint32_t) * 2u;
++        bytes += (uint64_t)raw_live * DS4_N_HEAD_DIM * sizeof(float);
++        const uint32_t ratio = ds4_layer_compress_ratio(il);
++        if (ratio == 0) continue;
++        bytes += (uint64_t)g->layer_n_comp[il] * DS4_N_HEAD_DIM * sizeof(float);
++        bytes += ds4_gpu_tensor_bytes(g->layer_attn_state_kv[il]);
++        bytes += ds4_gpu_tensor_bytes(g->layer_attn_state_score[il]);
++        if (ratio == 4) {
++            bytes += (uint64_t)g->layer_n_index_comp[il] * DS4_N_INDEXER_HEAD_DIM * sizeof(float);
++            bytes += ds4_gpu_tensor_bytes(g->layer_index_state_kv[il]);
++            bytes += ds4_gpu_tensor_bytes(g->layer_index_state_score[il]);
 +        }
 +    }
-+    if (!strcmp(mode, "save")) {
-+        if (pipeline_stage_save_kv(stage, path, err, sizeof(err)) != 0) {
-+            fprintf(stderr, "ds4: pipeline save_kv failed: %s\n", err);
-+            return 1;
++    return bytes;
++}
++
++static bool pipeline_stage_kv_write_tensor(FILE *fp, const ds4_gpu_tensor *tensor, uint64_t off, uint64_t bytes, uint8_t *buf, uint64_t cap) {
++    uint64_t done = 0;
++    while (done < bytes) {
++        const uint64_t want = bytes - done;
++        const size_t n = (size_t)(want > cap ? cap : want);
++        if (ds4_gpu_tensor_read(tensor, off + done, buf, n) == 0) return false;
++        if (fwrite(buf, 1, n, fp) != n) return false;
++        done += n;
++    }
++    return true;
++}
++
++static bool pipeline_stage_kv_read_tensor(FILE *fp, ds4_gpu_tensor *tensor, uint64_t off, uint64_t bytes, uint8_t *buf, uint64_t cap) {
++    uint64_t done = 0;
++    while (done < bytes) {
++        const uint64_t want = bytes - done;
++        const size_t n = (size_t)(want > cap ? cap : want);
++        if (fread(buf, 1, n, fp) != n) return false;
++        if (ds4_gpu_tensor_write(tensor, off + done, buf, n) == 0) return false;
++        done += n;
++    }
++    return true;
++}
++
++static bool pipeline_stage_kv_save(ds4_gpu_graph *g, uint32_t stage_id, uint32_t layer_begin, uint32_t layer_end, uint32_t token_count, const char *path) {
++    if (!g || !path || !path[0] || token_count == 0 || layer_begin >= layer_end || layer_end > DS4_N_LAYER) return false;
++    if (ds4_gpu_synchronize() == 0) return false;
++    FILE *fp = fopen(path, "wb");
++    if (!fp) return false;
++    const uint32_t raw_live = pipeline_stage_kv_raw_live_rows(g, token_count);
++    const uint64_t hc_dim = (uint64_t)DS4_N_HC * DS4_N_EMBD;
++    ds4_pipeline_stage_kv_header h = {
++        DS4_PIPELINE_STAGE_KV_MAGIC,
++        DS4_PIPELINE_STAGE_KV_VERSION,
++        stage_id,
++        layer_begin,
++        layer_end,
++        g->raw_cap,
++        g->raw_window,
++        g->comp_cap,
++        token_count,
++        raw_live,
++        (uint32_t)hc_dim,
++        1u,
++        pipeline_stage_kv_payload_bytes(g, layer_begin, layer_end, token_count),
++    };
++    bool ok = fwrite(&h, 1, sizeof(h), fp) == sizeof(h);
++    uint8_t *buf = xmalloc(DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++    const uint64_t hc_bytes = hc_dim * sizeof(float);
++    if (ok) ok = pipeline_stage_kv_write_tensor(fp, g->batch_cur_hc, (uint64_t)(token_count - 1u) * hc_bytes, hc_bytes, buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++    const uint32_t raw_first = token_count - raw_live;
++    for (uint32_t il = layer_begin; ok && il < layer_end; il++) {
++        if (fwrite(&g->layer_n_comp[il], 1, sizeof(uint32_t), fp) != sizeof(uint32_t)) ok = false;
++        if (ok && fwrite(&g->layer_n_index_comp[il], 1, sizeof(uint32_t), fp) != sizeof(uint32_t)) ok = false;
++        for (uint32_t r = 0; ok && r < raw_live; r++) {
++            const uint32_t phys = (raw_first + r) % g->raw_cap;
++            ok = pipeline_stage_kv_write_tensor(fp, g->layer_raw_cache[il], (uint64_t)phys * DS4_N_HEAD_DIM * sizeof(float), (uint64_t)DS4_N_HEAD_DIM * sizeof(float), buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
 +        }
-+        if (stat(path, &st) != 0) memset(&st, 0, sizeof(st));
-+        printf("{\"event\":\"save_kv\",\"stage_id\":%u,\"token_count\":%u,\"path\":\"%s\",\"bytes\":%llu}\n",
-+               stage->cfg.stage_id,
-+               prompt_count,
-+               path ? path : "",
-+               (unsigned long long)st.st_size);
-+        fflush(stdout);
-+        if (getenv("DS4_PIPELINE_KV_WAIT_AFTER_SAVE") != NULL) {
-+            printf("{\"event\":\"save_kv_waiting\",\"stage_id\":%u,\"pid\":%ld}\n", stage->cfg.stage_id, (long)getpid());
++        const uint32_t ratio = ds4_layer_compress_ratio(il);
++        if (ok && ratio != 0) ok = pipeline_stage_kv_write_tensor(fp, g->layer_attn_comp_cache[il], 0, (uint64_t)g->layer_n_comp[il] * DS4_N_HEAD_DIM * sizeof(float), buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++        if (ok && ratio != 0) ok = pipeline_stage_kv_write_tensor(fp, g->layer_attn_state_kv[il], 0, ds4_gpu_tensor_bytes(g->layer_attn_state_kv[il]), buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++        if (ok && ratio != 0) ok = pipeline_stage_kv_write_tensor(fp, g->layer_attn_state_score[il], 0, ds4_gpu_tensor_bytes(g->layer_attn_state_score[il]), buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++        if (ok && ratio == 4) ok = pipeline_stage_kv_write_tensor(fp, g->layer_index_comp_cache[il], 0, (uint64_t)g->layer_n_index_comp[il] * DS4_N_INDEXER_HEAD_DIM * sizeof(float), buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++        if (ok && ratio == 4) ok = pipeline_stage_kv_write_tensor(fp, g->layer_index_state_kv[il], 0, ds4_gpu_tensor_bytes(g->layer_index_state_kv[il]), buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++        if (ok && ratio == 4) ok = pipeline_stage_kv_write_tensor(fp, g->layer_index_state_score[il], 0, ds4_gpu_tensor_bytes(g->layer_index_state_score[il]), buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++    }
++    free(buf);
++    if (fclose(fp) != 0) ok = false;
++    return ok;
++}
++
++static bool pipeline_stage_kv_restore(ds4_gpu_graph *g, uint32_t stage_id, uint32_t layer_begin, uint32_t layer_end, uint32_t token_count, const char *path) {
++    if (!g || !path || !path[0] || layer_begin >= layer_end || layer_end > DS4_N_LAYER) return false;
++    FILE *fp = fopen(path, "rb");
++    if (!fp) return false;
++    ds4_pipeline_stage_kv_header h;
++    bool ok = fread(&h, 1, sizeof(h), fp) == sizeof(h);
++    if (ok && (h.magic != DS4_PIPELINE_STAGE_KV_MAGIC || h.version != DS4_PIPELINE_STAGE_KV_VERSION)) ok = false;
++    if (ok && (h.stage_id != stage_id || h.layer_begin != layer_begin || h.layer_end != layer_end || h.token_count != token_count || h.hc_dim != (uint32_t)((uint64_t)DS4_N_HC * DS4_N_EMBD))) ok = false;
++    if (ok && (h.raw_cap > g->raw_cap || h.raw_live_rows > g->raw_cap || h.raw_live_rows > h.token_count || h.comp_cap > g->comp_cap)) ok = false;
++    uint8_t *buf = xmalloc(DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++    const uint64_t hc_bytes = (uint64_t)DS4_N_HC * DS4_N_EMBD * sizeof(float);
++    if (ok) ok = pipeline_stage_kv_read_tensor(fp, g->cur_hc, 0, hc_bytes, buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++    const uint32_t raw_first = h.token_count - h.raw_live_rows;
++    for (uint32_t il = layer_begin; ok && il < layer_end; il++) {
++        uint32_t n_comp = 0;
++        uint32_t n_index_comp = 0;
++        if (fread(&n_comp, 1, sizeof(uint32_t), fp) != sizeof(uint32_t)) ok = false;
++        if (ok && fread(&n_index_comp, 1, sizeof(uint32_t), fp) != sizeof(uint32_t)) ok = false;
++        if (ok && (n_comp > g->layer_comp_cap[il] || n_index_comp > g->layer_comp_cap[il])) ok = false;
++        for (uint32_t r = 0; ok && r < h.raw_live_rows; r++) {
++            const uint32_t phys = (raw_first + r) % g->raw_cap;
++            ok = pipeline_stage_kv_read_tensor(fp, g->layer_raw_cache[il], (uint64_t)phys * DS4_N_HEAD_DIM * sizeof(float), (uint64_t)DS4_N_HEAD_DIM * sizeof(float), buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++        }
++        const uint32_t ratio = ds4_layer_compress_ratio(il);
++        if (ok && ratio != 0) ok = pipeline_stage_kv_read_tensor(fp, g->layer_attn_comp_cache[il], 0, (uint64_t)n_comp * DS4_N_HEAD_DIM * sizeof(float), buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++        if (ok && ratio != 0) ok = pipeline_stage_kv_read_tensor(fp, g->layer_attn_state_kv[il], 0, ds4_gpu_tensor_bytes(g->layer_attn_state_kv[il]), buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++        if (ok && ratio != 0) ok = pipeline_stage_kv_read_tensor(fp, g->layer_attn_state_score[il], 0, ds4_gpu_tensor_bytes(g->layer_attn_state_score[il]), buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++        if (ok && ratio == 4) ok = pipeline_stage_kv_read_tensor(fp, g->layer_index_comp_cache[il], 0, (uint64_t)n_index_comp * DS4_N_INDEXER_HEAD_DIM * sizeof(float), buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++        if (ok && ratio == 4) ok = pipeline_stage_kv_read_tensor(fp, g->layer_index_state_kv[il], 0, ds4_gpu_tensor_bytes(g->layer_index_state_kv[il]), buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++        if (ok && ratio == 4) ok = pipeline_stage_kv_read_tensor(fp, g->layer_index_state_score[il], 0, ds4_gpu_tensor_bytes(g->layer_index_state_score[il]), buf, DS4_PIPELINE_STAGE_KV_IO_CHUNK);
++        if (ok) {
++            g->layer_n_comp[il] = n_comp;
++            g->layer_n_index_comp[il] = n_index_comp;
++        }
++    }
++    free(buf);
++    if (fclose(fp) != 0) ok = false;
++    if (ok) ok = ds4_gpu_synchronize() != 0;
++    return ok;
+ }
+
++static bool pipeline_hash_hc_tensor(ds4_gpu_tensor *tensor, float *host, uint64_t hc_dim, uint64_t *hash_out, uint64_t *nonfinite_out) {
++    if (!tensor || !host) return false;
++    if (ds4_gpu_tensor_read(tensor, 0, host, hc_dim * sizeof(host[0])) == 0) return false;
++    if (hash_out) *hash_out = hash_bytes((const uint8_t *)host, hc_dim * sizeof(host[0]));
++    if (nonfinite_out) *nonfinite_out = pipeline_nonfinite_count(host, hc_dim);
++    return true;
++}
+ int ds4_pipeline_stage_worker_main(ds4_engine *e, int argc, char **argv) {
+     (void)argc;
+     (void)argv;
+@@ -15532,15 +15700,18 @@
+     const char *output_pattern = pipeline_env_path("DS4_PIPELINE_SESSION_OUTPUT_HC_FILE");
+     const char *token_in_pattern = pipeline_env_path("DS4_PIPELINE_SESSION_TOKEN_IN_FILE");
+     const char *token_out_pattern = pipeline_env_path("DS4_PIPELINE_SESSION_TOKEN_OUT_FILE");
++    const char *save_kv_path = pipeline_env_path("DS4_PIPELINE_SESSION_SAVE_KV_PATH");
++    const char *restore_kv_path = pipeline_env_path("DS4_PIPELINE_SESSION_RESTORE_KV_PATH");
++    const bool restore_mode = restore_kv_path && restore_kv_path[0];
+     if (!prompt_file || begin >= end || end > DS4_N_LAYER || max_tokens == 0 || ctx_size == 0) {
+         fprintf(stderr, "ds4: invalid pipeline session worker configuration\n");
+         return 1;
+     }
+-    if (begin != 0 && !input_pattern) {
++    if (!restore_mode && begin != 0 && !input_pattern) {
+         fprintf(stderr, "ds4: nonzero pipeline stage requires DS4_PIPELINE_SESSION_INPUT_HC_FILE\n");
+         return 1;
+     }
+-    if (!include_head && !output_pattern) {
++    if (!include_head && !restore_mode && !output_pattern) {
+         fprintf(stderr, "ds4: non-head pipeline stage requires DS4_PIPELINE_SESSION_OUTPUT_HC_FILE\n");
+         return 1;
+     }
+@@ -15575,39 +15746,74 @@
+     for (uint32_t i = 0; ok && i < prompt_len; i++) token_vec_push(&prompt, prompt_ids[i]);
+     if (ok && getenv("DS4_CUDA_STACK_PROBE_PRELOAD_STAGE") != NULL) ok = cuda_stack_probe_preload_stage(model, weights);
+     if (ok) ok = metal_graph_alloc_raw_cap(&g, weights, &weights->layer[0], raw_cap, ctx_size, prompt_len, false);
+-    if (ok) ok = metal_graph_upload_prompt_tokens(g.prefill_tokens, &prompt, 0, prompt_len);
+-    if (ok && begin == 0) {
+-        ok = metal_graph_upload_prompt_embeddings_hc(g.batch_cur_hc, g.prefill_tokens, model, weights, &prompt, 0, prompt_len);
+-    } else if (ok) {
+-        ok = pipeline_read_hc_file(g.batch_cur_hc, input_pattern, 0, host_prompt_hc, prompt_hc_floats, wait_ms);
+-    }
+-    if (ok) ok = pipeline_encode_prefill_range(&g, model, weights, begin, end, prompt_len);
+     uint64_t stage_hash = 0;
+     uint64_t stage_nonfinite = 0;
+     int32_t next_token = -1;
+-    if (ok && include_head) {
+-        ds4_gpu_tensor *last_hc = metal_graph_tensor_row_view(g.batch_cur_hc, prompt_len - 1u, hc_dim);
+-        ds4_gpu_tensor *saved_cur = g.cur_hc;
+-        ok = last_hc != NULL;
+-        if (ok) {
+-            g.cur_hc = last_hc;
++    if (ok && restore_mode) {
++        ok = pipeline_stage_kv_restore(&g, stage_id, begin, end, prompt_len, restore_kv_path);
++        if (ok && include_head) {
+             ok = pipeline_emit_output_head(&g, model, weights, host_logits, &next_token, &stage_hash, &stage_nonfinite);
+-            g.cur_hc = saved_cur;
++            if (ok) ok = pipeline_write_token_file(token_out_pattern, 0, next_token);
++        } else if (ok) {
++            ok = pipeline_hash_hc_tensor(g.cur_hc, host_decode_hc, hc_dim, &stage_hash, &stage_nonfinite);
+         }
+-        if (last_hc) ds4_gpu_tensor_free(last_hc);
+-        if (ok) ok = pipeline_write_token_file(token_out_pattern, 0, next_token);
+-    } else if (ok) {
+-        ok = pipeline_write_hc_file(g.batch_cur_hc, output_pattern, 0, host_prompt_hc, prompt_hc_floats, &stage_hash, &stage_nonfinite);
+-    }
+-    if (ok) {
+-        printf("{\"event\":\"pipeline_session_step\",\"stage_id\":%u,\"step\":0,\"path_kind\":\"prefill\",\"layer_begin\":%u,\"layer_end\":%u,\"token_count\":%u,\"hc_or_logits_fnv64\":\"%016" PRIx64 "\",\"nonfinite\":%" PRIu64 ",\"pipeline_argmax_token\":%d}\n",
+-               stage_id, begin, end, prompt_len, stage_hash, stage_nonfinite, next_token);
+-        if (include_head) {
+-            printf("{\"event\":\"pipeline_session_token\",\"stage_id\":%u,\"step\":0,\"token_id\":%d", stage_id, next_token);
+-            pipeline_print_token_bytes(e, next_token);
+-            printf("}\n");
++        if (ok) {
++            printf("{\"event\":\"pipeline_session_step\",\"stage_id\":%u,\"step\":0,\"path_kind\":\"restore\",\"layer_begin\":%u,\"layer_end\":%u,\"token_count\":%u,\"hc_or_logits_fnv64\":\"%016" PRIx64 "\",\"nonfinite\":%" PRIu64 ",\"pipeline_argmax_token\":%d}\n",
++                   stage_id, begin, end, prompt_len, stage_hash, stage_nonfinite, next_token);
++            printf("{\"event\":\"restore_kv\",\"stage_id\":%u,\"path\":\"%s\",\"token_count\":%u}\n", stage_id, restore_kv_path, prompt_len);
++            if (include_head) {
++                printf("{\"event\":\"pipeline_session_token\",\"stage_id\":%u,\"step\":0,\"token_id\":%d", stage_id, next_token);
++                pipeline_print_token_bytes(e, next_token);
++                printf("}\n");
++            }
 +            fflush(stdout);
-+            for (;;) pause();
+         }
+-        fflush(stdout);
++    } else {
++        if (ok) ok = metal_graph_upload_prompt_tokens(g.prefill_tokens, &prompt, 0, prompt_len);
++        if (ok && begin == 0) {
++            ok = metal_graph_upload_prompt_embeddings_hc(g.batch_cur_hc, g.prefill_tokens, model, weights, &prompt, 0, prompt_len);
++        } else if (ok) {
++            ok = pipeline_read_hc_file(g.batch_cur_hc, input_pattern, 0, host_prompt_hc, prompt_hc_floats, wait_ms);
 +        }
-+        return 0;
-+    }
-+    if (!strcmp(mode, "restore")) {
-+        if (pipeline_stage_restore_kv(stage, path, err, sizeof(err)) != 0) {
-+            fprintf(stderr, "ds4: pipeline restore_kv failed: %s\n", err);
-+            return 1;
++        if (ok) ok = pipeline_encode_prefill_range(&g, model, weights, begin, end, prompt_len);
++        if (ok && include_head) {
++            ds4_gpu_tensor *last_hc = metal_graph_tensor_row_view(g.batch_cur_hc, prompt_len - 1u, hc_dim);
++            ds4_gpu_tensor *saved_cur = g.cur_hc;
++            ok = last_hc != NULL;
++            if (ok) {
++                g.cur_hc = last_hc;
++                ok = pipeline_emit_output_head(&g, model, weights, host_logits, &next_token, &stage_hash, &stage_nonfinite);
++                g.cur_hc = saved_cur;
++            }
++            if (last_hc) ds4_gpu_tensor_free(last_hc);
++            if (ok) ok = pipeline_write_token_file(token_out_pattern, 0, next_token);
++        } else if (ok) {
++            ok = pipeline_write_hc_file(g.batch_cur_hc, output_pattern, 0, host_prompt_hc, prompt_hc_floats, &stage_hash, &stage_nonfinite);
 +        }
-+        if (stat(path, &st) != 0) memset(&st, 0, sizeof(st));
-+        if (pipeline_stage_decode_argmax_tokens(stage, n_decode, decoded, err, sizeof(err)) != 0) {
-+            fprintf(stderr, "ds4: pipeline restore decode failed: %s\n", err);
-+            return 1;
++        if (ok) {
++            printf("{\"event\":\"pipeline_session_step\",\"stage_id\":%u,\"step\":0,\"path_kind\":\"prefill\",\"layer_begin\":%u,\"layer_end\":%u,\"token_count\":%u,\"hc_or_logits_fnv64\":\"%016" PRIx64 "\",\"nonfinite\":%" PRIu64 ",\"pipeline_argmax_token\":%d}\n",
++                   stage_id, begin, end, prompt_len, stage_hash, stage_nonfinite, next_token);
++            if (include_head) {
++                printf("{\"event\":\"pipeline_session_token\",\"stage_id\":%u,\"step\":0,\"token_id\":%d", stage_id, next_token);
++                pipeline_print_token_bytes(e, next_token);
++                printf("}\n");
++            }
++            fflush(stdout);
 +        }
-+        printf("{\"event\":\"restore_decode\",\"stage_id\":%u,\"path\":\"%s\",\"bytes\":%llu,\"decode_token_ids\":",
-+               stage->cfg.stage_id,
-+               path ? path : "",
-+               (unsigned long long)st.st_size);
-+        pipeline_stage_print_i32_array(decoded, n_decode);
-+        printf("}\n");
-+        fflush(stdout);
-+        return 0;
-+    }
-+    if (!strcmp(mode, "live")) {
-+        if (pipeline_stage_decode_argmax_tokens(stage, n_decode, decoded, err, sizeof(err)) != 0) {
-+            fprintf(stderr, "ds4: pipeline live decode failed: %s\n", err);
-+            return 1;
++        if (ok && save_kv_path && save_kv_path[0]) {
++            ok = pipeline_stage_kv_save(&g, stage_id, begin, end, prompt_len, save_kv_path);
++            struct stat st;
++            memset(&st, 0, sizeof(st));
++            if (stat(save_kv_path, &st) != 0) memset(&st, 0, sizeof(st));
++            printf("{\"event\":\"save_kv\",\"stage_id\":%u,\"path\":\"%s\",\"token_count\":%u,\"bytes\":%llu}\n",
++                   stage_id, save_kv_path, prompt_len, (unsigned long long)st.st_size);
++            fflush(stdout);
++            if (ok && getenv("DS4_PIPELINE_SESSION_WAIT_AFTER_SAVE") != NULL) {
++                printf("{\"event\":\"save_kv_waiting\",\"stage_id\":%u,\"pid\":%ld}\n", stage_id, (long)getpid());
++                fflush(stdout);
++                for (;;) pause();
++            }
 +        }
-+        printf("{\"event\":\"live_decode\",\"stage_id\":%u,\"token_count\":%u,\"decode_token_ids\":",
-+               stage->cfg.stage_id,
-+               prompt_count);
-+        pipeline_stage_print_i32_array(decoded, n_decode);
-+        printf("}\n");
-+        fflush(stdout);
-+        return 0;
-+    }
-+    fprintf(stderr, "ds4: unknown DS4_PIPELINE_KV_MODE=%s\n", mode);
-+    return 1;
- }
-@@ -15472,4 +15671,5 @@
-     if (rc != 0) return 1;
-+    if (getenv("DS4_PIPELINE_KV_MODE") != NULL) rc = pipeline_stage_kv_smoke(stage);
-     ds4_pipeline_stage_free(stage);
--    return 0;
-+    return rc;
- }
+     }
+     for (uint32_t step = 1; ok && step < max_tokens; step++) {
+         int32_t input_token = -1;

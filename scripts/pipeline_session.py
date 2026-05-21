@@ -146,7 +146,7 @@ class PromptRun:
 
 def default_stages() -> list[StageConfig]:
 	return [
-		StageConfig(0, "spark0", "spark0@aitopatom-9ab9.local", "/tmp/ds4_stage_handoff_src", f"/home/spark0/models/ds4/{MODEL_BASENAME}", 0, 15, False, ""),
+		StageConfig(0, "spark0", "spark0", "/tmp/ds4_stage_handoff_src", f"/home/spark0/models/ds4/{MODEL_BASENAME}", 0, 15, False, ""),
 		StageConfig(1, "spark1", "spark1", "/home/spark1/src/ds4", f"/home/spark1/models/ds4/{MODEL_BASENAME}", 15, 29, False, "10.10.1.2"),
 		StageConfig(2, "spark2", "spark2", "/home/spark2/src/ds4", f"/home/spark2/models/ds4/{MODEL_BASENAME}", 29, 43, True, "10.10.3.2"),
 	]
@@ -291,6 +291,10 @@ def session_prompt_tokens_file(run_dir: str) -> str:
 
 def session_token_pattern(run_dir: str) -> str:
 	return f"{run_dir}/token_%u.bin"
+
+
+def session_kv_path(run_dir: str, stage_id: int) -> str:
+	return f"{run_dir}/stage{stage_id}.kv"
 
 
 def pattern_path(run_dir: str, name: str) -> str:
@@ -470,12 +474,12 @@ class PipelineSession:
 			raise PipelineSessionError(f"{dst.name} is missing listen IP for TCP boundary transfer")
 		expected = boundary_bytes(token_count)
 		recv_cmd = "python3 -c {} {} {} {}".format(q(RECV_CODE), port, q(dst_path), expected)
-		send_cmd = "python3 -c {} {} {} {} {} {}".format(q(SEND_CODE), q(dst.listen), port, q(src_path), 120.0, expected)
+		send_cmd = "python3 -c {} {} {} {} {} {}".format(q(SEND_CODE), q(dst.listen), port, q(src_path), 900.0, expected)
 		recv = popen_remote(dst, recv_cmd, self.ssh_config, self.known_hosts)
 		time.sleep(0.15)
 		send = popen_remote(src, send_cmd, self.ssh_config, self.known_hosts)
-		send_out, send_err = send.communicate(timeout=180)
-		recv_out, recv_err = recv.communicate(timeout=180)
+		send_out, send_err = send.communicate(timeout=960)
+		recv_out, recv_err = recv.communicate(timeout=960)
 		(out_dir / f"{label}.send.out").write_text(send_out or "", encoding="utf-8")
 		(out_dir / f"{label}.send.err").write_text(send_err or "", encoding="utf-8")
 		(out_dir / f"{label}.recv.out").write_text(recv_out or "", encoding="utf-8")
@@ -511,7 +515,15 @@ class PipelineSession:
 			return ids[-1]
 		raise PipelineSessionError("stage2 did not emit pipeline_argmax_token or committed_token_ids[-1]")
 
-	def build_session_worker_command(self, stage: StageConfig, run_id: str, prompt_file: str, max_tokens: int) -> str:
+	def build_session_worker_command(
+			self,
+			stage: StageConfig,
+			run_id: str,
+			prompt_file: str,
+			max_tokens: int,
+			save_kv_path: str = "",
+			restore_kv_path: str = "",
+			wait_after_save: bool = False) -> str:
 		run_dir = self.remote_step_dir(run_id, 0).rsplit("/", 1)[0]
 		env = [
 			f"DS4_PIPELINE_STAGE_ID={stage.stage_id}",
@@ -535,6 +547,12 @@ class PipelineSession:
 			env.append(f"DS4_PIPELINE_SESSION_TOKEN_IN_FILE={q(token_pattern)}")
 		if stage.include_head:
 			env.append(f"DS4_PIPELINE_SESSION_TOKEN_OUT_FILE={q(token_pattern)}")
+		if save_kv_path:
+			env.append(f"DS4_PIPELINE_SESSION_SAVE_KV_PATH={q(save_kv_path)}")
+		if restore_kv_path:
+			env.append(f"DS4_PIPELINE_SESSION_RESTORE_KV_PATH={q(restore_kv_path)}")
+		if wait_after_save:
+			env.append("DS4_PIPELINE_SESSION_WAIT_AFTER_SAVE=1")
 		cmd = " ".join(env + [
 			"ds4",
 			"-m",
@@ -543,10 +561,25 @@ class PipelineSession:
 		])
 		return f"mkdir -p {q(run_dir)}; cd {q(stage.ds4_dir)}; PATH=.:$PATH env {cmd}"
 
-	def launch_session_workers(self, run_id: str, prompt_files: dict[int, str], max_tokens: int) -> dict[int, subprocess.Popen[str]]:
+	def launch_session_workers(
+			self,
+			run_id: str,
+			prompt_files: dict[int, str],
+			max_tokens: int,
+			save_kv_paths: dict[int, str] | None = None,
+			restore_kv_paths: dict[int, str] | None = None,
+			wait_after_save: bool = False) -> dict[int, subprocess.Popen[str]]:
 		procs: dict[int, subprocess.Popen[str]] = {}
 		for stage in self.stages:
-			cmd = self.build_session_worker_command(stage, run_id, prompt_files[stage.stage_id], max_tokens)
+			cmd = self.build_session_worker_command(
+				stage,
+				run_id,
+				prompt_files[stage.stage_id],
+				max_tokens,
+				(save_kv_paths or {}).get(stage.stage_id, ""),
+				(restore_kv_paths or {}).get(stage.stage_id, ""),
+				wait_after_save,
+			)
 			procs[stage.stage_id] = popen_remote(stage, cmd, self.ssh_config, self.known_hosts)
 			time.sleep(0.25)
 		return procs
@@ -606,6 +639,80 @@ class PipelineSession:
 			stage2_in = actual_pattern_file(pattern_path(run_dir, "stage2_in"), step)
 			self.tcp_transfer_file(stage0, stage1, stage0_out, stage1_in, 19100 + step, out_dir, f"session_step{step}_stage0_to_stage1", rows)
 			self.tcp_transfer_file(stage1, stage2, stage1_out, stage2_in, 19200 + step, out_dir, f"session_step{step}_stage1_to_stage2", rows)
+			token = self.read_remote_token(stage2, token_pattern, step)
+			generated.append(token)
+			if step + 1 < max_tokens:
+				self.write_remote_prompt_tokens(stage0, actual_pattern_file(token_pattern, step), [token])
+				self.write_remote_prompt_tokens(stage1, actual_pattern_file(token_pattern, step), [token])
+		events = self.collect_session_workers(procs, out_dir)
+		steps = self.build_session_steps(events, generated)
+		validate_decode_steps(steps, len(self.stages))
+		return steps
+
+	def remote_file_info(self, stage: StageConfig, path: str) -> dict[str, Any]:
+		code = (
+			"import hashlib,json,os,sys;"
+			"path=sys.argv[1];"
+			"h=hashlib.sha256();"
+			"size=os.path.getsize(path);"
+			"f=open(path,'rb');"
+			"\nwhile True:"
+			"\n    b=f.read(1048576)"
+			"\n    if not b: break"
+			"\n    h.update(b)"
+			"\nf.close();"
+			"\nprint(json.dumps({'path':path,'bytes':size,'sha256':h.hexdigest()}))"
+		)
+		cmd = "python3 -c {} {}".format(q(code), q(path))
+		rc = self.runner(stage, cmd, self.ssh_config, self.known_hosts, 300)
+		if rc.returncode != 0:
+			raise PipelineSessionError(f"{stage.name} file info failed rc={rc.returncode}: {rc.stderr.strip()}")
+		return parse_last_json(rc.stdout)
+
+	def stop_session_workers(self) -> None:
+		for stage in self.stages:
+			rc = self.runner(stage, "pkill -f '[d]s4 .*--pipeline-session-b1-worker' || true", self.ssh_config, self.known_hosts, 60)
+			if rc.returncode != 0:
+				raise PipelineSessionError(f"{stage.name} session worker stop failed rc={rc.returncode}: {rc.stderr.strip()}")
+
+	def save_kv_after_prefill(self, run_id: str, token_ids: list[int], out_dir: Path) -> tuple[int, dict[int, dict[str, Any]]]:
+		run_dir = self.remote_step_dir(run_id, 0).rsplit("/", 1)[0]
+		prompt_files = {stage.stage_id: session_prompt_tokens_file(run_dir) for stage in self.stages}
+		kv_paths = {stage.stage_id: session_kv_path(run_dir, stage.stage_id) for stage in self.stages}
+		for stage in self.stages:
+			self.write_remote_prompt_tokens(stage, prompt_files[stage.stage_id], token_ids)
+		procs = self.launch_session_workers(run_id, prompt_files, 1, save_kv_paths=kv_paths, wait_after_save=True)
+		stage0, stage1, stage2 = self.stages
+		token_pattern = session_token_pattern(run_dir)
+		rows = len(token_ids)
+		self.tcp_transfer_file(stage0, stage1, actual_pattern_file(pattern_path(run_dir, "stage0_out"), 0), actual_pattern_file(pattern_path(run_dir, "stage1_in"), 0), 19100, out_dir, "kv_save_stage0_to_stage1", rows)
+		self.tcp_transfer_file(stage1, stage2, actual_pattern_file(pattern_path(run_dir, "stage1_out"), 0), actual_pattern_file(pattern_path(run_dir, "stage2_in"), 0), 19200, out_dir, "kv_save_stage1_to_stage2", rows)
+		token0 = self.read_remote_token(stage2, token_pattern, 0)
+		info = {stage.stage_id: self.remote_file_info(stage, kv_paths[stage.stage_id]) for stage in self.stages}
+		for stage_id, item in info.items():
+			if int(item.get("bytes", 0)) <= 0:
+				raise PipelineSessionError(f"stage {stage_id} wrote empty KV shard")
+		self.stop_session_workers()
+		for stage in self.stages:
+			stdout, stderr = procs[stage.stage_id].communicate(timeout=180)
+			(out_dir / f"kv_save_worker_stage{stage.stage_id}.out").write_text(stdout or "", encoding="utf-8")
+			(out_dir / f"kv_save_worker_stage{stage.stage_id}.err").write_text(stderr or "", encoding="utf-8")
+		return token0, info
+
+	def restore_decode_workers(self, run_id: str, token_ids: list[int], max_tokens: int, out_dir: Path) -> list[GeneratedStep]:
+		run_dir = self.remote_step_dir(run_id, 0).rsplit("/", 1)[0]
+		prompt_files = {stage.stage_id: session_prompt_tokens_file(run_dir) for stage in self.stages}
+		kv_paths = {stage.stage_id: session_kv_path(run_dir, stage.stage_id) for stage in self.stages}
+		for stage in self.stages:
+			self.write_remote_prompt_tokens(stage, prompt_files[stage.stage_id], token_ids)
+		procs = self.launch_session_workers(run_id, prompt_files, max_tokens, restore_kv_paths=kv_paths)
+		stage0, stage1, stage2 = self.stages
+		token_pattern = session_token_pattern(run_dir)
+		generated: list[int] = []
+		for step in range(max_tokens):
+			if step > 0:
+				self.tcp_transfer_file(stage0, stage1, actual_pattern_file(pattern_path(run_dir, "stage0_out"), step), actual_pattern_file(pattern_path(run_dir, "stage1_in"), step), 19100 + step, out_dir, f"kv_restore_step{step}_stage0_to_stage1", 1)
+				self.tcp_transfer_file(stage1, stage2, actual_pattern_file(pattern_path(run_dir, "stage1_out"), step), actual_pattern_file(pattern_path(run_dir, "stage2_in"), step), 19200 + step, out_dir, f"kv_restore_step{step}_stage1_to_stage2", 1)
 			token = self.read_remote_token(stage2, token_pattern, step)
 			generated.append(token)
 			if step + 1 < max_tokens:

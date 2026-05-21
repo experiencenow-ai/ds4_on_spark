@@ -1,0 +1,17 @@
+{
+  "0": {
+    "bytes": 5535920,
+    "path": "/tmp/ds4_lane_a_pp3_lane_b_kv_1779336029_13319/stage0.kv",
+    "sha256": "0dc45196a453cb8094e88931ff831ebba04e51716ae451c29f96136ac8949047"
+  },
+  "1": {
+    "bytes": 5957800,
+    "path": "/tmp/ds4_lane_a_pp3_lane_b_kv_1779336029_13319/stage1.kv",
+    "sha256": "5f19df9f6c522bfd540554490f6fed52cce9faa349ddc975918775b3889ec1c0"
+  },
+  "2": {
+    "bytes": 5957800,
+    "path": "/tmp/ds4_lane_a_pp3_lane_b_kv_1779336029_13319/stage2.kv",
+    "sha256": "6b08a06991275765ca56aa005fa0a3b998707bded40a5de316e41545d3d0cdd0"
+  }
+}
