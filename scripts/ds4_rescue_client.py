@@ -32,7 +32,7 @@ def request(host: str, port: int, token: str, method: str, path: str, body: dict
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("host")
-    ap.add_argument("command", choices=["health", "status", "ssh-probe", "restart-ssh"])
+    ap.add_argument("command", choices=["health", "status", "ssh-probe", "restart-ssh", "self-rescue"])
     ap.add_argument("--port", default=25100, type=int)
     ap.add_argument("--token-file", default="/private/tmp/ds4_rescue_token")
     args = ap.parse_args()
@@ -43,8 +43,10 @@ def main() -> int:
         out = request(args.host, args.port, token, "GET", "/status", None)
     elif args.command == "ssh-probe":
         out = request(args.host, args.port, token, "GET", "/ssh-probe", None)
-    else:
+    elif args.command == "restart-ssh":
         out = request(args.host, args.port, token, "POST", "/action", {"action": "restart_ssh"})
+    else:
+        out = request(args.host, args.port, token, "POST", "/action", {"action": "self_rescue"})
     try:
         print(json.dumps(json.loads(out), indent=2, sort_keys=True))
     except json.JSONDecodeError:

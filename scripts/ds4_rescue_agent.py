@@ -95,6 +95,14 @@ def restart_ssh() -> dict[str, Any]:
     }
 
 
+def self_rescue() -> dict[str, Any]:
+    first = run_cmd(["sudo", "-n", "/usr/local/sbin/ds4-sshd-watchdog", "--force"], 30)
+    return {
+        "attempts": [first],
+        "ssh_probe": ssh_banner_probe(),
+    }
+
+
 class RescueHandler(http.server.BaseHTTPRequestHandler):
     server_version = "ds4-rescue/1"
 
@@ -154,6 +162,9 @@ class RescueHandler(http.server.BaseHTTPRequestHandler):
             return
         if action == "restart_ssh":
             self.write_json(200, {"ok": True, "result": restart_ssh()})
+            return
+        if action == "self_rescue":
+            self.write_json(200, {"ok": True, "result": self_rescue()})
             return
         if action == "status":
             self.write_json(200, {"ok": True, "status": status_payload()})

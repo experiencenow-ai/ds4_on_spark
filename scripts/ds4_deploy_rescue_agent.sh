@@ -43,7 +43,7 @@ copy_payload()
 start_user_service()
 {
 	host="$1"
-	ssh "$host" 'chmod 700 "$HOME/.ds4-rescue"; chmod 600 "$HOME/.ds4-rescue/token"; chmod 755 "$HOME/.ds4-rescue/"*.sh; systemctl --user daemon-reload; systemctl --user enable --now ds4-rescue-agent; systemctl --user --no-pager --plain status ds4-rescue-agent | sed -n "1,8p"'
+	ssh "$host" 'chmod 700 "$HOME/.ds4-rescue"; chmod 600 "$HOME/.ds4-rescue/token"; chmod 755 "$HOME/.ds4-rescue/"*.sh; systemctl --user daemon-reload; systemctl --user enable ds4-rescue-agent; systemctl --user restart ds4-rescue-agent; systemctl --user --no-pager --plain status ds4-rescue-agent | sed -n "1,8p"'
 }
 
 install_root_watchdog()
