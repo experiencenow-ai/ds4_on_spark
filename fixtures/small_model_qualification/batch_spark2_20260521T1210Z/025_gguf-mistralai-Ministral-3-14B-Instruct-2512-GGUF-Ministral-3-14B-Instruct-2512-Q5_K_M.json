@@ -1,0 +1,92 @@
+{
+  "aggregate_metrics": {
+    "mean_tok_s": 0.10323506867610702,
+    "median_tok_s": 0.10946547309781487,
+    "p95_latency_ms": 9166.896,
+    "pass_count": 4,
+    "pass_rate": 1.0,
+    "prompt_count": 4
+  },
+  "batch_index": 25,
+  "cost_proxy_estimate": {
+    "basis": "model_size_params_billion / max(pass_rate, 0.05)",
+    "model_size_params": 14000000000,
+    "score": 14.0
+  },
+  "eval_set_id": "small-model-eval-v1",
+  "format": "small-model-qualification-v1",
+  "hardware_node": "spark2",
+  "model_dtype": "Q5",
+  "model_id": "gguf-mistralai-Ministral-3-14B-Instruct-2512-GGUF-Ministral-3-14B-Instruct-2512-Q5_K_M",
+  "model_path": "/home/spark2/models/gguf/mistralai/Ministral-3-14B-Instruct-2512-GGUF/Ministral-3-14B-Instruct-2512-Q5_K_M.gguf",
+  "model_size_params": 14000000000,
+  "per_prompt_results": [
+    {
+      "expected_answer": "4",
+      "generated_token_count": 1,
+      "generated_tokens": [
+        "4"
+      ],
+      "latency_ms": 12472.621,
+      "observed_answer": "4",
+      "passed": true,
+      "prompt": "Return exactly 4 for 2+2.",
+      "returncode": 0,
+      "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB",
+      "task_id": "simple_math",
+      "task_kind": "simple_math",
+      "tok_s": 0.08017560943914609
+    },
+    {
+      "expected_answer": "BLUE",
+      "generated_token_count": 1,
+      "generated_tokens": [
+        "BLUE"
+      ],
+      "latency_ms": 9166.896,
+      "observed_answer": "BLUE",
+      "passed": true,
+      "prompt": "Return exactly BLUE if the sky is blue on a clear day.",
+      "returncode": 0,
+      "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB",
+      "task_id": "factual_recall",
+      "task_kind": "factual_recall",
+      "tok_s": 0.10908818436584142
+    },
+    {
+      "expected_answer": "OK",
+      "generated_token_count": 1,
+      "generated_tokens": [
+        "OK"
+      ],
+      "latency_ms": 8784.743,
+      "observed_answer": "OK",
+      "passed": true,
+      "prompt": "Return exactly OK if this JSON is valid: {\"x\":1}.",
+      "returncode": 0,
+      "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB",
+      "task_id": "schema_check",
+      "task_kind": "schema_check",
+      "tok_s": 0.11383371906965226
+    },
+    {
+      "expected_answer": "PASS",
+      "generated_token_count": 1,
+      "generated_tokens": [
+        "PASS"
+      ],
+      "latency_ms": 9103.923,
+      "observed_answer": "PASS",
+      "passed": true,
+      "prompt": "Return exactly PASS if replacing foo with bar is a simple code edit.",
+      "returncode": 0,
+      "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB",
+      "task_id": "simple_code",
+      "task_kind": "simple_code",
+      "tok_s": 0.10984276182978833
+    }
+  ],
+  "qualification_timestamp": "2026-05-21T12:17:17.772491Z",
+  "serve_backend": "llama.cpp",
+  "status": "passed"
+}

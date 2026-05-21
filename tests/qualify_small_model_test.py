@@ -83,6 +83,10 @@ class SmallModelQualificationTest(unittest.TestCase):
         self.assertEqual(generated, "wrong answer")
         self.assertFalse(qualify.score_answer("4", generated))
 
+    def test_llama_command_uses_kill_after_timeout(self) -> None:
+        command = qualify.build_llama_command("spark2", "/opt/llama-cli", "/models/a.gguf", "Return 4", 8, 60.0)
+        self.assertIn("timeout -k 5s 60", command[-1])
+
 
 if __name__ == "__main__":
     unittest.main()
