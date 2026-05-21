@@ -67,6 +67,20 @@ class VllmDs4FlashLaunchGuardTest(unittest.TestCase):
 		self.assertLess(result["memory_estimate"]["headroom_after_estimate_gib"], result["memory_estimate"]["minimum_headroom_gib"])
 		self.assertTrue(any(i["blocker_kind"] == "low_free_memory" and "free GPU memory" in i["recommended_fix"] for i in result["issues"]))
 
+	def test_cross_node_tp_requires_gloo_socket_ifname(self) -> None:
+		text = GOOD_RECIPE.replace("vllm serve", "vllm serve --nnodes 2 --tensor-parallel-size 2")
+		path = self.write_tmp(text)
+		result = guard.validate_path(path)
+		self.assertEqual(result["status"], guard.BAD)
+		self.assertTrue(any(i["kind"] == "missing_gloo_socket_ifname" for i in result["issues"]))
+		self.assertTrue(any(i["blocker_kind"] == "cross_node_gloo_loopback" and "GLOO_SOCKET_IFNAME" in i["recommended_fix"] for i in result["issues"]))
+
+	def test_cross_node_tp_accepts_explicit_gloo_socket_ifname(self) -> None:
+		text = GOOD_RECIPE.replace("vllm serve", "GLOO_SOCKET_IFNAME=enp1s0f1np1 vllm serve --nnodes 2 --tensor-parallel-size 2")
+		path = self.write_tmp(text)
+		result = guard.validate_path(path)
+		self.assertEqual(result["status"], guard.OK, result)
+
 
 if __name__ == "__main__":
 	unittest.main()

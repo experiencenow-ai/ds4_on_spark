@@ -251,11 +251,11 @@ def build_standard_runtime_artifact(args: argparse.Namespace, raw: dict[str, Any
 		"model_format": "safetensors",
 		"quantization": args.quantization,
 		"hardware": {
-			"fabric": "direct_200g_pair",
-			"head_node": "spark4",
-			"launcher_node": "spark3",
-			"machine": "DGX Spark",
-			"worker_node": "spark5",
+			"fabric": args.hardware_fabric,
+			"head_node": args.hardware_head_node,
+			"launcher_node": args.hardware_launcher_node,
+			"machine": args.hardware_machine,
+			"worker_node": args.hardware_worker_node,
 		},
 		"launch_command": args.launch_command,
 		"api_endpoint": args.endpoint.rsplit("/", 1)[0],
@@ -360,6 +360,11 @@ def parse_args() -> argparse.Namespace:
 	p.add_argument("--model-family", default="deepseek_v4_flash")
 	p.add_argument("--runtime-version", default="0.1.dev16581+gdda4668b5.d20260521")
 	p.add_argument("--quantization", default="official FP8 checkpoint with fp8 KV cache and fp4 expert path")
+	p.add_argument("--hardware-fabric", default="direct_200g_pair")
+	p.add_argument("--hardware-head-node", default="spark4")
+	p.add_argument("--hardware-launcher-node", default="spark3")
+	p.add_argument("--hardware-machine", default="DGX Spark")
+	p.add_argument("--hardware-worker-node", default="spark5")
 	p.add_argument("--launch-command", default="DS4_WORKER_DOCKER_ARG_REWRITE_FROM=/home/spark4/models/hf/deepseek-ai/DeepSeek-V4-Flash DS4_WORKER_DOCKER_ARG_REWRITE_TO=/home/spark5/models/hf/deepseek-ai/DeepSeek-V4-Flash DS4_WORKER_ETH_IF=enp1s0f1np1 DS4_WORKER_IB_IF=rocep1s0f1 VLLM_SPARK_EXTRA_DOCKER_ARGS='-v /home/spark4/models/hf/deepseek-ai/DeepSeek-V4-Flash:/models/deepseek-v4-flash:ro' ./run-recipe.sh recipes/deepseek-v4-flash-local-batch512-no-mtp.yaml --no-ray --no-cache-dirs -d")
 	p.add_argument("--context-length", type=int, default=200000)
 	p.add_argument("--time-to-first-token-ms", type=float, default=0.0)

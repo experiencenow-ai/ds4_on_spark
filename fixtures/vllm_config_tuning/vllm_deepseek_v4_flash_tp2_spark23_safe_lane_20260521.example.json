@@ -1,0 +1,114 @@
+{
+  "artifact_sha256": "a33bb06e2adee288d6125ba9719b153b456937f520c4d4f82c38c8083e8049a4",
+  "attempts": [
+    {
+      "attempt_id": "ctx200k_full_and_piecewise_gpu08_no_prefix",
+      "blocker_detail": "Spark3/Spark2 standard vLLM TP=2 loaded both ranks with MARLIN MXFP4 MoE selected, but failed before serving because the 200000-token context left no available KV cache blocks.",
+      "blocker_kind": "kv_cache_allocation",
+      "enable_prefix_caching_logged": false,
+      "estimated_cuda_graph_memory_gib_rank0": 1.95,
+      "kv_cache_available_gib_rank0": 17.25,
+      "launch_guard_status": "passed_before_cross_node_gloo_guard",
+      "max_model_len": 200000,
+      "max_num_batched_tokens": 8192,
+      "max_num_seqs": 512,
+      "safety_status": "blocked_at_startup",
+      "startup_status": "failed",
+      "tokens_per_second_at_c512": null
+    },
+    {
+      "attempt_id": "ctx8192_full_and_piecewise_gpu08_missing_gloo_socket",
+      "blocker_detail": "Short-context relaunch avoided the 200k KV request but failed during cross-node TP worker initialization because Gloo built the CPU process group over 127.0.0.1; this requires explicit GLOO_SOCKET_IFNAME on the Spark 200G interface.",
+      "blocker_kind": "missing_gloo_socket_ifname",
+      "enable_prefix_caching_logged": false,
+      "launch_guard_status": "now_blocks_after_this_pr",
+      "max_model_len": 8192,
+      "max_num_batched_tokens": 8192,
+      "max_num_seqs": 512,
+      "safety_status": "blocked_at_startup",
+      "startup_status": "failed",
+      "tokens_per_second_at_c512": null
+    },
+    {
+      "attempt_id": "ctx8192_full_and_piecewise_gpu08_gloo_socket",
+      "blocker_detail": "With GLOO_SOCKET_IFNAME=enp1s0f1np1, cross-node TP initialized and both ranks loaded. Startup still failed after warmup because rank1 estimated 33.35 GiB CUDA graph memory and reported -24.61 GiB available KV cache memory.",
+      "blocker_kind": "cuda_graph_kv_starvation",
+      "enable_prefix_caching_logged": false,
+      "estimated_cuda_graph_memory_gib_rank0": 3.97,
+      "estimated_cuda_graph_memory_gib_rank1": 33.35,
+      "gloo_socket_ifname": "enp1s0f1np1",
+      "kv_cache_available_gib_rank0": 15.79,
+      "kv_cache_available_gib_rank1": -24.61,
+      "launch_guard_status": "passed",
+      "max_model_len": 8192,
+      "max_num_batched_tokens": 8192,
+      "max_num_seqs": 512,
+      "safety_status": "blocked_at_startup",
+      "startup_status": "failed",
+      "tokens_per_second_at_c512": null
+    },
+    {
+      "attempt_id": "ctx8192_piecewise_gpu09_gloo_socket_competing_gpu_job",
+      "blocker_detail": "PIECEWISE graph mode plus gpu_memory_utilization=0.9 was attempted to reduce graph reserve, but Spark2 had an unrelated DeepSeek-R1-Distill-Llama-8B Transformers container active. vLLM refused startup because free memory on cuda:0 was 80.95/119.69 GiB, below the requested 107.72 GiB.",
+      "blocker_kind": "competing_gpu_process",
+      "enable_prefix_caching_logged": false,
+      "gloo_socket_ifname": "enp1s0f1np1",
+      "launch_guard_status": "passed",
+      "max_model_len": 8192,
+      "max_num_batched_tokens": 8192,
+      "max_num_seqs": 512,
+      "safety_status": "not_measured",
+      "startup_status": "blocked_by_competing_gpu_process",
+      "tokens_per_second_at_c512": null
+    }
+  ],
+  "benchmark_id": "ds4-vllm-tp2-spark23-safe-lane-20260521",
+  "conclusion": {
+    "best_measured_config": "none",
+    "best_measured_tokens_per_second": 0.0,
+    "do_not_apply": [
+      "Do not launch cross-node TP without GLOO_SOCKET_IFNAME on the Spark 200G interface.",
+      "Do not use the Spark2/Spark3 c512 short-context FULL_AND_PIECEWISE profile at gpu_memory_utilization=0.8; it reached model load but left rank1 with negative KV cache memory.",
+      "Do not treat this as a throughput result; no /v1/models readiness or completions benchmark completed."
+    ],
+    "improved_vllm_performance": false,
+    "next_code_change": "Retry Spark2/Spark3 after the competing Spark2 GPU job exits using GLOO_SOCKET_IFNAME=enp1s0f1np1 and a lower graph-memory profile: PIECEWISE-only, smaller cudagraph capture set, or max_num_seqs below 512 before scaling back up."
+  },
+  "created_utc": "2026-05-21T13:25:00Z",
+  "custom_ds4_lessons_tested": [
+    {
+      "lesson": "Cross-node TP must pin both NCCL and Gloo to the Spark fabric.",
+      "result": "Accepted: missing GLOO_SOCKET_IFNAME reproduced localhost full-mesh failure and is now guarded.",
+      "vllm_transfer": "Set GLOO_SOCKET_IFNAME=enp1s0f1np1 for Spark2/Spark3 direct TP launches."
+    },
+    {
+      "lesson": "The short-output provider lane needs c512 without prefix cache.",
+      "result": "Blocked: 8192-context c512 still failed at CUDA graph/KV reserve before serving.",
+      "vllm_transfer": "Reduce graph capture memory before running the concurrency sweep."
+    }
+  ],
+  "format": "ds4-vllm-config-tuning-v1",
+  "hardware": {
+    "fabric": "direct_200g_pair",
+    "head_node": "spark3",
+    "machine": "DGX Spark",
+    "worker_node": "spark2"
+  },
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "runtime": "vllm",
+  "runtime_commit": "dda4668b59567416f86956cfe7bbc1eab371a61e",
+  "runtime_version": "0.1.dev16581+gdda4668b5.d20260521",
+  "selected_config": {
+    "enable_prefix_caching_logged": false,
+    "gloo_socket_ifname": "enp1s0f1np1",
+    "kv_cache_tokens": null,
+    "max_model_len": 8192,
+    "max_num_batched_tokens": 8192,
+    "max_num_seqs": 512,
+    "reason": "No Spark2/Spark3 standard-vLLM c512 profile reached API readiness in this offsite run.",
+    "safety_status": "blocked_at_startup",
+    "source_fixture": "",
+    "tokens_per_second_at_c256": 0.0,
+    "tokens_per_second_at_c512": 0.0
+  }
+}

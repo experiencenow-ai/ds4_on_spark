@@ -49,6 +49,11 @@ class VllmOpenAICompletionsFanoutTest(unittest.TestCase):
 		args.model_family = "family"
 		args.runtime_version = "runtime"
 		args.quantization = "quant"
+		args.hardware_fabric = "fabric"
+		args.hardware_head_node = "head"
+		args.hardware_launcher_node = "launcher"
+		args.hardware_machine = "machine"
+		args.hardware_worker_node = "worker"
 		args.launch_command = "launch"
 		args.endpoint = "http://127.0.0.1:8000/v1/completions"
 		args.context_length = 10
@@ -70,6 +75,8 @@ class VllmOpenAICompletionsFanoutTest(unittest.TestCase):
 		}
 		obj = fanout.build_standard_runtime_artifact(args, raw)
 		self.assertEqual(obj["format"], fanout.STANDARD_RUNTIME_FORMAT)
+		self.assertEqual(obj["hardware"]["head_node"], "head")
+		self.assertEqual(obj["hardware"]["worker_node"], "worker")
 		self.assertEqual(obj["tokens_per_second"], 10.0)
 		self.assertEqual(obj["artifact_sha256"], fanout.canonical_hash(obj))
 
