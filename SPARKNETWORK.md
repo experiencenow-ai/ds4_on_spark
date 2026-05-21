@@ -4,32 +4,35 @@ Load this file first for any Centaur/Spark networking work. The machine-readable
 source of truth is [`sparknetwork.json`](sparknetwork.json); this document is the
 human runbook derived from it.
 
-Last verified: `2026-05-21T1228Z` UTC.
+Last verified: `2026-05-21T1408Z` UTC.
 
 ## Rule Zero
 
 Do not confuse SSH login names with network hostnames.
 
 - SSH users: `spark0`, `spark1`, `spark2`, `spark3`, `spark4`, `spark5`,
-  `spark6`.
+  `spark6`; `spark7` is reserved for the new Lenovo node once install finishes.
 - Network hostnames are Bonjour/device names: `aitopatom-9ab9.local`,
   `edgexpert-d623.local`, `aitopatom-931a.local`, `aitopatom-a18f.local`,
-  `aitopatom-c342.local`, `aitopatom-a36d.local`, `aitopatom-c637.local`.
+  `aitopatom-c342.local`, `aitopatom-a36d.local`, `aitopatom-c637.local`, and
+  pending `thinkstation-pgx.local` for Spark7.
 - Do not use `sparkN.local` unless that alias is deliberately pinned in DNS or
   `/etc/hosts`.
 
 ## Current Physical Topology
 
-The 10G control plane now uses two switches:
+The 10G control plane is being reworked. Operator report: all Sparks, including
+new Spark7, are connected to the 8-port switch; fiber/wired internet is not
+connected, so internet should be considered Wi-Fi-only until reverified.
 
 ```text
-fiber modem -> TP-Link 5-port -> Mac Studio en0
-                              -> 8-port Spark switch -> spark0-spark6 enP7s7
+Mac Studio en0 -> TP-Link 5-port -> 8-port Spark switch -> spark0-spark7 10G
+Mac Studio en1 Wi-Fi -> TP-Link_D660_5G -> spark3/spark4/spark6 Wi-Fi
 ```
 
-The 5-port switch carries only the fiber modem, Mac Studio, and the uplink to
-the 8-port Spark switch. The 8-port switch carries all seven Spark `enP7s7`
-ports plus that uplink.
+Mac Studio still has `10.20.0.1/24` on `en0`, but direct Mac-to-Spark TCP/22 on
+`10.20.0.10-10.20.0.17` did not answer during the latest probe. Use Wi-Fi plus
+200G proxy hops as the current operator path.
 
 The 200G fabric is currently an open line, not a closed ring:
 
@@ -39,40 +42,41 @@ spark0 -> spark1 -> spark2 -> spark3 -> spark4 -> spark5 -> spark6
 
 The intended `spark6 -> spark0` 200G return edge is missing because the cable is
 too short. The 10G switch plane is not a substitute for the 200G return edge; it
-is the operator/control plane.
+is the operator/control plane. Spark7 is not yet integrated into the 200G fabric.
 
 ## Canonical Inventory
 
 | Node | SSH alias | Network hostname | Current primary path from Mac |
 |------|-----------|------------------|-------------------------------|
-| Spark0 | `ssh spark0` | `aitopatom-9ab9.local` | Direct private 10G, `10.20.0.10` |
-| Spark1 | `ssh spark1` | `edgexpert-d623.local` | Direct private 10G, `10.20.0.11` |
-| Spark2 | `ssh spark2` | `aitopatom-931a.local` | Direct private 10G, `10.20.0.12` |
-| Spark3 | `ssh spark3` | `aitopatom-a18f.local` | Direct private 10G, `10.20.0.13` |
-| Spark4 | `ssh spark4` | `aitopatom-c342.local` | Direct private 10G, `10.20.0.14` |
-| Spark5 | `ssh spark5` | `aitopatom-a36d.local` | Direct private 10G, `10.20.0.15` |
-| Spark6 | `ssh spark6` | `aitopatom-c637.local` | Direct private 10G, `10.20.0.16` |
+| Spark0 | `ssh spark0` | `aitopatom-9ab9.local` | Mac -> Spark3 Wi-Fi -> Spark2 200G -> Spark1 200G -> Spark0 200G |
+| Spark1 | `ssh spark1` | `edgexpert-d623.local` | Mac -> Spark3 Wi-Fi -> Spark2 200G -> Spark1 200G |
+| Spark2 | `ssh spark2` | `aitopatom-931a.local` | Mac -> Spark3 Wi-Fi -> Spark2 200G |
+| Spark3 | `ssh spark3` | `aitopatom-a18f.local` | Direct Wi-Fi, `192.168.1.110` |
+| Spark4 | `ssh spark4` | `aitopatom-c342.local` | Direct Wi-Fi, `192.168.1.137` |
+| Spark5 | `ssh spark5` | `aitopatom-a36d.local` | Mac -> Spark4 Wi-Fi -> Spark5 200G |
+| Spark6 | `ssh spark6` | `aitopatom-c637.local` | Direct Wi-Fi, `192.168.1.185` |
+| Spark7 | `ssh spark7` | `thinkstation-pgx.local` | Pending install/discovery |
 
-The Mac Studio `~/.ssh/config` has a `DS4 SPARKNETWORK` block matching this
-table. Verified commands:
+Current verified manual access paths:
 
 ```bash
-ssh spark0 hostname
-ssh spark1 hostname
-ssh spark2 hostname
-ssh spark3 hostname
-ssh spark4 hostname
-ssh spark5 hostname
-ssh spark6 hostname
-ssh spark0-10g hostname
-ssh spark6-10g hostname
+ssh spark3@192.168.1.110 hostname
+ssh spark4@192.168.1.137 hostname
+ssh spark6@192.168.1.185 hostname
+ssh -o ProxyCommand='ssh spark3@192.168.1.110 nc 10.10.5.2 22' spark2@10.10.5.2 hostname
+ssh -o ProxyCommand='ssh spark4@192.168.1.137 nc 10.10.9.2 22' spark5@10.10.9.2 hostname
 ```
+
+Spark0 and Spark1 are alive after reboot, but their current working paths are
+multi-hop 200G proxy chains through Spark3 -> Spark2 -> Spark1. The Mac Studio
+`DS4 SPARKNETWORK` SSH block was replaced at `2026-05-21T1408Z`; bare
+`ssh spark0` through `ssh spark6` were verified after the update.
 
 ## 10G Control Plane
 
 Mac Studio:
 
-- `en0`: office/fiber path, `175.193.138.31/24`.
+- `en1`: Wi-Fi path, `192.168.1.128/24`.
 - `en0`: private Spark alias, `10.20.0.1/24`.
 
 Private 10G assignments:
@@ -81,16 +85,18 @@ Private 10G assignments:
 |------|-----------|---------|-------|
 | Mac Studio | `en0` | `10.20.0.1/24` | switch/control alias |
 | Spark0 | `enP7s7` | `10.20.0.10/24` | 8-port switch control, private-only |
-| Spark1 | `enP7s7` | `10.20.0.11/24` | 8-port switch control, plus DHCP `125.129.239.251/24` |
-| Spark2 | `enP7s7` | `10.20.0.12/24` | 8-port switch control, private-only; 30m cable, carrier reports 10G, DHCP times out |
+| Spark1 | `enP7s7` | no IPv4 during latest probe | interface up, 10G switch address missing |
+| Spark2 | `enP7s7` | `10.20.0.12/24` | switch control address present, not reachable from Mac or Spark3 |
 | Spark3 | `enP7s7` | `10.20.0.13/24` | switch control, plus DHCP `125.129.239.57/24` |
 | Spark4 | `enP7s7` | `10.20.0.14/24` | switch control, plus DHCP `175.193.138.138/24` |
 | Spark5 | `enP7s7` | `10.20.0.15/24` | switch control, plus DHCP `175.193.138.193/24` |
 | Spark6 | `enP7s7` | `10.20.0.16/24` | 8-port switch control, private-only |
+| Spark7 | 10G interface pending | `10.20.0.17/24` reserved | new Lenovo ThinkStation PGX, not discovered yet |
 
-All seven private addresses answered Mac Studio ping on 2026-05-21. Spark2 is
-the cable-risk node because it is temporarily on a 30m cable, but it negotiated
-10G and `10.20.0.12` is reachable from Mac Studio.
+The latest probe did **not** see a flat private `10.20.0.0/24` control plane
+from Mac Studio. From inside the cluster, Spark3 could reach Spark0 at
+`10.20.0.10` and itself at `10.20.0.13`; Spark6 could reach only itself at
+`10.20.0.16`. Treat the 10G plane as fragmented until repaired.
 
 If Mac Studio ever loses the private alias, reinstall it as a `/24`:
 
@@ -101,8 +107,8 @@ sudo ifconfig en0 inet 10.20.0.1 netmask 255.255.255.0 alias
 
 ## 200G Fabric
 
-All live 200G links below report `200000Mb/s`. Normal ping, `8972` byte jumbo
-ping, and TCP/22 succeeded on every live link.
+Spark0 through Spark6 are reachable over the open-line 200G fabric using Wi-Fi
+jump points. Spark7 is not integrated or verified yet.
 
 | Edge | Link A | Link B |
 |------|--------|--------|
@@ -129,18 +135,21 @@ Wi-Fi is not the primary operator plane.
 | Spark4 | `192.168.1.137/24` | fallback on `TP-Link_D660_5G` |
 | Spark5 | down | fallback only |
 | Spark6 | `192.168.1.185/24` | fallback on `TP-Link_D660_5G`; also `ssh spark6-wifi` |
+| Spark7 | pending | fresh Lenovo ThinkStation PGX, not discovered yet |
 
 ## Internet Status
 
-Spark1, Spark3, Spark4, and Spark5 have working wired internet through
-`enP7s7`; a Cloudflare trace returned ICN for all four. Spark6 has working
-internet through Wi-Fi. Spark0 and Spark2 are reachable for control and ring
-traffic, but their current default Wi-Fi routes failed DNS resolution during the
-trace check.
+Operator report for this rewire: wired/fiber internet is not connected; internet
+should be considered Wi-Fi-only until reverified. Mac Studio currently uses
+Wi-Fi `192.168.1.128/24`. Spark3, Spark4, and Spark6 are reachable over
+`192.168.1.0/24`; Spark0, Spark1, and Spark2 default through the older
+`192.168.0.0/24` Wi-Fi LAN and are reachable from Mac only through the 200G SSH
+proxy chain. Spark5 has no Wi-Fi address and is reachable through Spark4 over
+200G.
 
 Do not use internet availability as a Spark health signal until every node has a
-deliberate routed/NAT path. Use `10.20.0.10-10.20.0.16` reachability as the
-control-plane health signal.
+deliberate routed/NAT path. Until the 10G plane is flat again, use verified SSH
+reachability over the Wi-Fi/200G proxy paths as the operator health signal.
 
 ## Communication Contract
 
@@ -186,16 +195,16 @@ python3 scripts/ds4_rescue_client.py 10.20.0.12 restart-ssh
 python3 scripts/ds4_rescue_client.py 10.20.0.12 self-rescue
 ```
 
-Replace the last octet for `spark3` through `spark6`. `spark0` and `spark1`
-did not receive this layer yet because they were not SSH-reachable during the
-2026-05-21 deployment.
+Replace the last octet for `spark3` through `spark6` when the 10G plane is
+healthy. `spark0` and `spark1` are now SSH-reachable through the 200G proxy
+chain after reboot, but the rescue layer has not been deployed there yet.
+Spark7 is pending install/discovery.
 
 For spark4-style wedges where TCP accepts but SSH and HTTP do not answer, the
 remote client will not help because the agent cannot respond. The local root
 timer is the intended recovery path: it must be deployed before the node wedges.
-The 2026-05-21 heavy-runtime kill escalation was deployed live to `spark2`,
-`spark3`, `spark5`, and `spark6`; `spark4` still needs this update after a
-physical reboot restores SSH.
+The 2026-05-21 heavy-runtime kill escalation is deployed live to `spark2`,
+`spark3`, `spark4`, `spark5`, and `spark6`.
 
 Deploy or refresh it on reachable nodes with:
 
@@ -274,9 +283,12 @@ Default ports:
 From Mac Studio:
 
 ```bash
+ssh spark3@192.168.1.110 hostname
+ssh spark4@192.168.1.137 hostname
+ssh spark6@192.168.1.185 hostname
 for h in spark0 spark1 spark2 spark3 spark4 spark5 spark6; do ssh "$h" hostname; done
-for ip in 10.20.0.10 10.20.0.11 10.20.0.12 10.20.0.13 10.20.0.14 10.20.0.15 10.20.0.16; do ping -c 1 "$ip"; done
-for ip in 10.20.0.12 10.20.0.13 10.20.0.14 10.20.0.15 10.20.0.16; do python3 scripts/ds4_rescue_client.py "$ip" ssh-probe; done
-ssh spark3 'for ip in 10.10.5.2 10.10.6.2 10.10.7.2 10.10.8.2; do ping -c 1 "$ip"; done'
-ssh spark5 'for ip in 10.10.9.1 10.10.10.1 10.10.11.2 10.10.12.2; do ping -c 1 "$ip"; done'
+ssh -o ProxyCommand='ssh spark3@192.168.1.110 nc 10.10.5.2 22' spark2@10.10.5.2 hostname
+ssh -o ProxyCommand='ssh spark4@192.168.1.137 nc 10.10.9.2 22' spark5@10.10.9.2 hostname
+ssh spark3@192.168.1.110 'for ip in 10.10.5.2 10.10.6.2 10.10.7.2 10.10.8.2; do ping -c 1 "$ip"; done'
+ssh spark4@192.168.1.137 'for ip in 10.10.9.2 10.10.10.2; do ping -c 1 "$ip"; done'
 ```
