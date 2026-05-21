@@ -1,17 +1,17 @@
 {
   "schema": "ds4.sparknetwork.v1",
-  "last_verified_utc": "2026-05-21T1228Z",
+  "last_verified_utc": "2026-05-21T1408Z",
   "operator": {
     "name": "Mac Studio",
     "hostname": "Mac-Studio.local",
-    "primary_interface": "en0",
-    "office_ipv4": "175.193.138.31/24",
+    "primary_interface": "en1",
+    "wifi_ipv4": "192.168.1.128/24",
     "private_10g_ipv4": "10.20.0.1/24"
   },
   "switch_topology": {
-    "verified_utc": "2026-05-21T0057Z",
+    "verified_utc": "2026-05-21T1408Z",
     "upstream_switch": "TP-Link 5-port",
-    "upstream_switch_ports": ["fiber modem", "Mac Studio en0", "8-port Spark switch uplink"],
+    "upstream_switch_ports": ["Mac Studio en0", "8-port Spark switch uplink"],
     "spark_switch": "8-port 10G switch",
     "spark_switch_ports": [
       "spark0 enP7s7",
@@ -20,19 +20,23 @@
       "spark3 enP7s7",
       "spark4 enP7s7",
       "spark5 enP7s7",
-      "spark6 enP7s7"
+      "spark6 enP7s7",
+      "spark7 10G port pending verification"
     ],
     "notes": [
-      "All seven Spark enP7s7 links answer from Mac Studio on 10.20.0.10-10.20.0.16.",
-      "Spark2 is temporarily using a 30m copper cable; carrier reports 10G and 10.20.0.12 pings from Mac Studio, but DHCP times out.",
-      "The 200G fabric remains a separate open line for neighbor data movement."
+      "Operator reported all Sparks are connected to the 8-port switch; fiber internet is not connected except through Wi-Fi.",
+      "Mac Studio en0 has 10.20.0.1/24, but direct Mac-to-Spark TCP/22 on 10.20.0.10-10.20.0.17 did not answer during the 2026-05-21T1408Z probe.",
+      "Use Wi-Fi reachable Spark3, Spark4, and Spark6 as operator jump points until the 10G switch plane is fixed.",
+      "Spark7 is a new Lenovo ThinkStation PGX node and was not discoverable yet as thinkstation-pgx.local, spark7.local, 10.20.0.17, or via the visible Wi-Fi SSH listeners."
     ]
   },
   "ssh_policy": {
     "users_match_ring_names": true,
     "known_hosts_file": "/private/tmp/ds4_office_known_hosts",
     "mac_config_block": "DS4 SPARKNETWORK",
-    "do_not_use_mdns_names": ["spark1.local", "spark2.local", "spark3.local", "spark4.local", "spark5.local", "spark6.local"]
+    "mac_config_updated_utc": "2026-05-21T1408Z",
+    "mac_config_verified_aliases": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6"],
+    "do_not_use_mdns_names": ["spark1.local", "spark2.local", "spark3.local", "spark4.local", "spark5.local", "spark6.local", "spark7.local"]
   },
   "nodes": [
     {
@@ -41,7 +45,7 @@
       "hostname": "aitopatom-9ab9",
       "mdns": "aitopatom-9ab9.local",
       "ssh_alias": "spark0",
-      "ssh_path": "mac -> spark0 over direct 10G private switch",
+      "ssh_path": "mac -> spark3 Wi-Fi -> spark2 200G -> spark1 200G -> spark0 200G",
       "interfaces": {
         "wifi": {"device": "wlP9s9", "ipv4": "192.168.0.155/24", "role": "fallback"},
         "ten_g": {"device": "enP7s7", "private_ipv4": "10.20.0.10/24", "role": "8-port switch control, private-only"}
@@ -53,10 +57,10 @@
       "hostname": "edgexpert-d623",
       "mdns": "edgexpert-d623.local",
       "ssh_alias": "spark1",
-      "ssh_path": "mac -> spark1 over direct 10G private switch",
+      "ssh_path": "mac -> spark3 Wi-Fi -> spark2 200G -> spark1 200G",
       "interfaces": {
         "wifi": {"device": "wlP9s9", "ipv4": "192.168.0.146/24", "role": "fallback"},
-        "ten_g": {"device": "enP7s7", "private_ipv4": "10.20.0.11/24", "dhcp_ipv4": "125.129.239.251/24", "role": "8-port switch control plus wired internet"}
+        "ten_g": {"device": "enP7s7", "state": "up", "role": "on 8-port switch but no IPv4 assigned during 2026-05-21T1408Z probe"}
       }
     },
     {
@@ -65,7 +69,7 @@
       "hostname": "aitopatom-931a",
       "mdns": "aitopatom-931a.local",
       "ssh_alias": "spark2",
-      "ssh_path": "mac -> spark2 over direct 10G private switch",
+      "ssh_path": "mac -> spark3 Wi-Fi -> spark2 200G",
       "interfaces": {
         "wifi": {"device": "wlP9s9", "ipv4": "192.168.0.116/24", "role": "fallback"},
         "ten_g": {"device": "enP7s7", "private_ipv4": "10.20.0.12/24", "role": "8-port switch control, private-only on 30m cable; DHCP times out"}
@@ -77,7 +81,7 @@
       "hostname": "aitopatom-a18f",
       "mdns": "aitopatom-a18f.local",
       "ssh_alias": "spark3",
-      "ssh_path": "mac -> spark3 over direct 10G private switch",
+      "ssh_path": "mac -> spark3 over Wi-Fi, 192.168.1.110",
       "interfaces": {
         "wifi": {"device": "wlP9s9", "ipv4": "192.168.1.110/24", "ssid": "TP-Link_D660_5G", "role": "fallback"},
         "ten_g": {"device": "enP7s7", "dhcp_ipv4": "125.129.239.57/24", "private_ipv4": "10.20.0.13/24", "role": "switch control"}
@@ -89,7 +93,7 @@
       "hostname": "aitopatom-c342",
       "mdns": "aitopatom-c342.local",
       "ssh_alias": "spark4",
-      "ssh_path": "mac -> spark4 over direct 10G private switch",
+      "ssh_path": "mac -> spark4 over Wi-Fi, 192.168.1.137",
       "interfaces": {
         "wifi": {"device": "wlP9s9", "ipv4": "192.168.1.137/24", "ssid": "TP-Link_D660_5G", "role": "fallback"},
         "ten_g": {"device": "enP7s7", "dhcp_ipv4": "175.193.138.138/24", "private_ipv4": "10.20.0.14/24", "role": "switch control"}
@@ -101,7 +105,7 @@
       "hostname": "aitopatom-a36d",
       "mdns": "aitopatom-a36d.local",
       "ssh_alias": "spark5",
-      "ssh_path": "mac -> spark5 over direct 10G private switch",
+      "ssh_path": "mac -> spark4 Wi-Fi -> spark5 200G",
       "interfaces": {
         "wifi": {"device": "wlP9s9", "state": "down", "role": "fallback"},
         "ten_g": {"device": "enP7s7", "dhcp_ipv4": "175.193.138.193/24", "private_ipv4": "10.20.0.15/24", "role": "switch control"}
@@ -113,10 +117,22 @@
       "hostname": "aitopatom-c637",
       "mdns": "aitopatom-c637.local",
       "ssh_alias": "spark6",
-      "ssh_path": "mac -> spark6 over direct 10G private switch",
+      "ssh_path": "mac -> spark6 over Wi-Fi, 192.168.1.185",
       "interfaces": {
         "wifi": {"device": "wlP9s9", "ipv4": "192.168.1.185/24", "ssid": "TP-Link_D660_5G", "role": "fallback"},
         "ten_g": {"device": "enP7s7", "private_ipv4": "10.20.0.16/24", "role": "8-port switch control, private-only"}
+      }
+    },
+    {
+      "id": "spark7",
+      "user": "spark7",
+      "hostname": "thinkstation-pgx",
+      "mdns": "thinkstation-pgx.local",
+      "ssh_alias": "spark7",
+      "ssh_path": "pending install/discovery; not reachable on thinkstation-pgx.local, spark7.local, 10.20.0.17, or visible Wi-Fi SSH listeners during 2026-05-21T1408Z probe",
+      "interfaces": {
+        "wifi": {"state": "pending", "role": "fresh install, not discovered"},
+        "ten_g": {"private_ipv4": "10.20.0.17/24", "state": "reserved_pending_verification", "role": "8-port switch control"}
       }
     }
   ],
@@ -130,24 +146,29 @@
       "spark3": "10.20.0.13",
       "spark4": "10.20.0.14",
       "spark5": "10.20.0.15",
-      "spark6": "10.20.0.16"
+      "spark6": "10.20.0.16",
+      "spark7": "10.20.0.17"
     },
     "notes": [
-      "All seven Sparks are on the 8-port 10G switch with Mac Studio reachable through the upstream 5-port switch.",
-      "Spark2 is using a 30m cable and is private-only; carrier reports 10G and Mac ping succeeds.",
-      "Use 10.20.0.10-10.20.0.16 for operator/control SSH; keep 200G for ring data movement."
+      "All eight Sparks are intended to be on the 8-port 10G switch.",
+      "Mac Studio en0 has 10.20.0.1/24, but direct Mac-to-Spark 10.20 TCP/22 failed for 10.20.0.10-10.20.0.17 at 2026-05-21T1408Z.",
+      "Inside the cluster, Spark3 reached Spark0 at 10.20.0.10 and itself at 10.20.0.13; Spark6 reached only itself at 10.20.0.16.",
+      "Treat the 10G switch plane as fragmented until repaired; use Wi-Fi plus 200G proxy paths for SSH."
     ]
   },
   "internet_status": {
-    "verified_utc": "2026-05-21T0057Z",
-    "working_wired_internet": ["spark1", "spark3", "spark4", "spark5"],
-    "working_wifi_internet": ["spark6"],
-    "reachable_but_no_internet_route": ["spark0", "spark2"],
+    "verified_utc": "2026-05-21T1408Z",
+    "working_wired_internet": [],
+    "working_wifi_internet": ["spark3", "spark4", "spark6"],
+    "reachable_but_no_internet_route": ["spark0", "spark1", "spark2", "spark5"],
+    "pending_nodes": ["spark7"],
     "notes": [
-      "spark1, spark3, spark4, and spark5 returned Cloudflare trace over enP7s7.",
-      "spark6 returned Cloudflare trace over Wi-Fi.",
-      "spark0 defaults to the older 192.168.0.0/24 Wi-Fi LAN and failed DNS resolution.",
-      "spark2 defaults to the older 192.168.0.0/24 Wi-Fi LAN and DNS resolution timed out; its enP7s7 is private-only on 10.20.0.12."
+      "Operator reported no wired/fiber internet is connected; internet should be considered Wi-Fi-only until reverified.",
+      "Mac Studio uses Wi-Fi 192.168.1.128/24 for current operator reachability.",
+      "spark3, spark4, and spark6 are directly reachable from Mac Studio over 192.168.1.0/24 Wi-Fi.",
+      "spark0, spark1, and spark2 default through the older 192.168.0.0/24 Wi-Fi LAN and are reachable from Mac only through the 200G SSH proxy chain.",
+      "spark5 has no Wi-Fi address and is reachable from Mac only through spark4 over the 200G link.",
+      "spark7 was not discoverable yet."
     ]
   },
   "ring_200g": {
@@ -155,7 +176,7 @@
     "order": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6"],
     "missing_return_edge": {"from": "spark6", "to": "spark0", "reason": "200G cable too short"},
     "mtu": 9000,
-    "verified": "all live links report 200000Mb/s; 8972-byte jumbo ping and tcp/22 succeeded",
+    "verified": "spark0 through spark6 are reachable over the open-line 200G fabric using Wi-Fi jump points; spark7 is not integrated or verified",
     "links": [
       {"edge": "spark0-spark1", "a": {"node": "spark0", "interface": "enp1s0f1np1", "ipv4": "10.10.1.1/30"}, "b": {"node": "spark1", "interface": "enp1s0f1np1", "ipv4": "10.10.1.2/30"}},
       {"edge": "spark0-spark1", "a": {"node": "spark0", "interface": "enP2p1s0f1np1", "ipv4": "10.10.2.1/30"}, "b": {"node": "spark1", "interface": "enP2p1s0f1np1", "ipv4": "10.10.2.2/30"}},
@@ -173,7 +194,7 @@
   },
   "centaur_control": {
     "controller": {"node": "spark0", "port": 8765},
-    "agent": {"port": 8766, "nodes": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6"]},
+    "agent": {"port": 8766, "nodes": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6"], "pending_nodes": ["spark7"]},
     "principles": [
       "Use SSH for break-glass only.",
       "Use the HTTP controller/agent plane for low-bandwidth commands and health.",
@@ -184,15 +205,14 @@
   },
   "rescue_control": {
     "schema": "ds4.rescue.v1",
-    "verified_utc": "2026-05-21T1228Z",
+    "verified_utc": "2026-05-21T1408Z",
     "deployed_nodes": ["spark2", "spark3", "spark4", "spark5", "spark6"],
-    "self_rescue_escalation_deployed_nodes": ["spark2", "spark3", "spark5", "spark6"],
-    "self_rescue_escalation_pending_nodes": [
-      {"node": "spark4", "reason": "TCP responds but SSH and rescue HTTP do not complete requests; install after physical reboot"}
-    ],
+    "self_rescue_escalation_deployed_nodes": ["spark2", "spark3", "spark4", "spark5", "spark6"],
+    "self_rescue_escalation_pending_nodes": [],
     "not_deployed_nodes": [
-      {"node": "spark0", "reason": "not SSH-reachable during deployment"},
-      {"node": "spark1", "reason": "not SSH-reachable during deployment"}
+      {"node": "spark0", "reason": "reachable after reboot through 200G proxy chain, but rescue has not been deployed yet"},
+      {"node": "spark1", "reason": "reachable after reboot through 200G proxy chain, but rescue has not been deployed yet"},
+      {"node": "spark7", "reason": "fresh Lenovo node pending install/discovery"}
     ],
     "plane": "10G control",
     "port": 25100,
