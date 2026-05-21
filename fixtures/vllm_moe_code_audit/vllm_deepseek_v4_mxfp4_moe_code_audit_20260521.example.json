@@ -1,0 +1,153 @@
+{
+  "format": "ds4-vllm-moe-code-audit-v1",
+  "artifact_sha256": "6f270362a0ea71d46641af9a6c2cb701a43ee9bb0a0b62cf14553c4a772ffadc",
+  "audit_id": "ds4-vllm-deepseek-v4-mxfp4-moe-code-audit-20260521",
+  "created_utc": "2026-05-21T09:10:00Z",
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "runtime": "vllm",
+  "runtime_version": "0.1.dev16581+gdda4668b5.d20260521",
+  "runtime_commit": "dda4668b59567416f86956cfe7bbc1eab371a61e",
+  "source_image": "vllm-node-dsv4",
+  "source_package_dir": "/usr/local/lib/python3.12/dist-packages/vllm",
+  "measured_selected_backend": "MARLIN",
+  "measured_backend_evidence": {
+    "source_fixture": "fixtures/standard_runtime_benchmarks/vllm_deepseek_v4_flash_tp2_no_mtp_spark45_mixed_fanout_20260521.example.json",
+    "best_known_config_fixture": "fixtures/vllm_config_tuning/vllm_deepseek_v4_flash_tp2_custom_transfer_tuning_20260521.example.json",
+    "best_no_mtp_c512_tokens_per_second": 174.19031762627782,
+    "best_config_summary": "TP=2 PP=2 DeepSeek-V4-Flash on Spark4/Spark5, max_model_len=200000, max_num_batched_tokens=8192, prefix cache enabled."
+  },
+  "custom_ds4_reference": {
+    "runtime_id": "antirez/ds4@3630e64+cuda-slice-tile8",
+    "fast_path_flag": "DS4_CUDA_MOE_SLICE_TILE8=1",
+    "batch_size": 512,
+    "microbatches": 16,
+    "achieved_streaming_rows_per_s": 631.672,
+    "baseline_rows_per_s_before_slice_tile8": 209.0,
+    "gate_up_ms_before": 117.0,
+    "gate_up_ms_after": 18.0,
+    "mechanism": "Build sorted routed expert pairs, batch up to 8 rows per expert tile, pass per-expert gate/up/down slice pointer tables, and run a tile8 gate/up kernel instead of scalar sorted fallback or full expert slabs."
+  },
+  "source_evidence": [
+    {
+      "id": "backend_priority_order",
+      "file": "/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/oracle/mxfp4.py",
+      "line_start": 257,
+      "line_end": 274,
+      "finding": "CUDA MXFP4 backend priority tries FlashInfer TRTLLM MXFP4/MXFP8, then DeepGEMM MXFP4, then MARLIN and BATCHED_MARLIN. A measured MARLIN selection means higher-priority candidates did not pass support checks in this deployment."
+    },
+    {
+      "id": "backend_auto_selection",
+      "file": "/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/oracle/mxfp4.py",
+      "line_start": 471,
+      "line_end": 545,
+      "finding": "select_deepseek_v4_mxfp4_moe_backend maps explicit marlin to MARLIN or BATCHED_MARLIN based on activation format; auto selection only reaches the batched variant when the selected activation format is BatchedExperts."
+    },
+    {
+      "id": "no_dp_ep_standard_activation",
+      "file": "/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/prepare_finalize/no_dp_ep.py",
+      "line_start": 40,
+      "line_end": 98,
+      "finding": "The current no-DP expert-parallel prepare/finalize path reports activation_format=Standard, quantizes the whole activation tensor, uses one dispatcher, and does not build a per-expert batched activation queue."
+    },
+    {
+      "id": "batched_activation_gating",
+      "file": "/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/config.py",
+      "line_start": 1022,
+      "line_end": 1053,
+      "finding": "use_batched_activation_format is enabled through DeepEP low-latency or NIXL expert-parallel all2all paths; use_all2all_kernels requires dp_size > 1 and expert parallel. The TP=2 no-DP lane therefore does not enable BatchedExperts activation format."
+    },
+    {
+      "id": "batched_marlin_exists",
+      "file": "/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/experts/marlin_moe.py",
+      "line_start": 879,
+      "line_end": 935,
+      "finding": "BatchedMarlinExperts exists and declares BatchedExperts activation format with per-expert batched workspaces, so the missing piece is topology/prepare-finalize routing rather than total absence of a batched MXFP4 expert implementation."
+    },
+    {
+      "id": "deepseek_v4_fused_moe_normal_path",
+      "file": "/usr/local/lib/python3.12/dist-packages/vllm/model_executor/models/deepseek_v4.py",
+      "line_start": 710,
+      "line_end": 858,
+      "finding": "DeepseekV4MoE uses the normal FusedMoE path unless moe_backend is deep_gemm_mega_moe; the standard run did not activate the mega-MoE route."
+    },
+    {
+      "id": "deepseek_v4_lm_head_full_logits",
+      "file": "/usr/local/lib/python3.12/dist-packages/vllm/model_executor/models/deepseek_v4.py",
+      "line_start": 1639,
+      "line_end": 1660,
+      "finding": "DeepSeek V4 creates a ParallelLMHead and compute_logits calls LogitsProcessor over the full lm_head path. Normal generation is not using a candidate-only scorer."
+    },
+    {
+      "id": "logits_processor_top_tokens_unused_normal",
+      "file": "/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/logits_processor.py",
+      "line_start": 89,
+      "line_end": 156,
+      "finding": "LogitsProcessor has a get_top_tokens helper that all-gathers only top token/value pairs, but normal _get_logits applies the full lm_head and gathers/slices logits. Grep showed get_top_tokens used by proposer/spec-decode paths, not DeepSeek V4 normal compute_logits."
+    },
+    {
+      "id": "mxfp4_w13_shape",
+      "file": "/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/mxfp4.py",
+      "line_start": 534,
+      "line_end": 582,
+      "finding": "The MXFP4 fused gate/up tensor exists as w13_weight with shape (num_experts, 2 * intermediate_size_per_partition, hidden_size // 2), plus MXFP4 block scales. There is a gate/up analog to optimize, but the layout is MXFP4/Marlin rather than the DS4 IQ2/Q8 slice-tile8 layout."
+    },
+    {
+      "id": "ds4_slice_tile8_mechanism",
+      "file": "docs/antirez-patches/README.md",
+      "line_start": 39,
+      "line_end": 58,
+      "finding": "The custom DS4 patch series routes sorted expert-pair gate/up/down tile kernels through per-expert slice pointer tables and keeps expert-tile kernels enabled under batched expert slice caching."
+    }
+  ],
+  "opportunities": [
+    {
+      "id": "enable_batched_activation_for_no_dp_ep",
+      "status": "reachable",
+      "confidence": "medium",
+      "why": "vLLM already has BatchedMarlinExperts, but the current TP=2 no-DP path forces Standard activations. A narrow prototype can add a no-DP batched prepare/finalize route or explicit backend experiment to test whether this recovers DS4-style expert-tile occupancy.",
+      "risk": "BatchedMarlin workspace scales with num_experts * max_num_tokens * num_dispatchers; it may increase memory use or require row/expert metadata that the current no-DP path does not materialize.",
+      "next_action": "Prototype an opt-in no-DP BatchedExperts activation path for MXFP4 MARLIN, or first run an explicit BATCHED_MARLIN support probe with memory logging."
+    },
+    {
+      "id": "capture_explicit_deep_gemm_flashinfer_rejection",
+      "status": "reachable",
+      "confidence": "high",
+      "why": "Auto backend priority checks FlashInfer TRTLLM and DeepGEMM before MARLIN. Since the measured deployment selected MARLIN, the missing data is the exact support-check rejection reason, not whether these backends exist.",
+      "risk": "Explicit backend launch may fail at startup, but the failure text is the desired artifact if it names unsupported architecture, missing library, activation format, or quantization constraint.",
+      "next_action": "Run short startup probes for moe_backend=deep_gemm, flashinfer_trtllm_afp8, flashinfer_trtllm, and deep_gemm_mega_moe on the same image, capturing support-check failures before changing kernels."
+    },
+    {
+      "id": "candidate_only_logits_for_constrained_outputs",
+      "status": "measured_absent",
+      "confidence": "high",
+      "why": "Normal DeepSeek V4 generation calls full ParallelLMHead logits. Existing get_top_tokens avoids full logits for proposer paths only, and previous grammar masking did not improve throughput because it did not replace output-head work with candidate-only scoring.",
+      "risk": "Candidate-only scoring changes semantics unless the request is explicitly constrained to the candidate set; it is not a drop-in replacement for unconstrained chat.",
+      "next_action": "Add a separate constrained-output provider path that scores declared candidates directly instead of using structured-output masking over full logits."
+    },
+    {
+      "id": "copy_ds4_slice_tile8_kernel_directly",
+      "status": "not_portable",
+      "confidence": "high",
+      "why": "DS4 slice-tile8 kernels target the custom IQ2/Q8 routed-MoE layout and per-expert slice cache, while vLLM's DeepSeek V4 path stores MXFP4 packed weights and Marlin/DeepGEMM/FlashInfer backend-specific layouts.",
+      "risk": "A direct port would likely be incorrect and slower unless it first reimplements MXFP4 decode, scales, routing metadata, and backend workspace contracts.",
+      "next_action": "Do not copy the CUDA kernel directly; instead map the same idea onto vLLM's existing MXFP4 backend interfaces."
+    },
+    {
+      "id": "load_time_filtering_and_layerwise_finalize",
+      "status": "blocked",
+      "confidence": "high",
+      "why": "The repo-owned vLLM patches for safetensors early filtering and layerwise MXFP4 finalize reduce load-time memory pressure, not steady-state MoE throughput.",
+      "risk": "Treating these patches as performance fixes would mask the actual runtime bottleneck.",
+      "next_action": "Keep these patches for startup capacity only; do not expect them to raise decode tok/s."
+    }
+  ],
+  "analysis_result": {
+    "does_mxfp4_have_a_gate_up_opportunity": true,
+    "is_ds4_slice_tile8_directly_reusable": false,
+    "is_vllm_currently_using_candidate_only_logits": false,
+    "is_vllm_currently_using_batched_mxfp4_marlin_for_tp2_no_dp": false,
+    "most_likely_missing_4x_like_path": "Batched/sliced expert activation routing for the MXFP4 MoE backend, not a scheduler flag.",
+    "why_not_guess": "The code shows the measured lane is MARLIN with Standard activations, while BatchedMarlin and DeepGEMM/FlashInfer candidates exist but are not active. The next experiment should test those exact code gates."
+  },
+  "recommended_next_experiment": "Before writing a new kernel, capture explicit backend rejection reasons for DeepGEMM/FlashInfer and prototype an opt-in no-DP BatchedExperts activation path for MXFP4 MARLIN. If that improves MoE occupancy, then map DS4's sorted expert-pair tile idea into vLLM's MXFP4 backend instead of copying the IQ2/Q8 slice-tile8 kernel."
+}
