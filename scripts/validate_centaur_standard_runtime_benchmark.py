@@ -16,6 +16,7 @@ FORMAT = "centaur-standard-runtime-model-benchmark-v1"
 RUNTIMES = {"llama_cpp", "sglang", "vllm", "local_openai_compatible"}
 MODEL_FORMATS = {"gguf", "hf", "safetensors", "other"}
 OUTPUT_MODES = {"full_vocab", "constrained_candidate", "grammar_masked"}
+MTP_UNVERIFIED_STATUS = "unverified - needs same-stack no-MTP baseline"
 BLOCKER_KINDS = {
     "none",
     "runtime_install_blocked",
@@ -120,6 +121,33 @@ def check_number_or_null(obj: dict[str, Any], field: str, path: Path, errors: li
     return float(value)
 
 
+def check_optional_mtp_same_stack_baseline(obj: dict[str, Any], path: Path, errors: list[str]) -> None:
+    mtp_enabled = obj.get("mtp_enabled")
+    blocker = obj.get("blocker_kind")
+    if mtp_enabled is not True or blocker != "none":
+        return
+    baseline = check_number_or_null(obj, "same_stack_no_mtp_baseline_tokens_per_second", path, errors) if "same_stack_no_mtp_baseline_tokens_per_second" in obj else None
+    speedup = check_number_or_null(obj, "same_stack_speedup_vs_no_mtp", path, errors) if "same_stack_speedup_vs_no_mtp" in obj else None
+    status = obj.get("same_stack_mtp_speedup_status")
+    if baseline is None:
+        if status != MTP_UNVERIFIED_STATUS:
+            errors.append(err(path, f"MTP benchmark without same-stack no-MTP baseline must set same_stack_mtp_speedup_status={MTP_UNVERIFIED_STATUS!r}"))
+        if speedup is not None:
+            errors.append(err(path, "MTP speedup claim requires same-stack no-MTP baseline"))
+        return
+    if baseline <= 0.0:
+        errors.append(err(path, "same_stack_no_mtp_baseline_tokens_per_second must be > 0 for MTP benchmark"))
+        return
+    if speedup is None:
+        errors.append(err(path, "MTP benchmark with same-stack no-MTP baseline requires same_stack_speedup_vs_no_mtp"))
+        return
+    tps = obj.get("tokens_per_second")
+    if isinstance(tps, (int, float)) and not isinstance(tps, bool):
+        expected = float(tps) / baseline
+        if abs(float(speedup) - expected) > 1e-6:
+            errors.append(err(path, "same_stack_speedup_vs_no_mtp must equal tokens_per_second / same_stack_no_mtp_baseline_tokens_per_second"))
+
+
 def scan_secret_keys(value: Any, path: Path, errors: list[str], key_path: str = "") -> None:
     if isinstance(value, dict):
         for key, child in value.items():
@@ -210,6 +238,7 @@ def validate_benchmark(obj: dict[str, Any], path: Path) -> list[str]:
             errors.append(err(path, "blocked benchmark must not set parse_valid=true"))
     if quality is not None and quality > 100.0:
         errors.append(err(path, "task_quality_score must be <= 100"))
+    check_optional_mtp_same_stack_baseline(obj, path, errors)
     scan_secret_keys(obj, path, errors)
     return errors
 

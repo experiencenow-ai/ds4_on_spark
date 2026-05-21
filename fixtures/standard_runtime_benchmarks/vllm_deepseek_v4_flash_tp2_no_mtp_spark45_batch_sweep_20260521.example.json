@@ -1,0 +1,162 @@
+{
+  "api_endpoint": "http://127.0.0.1:8000/v1",
+  "api_ready": true,
+  "artifact_sha256": "193eea93d71b5fb9d0d63b702ab37d9306e544f8ad020fa8049d1d79ffd6d7c4",
+  "batch_size": 512,
+  "benchmark_id": "ds4-vllm-existing-solution-tp2-no-mtp-spark45-batch-sweep-20260521",
+  "benchmark_status": "passed",
+  "block_size": 256,
+  "blocker_detail": "",
+  "blocker_kind": "none",
+  "concurrency_summaries": [
+    {
+      "concurrency": 1,
+      "mean_aggregate_tps": 22.21309753786723,
+      "rounds": 3,
+      "successful_rounds": 3,
+      "total_errors": 0
+    },
+    {
+      "concurrency": 2,
+      "mean_aggregate_tps": 41.920639785292884,
+      "rounds": 3,
+      "successful_rounds": 3,
+      "total_errors": 0
+    },
+    {
+      "concurrency": 4,
+      "mean_aggregate_tps": 60.1589076415627,
+      "rounds": 3,
+      "successful_rounds": 3,
+      "total_errors": 0
+    },
+    {
+      "concurrency": 8,
+      "mean_aggregate_tps": 104.80169757004741,
+      "rounds": 3,
+      "successful_rounds": 3,
+      "total_errors": 0
+    },
+    {
+      "concurrency": 16,
+      "mean_aggregate_tps": 170.15115016614087,
+      "rounds": 3,
+      "successful_rounds": 3,
+      "total_errors": 0
+    },
+    {
+      "concurrency": 32,
+      "mean_aggregate_tps": 238.56128230668926,
+      "rounds": 2,
+      "successful_rounds": 2,
+      "total_errors": 0
+    },
+    {
+      "concurrency": 64,
+      "mean_aggregate_tps": 310.31684000791483,
+      "rounds": 2,
+      "successful_rounds": 2,
+      "total_errors": 0
+    },
+    {
+      "concurrency": 128,
+      "mean_aggregate_tps": 432.10833176218233,
+      "rounds": 2,
+      "successful_rounds": 2,
+      "total_errors": 0
+    },
+    {
+      "concurrency": 256,
+      "mean_aggregate_tps": 524.5916887307408,
+      "rounds": 1,
+      "successful_rounds": 1,
+      "total_errors": 0
+    },
+    {
+      "concurrency": 512,
+      "mean_aggregate_tps": 566.1547121145653,
+      "rounds": 1,
+      "successful_rounds": 1,
+      "total_errors": 0
+    }
+  ],
+  "context_length": 200000,
+  "created_utc": "2026-05-21T05:16:00Z",
+  "cudagraph_mode": "FULL_AND_PIECEWISE",
+  "expert_parallel": true,
+  "format": "centaur-standard-runtime-model-benchmark-v1",
+  "hardware": {
+    "fabric": "direct_200g_pair",
+    "head_node": "spark4",
+    "interconnect": "Spark4-Spark5 200G ring edge over 10.10.9.1/30 and 10.10.9.2/30",
+    "machine": "DGX Spark",
+    "network_doc": "SPARKNETWORK.md",
+    "worker_node": "spark5"
+  },
+  "kv_cache_dtype": "fp8",
+  "kv_cache_tokens": 653727,
+  "launch_command": "DS4_WORKER_DOCKER_ARG_REWRITE_FROM=/home/spark4/models/hf/deepseek-ai/DeepSeek-V4-Flash DS4_WORKER_DOCKER_ARG_REWRITE_TO=/home/spark5/models/hf/deepseek-ai/DeepSeek-V4-Flash DS4_WORKER_ETH_IF=enp1s0f1np1 DS4_WORKER_IB_IF=rocep1s0f1 VLLM_SPARK_EXTRA_DOCKER_ARGS='-v /home/spark4/models/hf/deepseek-ai/DeepSeek-V4-Flash:/models/deepseek-v4-flash:ro' ./run-recipe.sh recipes/deepseek-v4-flash-local-batch512-no-mtp.yaml --no-ray --no-cache-dirs -d",
+  "live_routing_eligible": true,
+  "max_num_batched_tokens": 8192,
+  "max_num_seqs": 512,
+  "memory_used_gib": 75.76,
+  "model_family": "deepseek_v4_flash",
+  "model_format": "safetensors",
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "model_path": "/models/deepseek-v4-flash",
+  "mtp_enabled": false,
+  "mtp_supported": true,
+  "ngram_spec_enabled": false,
+  "no_ray": true,
+  "notes": [
+    "This is the same Spark4/Spark5 vLLM stack and batch512 recipe shape as the MTP K=2 sweep, with speculative_config removed.",
+    "Readiness used an 1800s timeout; /v1/models opened at about 540.4s, so the earlier 600s no-MTP attempt was too short.",
+    "Concurrency is request-level OpenAI-compatible serving concurrency; vLLM continuously batches those requests internally.",
+    "The sweep used short prompts and max_tokens=32 to test scheduler batch pressure up to max_num_seqs=512, not 512 long 200k-context requests.",
+    "The raw sweep artifact is /home/spark4/ds4_vllm_batch_sweep_no_mtp_maxseq512_20260521.json."
+  ],
+  "output_mode": "full_vocab",
+  "parse_valid": true,
+  "pipeline_parallel_size": 1,
+  "prompt_processing_tokens_per_second": 794.5,
+  "prompt_processing_tokens_per_second_source": "vLLM log line during the concurrency=512 no-MTP run",
+  "prompt_shape": "concurrency_sweep_15_prompt_tokens_32_output_tokens",
+  "provider_id": "standard-vllm-deepseek-v4-flash-existing-recipe",
+  "quantization": "official FP8 checkpoint with fp8 KV cache and fp4 expert path",
+  "raw_sweep_artifact": {
+    "format": "ds4-vllm-concurrency-sweep-v1",
+    "path": "/home/spark4/ds4_vllm_batch_sweep_no_mtp_maxseq512_20260521.json",
+    "sha256": "562c8c19be05356db476793ae696d0def29489273fa42aae4a01243498b39be2"
+  },
+  "reported_max_concurrency_at_200k_context": 3.27,
+  "request_max_tokens": 32,
+  "runner_image_sha256": "sha256:da30a99537ae40c544a91ed358b6b56c2b5da68c80b9bab9dd61706f1e10b042",
+  "runtime": "vllm",
+  "runtime_pr_head": "7a3249e3b4826233972c147a4fe2c6f791227a0b",
+  "runtime_repo": "https://github.com/eugr/spark-vllm-docker.git",
+  "runtime_version": "0.1.dev16581+gdda4668b5.d20260521",
+  "source_recipe_commit": "84387a446ae42ca1c98ca912c8136642043ea9c6",
+  "source_recipe_repo": "https://github.com/tonyd2wild/deepseek-v4-flash-dual-spark-recipe",
+  "speculative_config": {},
+  "startup_observations": {
+    "api_ready": true,
+    "api_ready_wait_seconds": 540.4,
+    "cuda_graph_capture_seconds": 72.0,
+    "engine_init_seconds": 400.95,
+    "target_weight_load_seconds_head": 128.87,
+    "torch_compile_seconds_head": 19.21
+  },
+  "task_quality_score": null,
+  "tensor_parallel_size": 2,
+  "time_to_first_token_ms": 183.29502799315378,
+  "time_to_first_token_source": "post-sweep streaming /v1/completions probe with max_tokens=32 and speculative_config=None",
+  "tokens_per_second": 566.1547121145653,
+  "topline_result": {
+    "best_aggregate_tps": 566.1547121145653,
+    "best_concurrency": 512,
+    "completion_tokens": 16384,
+    "wall_seconds": 28.939086170998053
+  },
+  "vllm_commit": "dda4668b59567416f86956cfe7bbc1eab371a61e",
+  "vllm_repo": "https://github.com/jasl/vllm.git"
+}

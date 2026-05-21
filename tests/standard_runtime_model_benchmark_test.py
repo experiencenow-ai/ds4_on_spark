@@ -39,6 +39,27 @@ class StandardRuntimeModelBenchmarkTest(unittest.TestCase):
         errors = benchmark_validator.validate_benchmark(obj, path)
         self.assertTrue(any("mtp_enabled requires" in item for item in errors))
 
+    def test_mtp_speedup_requires_same_stack_baseline(self) -> None:
+        path = Path("fixture.json")
+        fixture = [item for item in benchmark_validator.default_benchmark_paths() if item.name == "vllm_deepseek_v4_flash_tp2_mtp2_spark10_20260521.example.json"][0]
+        obj = benchmark_validator.load_benchmark(fixture)
+        obj = copy.deepcopy(obj)
+        obj["same_stack_mtp_speedup_status"] = "verified_same_stack_baseline"
+        obj["same_stack_speedup_vs_no_mtp"] = 1.1
+        obj["artifact_sha256"] = benchmark_validator.canonical_hash(obj)
+        errors = benchmark_validator.validate_benchmark(obj, path)
+        self.assertTrue(any("same-stack no-MTP baseline" in item for item in errors))
+
+    def test_mtp_same_stack_speedup_must_match_baseline(self) -> None:
+        path = Path("fixture.json")
+        fixture = [item for item in benchmark_validator.default_benchmark_paths() if item.name == "vllm_deepseek_v4_flash_tp2_mtp2_spark45_batch_sweep_20260521.example.json"][0]
+        obj = benchmark_validator.load_benchmark(fixture)
+        obj = copy.deepcopy(obj)
+        obj["same_stack_speedup_vs_no_mtp"] = 42.0
+        obj["artifact_sha256"] = benchmark_validator.canonical_hash(obj)
+        errors = benchmark_validator.validate_benchmark(obj, path)
+        self.assertTrue(any("same_stack_speedup_vs_no_mtp must equal" in item for item in errors))
+
     def test_constrained_success_requires_candidate_only_semantics(self) -> None:
         path = Path("fixture.json")
         fixture = [item for item in benchmark_validator.default_benchmark_paths() if item.name == "sglang_structured_output_semantics_blocked.example.json"][0]

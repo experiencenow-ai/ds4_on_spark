@@ -1,7 +1,7 @@
 {
   "api_endpoint": "http://127.0.0.1:8000/v1",
   "api_ready": true,
-  "artifact_sha256": "63336face53a072f05a53702c5bee5fb4037565e056b172fd3d7d184e247bbb0",
+  "artifact_sha256": "4f96dc6f9e7ebd3895d99bc6422e98444dc000108a4a22723fe521cf2ac3031f",
   "batch_size": 512,
   "benchmark_id": "ds4-vllm-existing-solution-tp2-mtp2-spark45-batch-sweep-20260521",
   "benchmark_status": "passed",
@@ -113,7 +113,9 @@
     "The sweep used short prompts and max_tokens=32 to test scheduler batch pressure up to max_num_seqs=512, not 512 long 200k-context requests.",
     "vLLM reported GPU KV cache size 653727 tokens and maximum concurrency 3.27x for 200000-token requests, so high request counts require short contexts.",
     "Spark4/Spark5 needed worker-local model mount rewriting plus per-rank network interface/HCA mapping because the direct link uses enp1s0f0np0 on Spark4 and enp1s0f1np1 on Spark5.",
-    "The raw sweep artifact is /home/spark4/ds4_vllm_batch_sweep_mtp2_maxseq512_20260521.json."
+    "The raw sweep artifact is /home/spark4/ds4_vllm_batch_sweep_mtp2_maxseq512_20260521.json.",
+    "Same-stack no-MTP baseline was measured after raising the /v1/models readiness wait to 1800s; readiness opened at about 540.4s.",
+    "At concurrency=512, no-MTP reached 566.155 aggregate tok/s and MTP K=2 reached 435.850 aggregate tok/s, so this artifact does not support enabling MTP for the batch sweep."
   ],
   "output_mode": "full_vocab",
   "parse_valid": true,
@@ -130,13 +132,133 @@
   "runtime_pr_head": "7a3249e3b4826233972c147a4fe2c6f791227a0b",
   "runtime_repo": "https://github.com/eugr/spark-vllm-docker.git",
   "runtime_version": "0.1.dev16581+gdda4668b5.d20260521",
+  "same_stack_comparison_by_concurrency": [
+    {
+      "concurrency": 1,
+      "mtp_mean_aggregate_tps": 32.21695518605273,
+      "mtp_rounds": 3,
+      "mtp_speedup_vs_no_mtp": 1.4503585162371735,
+      "mtp_successful_rounds": 3,
+      "no_mtp_mean_aggregate_tps": 22.21309753786723,
+      "no_mtp_rounds": 3,
+      "no_mtp_successful_rounds": 3
+    },
+    {
+      "concurrency": 2,
+      "mtp_mean_aggregate_tps": 45.915689012342604,
+      "mtp_rounds": 3,
+      "mtp_speedup_vs_no_mtp": 1.0953002923502926,
+      "mtp_successful_rounds": 3,
+      "no_mtp_mean_aggregate_tps": 41.920639785292884,
+      "no_mtp_rounds": 3,
+      "no_mtp_successful_rounds": 3
+    },
+    {
+      "concurrency": 4,
+      "mtp_mean_aggregate_tps": 57.718716974427245,
+      "mtp_rounds": 3,
+      "mtp_speedup_vs_no_mtp": 0.9594375835134086,
+      "mtp_successful_rounds": 3,
+      "no_mtp_mean_aggregate_tps": 60.1589076415627,
+      "no_mtp_rounds": 3,
+      "no_mtp_successful_rounds": 3
+    },
+    {
+      "concurrency": 8,
+      "mtp_mean_aggregate_tps": 134.73219277925415,
+      "mtp_rounds": 3,
+      "mtp_speedup_vs_no_mtp": 1.2855917022641907,
+      "mtp_successful_rounds": 3,
+      "no_mtp_mean_aggregate_tps": 104.80169757004741,
+      "no_mtp_rounds": 3,
+      "no_mtp_successful_rounds": 3
+    },
+    {
+      "concurrency": 16,
+      "mtp_mean_aggregate_tps": 189.72693498787712,
+      "mtp_rounds": 3,
+      "mtp_speedup_vs_no_mtp": 1.1150493828729446,
+      "mtp_successful_rounds": 3,
+      "no_mtp_mean_aggregate_tps": 170.15115016614087,
+      "no_mtp_rounds": 3,
+      "no_mtp_successful_rounds": 3
+    },
+    {
+      "concurrency": 32,
+      "mtp_mean_aggregate_tps": 234.32162045694366,
+      "mtp_rounds": 2,
+      "mtp_speedup_vs_no_mtp": 0.9822282064853458,
+      "mtp_successful_rounds": 2,
+      "no_mtp_mean_aggregate_tps": 238.56128230668926,
+      "no_mtp_rounds": 2,
+      "no_mtp_successful_rounds": 2
+    },
+    {
+      "concurrency": 64,
+      "mtp_mean_aggregate_tps": 329.1684546515903,
+      "mtp_rounds": 2,
+      "mtp_speedup_vs_no_mtp": 1.0607495701593077,
+      "mtp_successful_rounds": 2,
+      "no_mtp_mean_aggregate_tps": 310.31684000791483,
+      "no_mtp_rounds": 2,
+      "no_mtp_successful_rounds": 2
+    },
+    {
+      "concurrency": 128,
+      "mtp_mean_aggregate_tps": 382.165616321039,
+      "mtp_rounds": 2,
+      "mtp_speedup_vs_no_mtp": 0.8844208459543657,
+      "mtp_successful_rounds": 2,
+      "no_mtp_mean_aggregate_tps": 432.10833176218233,
+      "no_mtp_rounds": 2,
+      "no_mtp_successful_rounds": 2
+    },
+    {
+      "concurrency": 256,
+      "mtp_mean_aggregate_tps": 340.75875248444544,
+      "mtp_rounds": 1,
+      "mtp_speedup_vs_no_mtp": 0.6495694838568974,
+      "mtp_successful_rounds": 1,
+      "no_mtp_mean_aggregate_tps": 524.5916887307408,
+      "no_mtp_rounds": 1,
+      "no_mtp_successful_rounds": 1
+    },
+    {
+      "concurrency": 512,
+      "mtp_mean_aggregate_tps": 435.85012988681746,
+      "mtp_rounds": 1,
+      "mtp_speedup_vs_no_mtp": 0.7698428019064516,
+      "mtp_successful_rounds": 1,
+      "no_mtp_mean_aggregate_tps": 566.1547121145653,
+      "no_mtp_rounds": 1,
+      "no_mtp_successful_rounds": 1
+    }
+  ],
+  "same_stack_mtp_speedup_status": "verified_same_stack_baseline_underperforms_no_mtp",
+  "same_stack_no_mtp_baseline": {
+    "artifact_path": "/home/spark4/ds4_vllm_batch_sweep_no_mtp_maxseq512_20260521.json",
+    "artifact_sha256": "562c8c19be05356db476793ae696d0def29489273fa42aae4a01243498b39be2",
+    "benchmark_id": "ds4-vllm-existing-solution-tp2-no-mtp-spark45-batch-sweep-20260521",
+    "concurrency": 512,
+    "max_aggregate_tps": 566.1547121145653,
+    "mean_aggregate_tps": 566.1547121145653,
+    "readiness_wait_seconds": 540.4,
+    "rounds": 1,
+    "speculative_config": null,
+    "successful_rounds": 1,
+    "time_to_first_token_ms": 183.29502799315378,
+    "total_completion_tokens": 16384,
+    "total_wall_seconds": 28.939086170998053
+  },
+  "same_stack_no_mtp_baseline_tokens_per_second": 566.1547121145653,
+  "same_stack_speedup_vs_no_mtp": 0.7698428019064516,
   "source_recipe_commit": "84387a446ae42ca1c98ca912c8136642043ea9c6",
   "source_recipe_repo": "https://github.com/tonyd2wild/deepseek-v4-flash-dual-spark-recipe",
   "spec_decode_metrics_after_sweep_and_ttft_probe": {
+    "acceptance_rate": 0.6889016676250719,
     "accepted_tokens": 23960,
     "accepted_tokens_position_0": 15654,
     "accepted_tokens_position_1": 8306,
-    "acceptance_rate": 0.6889016676250719,
     "draft_tokens": 34780,
     "generation_tokens": 41952,
     "num_drafts": 17390
@@ -160,9 +282,12 @@
   "time_to_first_token_source": "post-sweep streaming /v1/completions probe with max_tokens=32",
   "tokens_per_second": 435.85012988681746,
   "topline_result": {
-    "best_concurrency": 512,
     "best_aggregate_tps": 435.85012988681746,
+    "best_concurrency": 512,
     "completion_tokens": 16384,
+    "same_stack_no_mtp_best_aggregate_tps": 566.1547121145653,
+    "same_stack_result": "MTP K=2 underperformed no-MTP at concurrency=512 in this max_num_seqs=512 short-output sweep.",
+    "same_stack_speedup_vs_no_mtp": 0.7698428019064516,
     "wall_seconds": 37.590903102987795
   },
   "vllm_commit": "dda4668b59567416f86956cfe7bbc1eab371a61e",
