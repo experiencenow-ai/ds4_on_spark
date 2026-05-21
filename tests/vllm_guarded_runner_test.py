@@ -10,6 +10,7 @@ from scripts import run_guarded_spark_vllm_recipe as guarded
 SAFE_SCRIPT = """#!/bin/bash
 vllm serve /models/deepseek-v4-flash \\
   --tokenizer-mode deepseek_v4 \\
+  --tensor-parallel-size 2 \\
   --max-model-len 200000 \\
   --max-num-seqs 512 \\
   --max-num-batched-tokens 8192 \\
