@@ -1,6 +1,6 @@
 # Centaur system dashboard
 
-> Last meaningful update: **2026-05-21T11:30Z** (small-model qualification workstream added: #1213 harness + #1214 batch + #1215 router wire; Spark2 dedicated; `local_small`/`local_coder` tier gap is no longer un-tracked)
+> Last meaningful update: **2026-05-21T12:00Z** (anti-stall protocol added to LANES.md; stall ledger added so behavioral patterns are visible; the "I wrote a blocker comment so I'm done" failure mode is now structurally invalid)
 >
 > Percentages are deliberate approximations. They reflect "what fraction of this component is built and working end-to-end against real hardware/data" — not lines of code, not number of files, not roadmap-checklist position. A 70% component means the happy path works for one well-known input; a 90% component means it has been exercised at scale.
 
@@ -163,7 +163,24 @@ Sustained merge cadence since protocol landed: track:1 most productive (3 merges
 
 ---
 
-## What "100%" would look like for each track
+## Stall ledger
+
+Track-by-track behavioral pattern, updated alongside material observation. Stalls are visible so the pattern is hard to ignore. This is not moralizing — it's a scoreboard that says where the autonomous protocol is and is not working.
+
+| Track | Sessions observed | Idle exits | Blocker comments | `/release-stalled` events received | Notes |
+|---|---:|---:|---:|---:|---|
+| track:1 | 2 | 0 | 0 | 0 | Highest-output. Working closely with user. |
+| track:2 | 1 | 1 | 0 | 0 | One full session silent. Reassigned-watch. |
+| track:3 | 2 | 1 | 1 | 0 | Self-blocked an `hw:none` paper task at #1197 — would have been invalid under new five-question gate (no real external block). |
+| track:4 | 2 | 0 | 0 | 0 | Saved #1192 cross-track. Currently real-work on #1194. |
+
+**Anti-pattern callouts (from observed behavior, public so the pattern is unambiguous):**
+
+- "Posted blocker comment, done" with no five-question gate and no alternative attempted — observed at least once on each of track:2, track:3, track:4. After this dashboard update + new LANES.md rules land, this is forbidden.
+- Self-blocking `hw:none` work because the *external* world wasn't ready (e.g. blocking the paper task on a hardware availability that the paper task doesn't need) — observed at track:3 on #1197. Self-corrected by manager.
+- Idle-exit without backlog-claim attempt — would be invalid under new rules.
+
+
 
 - **Track 1:** Centaur evolves a candidate state machine on a domain it hasn't seen before, beats prior baseline by measurable economics, and the win is replayable from the bundle.
 - **Track 2:** LongMem oracle accuracy ≥96.6% sustained when reached via a Centaur-orchestrated candidate (not the hand-tuned HWM config).
