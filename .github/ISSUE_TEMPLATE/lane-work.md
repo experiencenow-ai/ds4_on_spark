@@ -19,8 +19,16 @@ Connect to Centaur vision or to an upstream blocker. If you cannot explain why n
 
 ## Target repo
 
-<!-- experiencenow-ai/ds4_on_spark | experiencenow-ai/centaur | experiencenow-ai/ds4 (ethpred fork) -->
-
+<!--
+The repo where the PR will be opened. The issue stays in ds4_on_spark; the PR can be in any of these:
+- experiencenow-ai/ds4_on_spark   (Spark deployment, ds4 patches, evaluation harnesses, vLLM/SGLang benchmarks, coordination infra)
+- experiencenow-ai/centaur        (state-machine factory, provider bindings, model-router, evolution domains)
+- experiencenow-ai/trimind-brain  (memory codec, brain forest, IVF-PQ search, LongMemEval harness)
+- experiencenow-ai/tc             (Tockchain firmware; push via ethpred/tc fork)
+- antirez/ds4                     (upstream ds4 patches; push via ethpred/ds4 fork)
+Replace this comment with the chosen repo path.
+-->
+experiencenow-ai/ds4_on_spark
 ## Hardware required
 
 <!--

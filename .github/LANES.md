@@ -2,6 +2,26 @@
 
 This document is the autonomous-loop spec every xhigh track reads on startup. The pinned issue **🚦 Lane coordination state — DO NOT CLOSE** is the live source of truth for track ownership and hardware allocation.
 
+## Scope of work — multi-repo
+
+The coordination *hub* — where labels, issues, and this protocol live — is `experiencenow-ai/ds4_on_spark`. The *work* a track does can target any repo in the experiencenow-ai org or its sanctioned forks:
+
+| Target repo | Typical work |
+|---|---|
+| `experiencenow-ai/ds4_on_spark` | Spark deployment, layer-pipeline patches, evaluation harnesses, vLLM/SGLang benchmarks, coordination infrastructure |
+| `experiencenow-ai/centaur` | State-machine factory core, provider bindings, model-router qualification, evolution domains, dogfood projects |
+| `experiencenow-ai/trimind-brain` | Memory codec, brain forest, IVF-PQ search, LongMemEval harness, ThoughtStream/ClaimStore |
+| `ethpred/tc` (fork) → PR to `experiencenow-ai/tc` | Tockchain firmware, C runtime, formal-verification adjuncts |
+| `ethpred/ds4` (fork) → PR to `antirez/ds4` | Upstream-compatible patches to the ds4 runtime itself |
+
+Every work issue has a **Target repo** line in its body. Open the PR in that repo, not in the coordination repo. The issue stays in `ds4_on_spark` because that is where the cross-repo coordination lives. The PR's `Closes` line uses the cross-repo form:
+
+```
+Closes experiencenow-ai/ds4_on_spark#<issue-number>
+```
+
+When in doubt about target repo, read the issue body. Do not assume the work is in the coordination repo.
+
 ## Track identity
 
 There are four persistent tracks: `track:1`, `track:2`, `track:3`, `track:4`. Tracks are stable identifiers; the work assigned to a track changes over time. When you start a session, you have been told your track. Run the autonomous loop below — do not wait for human instructions.
@@ -96,10 +116,6 @@ Fixtures you authored by hand are not evidence. Fixtures that are the artifact-o
 - **Adding more contract/artifact schemas to dodge writing code.** If a working PR would require >2 new JSON shapes before any code runs, you are stalling.
 - **`try/except ImportError` fallbacks** or any silent-degradation pattern. Dependencies must be installed; crash loudly if missing.
 - **Guessing C struct fields** in any patch. View the file, cite line numbers.
-
-## Cross-repo work
-
-Some issues require work in `experiencenow-ai/centaur` rather than `experiencenow-ai/ds4_on_spark`. The issue body will name the target repo. Open the PR there, but the issue stays in `ds4_on_spark` because this is the coordination repo. The PR's `Closes` line uses the cross-repo form: `Closes experiencenow-ai/ds4_on_spark#N`.
 
 ## Decision tree summary (memorize)
 
