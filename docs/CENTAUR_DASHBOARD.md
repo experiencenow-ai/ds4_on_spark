@@ -1,6 +1,6 @@
 # Centaur system dashboard
 
-> Last meaningful update: **2026-05-21T16:30Z** (18 merges in 4h post-protocol; Lane D corrected baseline 73/92 = 79.3% at 13.9 tok/s shipped; small-model qualification chain complete; Spark4 outage taking out the vLLM throughput investigations; track:2 silent and recommended retired)
+> Last meaningful update: **2026-05-21T17:00Z** (Spark4 back up — three P0 throughput investigations unblocked: #1208 regression, #1209 MoE queue, #1198 prefix cache; #1196 PP=3 sweep also live again)
 
 > **Naming note.** The Centaur vision document names four *workstream components* (factory core, memory domain, providers, product/UI). The coordination system uses agent *track slots* (`track:1`, `track:2`, `track:3`, `track:4`). These are not the same thing despite the unfortunate number overlap. **Any track slot may work on any workstream component.** A track is an agent handle with accumulated PR history; it is not a job description. This dashboard reports component progress; the stall ledger reports per-track-slot behavior.
 
@@ -92,12 +92,12 @@ The product target is `a machine that creates machines that solves domains effic
 | spark-0 | DOWN | — | — | SSH banner timeout since ~2026-05-20 late |
 | spark-1 | DOWN | — | — | Same |
 | spark-2 | UP | dedicated (qualification done) | Small-model qualification corpus committed; can now host live `local_small`/`local_coder` providers if wired | |
-| spark-3 | UP | track:1 | vLLM TP=2 spare / sweep launcher | Currently degraded due to Spark4 outage |
-| **spark-4** | **DOWN** | **—** | **Was vLLM TP=2 node A — outage since ~11:30Z** | Banner timeout. Blocks #1208/#1209/#1196/#1198. |
-| spark-5 | UP | track:1 | vLLM TP=2 node B | Idle without partner |
+| spark-3 | UP | track:1 | vLLM TP=2 spare / sweep launcher | |
+| spark-4 | UP | track:1 | vLLM TP=2 node A | Restored 17:00Z; verify with `ssh spark4 hostname` and `curl /v1/models` before claiming |
+| spark-5 | UP | track:1 | vLLM TP=2 node B | |
 | spark-6 | UP | track:4 | Isolated ds4-eval baseline | Corrected baseline done (73/92 at 13.9 tok/s); slot free for next claim |
 
-4/7 Sparks online and useful. **Spark4 is the critical-path block** for the vLLM throughput investigation lane.
+6/7 Sparks online and useful. Spark0/1 remain down; everything else is claimable. The vLLM throughput investigation lane is unblocked.
 
 ---
 
