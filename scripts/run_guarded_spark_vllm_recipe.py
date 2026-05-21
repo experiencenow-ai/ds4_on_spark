@@ -16,6 +16,7 @@ if str(REPO_ROOT) not in sys.path:
 	sys.path.insert(0,str(REPO_ROOT))
 
 from scripts import vllm_ds4_flash_launch_guard as launch_guard
+from scripts import vllm_memory_safety_preflight as memory_preflight
 
 
 BEGIN = "=== Generated Launch Script ==="
@@ -70,6 +71,31 @@ def guard_script_text(script: str) -> dict[str, object]:
 			pass
 
 
+def memory_preflight_script_text(script: str, args: argparse.Namespace) -> dict[str, object]:
+	with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False) as f:
+		f.write(script)
+		path = Path(f.name)
+	try:
+		return(memory_preflight.evaluate_path(
+			path,
+			available_kv_gib=args.available_kv_gib,
+			gpu_total_gib=args.gpu_total_gib,
+			gpu_used_gib=args.gpu_used_gib,
+			gpu_free_gib=args.gpu_free_gib,
+			min_free_gib=args.min_free_gib,
+			kv_headroom_ratio=args.kv_headroom_ratio,
+			require_memory_sample=args.require_memory_sample,
+			runtime_free_gib=args.runtime_free_gib,
+			runtime_soft_min_free_gib=args.runtime_soft_min_free_gib,
+			runtime_hard_min_free_gib=args.runtime_hard_min_free_gib,
+		))
+	finally:
+		try:
+			path.unlink()
+		except OSError:
+			pass
+
+
 def print_process_output(result: subprocess.CompletedProcess[str]) -> None:
 	if result.stdout:
 		print(result.stdout, end="")
@@ -81,6 +107,16 @@ def parse_args() -> argparse.Namespace:
 	p = argparse.ArgumentParser(description=__doc__)
 	p.add_argument("--runner", required=True, help="Path to spark-vllm-docker run-recipe.sh or run-recipe.py")
 	p.add_argument("--allow-blocked", action="store_true", help="Print guard failures but still execute the recipe")
+	p.add_argument("--available-kv-gib", type=float, help="Measured vLLM available KV cache memory for preflight")
+	p.add_argument("--gpu-total-gib", type=float, help="Measured GPU/system memory total for preflight")
+	p.add_argument("--gpu-used-gib", type=float, help="Measured GPU/system memory used for preflight")
+	p.add_argument("--gpu-free-gib", type=float, help="Measured GPU/system memory free for preflight")
+	p.add_argument("--min-free-gib", type=float, default=8.0, help="Minimum free memory floor before launch")
+	p.add_argument("--kv-headroom-ratio", type=float, default=0.10, help="Required KV headroom above the estimated request need")
+	p.add_argument("--require-memory-sample", action="store_true", help="Block launch unless a memory sample is supplied")
+	p.add_argument("--runtime-free-gib", type=float, help="Runtime free-memory sample for low-memory drain/terminate classification")
+	p.add_argument("--runtime-soft-min-free-gib", type=float, default=10.0)
+	p.add_argument("--runtime-hard-min-free-gib", type=float, default=6.0)
 	p.add_argument("recipe_args", nargs=argparse.REMAINDER, help="Arguments passed to the recipe runner")
 	return(p.parse_args())
 
@@ -108,9 +144,14 @@ def main() -> int:
 		print(f"launch guard failed to inspect dry-run output: {e}", file=sys.stderr)
 		return(2)
 	print(json.dumps({"launch_guard": result}, indent=2, sort_keys=True))
+	mem_result = memory_preflight_script_text(script,args)
+	print(json.dumps({"memory_preflight": mem_result}, indent=2, sort_keys=True))
 	if result.get("status") == launch_guard.BAD and not args.allow_blocked:
 		print("refusing to execute blocked vLLM launch profile", file=sys.stderr)
 		return(3)
+	if mem_result.get("status") == memory_preflight.BAD and not args.allow_blocked:
+		print("refusing to execute memory-unsafe vLLM launch profile", file=sys.stderr)
+		return(4)
 	if has_dry_run_arg(args.recipe_args):
 		return(0)
 	print(f"guard execute: {shlex.join(original_cmd)}")

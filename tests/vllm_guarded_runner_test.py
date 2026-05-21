@@ -69,6 +69,14 @@ exit 0
 		self.assertTrue(marker.exists())
 		self.assertIn('"status": "passed"', result.stdout)
 
+	def test_memory_unsafe_profile_does_not_execute(self) -> None:
+		runner, marker = self.make_runner(SAFE_SCRIPT)
+		cmd = ["python3", "scripts/run_guarded_spark_vllm_recipe.py", "--runner", str(runner), "--available-kv-gib", "6.07", "recipe.yaml", "--no-ray"]
+		result = subprocess.run(cmd, text=True, capture_output=True)
+		self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+		self.assertFalse(marker.exists())
+		self.assertIn("kv_request_exceeds_available", result.stdout)
+
 
 if __name__ == "__main__":
 	unittest.main()
