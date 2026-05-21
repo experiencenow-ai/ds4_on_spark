@@ -65,6 +65,8 @@ def default_command_runner(command: list[str], timeout_seconds: float) -> dict[s
 def build_llama_command(host: str, llama_cli: str, model_path: str, prompt: str, max_tokens: int, timeout_seconds: float) -> list[str]:
     remote = [
         "timeout",
+        "-k",
+        "5s",
         str(int(max(timeout_seconds, 1.0))),
         llama_cli,
         "-m",
