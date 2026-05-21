@@ -53,17 +53,30 @@ Face organizations as of 2026-05-20.
 
 Use the candidate tiers this way:
 
-- `next_seed_priority`: pull these first. They are small, fast, GGUF, FP8, or
-  useful support models such as embedding and reranker models.
-- `small_and_mid_llm`, `ministral3_gguf`, `phi4_current`, and similar tiers:
-  good default local shelf for experiments.
-- `large_fast`: pull FP8, GPTQ-Int4, NVFP4, or GGUF variants before full
-  BF16/FP16 unless a run specifically needs unquantized weights.
-- `multimodal_audio`, `vision_ocr_math`, and similar tiers: cache when the
-  workload needs that modality, but do not block text-only inference.
+- `next_seed_priority`: pull these first. They are text/code/reasoning repos
+  that should run on one Spark and are smaller than the current DeepSeek V4
+  footprint. Pull complete repos, not weight-only subsets.
+- `single_spark_mirror_policy`: this is the replication gate for any future
+  addition to `next_seed_priority`.
+- `small_and_mid_llm`, `ministral3_gguf`, `phi4_current`, and similar tiers are
+  catalog pools, not automatic mirror queues.
+- `large_fast`: catalog only unless a run explicitly needs the model and we have
+  a concrete distributed runtime plan.
+- `multimodal_audio`, `vision_ocr_math`, speech, OCR, image/video, embedding,
+  and reranker tiers are not part of the default mirror-everywhere model shelf.
 - Gated families such as Gemma and Llama stay in the manifest even before
   license acceptance. Accept terms once, seed on a node with internet, then
   mirror over the ring.
+
+Default replication rule:
+
+```text
+mirror everywhere only if full repo <= 80 GB and the model is text/code/reasoning
+```
+
+This deliberately excludes Kimi K2, Llama 405B, DeepSeek V4 Pro, GLM-5 full, and
+other huge or distributed-only repos. Those can stay in the catalog but should
+not consume every Spark's disk unless a specific run needs them.
 
 Future HF-format repos go under:
 
