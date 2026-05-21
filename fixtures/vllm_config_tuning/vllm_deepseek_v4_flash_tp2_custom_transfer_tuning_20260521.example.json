@@ -1,127 +1,164 @@
 {
-  "format": "ds4-vllm-config-tuning-v1",
-  "artifact_sha256": "4411393d0f300e0fb2c5c2632d0b3f8a03da2c10486a0bfade3d90e5180d2459",
-  "benchmark_id": "ds4-vllm-tp2-custom-transfer-tuning-spark45-20260521",
-  "created_utc": "2026-05-21T07:20:00Z",
-  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
-  "runtime": "vllm",
-  "runtime_version": "0.1.dev16581+gdda4668b5.d20260521",
-  "runtime_commit": "dda4668b59567416f86956cfe7bbc1eab371a61e",
-  "hardware": {
-    "head_node": "spark4",
-    "worker_node": "spark5",
-    "fabric": "direct_200g_pair",
-    "machine": "DGX Spark"
-  },
-  "custom_ds4_lessons_tested": [
-    {
-      "lesson": "Larger effective row batches can improve expensive layer utilization.",
-      "vllm_transfer": "Increase max_num_batched_tokens.",
-      "result": "Rejected: 16384 was slower and 32768 at 200k context failed KV allocation."
-    },
-    {
-      "lesson": "Do not pay for reuse machinery when rows intentionally have distinct prefixes.",
-      "vllm_transfer": "Launch with explicit --no-enable-prefix-caching.",
-      "result": "Rejected: explicit no-prefix was slower than the prior prefix-enabled run despite 0.0% observed prefix hits."
-    },
-    {
-      "lesson": "The fast custom path is a short-output benchmark rather than long-context serving.",
-      "vllm_transfer": "Use max_model_len=8192 with a larger scheduler token cap.",
-      "result": "Rejected: KV capacity fell to 24392 tokens and high fanout queued."
-    },
-    {
-      "lesson": "Candidate-only constrained scoring speeds the custom path by avoiding full-vocab work.",
-      "vllm_transfer": "Use vLLM structured_outputs.choice.",
-      "result": "Already measured in PR #1186: grammar masking did not improve throughput because it is not candidate-only scoring."
-    },
-    {
-      "lesson": "The 3x-4x custom compute win came from DS4 routed-MoE expert-tile/slice-tile8 kernels.",
-      "vllm_transfer": "Check whether the standard vLLM stack activates an equivalent path.",
-      "result": "The measured vLLM run selects MARLIN MXFP4 MoE, not the custom DS4 slice-tile8 path."
-    }
-  ],
-  "selected_config": {
-    "source_fixture": "fixtures/standard_runtime_benchmarks/vllm_deepseek_v4_flash_tp2_no_mtp_spark45_mixed_fanout_20260521.example.json",
-    "max_model_len": 200000,
-    "max_num_batched_tokens": 8192,
-    "enable_prefix_caching_logged": true,
-    "max_num_seqs": 512,
-    "tokens_per_second_at_c512": 174.19031762627782,
-    "tokens_per_second_at_c256": 173.70004298152247,
-    "kv_cache_tokens": 796107,
-    "reason": "Fastest measured vLLM TP=2 no-MTP fanout lane after the custom-transfer config attempts."
-  },
+  "artifact_sha256": "b94b7761be0f39a2d5eed1281291135da9a8ff8de4e8a529b232004e0040a871",
   "attempts": [
     {
       "attempt_id": "max_batched_tokens_32768_ctx200k",
+      "blocker_detail": "vLLM startup failed: at least one 200000-token request required 13.83 GiB KV cache, but only 6.07 GiB was available; estimated max model length was 15104.",
+      "blocker_kind": "kv_cache_allocation",
+      "enable_prefix_caching_logged": true,
+      "kv_cache_tokens": null,
       "max_model_len": 200000,
       "max_num_batched_tokens": 32768,
-      "enable_prefix_caching_logged": true,
+      "safety_status": "blocked_at_startup",
       "startup_status": "failed",
-      "tokens_per_second_at_c512": null,
-      "kv_cache_tokens": null,
-      "blocker_kind": "kv_cache_allocation",
-      "blocker_detail": "vLLM startup failed: at least one 200000-token request required 13.83 GiB KV cache, but only 6.07 GiB was available; estimated max model length was 15104."
+      "tokens_per_second_at_c512": null
     },
     {
       "attempt_id": "max_batched_tokens_16384_ctx200k",
-      "max_model_len": 200000,
-      "max_num_batched_tokens": 16384,
       "enable_prefix_caching_logged": true,
-      "startup_status": "passed",
       "kv_cache_tokens": 367517,
       "max_full_context_concurrency": 1.84,
+      "max_model_len": 200000,
+      "max_num_batched_tokens": 16384,
+      "raw_artifact": "fixtures/vllm_config_tuning/ds4_vllm_mixed_fanout_no_mtp_maxtok16384_20260521.raw.json",
+      "raw_artifact_sha256": "9b4ae9cb6353441a9278c769fe78fe80689de4ba49996e3829cbcf226a235dbf",
+      "safety_status": "rejected_slower",
+      "startup_status": "passed",
       "tokens_per_second_by_concurrency": {
-        "64": 89.67810391094605,
         "128": 115.29571478690866,
         "256": 122.87583498594289,
-        "512": 127.36838668322197
-      },
-      "raw_artifact": "fixtures/vllm_config_tuning/ds4_vllm_mixed_fanout_no_mtp_maxtok16384_20260521.raw.json",
-      "raw_artifact_sha256": "9b4ae9cb6353441a9278c769fe78fe80689de4ba49996e3829cbcf226a235dbf"
+        "512": 127.36838668322197,
+        "64": 89.67810391094605
+      }
     },
     {
       "attempt_id": "explicit_no_prefix_ctx200k",
+      "enable_prefix_caching_logged": false,
+      "kv_cache_tokens": 729138,
+      "launch_guard_status": "passed",
+      "max_full_context_concurrency": 3.65,
       "max_model_len": 200000,
       "max_num_batched_tokens": 8192,
-      "enable_prefix_caching_logged": false,
+      "raw_artifact": "fixtures/vllm_config_tuning/ds4_vllm_mixed_fanout_no_mtp_no_prefix_explicit_8192_20260521.raw.json",
+      "raw_artifact_sha256": "a0cb5bbebe07737afbc17b454bb97c8866e3dbd9fe57db6bebc5251fa1e19db6",
+      "safety_status": "passed_in_prior_c512_sweep",
       "startup_status": "passed",
-      "kv_cache_tokens": 729138,
-      "max_full_context_concurrency": 3.65,
       "tokens_per_second_by_concurrency": {
-        "64": 105.674695056921,
         "128": 133.50565085431776,
         "256": 148.0810578578462,
-        "512": 149.0744608511214
-      },
-      "raw_artifact": "fixtures/vllm_config_tuning/ds4_vllm_mixed_fanout_no_mtp_no_prefix_explicit_8192_20260521.raw.json",
-      "raw_artifact_sha256": "a0cb5bbebe07737afbc17b454bb97c8866e3dbd9fe57db6bebc5251fa1e19db6"
+        "512": 149.0744608511214,
+        "64": 105.674695056921
+      }
     },
     {
       "attempt_id": "short_context_8192_max_batched_tokens_32768",
-      "max_model_len": 8192,
-      "max_num_batched_tokens": 32768,
       "enable_prefix_caching_logged": true,
-      "startup_status": "passed",
       "kv_cache_tokens": 24392,
       "max_full_context_concurrency": 2.98,
+      "max_model_len": 8192,
+      "max_num_batched_tokens": 32768,
+      "raw_artifact": "fixtures/vllm_config_tuning/ds4_vllm_mixed_fanout_no_mtp_shortctx8192_maxtok32768_20260521.raw.json",
+      "raw_artifact_sha256": "9297a715b0d23d1d87b487fa19253bc2800458b4d3b3506fe31f81301afb79df",
+      "safety_status": "rejected_slower",
+      "startup_status": "passed",
       "tokens_per_second_by_concurrency": {
         "128": 116.85586567080975,
         "512": 135.35407922552488
-      },
-      "raw_artifact": "fixtures/vllm_config_tuning/ds4_vllm_mixed_fanout_no_mtp_shortctx8192_maxtok32768_20260521.raw.json",
-      "raw_artifact_sha256": "9297a715b0d23d1d87b487fa19253bc2800458b4d3b3506fe31f81301afb79df"
+      }
+    },
+    {
+      "attempt_id": "prefix_enabled_ctx200k_c512_stress_remote_disconnect",
+      "blocker_detail": "A live c64 run completed with zero errors, then a c512 fanout run returned 512 RemoteDisconnected errors; /v1/models was down afterward and Docker logs/containers were no longer available on both nodes.",
+      "blocker_kind": "rank0_api_death_after_c512",
+      "enable_prefix_caching_logged": true,
+      "max_model_len": 200000,
+      "max_num_batched_tokens": 8192,
+      "raw_artifact": "fixtures/vllm_config_tuning/ds4_vllm_c512_prefix_cache_remote_disconnect_20260521.raw.json",
+      "raw_artifact_sha256": "80b1a37b332529834f3a13e231a2eb5de5439efc11629748a90acd57c4a0ebe9",
+      "safety_status": "failed_after_stress",
+      "startup_status": "passed_then_failed_under_c512_stress",
+      "tokens_per_second_by_concurrency": {
+        "512": 0.0,
+        "64": 114.90490711524322
+      }
+    },
+    {
+      "attempt_id": "prefix_enabled_ctx200k_c64_survived_before_c512_failure",
+      "blocker_detail": "c64 is not sufficient acceptance for this provider because the same live process died under c512 stress immediately afterward.",
+      "blocker_kind": "none_at_c64",
+      "enable_prefix_caching_logged": true,
+      "max_model_len": 200000,
+      "max_num_batched_tokens": 8192,
+      "raw_artifact": "fixtures/vllm_config_tuning/ds4_vllm_c64_prefix_cache_survived_20260521.raw.json",
+      "raw_artifact_sha256": "e7d4b857388b893cfa4278686a9ed5a2257de322790ee05aaa284cc93c331115",
+      "safety_status": "insufficient_for_c512",
+      "startup_status": "passed_for_c64_only",
+      "tokens_per_second_by_concurrency": {
+        "64": 114.90490711524322
+      }
     }
   ],
+  "benchmark_id": "ds4-vllm-tp2-custom-transfer-tuning-spark45-20260521",
   "conclusion": {
-    "improved_vllm_performance": false,
-    "best_measured_tokens_per_second": 174.19031762627782,
-    "best_measured_config": "ctx200k_max_num_batched_tokens8192_prefix_cache_enabled",
+    "best_measured_config": "ctx200k_max_num_batched_tokens8192_prefix_cache_disabled",
+    "best_measured_tokens_per_second": 149.0744608511214,
     "do_not_apply": [
-      "Do not raise max_num_batched_tokens above 8192 for the 200k-context Spark4/Spark5 TP=2 lane without retesting KV capacity.",
-      "Do not add --no-enable-prefix-caching for this mixed fanout lane.",
-      "Do not use max_model_len=8192 for 512-way fanout; it reduced KV token capacity too far."
+      "Do not use the prefix-enabled 200k/c512 profile for Spark4/Spark5; c512 stress reproduced rank0/API death despite c64 success.",
+      "Do not use max_num_batched_tokens=512 for the 200k-context c512 lane; relaunch showed 512-size graph capture, low KV headroom, worker exit, and Spark4 SSH banner timeouts.",
+      "Do not raise max_num_batched_tokens above 8192 for the 200k-context Spark4/Spark5 TP=2 lane without retesting KV capacity."
     ],
-    "next_code_change": "A real vLLM improvement requires an actual candidate-only output path or a DeepSeek-V4 MoE backend equivalent to the custom DS4 slice-tile8 path; config-only transfers did not reproduce the custom speedup."
+    "improved_vllm_performance": false,
+    "next_code_change": "Run the DS4 vLLM launch guard before every Spark4/Spark5 DeepSeek-V4-Flash launch, and only retest c512 after Spark4 is rebooted/recovered."
+  },
+  "created_utc": "2026-05-21T07:20:00Z",
+  "custom_ds4_lessons_tested": [
+    {
+      "lesson": "Larger effective row batches can improve expensive layer utilization.",
+      "result": "Rejected: 16384 was slower and 32768 at 200k context failed KV allocation.",
+      "vllm_transfer": "Increase max_num_batched_tokens."
+    },
+    {
+      "lesson": "Do not pay for reuse machinery when rows intentionally have distinct prefixes.",
+      "result": "Rejected: explicit no-prefix was slower than the prior prefix-enabled run despite 0.0% observed prefix hits.",
+      "vllm_transfer": "Launch with explicit --no-enable-prefix-caching."
+    },
+    {
+      "lesson": "The fast custom path is a short-output benchmark rather than long-context serving.",
+      "result": "Rejected: KV capacity fell to 24392 tokens and high fanout queued.",
+      "vllm_transfer": "Use max_model_len=8192 with a larger scheduler token cap."
+    },
+    {
+      "lesson": "Candidate-only constrained scoring speeds the custom path by avoiding full-vocab work.",
+      "result": "Already measured in PR #1186: grammar masking did not improve throughput because it is not candidate-only scoring.",
+      "vllm_transfer": "Use vLLM structured_outputs.choice."
+    },
+    {
+      "lesson": "The 3x-4x custom compute win came from DS4 routed-MoE expert-tile/slice-tile8 kernels.",
+      "result": "The measured vLLM run selects MARLIN MXFP4 MoE, not the custom DS4 slice-tile8 path.",
+      "vllm_transfer": "Check whether the standard vLLM stack activates an equivalent path."
+    }
+  ],
+  "format": "ds4-vllm-config-tuning-v1",
+  "hardware": {
+    "fabric": "direct_200g_pair",
+    "head_node": "spark4",
+    "machine": "DGX Spark",
+    "worker_node": "spark5"
+  },
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "runtime": "vllm",
+  "runtime_commit": "dda4668b59567416f86956cfe7bbc1eab371a61e",
+  "runtime_version": "0.1.dev16581+gdda4668b5.d20260521",
+  "selected_config": {
+    "enable_prefix_caching_logged": false,
+    "kv_cache_tokens": 729138,
+    "max_model_len": 200000,
+    "max_num_batched_tokens": 8192,
+    "max_num_seqs": 512,
+    "reason": "Fastest measured c512 config that explicitly disabled prefix caching; a later prefix-enabled stress rerun killed rank0/API and invalidated the older faster prefix-enabled selection.",
+    "safety_status": "passed_in_prior_c512_sweep",
+    "source_fixture": "fixtures/vllm_config_tuning/ds4_vllm_mixed_fanout_no_mtp_no_prefix_explicit_8192_20260521.raw.json",
+    "tokens_per_second_at_c256": 148.0810578578462,
+    "tokens_per_second_at_c512": 149.0744608511214
   }
 }

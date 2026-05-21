@@ -41,6 +41,10 @@ def load(path: Path) -> dict[str, Any]:
 
 
 def attempt_best_tps(attempt: dict[str, Any]) -> float:
+	if attempt.get("safety_status") not in (None, "passed"):
+		return(0.0)
+	if attempt.get("startup_status") not in (None, "passed"):
+		return(0.0)
 	by_c = attempt.get("tokens_per_second_by_concurrency")
 	if not isinstance(by_c, dict):
 		return(0.0)
