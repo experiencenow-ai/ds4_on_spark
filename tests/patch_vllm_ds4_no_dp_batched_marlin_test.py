@@ -1,4 +1,6 @@
 import tempfile
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -220,6 +222,22 @@ class PatchVllmDs4NoDpBatchedMarlinTest(unittest.TestCase):
 			self.assertTrue((topk_reduce.with_name(topk_reduce.name + ".bak")).exists())
 			result2 = patcher.apply_patch(root, backup_suffix=".bak", write=True)
 			self.assertFalse(result2["changed"])
+
+	def test_cli_refuses_default_write_for_known_wedge_profile(self) -> None:
+		with tempfile.TemporaryDirectory() as tmp:
+			result = subprocess.run(
+				[
+					sys.executable,
+					"scripts/patch_vllm_ds4_no_dp_batched_marlin.py",
+					"--vllm-package-dir",
+					tmp,
+				],
+				capture_output=True,
+				text=True,
+			)
+			self.assertNotEqual(result.returncode, 0)
+			self.assertIn("refusing to write known Spark4-wedging prototype", result.stderr)
+			self.assertIn(patcher.UNSAFE_WRITE_FLAG, result.stderr)
 
 
 if __name__ == "__main__":

@@ -15,6 +15,14 @@ class PatchError(RuntimeError):
 	pass
 
 
+UNSAFE_WRITE_FLAG = "--unsafe-allow-gb10-flashinfer-runtime-failure"
+UNSAFE_WRITE_DETAIL = (
+	"The support gate can be forced on GB10, but the measured TP=2 startup "
+	"selected FLASHINFER_TRTLLM_MXFP4_MXFP8 and then failed in FlashInfer "
+	"0.6.11 trtllm_batched_gemm_runner.cu before API readiness."
+)
+
+
 def sha256_text(text: str) -> str:
 	return(hashlib.sha256(text.encode("utf-8")).hexdigest())
 
@@ -117,7 +125,10 @@ def main() -> int:
 	p.add_argument("package_dir", type=Path)
 	p.add_argument("--write", action="store_true")
 	p.add_argument("--backup-suffix", default=".ds4gb10bak")
+	p.add_argument(UNSAFE_WRITE_FLAG, action="store_true", help=argparse.SUPPRESS)
 	args = p.parse_args()
+	if args.write and not getattr(args, "unsafe_allow_gb10_flashinfer_runtime_failure"):
+		p.error(f"refusing to write known GB10 FlashInfer runtime-failing prototype; pass {UNSAFE_WRITE_FLAG} only for isolated SM121 runtime experiments. {UNSAFE_WRITE_DETAIL}")
 	result = apply_patch(args.package_dir, backup_suffix=args.backup_suffix, write=args.write)
 	print(json.dumps(result, indent=2, sort_keys=True))
 	return(0)

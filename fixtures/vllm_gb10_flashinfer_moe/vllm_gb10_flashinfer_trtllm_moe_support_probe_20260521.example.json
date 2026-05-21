@@ -1,5 +1,5 @@
 {
-  "artifact_sha256": "7d59c304bfe348cd0307967fef2da1f65c22ef6c788eb0c6ad30f696cb1a85e8",
+  "artifact_sha256": "2625147234f4a9834d818dbd690224f9016ddd63e11c1caefdb23710933e98e3",
   "baseline_c512_aggregate_tps": 566.1547121145653,
   "baseline_source_fixture": "fixtures/standard_runtime_benchmarks/vllm_deepseek_v4_flash_tp2_no_mtp_spark45_batch_sweep_20260521.example.json",
   "blocker_detail": "A manual TP=2 no-MTP launch on Spark3/Spark2 with DS4_VLLM_ENABLE_GB10_FLASHINFER_TRTLLM_MOE=1 selected FLASHINFER_TRTLLM_MXFP4_MXFP8 on both ranks, then failed during startup profiling in flashinfer/data/csrc/trtllm_batched_gemm_runner.cu:286: Error occurred when running GEMM, kernel bmm_MxE4m3_MxE2m1MxE4m3_Fp32_Ab32_Bb32_Cb32_t128x128x256u2_s4_et128x32_m256x128x32_c2x1x1_rM_TN_transOut_schPd2x1x2x3_biasFp32M_bN_tma_ldgstsSf_rgTma_clmp_swiGlu_lbW8_lsfbW4_dynB_sm100f. The Spark5/Spark6 alternate pair was also blocked because Spark6 had an existing ./ds4-eval process using about 103 GiB GPU memory; it was not killed without explicit user approval.",
@@ -23,13 +23,13 @@
   "patch_id": "ds4-vllm-gb10-flashinfer-trtllm-moe",
   "platform_family100_before_patch": false,
   "probe_id": "ds4-vllm-gb10-flashinfer-trtllm-moe-support-probe-20260521",
-  "required_next_command": "Do not claim throughput from the GB10 FlashInfer patch. Either keep the production vLLM lane on the measured no-MTP backend, or test a FlashInfer/vLLM build with real SM121 TRTLLM MXFP4 support and rerun the same TP=2 c64/c128/c512 fanout.",
+  "required_next_command": "Do not claim throughput from the GB10 FlashInfer patch. The script now refuses --write unless --unsafe-allow-gb10-flashinfer-runtime-failure is passed. Either keep the production vLLM lane on the measured no-MTP backend, or test a FlashInfer/vLLM build with real SM121 TRTLLM MXFP4 support and rerun the same TP=2 c64/c128/c512 fanout.",
   "runtime": "vllm",
   "runtime_commit": "dda4668b59567416f86956cfe7bbc1eab371a61e",
   "runtime_version": "0.1.dev16581+gdda4668b5.d20260521",
   "source_image": "vllm-node-dsv4",
   "startup_status": "failed",
-  "support_probe_command": "docker run --rm --gpus all -v /tmp/patch_vllm_ds4_gb10_flashinfer_moe.py:/tmp/patch.py:ro --entrypoint bash vllm-node-dsv4 -lc 'python3 /tmp/patch.py /usr/local/lib/python3.12/dist-packages/vllm --write && DS4_VLLM_ENABLE_GB10_FLASHINFER_TRTLLM_MOE=1 python3 -c ...'",
+  "support_probe_command": "docker run --rm --gpus all -v /tmp/patch_vllm_ds4_gb10_flashinfer_moe.py:/tmp/patch.py:ro --entrypoint bash vllm-node-dsv4 -lc 'python3 /tmp/patch.py /usr/local/lib/python3.12/dist-packages/vllm --write --unsafe-allow-gb10-flashinfer-runtime-failure && DS4_VLLM_ENABLE_GB10_FLASHINFER_TRTLLM_MOE=1 python3 -c ...'",
   "support_probe_output": [
     "NVIDIA GB10",
     "(12, 1)",
@@ -57,5 +57,7 @@
       "backend_selected_on_worker": true,
       "error": "flashinfer/data/csrc/trtllm_batched_gemm_runner.cu:286 Error occurred when running GEMM for SM100 TRTLLM FP4 block-scale routed MoE kernel on GB10."
     }
-  ]
+  ],
+  "patch_write_guard": "enabled",
+  "unsafe_override_flag": "--unsafe-allow-gb10-flashinfer-runtime-failure"
 }

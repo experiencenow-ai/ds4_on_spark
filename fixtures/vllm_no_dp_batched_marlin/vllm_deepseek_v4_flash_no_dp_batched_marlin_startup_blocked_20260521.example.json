@@ -1,6 +1,6 @@
 {
   "activation_format": "BatchedExperts",
-  "artifact_sha256": "129510b865f06274c3c4df15e439ff94e1e4a18c3369cffa0ed82173ea4cfa87",
+  "artifact_sha256": "bd68cf22b75a9e617d3cb06a4e526b237cf3b6d5919973c30f4e5f8ea60994fb",
   "baseline_c512_aggregate_tps": 174.19031762627782,
   "baseline_source_fixture": "fixtures/standard_runtime_benchmarks/vllm_deepseek_v4_flash_tp2_no_mtp_spark45_mixed_fanout_20260521.example.json",
   "blocker_detail": "The graph-safe no-DP BatchedMarlin prototype selected BATCHED_MARLIN and BatchedPrepareAndFinalize, and it moved past the earlier illegal host-scalar branch in prepare_finalize/batched.py. It then spent minutes capturing 51 CUDA graph sizes at max_num_batched_tokens=512, made the Spark4 head unresponsive to SSH banner exchange, and never reached API readiness. This path is still not a measured throughput win and should not replace the standard MARLIN lane.",
@@ -21,7 +21,7 @@
   "patch_id": "ds4-vllm-no-dp-batched-marlin-prototype",
   "prepare_finalize": "BatchedPrepareAndFinalize",
   "prototype_id": "ds4-vllm-deepseek-v4-flash-no-dp-batched-marlin-graphsafe-capture-blocked-20260521",
-  "required_next_code_change": "Do not keep expanding the Python BatchedPrepareAndFinalize adapter as the primary speed path. First test the opt-in GB10 FlashInfer TRTLLM MXFP4 MoE backend unlock, because the image exposes flashinfer.trtllm_fp4_block_scale_routed_moe and a support probe passes after the GB10 capability gate is patched.",
+  "required_next_code_change": "Keep this profile disabled by default. After Spark4 physical recovery, delete or quarantine any recipe that sets DS4_VLLM_FORCE_NO_DP_BATCHED_MARLIN=1 unless an operator passes --unsafe-allow-spark4-wedge-profile on an isolated expendable node. Do not keep expanding the Python BatchedPrepareAndFinalize adapter as the primary speed path.",
   "runtime": "vllm",
   "runtime_commit": "dda4668b59567416f86956cfe7bbc1eab371a61e",
   "runtime_version": "0.1.dev16581+gdda4668b5.d20260521",
@@ -40,5 +40,7 @@
     "spark4_ssh_banner_timeout": true,
     "worker_node": "spark5"
   },
-  "startup_status": "failed"
+  "startup_status": "failed",
+  "patch_write_guard": "enabled",
+  "unsafe_override_flag": "--unsafe-allow-spark4-wedge-profile"
 }

@@ -1,4 +1,6 @@
 import tempfile
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -45,6 +47,22 @@ class PatchVllmDs4Gb10FlashinferMoeTest(unittest.TestCase):
 			self.assertTrue((target.with_name(target.name + ".bak")).exists())
 			result2 = patcher.apply_patch(root, backup_suffix=".bak", write=True)
 			self.assertFalse(result2["changed"])
+
+	def test_cli_refuses_write_for_known_runtime_failure(self) -> None:
+		with tempfile.TemporaryDirectory() as tmp:
+			result = subprocess.run(
+				[
+					sys.executable,
+					"scripts/patch_vllm_ds4_gb10_flashinfer_moe.py",
+					tmp,
+					"--write",
+				],
+				capture_output=True,
+				text=True,
+			)
+			self.assertNotEqual(result.returncode, 0)
+			self.assertIn("refusing to write known GB10 FlashInfer runtime-failing prototype", result.stderr)
+			self.assertIn(patcher.UNSAFE_WRITE_FLAG, result.stderr)
 
 
 if __name__ == "__main__":

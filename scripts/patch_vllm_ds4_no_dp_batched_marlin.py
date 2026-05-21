@@ -13,6 +13,12 @@ from typing import Any
 
 
 PATCH_ID = "ds4-vllm-no-dp-batched-marlin-prototype"
+UNSAFE_WRITE_FLAG = "--unsafe-allow-spark4-wedge-profile"
+UNSAFE_WRITE_DETAIL = (
+	"This no-DP BatchedMarlin prototype selected BATCHED_MARLIN, then wedged "
+	"Spark4 during FULL_AND_PIECEWISE CUDA graph capture before API readiness. "
+	"Use only on an expendable node after a reboot/power-cycle plan is in place."
+)
 
 
 class PatchError(RuntimeError):
@@ -398,7 +404,10 @@ def main() -> int:
 	parser.add_argument("--vllm-package-dir")
 	parser.add_argument("--backup-suffix", default=".ds4_no_dp_batched_marlin_bak")
 	parser.add_argument("--check", action="store_true", help="Show whether changes are needed without writing.")
+	parser.add_argument(UNSAFE_WRITE_FLAG, action="store_true", help=argparse.SUPPRESS)
 	args = parser.parse_args()
+	if not args.check and not getattr(args, "unsafe_allow_spark4_wedge_profile"):
+		parser.error(f"refusing to write known Spark4-wedging prototype; pass {UNSAFE_WRITE_FLAG} only for isolated recovery experiments. {UNSAFE_WRITE_DETAIL}")
 	package_dir = locate_package_dir(
 		Path(args.runtime_root).expanduser() if args.runtime_root else None,
 		Path(args.vllm_package_dir).expanduser() if args.vllm_package_dir else None,
