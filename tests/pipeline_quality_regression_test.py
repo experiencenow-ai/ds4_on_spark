@@ -181,10 +181,15 @@ class PipelineQualityRegressionTest(unittest.TestCase):
 			self.assertEqual(len(question_rows), 4)
 			self.assertTrue(all(row["passed"] for row in question_rows))
 			self.assertEqual(rows[-1]["passed"], 4)
+			self.assertEqual(
+				[(item["source"], item["domain"], item["passed"], item["question_count"]) for item in rows[-1]["domain_breakdown"]],
+				[("AIME2025", "Math", 1, 1), ("COMPSEC", "C", 1, 1), ("GPQA Diamond", "Physics", 1, 1), ("LONG_CONTEXT_RECALL", "Recall", 1, 1)],
+			)
 			throughput = truth.summarize(out)
 			self.assertEqual(throughput["format"], "pipeline-throughput-truth-v1")
 			self.assertEqual(throughput["question_count"], 4)
 			self.assertGreater(throughput["aggregate_output_tokens_per_s"], 0.0)
+			self.assertEqual(throughput["domain_breakdown"][0]["source"], "AIME2025")
 
 	def test_baseline_delta_marks_token_divergence(self) -> None:
 		with tempfile.TemporaryDirectory() as d:
@@ -228,6 +233,10 @@ class PipelineQualityRegressionTest(unittest.TestCase):
 			self.assertEqual(rows[-1]["passed"], 1)
 			self.assertEqual(rows[-1]["failed"], 1)
 			self.assertEqual(rows[-1]["aggregate_output_tokens_per_s"], 2.5)
+			self.assertEqual(
+				[(item["source"], item["domain"], item["passed"], item["failed"]) for item in rows[-1]["domain_breakdown"]],
+				[("COMPSEC", "C", 0, 1), ("GPQA Diamond", "Physics", 1, 0)],
+			)
 			self.assertEqual(rows[0]["question_kind"], "multiple_choice")
 			self.assertEqual(rows[1]["question_kind"], "compsec")
 			self.assertEqual(rows[0]["generated_text"], "Answer: B")

@@ -27,6 +27,39 @@ def load_records(path: Path) -> list[dict[str, Any]]:
 	return records
 
 
+def summarize_domains(questions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	buckets: dict[tuple[str, str], dict[str, Any]] = {}
+	for row in questions:
+		source = str(row.get("source") or "")
+		domain = str(row.get("domain") or "")
+		key = (source, domain)
+		bucket = buckets.setdefault(key, {
+			"source": source,
+			"domain": domain,
+			"question_count": 0,
+			"passed": 0,
+			"failed": 0,
+			"generated_tokens": 0,
+			"elapsed_sec": 0.0,
+		})
+		bucket["question_count"] += 1
+		if row.get("passed") is True:
+			bucket["passed"] += 1
+		elif row.get("passed") is False:
+			bucket["failed"] += 1
+		bucket["generated_tokens"] += int(row.get("generated_tokens") or 0)
+		bucket["elapsed_sec"] += float(row.get("elapsed_sec") or 0.0)
+	breakdown = []
+	for bucket in buckets.values():
+		questions_count = int(bucket["question_count"])
+		tokens = int(bucket["generated_tokens"])
+		elapsed = float(bucket["elapsed_sec"])
+		bucket["pass_rate"] = bucket["passed"] / questions_count if questions_count > 0 else 0.0
+		bucket["aggregate_output_tokens_per_s"] = tokens / elapsed if elapsed > 0.0 else 0.0
+		breakdown.append(bucket)
+	return sorted(breakdown, key=lambda item: (str(item["source"]), str(item["domain"])))
+
+
 def summarize(path: Path) -> dict[str, Any]:
 	records = load_records(path)
 	questions = [row for row in records if row.get("record_type") == "question"]
@@ -47,6 +80,7 @@ def summarize(path: Path) -> dict[str, Any]:
 		"generated_tokens": generated_tokens,
 		"elapsed_sec": elapsed_sec,
 		"aggregate_output_tokens_per_s": generated_tokens / elapsed_sec if elapsed_sec > 0.0 else 0.0,
+		"domain_breakdown": summarize_domains(questions),
 		"case_tokens_per_s": [
 			{
 				"case_id": row.get("case_id"),

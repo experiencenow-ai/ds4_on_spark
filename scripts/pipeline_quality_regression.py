@@ -408,6 +408,39 @@ def baseline_delta(record: dict[str, Any], baseline: dict[str, dict[str, Any]]) 
 	}
 
 
+def summarize_domains(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	buckets: dict[tuple[str, str], dict[str, Any]] = {}
+	for row in records:
+		source = str(row.get("source") or "")
+		domain = str(row.get("domain") or "")
+		key = (source, domain)
+		bucket = buckets.setdefault(key, {
+			"source": source,
+			"domain": domain,
+			"question_count": 0,
+			"passed": 0,
+			"failed": 0,
+			"generated_tokens": 0,
+			"elapsed_sec": 0.0,
+		})
+		bucket["question_count"] += 1
+		if row.get("passed") is True:
+			bucket["passed"] += 1
+		elif row.get("passed") is False:
+			bucket["failed"] += 1
+		bucket["generated_tokens"] += int(row.get("generated_tokens") or 0)
+		bucket["elapsed_sec"] += float(row.get("elapsed_sec") or 0.0)
+	breakdown = []
+	for bucket in buckets.values():
+		questions = int(bucket["question_count"])
+		elapsed = float(bucket["elapsed_sec"])
+		tokens = int(bucket["generated_tokens"])
+		bucket["pass_rate"] = bucket["passed"] / questions if questions > 0 else 0.0
+		bucket["aggregate_output_tokens_per_s"] = tokens / elapsed if elapsed > 0 else 0.0
+		breakdown.append(bucket)
+	return sorted(breakdown, key=lambda item: (str(item["source"]), str(item["domain"])))
+
+
 def _parse_trace_fields(section: str) -> dict[str, str]:
 	fields: dict[str, str] = {}
 	for line in section.splitlines():
@@ -536,6 +569,7 @@ def load_ds4_eval_trace(path: Path, args: argparse.Namespace) -> tuple[list[dict
 		"generated_tokens": total_tokens,
 		"elapsed_sec": total_elapsed,
 		"aggregate_output_tokens_per_s": total_tokens / total_elapsed if total_elapsed > 0 else 0.0,
+		"domain_breakdown": summarize_domains(records),
 		"baseline_path": args.baseline or "",
 		"ds4_eval_trace_path": trace_artifact,
 		"ds4_eval_stdout_path": args.ds4_eval_stdout,
@@ -622,6 +656,7 @@ def run_cases(args: argparse.Namespace) -> tuple[list[dict[str, Any]], dict[str,
 		"generated_tokens": total_tokens,
 		"elapsed_sec": total_elapsed,
 		"aggregate_output_tokens_per_s": total_tokens / total_elapsed if total_elapsed > 0 else 0.0,
+		"domain_breakdown": summarize_domains(records),
 		"baseline_path": args.baseline or "",
 	}
 	return records, summary
