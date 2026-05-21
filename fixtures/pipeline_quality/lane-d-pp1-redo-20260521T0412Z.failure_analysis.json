@@ -1,0 +1,431 @@
+{
+  "aggregate_output_tokens_per_s": 13.896074915622428,
+  "domain_breakdown": [
+    {
+      "domain": "Combinatorics",
+      "failed": 4,
+      "format_error": 0,
+      "other": 0,
+      "refusal": 0,
+      "source": "AIME2025",
+      "truncation": 4,
+      "wrong_answer": 0
+    },
+    {
+      "domain": "Chemistry",
+      "failed": 3,
+      "format_error": 0,
+      "other": 0,
+      "refusal": 0,
+      "source": "GPQA Diamond",
+      "truncation": 3,
+      "wrong_answer": 0
+    },
+    {
+      "domain": "Algebra",
+      "failed": 2,
+      "format_error": 1,
+      "other": 0,
+      "refusal": 0,
+      "source": "AIME2025",
+      "truncation": 1,
+      "wrong_answer": 0
+    },
+    {
+      "domain": "Number Theory",
+      "failed": 2,
+      "format_error": 0,
+      "other": 0,
+      "refusal": 0,
+      "source": "AIME2025",
+      "truncation": 2,
+      "wrong_answer": 0
+    },
+    {
+      "domain": "Biology",
+      "failed": 2,
+      "format_error": 0,
+      "other": 0,
+      "refusal": 0,
+      "source": "GPQA Diamond",
+      "truncation": 1,
+      "wrong_answer": 1
+    },
+    {
+      "domain": "Combinatorics, Number Theory",
+      "failed": 1,
+      "format_error": 0,
+      "other": 0,
+      "refusal": 0,
+      "source": "AIME2025",
+      "truncation": 1,
+      "wrong_answer": 0
+    },
+    {
+      "domain": "Geometry",
+      "failed": 1,
+      "format_error": 0,
+      "other": 0,
+      "refusal": 0,
+      "source": "AIME2025",
+      "truncation": 1,
+      "wrong_answer": 0
+    },
+    {
+      "domain": "Botan",
+      "failed": 1,
+      "format_error": 0,
+      "other": 0,
+      "refusal": 0,
+      "source": "COMPSEC",
+      "truncation": 0,
+      "wrong_answer": 1
+    },
+    {
+      "domain": "Military Science",
+      "failed": 1,
+      "format_error": 0,
+      "other": 0,
+      "refusal": 0,
+      "source": "SuperGPQA",
+      "truncation": 0,
+      "wrong_answer": 1
+    },
+    {
+      "domain": "Science",
+      "failed": 1,
+      "format_error": 0,
+      "other": 0,
+      "refusal": 0,
+      "source": "SuperGPQA",
+      "truncation": 0,
+      "wrong_answer": 1
+    },
+    {
+      "domain": "Sociology",
+      "failed": 1,
+      "format_error": 0,
+      "other": 0,
+      "refusal": 0,
+      "source": "SuperGPQA",
+      "truncation": 0,
+      "wrong_answer": 1
+    }
+  ],
+  "failed": 19,
+  "failure_class_breakdown": [
+    {
+      "count": 13,
+      "failure_class": "truncation"
+    },
+    {
+      "count": 5,
+      "failure_class": "wrong_answer"
+    },
+    {
+      "count": 1,
+      "failure_class": "format_error"
+    }
+  ],
+  "failures": [
+    {
+      "case_id": "aime2025-05",
+      "case_index": 24,
+      "domain": "Combinatorics, Number Theory",
+      "elapsed_sec": 1160.687,
+      "evidence": "generated_tokens=16000 reached max_tokens=16000",
+      "expected_answer": "279",
+      "failure_class": "truncation",
+      "generated_tokens": 16000,
+      "observed_answer": "1",
+      "source": "AIME2025",
+      "stdout_report_line": " 24 FAILED        126    16000    16126 1        279      AIME2025/aime2025-05"
+    },
+    {
+      "case_id": "recb80OwMgNnceA9t",
+      "case_index": 28,
+      "domain": "Chemistry",
+      "elapsed_sec": 1161.51,
+      "evidence": "generated_tokens=16000 reached max_tokens=16000",
+      "expected_answer": "D",
+      "failure_class": "truncation",
+      "generated_tokens": 16000,
+      "observed_answer": "A",
+      "source": "GPQA Diamond",
+      "stdout_report_line": " 28 FAILED        198    16000    16198 A        D        GPQA Diamond/recb80OwMgNnceA9t"
+    },
+    {
+      "case_id": "aime2025-07",
+      "case_index": 33,
+      "domain": "Combinatorics",
+      "elapsed_sec": 1162.388,
+      "evidence": "generated_tokens=16000 reached max_tokens=16000",
+      "expected_answer": "821",
+      "failure_class": "truncation",
+      "generated_tokens": 16000,
+      "observed_answer": "10395",
+      "source": "AIME2025",
+      "stdout_report_line": " 33 FAILED        196    16000    16196 10395    821      AIME2025/aime2025-07"
+    },
+    {
+      "case_id": "e78e4e539d6f4e379ac140d923d7b1be",
+      "case_index": 41,
+      "domain": "Military Science",
+      "elapsed_sec": 107.338,
+      "evidence": "observed_answer=E expected_answer=H",
+      "expected_answer": "H",
+      "failure_class": "wrong_answer",
+      "generated_tokens": 1574,
+      "observed_answer": "E",
+      "source": "SuperGPQA",
+      "stdout_report_line": " 41 FAILED        128     1574     1702 E        H        SuperGPQA/e78e4e539d6f4e379ac140d923d7b1be"
+    },
+    {
+      "case_id": "aime2025-10",
+      "case_index": 48,
+      "domain": "Combinatorics",
+      "elapsed_sec": 1162.528,
+      "evidence": "generated_tokens=16000 reached max_tokens=16000",
+      "expected_answer": "81",
+      "failure_class": "truncation",
+      "generated_tokens": 16000,
+      "observed_answer": "2",
+      "source": "AIME2025",
+      "stdout_report_line": " 48 FAILED        335    16000    16335 2        81       AIME2025/aime2025-10"
+    },
+    {
+      "case_id": "recZWeueB7lSPR6wN",
+      "case_index": 49,
+      "domain": "Chemistry",
+      "elapsed_sec": 1162.875,
+      "evidence": "generated_tokens=16000 reached max_tokens=16000",
+      "expected_answer": "B",
+      "failure_class": "truncation",
+      "generated_tokens": 16000,
+      "observed_answer": "C",
+      "source": "GPQA Diamond",
+      "stdout_report_line": " 49 FAILED        225    16000    16225 C        B        GPQA Diamond/recZWeueB7lSPR6wN"
+    },
+    {
+      "case_id": "aime2025-25",
+      "case_index": 51,
+      "domain": "Combinatorics",
+      "elapsed_sec": 1161.234,
+      "evidence": "generated_tokens=16000 reached max_tokens=16000",
+      "expected_answer": "907",
+      "failure_class": "truncation",
+      "generated_tokens": 16000,
+      "observed_answer": "13",
+      "source": "AIME2025",
+      "stdout_report_line": " 51 FAILED        117    16000    16117 13       907      AIME2025/aime2025-25"
+    },
+    {
+      "case_id": "recVvpD8miVjmmyfe",
+      "case_index": 52,
+      "domain": "Biology",
+      "elapsed_sec": 1160.687,
+      "evidence": "generated_tokens=16000 reached max_tokens=16000",
+      "expected_answer": "C",
+      "failure_class": "truncation",
+      "generated_tokens": 16000,
+      "observed_answer": "A",
+      "source": "GPQA Diamond",
+      "stdout_report_line": " 52 FAILED        115    16000    16115 A        C        GPQA Diamond/recVvpD8miVjmmyfe"
+    },
+    {
+      "case_id": "aime2025-12",
+      "case_index": 57,
+      "domain": "Algebra",
+      "elapsed_sec": 1124.641,
+      "evidence": "observed_answer=?",
+      "expected_answer": "510",
+      "failure_class": "format_error",
+      "generated_tokens": 15491,
+      "observed_answer": "?",
+      "source": "AIME2025",
+      "stdout_report_line": " 57 FAILED        160    15491    15651 ?        510      AIME2025/aime2025-12"
+    },
+    {
+      "case_id": "aime2025-27",
+      "case_index": 60,
+      "domain": "Geometry",
+      "elapsed_sec": 1162.817,
+      "evidence": "generated_tokens=16000 reached max_tokens=16000",
+      "expected_answer": "19",
+      "failure_class": "truncation",
+      "generated_tokens": 16000,
+      "observed_answer": "9",
+      "source": "AIME2025",
+      "stdout_report_line": " 60 FAILED        284    16000    16284 9        19       AIME2025/aime2025-27"
+    },
+    {
+      "case_id": "aime2025-13",
+      "case_index": 63,
+      "domain": "Combinatorics",
+      "elapsed_sec": 1161.999,
+      "evidence": "generated_tokens=16000 reached max_tokens=16000",
+      "expected_answer": "204",
+      "failure_class": "truncation",
+      "generated_tokens": 16000,
+      "observed_answer": "3",
+      "source": "AIME2025",
+      "stdout_report_line": " 63 FAILED        129    16000    16129 3        204      AIME2025/aime2025-13"
+    },
+    {
+      "case_id": "aime2025-28",
+      "case_index": 66,
+      "domain": "Number Theory",
+      "elapsed_sec": 1162.061,
+      "evidence": "generated_tokens=16000 reached max_tokens=16000",
+      "expected_answer": "248",
+      "failure_class": "truncation",
+      "generated_tokens": 16000,
+      "observed_answer": "1",
+      "source": "AIME2025",
+      "stdout_report_line": " 66 FAILED        182    16000    16182 1        248      AIME2025/aime2025-28"
+    },
+    {
+      "case_id": "reczQ4I0VpENdMtIj",
+      "case_index": 67,
+      "domain": "Biology",
+      "elapsed_sec": 574.555,
+      "evidence": "observed_answer=A expected_answer=C",
+      "expected_answer": "C",
+      "failure_class": "wrong_answer",
+      "generated_tokens": 8044,
+      "observed_answer": "A",
+      "source": "GPQA Diamond",
+      "stdout_report_line": " 67 FAILED        207     8044     8251 A        C        GPQA Diamond/reczQ4I0VpENdMtIj"
+    },
+    {
+      "case_id": "recWxGU8Q4YReJ1tb",
+      "case_index": 70,
+      "domain": "Chemistry",
+      "elapsed_sec": 1166.91,
+      "evidence": "generated_tokens=16000 reached max_tokens=16000",
+      "expected_answer": "C",
+      "failure_class": "truncation",
+      "generated_tokens": 16000,
+      "observed_answer": "A",
+      "source": "GPQA Diamond",
+      "stdout_report_line": " 70 FAILED        777    16000    16777 A        C        GPQA Diamond/recWxGU8Q4YReJ1tb"
+    },
+    {
+      "case_id": "591a77df21324272914be82ac6583399",
+      "case_index": 71,
+      "domain": "Science",
+      "elapsed_sec": 92.489,
+      "evidence": "observed_answer=D expected_answer=F",
+      "expected_answer": "F",
+      "failure_class": "wrong_answer",
+      "generated_tokens": 1354,
+      "observed_answer": "D",
+      "source": "SuperGPQA",
+      "stdout_report_line": " 71 FAILED        277     1354     1631 D        F        SuperGPQA/591a77df21324272914be82ac6583399"
+    },
+    {
+      "case_id": "aime2025-15",
+      "case_index": 72,
+      "domain": "Number Theory",
+      "elapsed_sec": 1161.155,
+      "evidence": "generated_tokens=16000 reached max_tokens=16000",
+      "expected_answer": "735",
+      "failure_class": "truncation",
+      "generated_tokens": 16000,
+      "observed_answer": "0",
+      "source": "AIME2025",
+      "stdout_report_line": " 72 FAILED        127    16000    16127 0        735      AIME2025/aime2025-15"
+    },
+    {
+      "case_id": "e780f37a5baa4fe094cd9c157486664d",
+      "case_index": 74,
+      "domain": "Sociology",
+      "elapsed_sec": 44.647,
+      "evidence": "observed_answer=J expected_answer=H",
+      "expected_answer": "H",
+      "failure_class": "wrong_answer",
+      "generated_tokens": 669,
+      "observed_answer": "J",
+      "source": "SuperGPQA",
+      "stdout_report_line": " 74 FAILED        202      669      871 J        H        SuperGPQA/e780f37a5baa4fe094cd9c157486664d"
+    },
+    {
+      "case_id": "aime2025-30",
+      "case_index": 75,
+      "domain": "Algebra",
+      "elapsed_sec": 1161.373,
+      "evidence": "generated_tokens=16000 reached max_tokens=16000",
+      "expected_answer": "240",
+      "failure_class": "truncation",
+      "generated_tokens": 16000,
+      "observed_answer": "4",
+      "source": "AIME2025",
+      "stdout_report_line": " 75 FAILED        128    16000    16128 4        240      AIME2025/aime2025-30"
+    },
+    {
+      "case_id": "compsec-080",
+      "case_index": 80,
+      "domain": "Botan",
+      "elapsed_sec": 118.083,
+      "evidence": "observed_answer=12 expected_answer=5-6",
+      "expected_answer": "5-6",
+      "failure_class": "wrong_answer",
+      "generated_tokens": 1706,
+      "observed_answer": "12",
+      "source": "COMPSEC",
+      "stdout_report_line": " 80 FAILED        307     1706     2013 12       5-6      COMPSEC/compsec-080"
+    }
+  ],
+  "format": "ds4-eval-failure-analysis-v1",
+  "largest_failure_class": {
+    "count": 13,
+    "failure_class": "truncation",
+    "investigation_lead": true
+  },
+  "max_tokens": 16000,
+  "pass_rate": 0.7934782608695652,
+  "passed": 73,
+  "question_count": 92,
+  "run_id": "lane-d-pp1-redo-20260521T0412Z",
+  "source_breakdown": [
+    {
+      "failed": 10,
+      "format_error": 1,
+      "other": 0,
+      "refusal": 0,
+      "source": "AIME2025",
+      "truncation": 9,
+      "wrong_answer": 0
+    },
+    {
+      "failed": 5,
+      "format_error": 0,
+      "other": 0,
+      "refusal": 0,
+      "source": "GPQA Diamond",
+      "truncation": 4,
+      "wrong_answer": 1
+    },
+    {
+      "failed": 3,
+      "format_error": 0,
+      "other": 0,
+      "refusal": 0,
+      "source": "SuperGPQA",
+      "truncation": 0,
+      "wrong_answer": 3
+    },
+    {
+      "failed": 1,
+      "format_error": 0,
+      "other": 0,
+      "refusal": 0,
+      "source": "COMPSEC",
+      "truncation": 0,
+      "wrong_answer": 1
+    }
+  ],
+  "source_jsonl": "fixtures/pipeline_quality/lane-d-pp1-redo-20260521T0412Z.jsonl",
+  "source_stdout": "fixtures/pipeline_quality/lane-d-pp1-redo-20260521T0412Z.stdout.txt.gz",
+  "verdict": "materially diverged at evaluation termination/control: 13/19 failures reached the 16000-token generation ceiling, so the 73/92 baseline is dominated by hard-budget truncation rather than finished wrong answers."
+}
