@@ -13,6 +13,12 @@ from typing import Any
 
 
 PATCH_ID = "ds4-vllm-no-dp-batched-marlin-prototype"
+UNSAFE_WRITE_FLAG = "--unsafe-allow-spark4-wedge-profile"
+UNSAFE_WRITE_DETAIL = (
+	"This no-DP BatchedMarlin prototype selected BATCHED_MARLIN, then wedged "
+	"Spark4 during FULL_AND_PIECEWISE CUDA graph capture before API readiness. "
+	"Use only on an expendable node after a reboot/power-cycle plan is in place."
+)
 
 
 class PatchError(RuntimeError):
@@ -214,6 +220,141 @@ def patch_batched_prepare_finalize(text: str) -> str:
 			text = text.replace(old_standard, new_local_counter, 1)
 		else:
 			raise PatchError("missing expected block: batched prepare local token counter")
+	old_reference_loop = """        for expert_id in range(first_expert, last_expert):
+            topks = torch.any(topk_ids == expert_id, dim=1).flatten()
+            rows = torch.count_nonzero(topks.flatten())
+            if rows == 0:
+                continue
+            idx = expert_id - first_expert
+            tokens_per_expert[idx] = rows
+            rhs = a1[: topks.numel()][topks]
+            if quant_config.quant_dtype is not None:
+                if a1_scale is not None:
+                    if quant_config.is_per_act_token:
+                        rhs_a1_scale = a1_scale[: topks.numel()][topks]
+                    else:
+                        rhs_a1_scale = a1_scale
+                else:
+                    rhs_a1_scale = None
+                b_a1[idx, :rows, :], b_s = moe_kernel_quantize_input(
+                    rhs,
+                    rhs_a1_scale,
+                    quant_config.quant_dtype,
+                    quant_config.per_act_token_quant,
+                    quant_config.block_shape,
+                )
+                assert b_s is not None
+                if quant_config.is_per_act_token:
+                    b_a1_scale[idx, :rows] = b_s[:rows]
+                else:
+                    b_a1_scale[idx, : b_s.shape[0]] = b_s
+            else:
+                b_a1[idx, :rows, :] = rhs
+"""
+	new_graph_safe_loop = """        if (
+            os.environ.get("DS4_VLLM_FORCE_NO_DP_BATCHED_MARLIN") == "1"
+            and quant_config.quant_dtype is not None
+        ):
+            raise NotImplementedError(
+                "DS4 no-DP BatchedMarlin prototype only supports unquantized "
+                "activation input for CUDA-graph-safe prepare"
+            )
+
+        for expert_id in range(first_expert, last_expert):
+            idx = expert_id - first_expert
+            topks = torch.any(topk_ids == expert_id, dim=1).flatten()
+            topks_i32 = topks.to(torch.int32)
+            rows = torch.sum(topks_i32)
+            tokens_per_expert[idx] = rows
+            row_indices = torch.cumsum(topks_i32, dim=0) - 1
+            row_indices = torch.where(
+                topks,
+                row_indices,
+                torch.zeros_like(row_indices),
+            ).to(torch.long)
+            if quant_config.quant_dtype is not None:
+                rhs = a1[: topks.numel()][topks]
+                if a1_scale is not None:
+                    if quant_config.is_per_act_token:
+                        rhs_a1_scale = a1_scale[: topks.numel()][topks]
+                    else:
+                        rhs_a1_scale = a1_scale
+                else:
+                    rhs_a1_scale = None
+                b_a1[idx, :rows, :], b_s = moe_kernel_quantize_input(
+                    rhs,
+                    rhs_a1_scale,
+                    quant_config.quant_dtype,
+                    quant_config.per_act_token_quant,
+                    quant_config.block_shape,
+                )
+                assert b_s is not None
+                if quant_config.is_per_act_token:
+                    b_a1_scale[idx, :rows] = b_s[:rows]
+                else:
+                    b_a1_scale[idx, : b_s.shape[0]] = b_s
+            elif os.environ.get("DS4_VLLM_FORCE_NO_DP_BATCHED_MARLIN") == "1":
+                b_a1[idx].scatter_add_(
+                    0,
+                    row_indices.view(num_tokens, 1).expand(num_tokens, hidden_dim),
+                    a1 * topks.to(a1.dtype).view(num_tokens, 1),
+                )
+            else:
+                rhs = a1[: topks.numel()][topks]
+                b_a1[idx, :rows, :] = rhs
+"""
+	if new_graph_safe_loop not in text:
+		if old_reference_loop in text:
+			text = text.replace(old_reference_loop, new_graph_safe_loop, 1)
+		else:
+			raise PatchError("missing expected block: batched prepare expert loop")
+	return(text)
+
+
+def patch_topk_weight_and_reduce(text: str) -> str:
+	text, _ = _replace(
+		text,
+		"import torch\n",
+		"import os\nimport torch\n",
+		"topk weight/reduce os import",
+	)
+	old_reference_loop = """        for expert_id in range(first_expert, last_expert):
+            matching_tokens = topk_ids == expert_id
+            topks = torch.any(matching_tokens, dim=1).flatten()
+            rows = torch.count_nonzero(topks)
+            rhs = fused_expert_output[expert_id - first_expert, :rows, :]
+            if not apply_router_weight_on_input:
+                rhs.mul_(topk_weights[matching_tokens].view(rhs.size(0), 1))
+            output[topks] = output[topks] + rhs
+"""
+	new_graph_safe_loop = """        for expert_id in range(first_expert, last_expert):
+            idx = expert_id - first_expert
+            matching_tokens = topk_ids == expert_id
+            topks = torch.any(matching_tokens, dim=1).flatten()
+            topks_i32 = topks.to(torch.int32)
+            row_indices = torch.cumsum(topks_i32, dim=0) - 1
+            row_indices = torch.where(
+                topks,
+                row_indices,
+                torch.zeros_like(row_indices),
+            ).to(torch.long)
+            rhs = fused_expert_output[idx].index_select(0, row_indices)
+            if not apply_router_weight_on_input:
+                expert_weights = (
+                    topk_weights * matching_tokens.to(topk_weights.dtype)
+                ).sum(dim=1, keepdim=True)
+                rhs = rhs * expert_weights.to(rhs.dtype)
+            if os.environ.get("DS4_VLLM_FORCE_NO_DP_BATCHED_MARLIN") == "1":
+                output.add_(rhs * topks.to(rhs.dtype).view(num_tokens, 1))
+            else:
+                rows = torch.count_nonzero(topks)
+                output[topks] = output[topks] + rhs[:rows]
+"""
+	if new_graph_safe_loop not in text:
+		if old_reference_loop in text:
+			text = text.replace(old_reference_loop, new_graph_safe_loop, 1)
+		else:
+			raise PatchError("missing expected block: naive batched topk reduce loop")
 	return(text)
 
 
@@ -234,6 +375,10 @@ def apply_patch(package_dir: Path, *, backup_suffix: str, write: bool) -> dict[s
 		"batched_prepare_finalize": (
 			package_dir / "model_executor" / "layers" / "fused_moe" / "prepare_finalize" / "batched.py",
 			patch_batched_prepare_finalize,
+		),
+		"topk_weight_and_reduce": (
+			package_dir / "model_executor" / "layers" / "fused_moe" / "topk_weight_and_reduce.py",
+			patch_topk_weight_and_reduce,
 		),
 	}
 	files: dict[str, Any] = {}
@@ -259,7 +404,10 @@ def main() -> int:
 	parser.add_argument("--vllm-package-dir")
 	parser.add_argument("--backup-suffix", default=".ds4_no_dp_batched_marlin_bak")
 	parser.add_argument("--check", action="store_true", help="Show whether changes are needed without writing.")
+	parser.add_argument(UNSAFE_WRITE_FLAG, action="store_true", help=argparse.SUPPRESS)
 	args = parser.parse_args()
+	if not args.check and not getattr(args, "unsafe_allow_spark4_wedge_profile"):
+		parser.error(f"refusing to write known Spark4-wedging prototype; pass {UNSAFE_WRITE_FLAG} only for isolated recovery experiments. {UNSAFE_WRITE_DETAIL}")
 	package_dir = locate_package_dir(
 		Path(args.runtime_root).expanduser() if args.runtime_root else None,
 		Path(args.vllm_package_dir).expanduser() if args.vllm_package_dir else None,

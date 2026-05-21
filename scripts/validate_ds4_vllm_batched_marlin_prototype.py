@@ -17,6 +17,7 @@ REQUIRED_PATCH_FILES = {
 	"vllm/model_executor/layers/fused_moe/config.py",
 	"vllm/model_executor/layers/fused_moe/all2all_utils.py",
 	"vllm/model_executor/layers/fused_moe/prepare_finalize/batched.py",
+	"vllm/model_executor/layers/fused_moe/topk_weight_and_reduce.py",
 }
 
 
