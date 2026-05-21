@@ -52,6 +52,18 @@ def attempt_best_tps(attempt: dict[str, Any]) -> float:
 	return(max(vals) if vals else 0.0)
 
 
+def selected_config_tps(selected: dict[str, Any], path: Path, errors: list[str]) -> float:
+	c512 = selected.get("tokens_per_second_at_c512")
+	if isinstance(c512, (int, float)) and not isinstance(c512, bool):
+		return(float(c512))
+	max_num_seqs = selected.get("max_num_seqs")
+	c256 = selected.get("tokens_per_second_at_c256")
+	if isinstance(max_num_seqs, int) and max_num_seqs < 512 and isinstance(c256, (int, float)) and not isinstance(c256, bool):
+		return(float(c256))
+	errors.append(err(path, "selected_config.tokens_per_second_at_c512 must be numeric unless max_num_seqs < 512 and tokens_per_second_at_c256 is numeric"))
+	return(0.0)
+
+
 def check_raw_artifact(root: Path, attempt: dict[str, Any], path: Path, errors: list[str]) -> None:
 	raw = attempt.get("raw_artifact")
 	expected = attempt.get("raw_artifact_sha256")
@@ -88,10 +100,7 @@ def validate(obj: dict[str, Any], path: Path) -> list[str]:
 	if not isinstance(conclusion, dict):
 		errors.append(err(path, "conclusion must be an object"))
 		conclusion = {}
-	best_selected = selected.get("tokens_per_second_at_c512")
-	if not isinstance(best_selected, (int, float)) or isinstance(best_selected, bool):
-		errors.append(err(path, "selected_config.tokens_per_second_at_c512 must be numeric"))
-		best_selected = 0.0
+	best_selected = selected_config_tps(selected,path,errors)
 	attempt_best = 0.0
 	for attempt in attempts:
 		if not isinstance(attempt, dict):

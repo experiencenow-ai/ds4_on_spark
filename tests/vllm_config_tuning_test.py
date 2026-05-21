@@ -49,6 +49,20 @@ class VllmConfigTuningTest(unittest.TestCase):
 		errors = tuning_validator.validate(obj, path)
 		self.assertTrue(any("raw artifact missing" in item for item in errors))
 
+	def test_c256_only_selected_config_allowed(self) -> None:
+		path = Path("fixture.json")
+		obj = tuning_validator.load(tuning_validator.default_paths()[0])
+		obj = copy.deepcopy(obj)
+		obj["selected_config"]["max_num_seqs"] = 256
+		obj["selected_config"]["tokens_per_second_at_c256"] = 333.0
+		obj["selected_config"]["tokens_per_second_at_c512"] = None
+		obj["attempts"][0]["tokens_per_second_by_concurrency"] = {"256": 333.0}
+		obj["attempts"][0]["startup_status"] = "passed"
+		obj["attempts"][0]["safety_status"] = "passed"
+		obj["artifact_sha256"] = tuning_validator.canonical_hash(obj)
+		errors = tuning_validator.validate(obj, path)
+		self.assertFalse(any("tokens_per_second_at_c512" in item for item in errors), errors)
+
 
 if __name__ == "__main__":
 	unittest.main()
