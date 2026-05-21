@@ -1,0 +1,28 @@
+{
+  "aggregate_metrics": {
+    "mean_tok_s": 0.0,
+    "median_tok_s": 0.0,
+    "p95_latency_ms": 0.0,
+    "pass_count": 0,
+    "pass_rate": 0.0,
+    "prompt_count": 0
+  },
+  "batch_index": 23,
+  "cost_proxy_estimate": {
+    "basis": "model_size_params_billion / max(pass_rate, 0.05)",
+    "model_size_params": null,
+    "score": null
+  },
+  "eval_set_id": "small-model-eval-v1",
+  "failure_reason": "qualification failed: transformers qualification command failed rc=1 stderr=           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/dynamic_module_utils.py\", line 627, in get_class_from_dynamic_module\n    return get_class_in_module(class_name, final_module, force_reload=force_download)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/dynamic_module_utils.py\", line 309, in get_class_in_module\n    module_spec.loader.exec_module(module)\n  File \"<frozen importlib._bootstrap_external>\", line 995, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 488, in _call_with_frames_removed\n  File \"/root/.cache/huggingface/modules/transformers_modules/Phi_hyphen_4_hyphen_mini_hyphen_instruct/3886b25a63d271ee/modeling_phi3.py\", line 37, in <module>\n    from transformers.utils import (\nImportError: cannot import name 'LossKwargs' from 'transformers.utils' (/usr/local/lib/python3.12/dist-packages/transformers/utils/__init__.py)",
+  "format": "small-model-qualification-v1",
+  "hardware_node": "spark2",
+  "model_dtype": "bfloat16",
+  "model_id": "hf-microsoft-Phi-4-mini-instruct",
+  "model_path": "/home/spark2/models/hf/microsoft/Phi-4-mini-instruct",
+  "model_size_params": null,
+  "per_prompt_results": [],
+  "qualification_timestamp": "2026-05-21T13:47:22.708046Z",
+  "serve_backend": "transformers",
+  "status": "failed"
+}

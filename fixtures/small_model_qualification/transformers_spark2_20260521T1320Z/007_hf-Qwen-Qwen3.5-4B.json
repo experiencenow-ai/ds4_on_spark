@@ -1,0 +1,104 @@
+{
+  "aggregate_metrics": {
+    "mean_tok_s": 13.603121658254722,
+    "median_tok_s": 17.18666194661455,
+    "p95_latency_ms": 466.712,
+    "pass_count": 0,
+    "pass_rate": 0.0,
+    "prompt_count": 4
+  },
+  "batch_index": 7,
+  "cost_proxy_estimate": {
+    "basis": "model_size_params_billion / max(pass_rate, 0.05)",
+    "model_size_params": 4000000000,
+    "score": 80.0
+  },
+  "eval_set_id": "small-model-eval-v1",
+  "format": "small-model-qualification-v1",
+  "hardware_node": "spark2",
+  "model_dtype": "unknown",
+  "model_id": "hf-Qwen-Qwen3.5-4B",
+  "model_path": "/home/spark2/models/hf/Qwen/Qwen3.5-4B",
+  "model_size_params": 4000000000,
+  "per_prompt_results": [
+    {
+      "expected_answer": "4",
+      "generated_token_count": 8,
+      "generated_tokens": [
+        "Thinking",
+        "Process:",
+        "1.",
+        "**"
+      ],
+      "latency_ms": 2864.544,
+      "observed_answer": "Thinking Process:\n\n1.  **",
+      "passed": false,
+      "prompt": "Return exactly 4 for 2+2.",
+      "returncode": 0,
+      "stderr_tail": "[transformers] The fast path is not available because one of the required library is not installed. Falling back to torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and https://github.com/Dao-AILab/causal-conv1d\n\nLoading weights:   0%|          | 0/426 [00:00<?, ?it/s]\nLoading weights:  77%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b  | 330/426 [00:00<00:00, 3225.04it/s]\nLoading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 426/426 [00:00<00:00, 3267.03it/s]",
+      "task_id": "simple_math",
+      "task_kind": "simple_math",
+      "tok_s": 2.792765619938112
+    },
+    {
+      "expected_answer": "BLUE",
+      "generated_token_count": 8,
+      "generated_tokens": [
+        "Thinking",
+        "Process:",
+        "1.",
+        "**"
+      ],
+      "latency_ms": 466.712,
+      "observed_answer": "Thinking Process:\n\n1.  **",
+      "passed": false,
+      "prompt": "Return exactly BLUE if the sky is blue on a clear day.",
+      "returncode": 0,
+      "stderr_tail": "[transformers] The fast path is not available because one of the required library is not installed. Falling back to torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and https://github.com/Dao-AILab/causal-conv1d\n\nLoading weights:   0%|          | 0/426 [00:00<?, ?it/s]\nLoading weights:  77%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b  | 330/426 [00:00<00:00, 3225.04it/s]\nLoading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 426/426 [00:00<00:00, 3267.03it/s]",
+      "task_id": "factual_recall",
+      "task_kind": "factual_recall",
+      "tok_s": 17.141191998491575
+    },
+    {
+      "expected_answer": "OK",
+      "generated_token_count": 8,
+      "generated_tokens": [
+        "Thinking",
+        "Process:",
+        "1.",
+        "**"
+      ],
+      "latency_ms": 463.865,
+      "observed_answer": "Thinking Process:\n\n1.  **",
+      "passed": false,
+      "prompt": "Return exactly OK if this JSON is valid: {\"x\":1}.",
+      "returncode": 0,
+      "stderr_tail": "[transformers] The fast path is not available because one of the required library is not installed. Falling back to torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and https://github.com/Dao-AILab/causal-conv1d\n\nLoading weights:   0%|          | 0/426 [00:00<?, ?it/s]\nLoading weights:  77%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b  | 330/426 [00:00<00:00, 3225.04it/s]\nLoading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 426/426 [00:00<00:00, 3267.03it/s]",
+      "task_id": "schema_check",
+      "task_kind": "schema_check",
+      "tok_s": 17.24639711985168
+    },
+    {
+      "expected_answer": "PASS",
+      "generated_token_count": 8,
+      "generated_tokens": [
+        "Thinking",
+        "Process:",
+        "1.",
+        "**"
+      ],
+      "latency_ms": 464.249,
+      "observed_answer": "Thinking Process:\n\n1.  **",
+      "passed": false,
+      "prompt": "Return exactly PASS if replacing foo with bar is a simple code edit.",
+      "returncode": 0,
+      "stderr_tail": "[transformers] The fast path is not available because one of the required library is not installed. Falling back to torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and https://github.com/Dao-AILab/causal-conv1d\n\nLoading weights:   0%|          | 0/426 [00:00<?, ?it/s]\nLoading weights:  77%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b  | 330/426 [00:00<00:00, 3225.04it/s]\nLoading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 426/426 [00:00<00:00, 3267.03it/s]",
+      "task_id": "simple_code",
+      "task_kind": "simple_code",
+      "tok_s": 17.23213189473752
+    }
+  ],
+  "qualification_timestamp": "2026-05-21T13:16:58.298828Z",
+  "serve_backend": "transformers",
+  "status": "passed"
+}

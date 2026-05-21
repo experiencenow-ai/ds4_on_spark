@@ -1,0 +1,28 @@
+{
+  "aggregate_metrics": {
+    "mean_tok_s": 0.0,
+    "median_tok_s": 0.0,
+    "p95_latency_ms": 0.0,
+    "pass_count": 0,
+    "pass_rate": 0.0,
+    "prompt_count": 0
+  },
+  "batch_index": 20,
+  "cost_proxy_estimate": {
+    "basis": "model_size_params_billion / max(pass_rate, 0.05)",
+    "model_size_params": null,
+    "score": null
+  },
+  "eval_set_id": "small-model-eval-v1",
+  "failure_reason": "qualification failed: transformers qualification command failed rc=1 stderr='attention_factor'}\nTraceback (most recent call last):\n  File \"<string>\", line 11, in <module>\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/auto/auto_factory.py\", line 405, in from_pretrained\n    return model_class.from_pretrained(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/modeling_utils.py\", line 4181, in from_pretrained\n    hf_quantizer, config, device_map = get_hf_quantizer(\n                                       ^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/quantizers/auto.py\", line 342, in get_hf_quantizer\n    hf_quantizer.validate_environment(\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/quantizers/quantizer_finegrained_fp8.py\", line 32, in validate_environment\n    raise ImportError(\"Loading an FP8 quantized model requires accelerate (`pip install accelerate`)\")\nImportError: Loading an FP8 quantized model requires accelerate (`pip install accelerate`)",
+  "format": "small-model-qualification-v1",
+  "hardware_node": "spark2",
+  "model_dtype": "fp8",
+  "model_id": "hf-deepseek-ai-DeepSeek-V4-Flash",
+  "model_path": "/home/spark2/models/hf/deepseek-ai/DeepSeek-V4-Flash",
+  "model_size_params": null,
+  "per_prompt_results": [],
+  "qualification_timestamp": "2026-05-21T13:47:00.099224Z",
+  "serve_backend": "transformers",
+  "status": "failed"
+}

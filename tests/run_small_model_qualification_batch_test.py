@@ -6,12 +6,12 @@ from scripts import run_small_model_qualification_batch as batch
 
 
 class SmallModelQualificationBatchTest(unittest.TestCase):
-    def test_failure_record_for_unwired_backend(self) -> None:
-        model = {"model_id": "hf-test", "model_path": "/models/hf-test", "serve_backend": "transformers", "hardware_node": "spark2"}
+    def test_failure_record_for_unsupported_backend(self) -> None:
+        model = {"model_id": "hf-test", "model_path": "/models/hf-test", "serve_backend": "unknown", "hardware_node": "spark2"}
         record = batch.qualify_or_fail(model, {"eval_set_id": "unit", "prompts": []}, "spark2", "/opt/llama-cli", 1.0)
         self.assertEqual(record["format"], "small-model-qualification-v1")
         self.assertEqual(record["status"], "failed")
-        self.assertIn("not wired", record["failure_reason"])
+        self.assertIn("unsupported serve_backend", record["failure_reason"])
 
     def test_summary_has_required_rankings_and_wall_clock(self) -> None:
         records = [
@@ -54,7 +54,7 @@ class SmallModelQualificationBatchTest(unittest.TestCase):
             }
             batch.write_results_doc(path, summary)
             text = path.read_text(encoding="utf-8")
-            self.assertIn("Failed Or Unwired Models", text)
+            self.assertIn("Failed Models", text)
             self.assertIn("not wired", text)
 
     def test_model_id_filter_rejects_missing_model(self) -> None:

@@ -20,6 +20,9 @@ class SmallModelQualificationTest(unittest.TestCase):
         gguf = [item for item in inventory["models"] if item["artifact_type"] == "gguf"]
         self.assertTrue(all(item["serve_backend"] == "llama.cpp" for item in gguf))
         self.assertTrue(all(item["can_serve_request"] for item in gguf))
+        hf = [item for item in inventory["models"] if item["artifact_type"] == "hf"]
+        self.assertTrue(all(item["serve_backend"] == "transformers" for item in hf))
+        self.assertTrue(all(item["can_serve_request"] for item in hf))
         by_params = {item["model_size_params"]: item for item in gguf}
         self.assertIn(15_000_000, by_params)
         self.assertIn(2_000_000_000, by_params)
@@ -86,6 +89,51 @@ class SmallModelQualificationTest(unittest.TestCase):
     def test_llama_command_uses_kill_after_timeout(self) -> None:
         command = qualify.build_llama_command("spark2", "/opt/llama-cli", "/models/a.gguf", "Return 4", 8, 60.0)
         self.assertIn("timeout -k 5s 60", command[-1])
+
+    def test_transformers_command_is_local_files_only(self) -> None:
+        command = qualify.build_transformers_command("spark2", "python3", "/models/hf/Qwen", "Return 4", 8, 60.0)
+        self.assertEqual(command[:4], ["ssh", "-o", "BatchMode=yes", "-o"])
+        self.assertIn("AutoModelForCausalLM", command[-1])
+        self.assertIn("local_files_only=True", command[-1])
+        self.assertIn("--model-path /models/hf/Qwen", command[-1])
+        self.assertNotIn("device_map", command[-1])
+
+    def test_transformers_command_can_use_existing_docker_image(self) -> None:
+        command = qualify.build_transformers_command("spark2", "python3", "/home/spark2/models/hf/Qwen/Qwen3.5-0.8B", "Return 4", 8, 60.0, docker_image="vllm-node-dsv4:latest")
+        self.assertIn("docker run --rm --gpus all", command[-1])
+        self.assertIn("-v /home/spark2/models:/home/spark2/models:ro", command[-1])
+        self.assertIn("vllm-node-dsv4:latest python3", command[-1])
+
+    def test_transformers_backend_execution_builds_valid_record(self) -> None:
+        model = {
+            "model_id": "hf-qwen-unit",
+            "model_path": "/models/hf/qwen",
+            "model_size_params": 800_000_000,
+            "model_dtype": "bfloat16",
+            "serve_backend": "transformers",
+            "can_serve_request": False,
+        }
+        eval_set = {
+            "format": "small-model-eval-set-v1",
+            "eval_set_id": "unit",
+            "prompts": [
+                {"task_id": "math", "task_kind": "simple_math", "prompt": "Return 4", "expected_answer": "4", "max_tokens": 8},
+            ],
+        }
+
+        def runner(command, timeout_seconds):
+            self.assertIn("--prompts-json", command[-1])
+            payload = '{"results": [{"generated_text": "4", "generated_token_count": 1, "latency_ms": 250.0}]}'
+            return {"returncode": 0, "stdout": qualify.TRANSFORMERS_RESULT_PREFIX + payload, "stderr": "", "elapsed_seconds": 0.25}
+
+        record = qualify.qualify_model(model, eval_set, "spark2", "/opt/llama-cli", runner=runner)
+        self.assertEqual(record["serve_backend"], "transformers")
+        self.assertEqual(record["aggregate_metrics"]["pass_rate"], 1.0)
+        self.assertEqual(record["aggregate_metrics"]["mean_tok_s"], 4.0)
+
+    def test_transformers_missing_sentinel_fails_loudly(self) -> None:
+        with self.assertRaises(RuntimeError):
+            qualify.extract_transformers_result("plain model output without sentinel")
 
 
 if __name__ == "__main__":

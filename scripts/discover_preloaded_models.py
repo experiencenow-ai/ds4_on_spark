@@ -99,8 +99,8 @@ def discover_from_remote_listing(listing: dict[str, Any], host: str, model_root:
                 "serve_backend": "transformers",
                 "artifact_type": "hf",
                 "hardware_node": host,
-                "can_serve_request": False,
-                "serve_command_hint": "transformers loader not wired in #1213",
+                "can_serve_request": True,
+                "serve_command_hint": "python3 transformers AutoModelForCausalLM local_files_only greedy decode",
             }
         )
     return {"format": FORMAT, "inventory_timestamp": utc_now(), "hardware_node": host, "model_root": model_root, "model_count": len(models), "models": models}

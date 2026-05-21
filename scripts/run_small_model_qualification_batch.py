@@ -15,6 +15,9 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.qualify_small_model import DEFAULT_EVAL_SET
 from scripts.qualify_small_model import DEFAULT_LLAMA_CLI
+from scripts.qualify_small_model import DEFAULT_TRANSFORMERS_DOCKER_IMAGE
+from scripts.qualify_small_model import DEFAULT_TRANSFORMERS_MODEL_MOUNT
+from scripts.qualify_small_model import DEFAULT_TRANSFORMERS_PYTHON
 from scripts.qualify_small_model import cost_proxy
 from scripts.qualify_small_model import load_eval_set
 from scripts.qualify_small_model import qualify_model
@@ -56,13 +59,14 @@ def failure_record(model: dict[str, Any], eval_set_id: str, reason: str) -> dict
     }
 
 
-def qualify_or_fail(model: dict[str, Any], eval_set: dict[str, Any], host: str, llama_cli: str, timeout_seconds: float) -> dict[str, Any]:
-    if model.get("serve_backend") != "llama.cpp":
-        return failure_record(model, eval_set["eval_set_id"], f"serve_backend {model.get('serve_backend')} not wired for #1214 batch")
-    if not model.get("can_serve_request"):
+def qualify_or_fail(model: dict[str, Any], eval_set: dict[str, Any], host: str, llama_cli: str, timeout_seconds: float, transformers_python: str = DEFAULT_TRANSFORMERS_PYTHON, transformers_docker_image: str = DEFAULT_TRANSFORMERS_DOCKER_IMAGE, transformers_model_mount: str = DEFAULT_TRANSFORMERS_MODEL_MOUNT) -> dict[str, Any]:
+    backend = model.get("serve_backend")
+    if backend not in {"llama.cpp", "transformers"}:
+        return failure_record(model, eval_set["eval_set_id"], f"unsupported serve_backend for live qualification: {backend}")
+    if backend == "llama.cpp" and not model.get("can_serve_request"):
         return failure_record(model, eval_set["eval_set_id"], "model is not marked can_serve_request in inventory")
     try:
-        record = qualify_model(model, eval_set, host, llama_cli, timeout_seconds=timeout_seconds)
+        record = qualify_model(model, eval_set, host, llama_cli, timeout_seconds=timeout_seconds, transformers_python=transformers_python, transformers_docker_image=transformers_docker_image, transformers_model_mount=transformers_model_mount)
     except Exception as exc:
         return failure_record(model, eval_set["eval_set_id"], f"qualification failed: {exc}")
     record["status"] = "passed"
@@ -101,12 +105,14 @@ def build_summary(records: list[dict[str, Any]], inventory: dict[str, Any], outp
 
 
 def write_results_doc(path: Path, summary: dict[str, Any]) -> None:
+    passed_record_count = int(summary.get("passed_record_count", int(summary["record_count"]) - int(summary["failure_count"])))
     lines = [
         "# Small Model Qualification Results",
         "",
         f"Batch timestamp: `{summary['batch_timestamp']}`",
         f"Hardware node: `{summary['hardware_node']}`",
         f"Records: `{summary['record_count']}` of `{summary['inventory_model_count']}` inventory entries",
+        f"Executed records: `{passed_record_count}`",
         f"Failures: `{summary['failure_count']}`",
         f"Wall clock seconds: `{summary['wall_clock_seconds']}`",
         "",
@@ -123,14 +129,14 @@ def write_results_doc(path: Path, summary: dict[str, Any]) -> None:
     for row in summary["top_by_cost_proxy"][:3]:
         lines.append(f"- `{row['model_id']}` cost_proxy={row['cost_proxy']}")
     lines.append("")
-    lines.append("## Failed Or Unwired Models")
+    lines.append("## Failed Models")
     for row in summary["failed_models"]:
         lines.append(f"- `{row['model_id']}`: {row['reason']}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def run_batch(inventory: dict[str, Any], eval_set: dict[str, Any], output_dir: Path, host: str, llama_cli: str, timeout_seconds: float, limit: int = 0, model_ids: list[str] | None = None, run_id: str = "20260521T1210Z") -> dict[str, Any]:
+def run_batch(inventory: dict[str, Any], eval_set: dict[str, Any], output_dir: Path, host: str, llama_cli: str, timeout_seconds: float, limit: int = 0, model_ids: list[str] | None = None, run_id: str = "20260521T1210Z", transformers_python: str = DEFAULT_TRANSFORMERS_PYTHON, transformers_docker_image: str = DEFAULT_TRANSFORMERS_DOCKER_IMAGE, transformers_model_mount: str = DEFAULT_TRANSFORMERS_MODEL_MOUNT, results_doc: Path = Path("docs/SMALL_MODEL_QUALIFICATION_RESULTS.md")) -> dict[str, Any]:
     started = time.perf_counter()
     models = list(inventory.get("models") or [])
     models = sorted(models, key=lambda model: (model.get("serve_backend") != "llama.cpp", model.get("model_size_params") is None, int(model.get("model_size_params") or 10**18), str(model.get("model_id") or "")))
@@ -145,7 +151,7 @@ def run_batch(inventory: dict[str, Any], eval_set: dict[str, Any], output_dir: P
     records = []
     output_dir.mkdir(parents=True, exist_ok=True)
     for index, model in enumerate(models, start=1):
-        record = qualify_or_fail(model, eval_set, host, llama_cli, timeout_seconds)
+        record = qualify_or_fail(model, eval_set, host, llama_cli, timeout_seconds, transformers_python, transformers_docker_image, transformers_model_mount)
         record["batch_index"] = index
         record_path = output_dir / f"{index:03d}_{slug(str(record.get('model_id') or 'unknown'))}.json"
         write_json(record_path, record)
@@ -153,7 +159,7 @@ def run_batch(inventory: dict[str, Any], eval_set: dict[str, Any], output_dir: P
         print(json.dumps({"index": index, "model_id": record.get("model_id"), "status": record.get("status"), "pass_rate": record.get("aggregate_metrics", {}).get("pass_rate"), "path": str(record_path)}, sort_keys=True), flush=True)
     summary = build_summary(records, inventory, output_dir, started)
     write_json(output_dir / f"batch_summary_spark2_{run_id}.json", summary)
-    write_results_doc(Path("docs/SMALL_MODEL_QUALIFICATION_RESULTS.md"), summary)
+    write_results_doc(results_doc, summary)
     return summary
 
 
@@ -164,14 +170,18 @@ def main() -> int:
     parser.add_argument("--output-dir", default="fixtures/small_model_qualification/batch_spark2_20260521T1210Z")
     parser.add_argument("--host", default="spark2")
     parser.add_argument("--llama-cli", default=DEFAULT_LLAMA_CLI)
+    parser.add_argument("--transformers-python", default=DEFAULT_TRANSFORMERS_PYTHON)
+    parser.add_argument("--transformers-docker-image", default=DEFAULT_TRANSFORMERS_DOCKER_IMAGE)
+    parser.add_argument("--transformers-model-mount", default=DEFAULT_TRANSFORMERS_MODEL_MOUNT)
     parser.add_argument("--timeout-seconds", type=float, default=90.0)
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--model-id", action="append", default=[])
     parser.add_argument("--run-id", default="20260521T1210Z")
+    parser.add_argument("--results-doc", default="docs/SMALL_MODEL_QUALIFICATION_RESULTS.md")
     args = parser.parse_args()
     inventory = load_json(Path(args.inventory))
     eval_set = load_eval_set(Path(args.eval_set))
-    summary = run_batch(inventory, eval_set, Path(args.output_dir), args.host, args.llama_cli, args.timeout_seconds, args.limit, args.model_id, args.run_id)
+    summary = run_batch(inventory, eval_set, Path(args.output_dir), args.host, args.llama_cli, args.timeout_seconds, args.limit, args.model_id, args.run_id, args.transformers_python, args.transformers_docker_image, args.transformers_model_mount, Path(args.results_doc))
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
 
