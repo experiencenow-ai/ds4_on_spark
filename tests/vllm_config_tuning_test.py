@@ -23,9 +23,22 @@ class VllmConfigTuningTest(unittest.TestCase):
 		obj = tuning_validator.load(tuning_validator.default_paths()[0])
 		obj = copy.deepcopy(obj)
 		obj["attempts"][0]["tokens_per_second_by_concurrency"] = {"512": 999.0}
+		obj["attempts"][0]["startup_status"] = "passed"
+		obj["attempts"][0]["safety_status"] = "passed"
 		obj["artifact_sha256"] = tuning_validator.canonical_hash(obj)
 		errors = tuning_validator.validate(obj, path)
 		self.assertTrue(any("selected config must not be slower" in item for item in errors))
+
+	def test_unsafe_faster_attempt_not_selected(self) -> None:
+		path = Path("fixture.json")
+		obj = tuning_validator.load(tuning_validator.default_paths()[0])
+		obj = copy.deepcopy(obj)
+		obj["attempts"][0]["tokens_per_second_by_concurrency"] = {"512": 999.0}
+		obj["attempts"][0]["startup_status"] = "passed"
+		obj["attempts"][0]["safety_status"] = "failed_after_stress"
+		obj["artifact_sha256"] = tuning_validator.canonical_hash(obj)
+		errors = tuning_validator.validate(obj, path)
+		self.assertFalse(any("selected config must not be slower" in item for item in errors), errors)
 
 	def test_missing_raw_artifact_rejected(self) -> None:
 		path = Path("fixture.json")
