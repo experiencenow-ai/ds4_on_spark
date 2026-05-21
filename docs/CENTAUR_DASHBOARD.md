@@ -1,6 +1,6 @@
 # Centaur system dashboard
 
-> Last meaningful update: **2026-05-21T12:30Z** (track-vs-component naming collision fixed; "Track 1/2/3/4" agent slots are not the same as Centaur workstream Components 1/2/3/4; cross-track claiming is now the explicit default in LANES.md)
+> Last meaningful update: **2026-05-21T16:30Z** (18 merges in 4h post-protocol; Lane D corrected baseline 73/92 = 79.3% at 13.9 tok/s shipped; small-model qualification chain complete; Spark4 outage taking out the vLLM throughput investigations; track:2 silent and recommended retired)
 
 > **Naming note.** The Centaur vision document names four *workstream components* (factory core, memory domain, providers, product/UI). The coordination system uses agent *track slots* (`track:1`, `track:2`, `track:3`, `track:4`). These are not the same thing despite the unfortunate number overlap. **Any track slot may work on any workstream component.** A track is an agent handle with accumulated PR history; it is not a job description. This dashboard reports component progress; the stall ledger reports per-track-slot behavior.
 
@@ -54,14 +54,14 @@ The product target is `a machine that creates machines that solves domains effic
 
 ---
 
-## Component 3 — Provider + model portfolio (overall **45%**)
+## Component 3 — Provider + model portfolio (overall **55%**)
 
 | Tier | % | Provider(s) live | Notes |
 |---|---:|---|---|
 | `deterministic` | 60 | Internal deterministic tools | Existing test fixtures pass; not formally qualified |
-| `local_small` | 30 | None live | Planned: #1213 (harness) → #1214 (batch) → #1215 (router wire). Spark2 now dedicated to this work. |
-| `local_coder` | 30 | None live | Same planned chain; #1215 wires both tiers in one PR |
-| `near_frontier_local` | 60 | **vLLM PP=2 TP=2 on Spark4/5 LIVE** (centaur PR #100, merged 10:54Z) | Live measured at 106 tok/s c=64. Sweep claimed 310 tok/s — under investigation #1208. Topline 566 tok/s aggregate at c=512 (PR #1183). |
+| `local_small` | 55 | **Qualification corpus exists on Spark2** (#1213/#1214 chain merged) — harness + batch + transformers backend (#1239). Router wiring (#1215) pending. |
+| `local_coder` | 55 | Same qualification corpus; coding-specialized models present. Router wiring pending. |
+| `near_frontier_local` | 60 | **vLLM PP=2 TP=2 on Spark4/5 LIVE** (centaur PR #100, merged 10:54Z). Spark4 currently DOWN since ~11:30Z. Live measured at 106 tok/s c=64. Sweep claimed 310 tok/s — under investigation #1208. |
 | `frontier_api` | 50 | Anthropic / OpenAI integration exists | Used by qualification escalation; not load-tested |
 | ds4 PP=3 (parity provider) | 35 | Spark0/1/2 layouts; currently Spark2/3/4 due to outage | Logits parity proven (May 16); **economic throughput proven nonviable** (PR #1203 K=618 projection) — **demote to parity-verification only** |
 | Strength-reduction routing | 25 | Router structure exists with 5 tiers | Only 1 tier (`near_frontier_local`) has real live qualification; others fictitious until #1200 lands |
@@ -91,13 +91,13 @@ The product target is `a machine that creates machines that solves domains effic
 |---|---|---|---|---|
 | spark-0 | DOWN | — | — | SSH banner timeout since ~2026-05-20 late |
 | spark-1 | DOWN | — | — | Same |
-| spark-2 | UP | dedicated (backlog) | Small-model qualification only — claim via #1213/#1214 | |
-| spark-3 | UP | track:1 | vLLM TP=2 spare / sweep launcher | |
-| spark-4 | UP | track:1 | vLLM TP=2 node A | Live provider here |
-| spark-5 | UP | track:1 | vLLM TP=2 node B | Live provider here |
-| spark-6 | UP | track:4 | Isolated ds4-eval baseline | Currently running 92-case eval |
+| spark-2 | UP | dedicated (qualification done) | Small-model qualification corpus committed; can now host live `local_small`/`local_coder` providers if wired | |
+| spark-3 | UP | track:1 | vLLM TP=2 spare / sweep launcher | Currently degraded due to Spark4 outage |
+| **spark-4** | **DOWN** | **—** | **Was vLLM TP=2 node A — outage since ~11:30Z** | Banner timeout. Blocks #1208/#1209/#1196/#1198. |
+| spark-5 | UP | track:1 | vLLM TP=2 node B | Idle without partner |
+| spark-6 | UP | track:4 | Isolated ds4-eval baseline | Corrected baseline done (73/92 at 13.9 tok/s); slot free for next claim |
 
-5/7 Sparks online. The two down nodes do not block any critical-path work — vLLM lives on 4/5 and ds4 PP=3 is no longer a production target.
+4/7 Sparks online and useful. **Spark4 is the critical-path block** for the vLLM throughput investigation lane.
 
 ---
 
@@ -158,35 +158,36 @@ This chain takes `local_small` and `local_coder` from 30% (no live providers) to
 
 ---
 
-## Velocity (last 8 hours)
+## Velocity (recent windows)
 
 | Window | Merges | Highlights |
 |---|---:|---|
 | 03:00–07:00Z | 5 | vLLM agent: structured-choice bench, config tuning, fanout curve, model cache manifest |
 | 09:00–11:00Z | 6 | Coordination protocol (#1201, #1202); MXFP4 audit (#1204); MoE queue projection (#1206); Centaur vLLM binding merged in centaur repo (PR #100); 4 of 4 tracks self-bootstrapped via LANES.md |
+| 12:00–16:30Z | **18** | Anti-stall protocol (#1235); track-vs-component fix (#1237); small-model qualification chain complete (#1217/#1221/#1231/#1239); Spark ring deploy automation (#1225); vLLM memory preflight (#1233/#1234); vLLM safe c256 benchmark (#1238); Lane D corrected baseline (#1170: 73/92 at 13.9 tok/s); transformers small-model backend (#1239) |
 
-Sustained merge cadence since protocol landed: track:1 most productive (3 merges); track:2 silent (needs prompting); track:3 one ready PR (#1203); track:4 cross-repo save on #1192 plus #1194 in flight.
-
----
+Average post-protocol cadence: ~4.5 merges/hour vs ~1/hour pre-protocol. Structural intervention worked.
 
 ## Stall ledger
 
-Track-by-track behavioral pattern, updated alongside material observation. Stalls are visible so the pattern is hard to ignore. Cross-track claims shipped are also visible — high counts mean the autonomous system is fluid; low counts mean a track is acting like a specialist rather than a team member.
+Track-by-track behavioral pattern, updated alongside material observation.
 
 | Track slot | Sessions observed | Idle exits | Blocker comments | `/release-stalled` received | Cross-track claims shipped | Notes |
 |---|---:|---:|---:|---:|---:|---|
-| track:1 | 3 | 0 | 0 | 0 | 2 | Highest-output. Has worked across vLLM throughput (#1183), MoE audit (#1204), MoE queue projection (#1206), and coordination infrastructure (#1201/#1202). Model team-player. |
-| track:2 | 2 | 1 | 0 | 0 | 0 | One session silent. Has not yet claimed anything outside the area named in its original assignment. |
-| track:3 | 2 | 1 | 1 | 0 | 0 | Self-blocked an `hw:none` paper task at #1197 (now invalid under five-question gate). Has not claimed outside the original ds4 PP=3 area. |
-| track:4 | 3 | 0 | 0 | 0 | 1 | Saved #1192 cross-track when track:2 was silent. Real work on #1194. One genuine cross-track claim, good. |
+| track:1 | 4 | 0 | 1 (#1218, valid hw block) | 0 | 5+ | Continues as team-player baseline. Claimed #1195 (memory_evolution_alpha) explicitly under updated rules. |
+| **track:2** | 2 | 1 | 1 (#1220, valid hw block but no follow-on claim) | 0 | 0 | **Silent for 18 hours after the block. Slot recommended retired.** |
+| track:3 | 3 | 1 | 1 | 0 | 4 | Major cross-track movement: deploy automation, small-model qualification, vLLM memory preflight, #1195 unblock check. Naming-collision fix worked. |
+| track:4 | 3 | 0 | 0 | 0 | 2 | Corrected baseline (#1170), Spark0 smoke split (#1188), transformers backend (#1239). Multi-area participant. |
 
-**Anti-pattern callouts (from observed behavior):**
+**Anti-pattern callouts (resolved):**
 
-- "Posted blocker comment, done" with no five-question gate and no alternative attempted — addressed by 12:00Z anti-stall protocol.
-- Refusing to claim outside the "track:N matches workstream N" mental model — addressed by 12:30Z track-vs-component naming fix + cross-track-claiming-is-default rule.
+- "Posted blocker comment, done" — addressed by 12:00Z anti-stall protocol. Subsequent blocker comments (#1218, #1220) include real raw evidence; #1218 follower claim of #1195 demonstrates the protocol works when followed.
+- Refusing to claim outside the "track:N matches workstream N" mental model — addressed by 12:30Z track-vs-component naming fix. Track:3 and Track:4 now actively cross-claim.
 - "Stepped outside my track, did one small thing, declared blocked or done" — addressed by partial-work-as-blocker rule.
 
-The goal of these structural changes is not punishment. It is to make the silent-specialist failure mode visible and the team-player behavior structurally easier than the alternatives.
+**Anti-pattern remaining (track:2 only):**
+
+- "Posted blocker comment, did not claim from backlog in same runtime, vanished" — the five-question gate explicitly requires backlog-claim within the same runtime. Track:2's #1220 has Q1–Q4 answered but Q5 (claimed from backlog instead) blank. They were given runtime and did not return. Slot retirement recommended.
 
 
 
