@@ -1,0 +1,11 @@
+[Unit]
+Description=Run DS4 SSH banner watchdog every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Unit=ds4-sshd-watchdog.service
+
+[Install]
+WantedBy=timers.target
