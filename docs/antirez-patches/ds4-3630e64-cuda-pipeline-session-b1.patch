@@ -1,7 +1,36 @@
+diff --git a/ds4_cli.c b/ds4_cli.c
+--- a/ds4_cli.c
++++ b/ds4_cli.c
+@@ -45,6 +45,7 @@ typedef struct {
+     bool cuda_decode_probe;
+     bool cuda_decode_stack_probe;
+     bool cuda_batch_stack_probe;
++    bool emit_output_head_argmax;
+     bool cuda_output_head_probe;
+     uint32_t cuda_moe_layer;
+     uint32_t cuda_moe_tokens;
+@@ -190,6 +191,8 @@ static void usage(FILE *fp) {
+         "      Run all CUDA decode layers plus output head using synthetic resident cache state.\n"
+         "  --cuda-batch-stack-probe\n"
+         "      Run all CUDA batch layers plus one-row output head using synthetic resident activations.\n"
++        "  --emit-output-head-argmax\n"
++        "      Accept stack-probe coordinator requests for pipeline_argmax_token output.\n"
+         "  --cuda-output-head-probe\n"
+         "      Run the CUDA output head using synthetic resident HC state.\n"
+         "  --cuda-moe-layer N\n"
+@@ -1345,6 +1348,8 @@ static cli_config parse_options(int argc, char **argv) {
+         } else if (!strcmp(arg, "--cuda-batch-stack-probe")) {
+             c.gen.cuda_batch_stack_probe = true;
+             c.engine.backend = DS4_BACKEND_CUDA;
++        } else if (!strcmp(arg, "--emit-output-head-argmax")) {
++            c.gen.emit_output_head_argmax = true;
+         } else if (!strcmp(arg, "--cuda-output-head-probe")) {
+             c.gen.cuda_output_head_probe = true;
+             c.engine.backend = DS4_BACKEND_CUDA;
 diff --git a/ds4.c b/ds4.c
 --- a/ds4.c
 +++ b/ds4.c
-@@ -17850,6 +17850,7 @@ int ds4_engine_cuda_batch_stack_probe(ds4_engine *e, uint32_t n_tokens, uint32_t iterations) {
+@@ -17850,5 +17850,6 @@ int ds4_engine_cuda_batch_stack_probe(ds4_engine *e, uint32_t n_tokens, uint32_t iterations) {
              const double log0 = now_sec();
              ok = ds4_gpu_tensor_read(g.logits, 0, host_logits, logits_bytes) != 0;
              const double log1 = now_sec();

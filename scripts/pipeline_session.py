@@ -146,9 +146,9 @@ class PromptRun:
 
 def default_stages() -> list[StageConfig]:
 	return [
-		StageConfig(0, "spark0", "spark0@aitopatom-9ab9.local", "/home/spark0/src/ds4", f"/home/spark0/models/ds4/{MODEL_BASENAME}", 0, 15, False, ""),
-		StageConfig(1, "spark1", "spark1", "/home/spark1/src/ds4", f"/home/spark1/models/ds4/{MODEL_BASENAME}", 15, 29, False, "10.10.1.248"),
-		StageConfig(2, "spark2", "spark2", "/home/spark2/src/ds4", f"/home/spark2/models/ds4/{MODEL_BASENAME}", 29, 43, True, "10.10.5.2"),
+		StageConfig(0, "spark0", "spark0@aitopatom-9ab9.local", "/tmp/ds4_stage_handoff_src", f"/home/spark0/models/ds4/{MODEL_BASENAME}", 0, 15, False, ""),
+		StageConfig(1, "spark1", "spark1", "/home/spark1/src/ds4", f"/home/spark1/models/ds4/{MODEL_BASENAME}", 15, 29, False, "10.10.1.2"),
+		StageConfig(2, "spark2", "spark2", "/home/spark2/src/ds4", f"/home/spark2/models/ds4/{MODEL_BASENAME}", 29, 43, True, "10.10.3.2"),
 	]
 
 
@@ -277,8 +277,8 @@ def hash_token_ids(token_ids: list[int]) -> str:
 	return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
-def boundary_bytes(batch_size: int = DEFAULT_BATCH) -> int:
-	return batch_size * HC_MULT * HIDDEN_SIZE * BOUNDARY_DTYPE_BYTES
+def boundary_bytes(token_count: int = DEFAULT_BATCH) -> int:
+	return token_count * HC_MULT * HIDDEN_SIZE * BOUNDARY_DTYPE_BYTES
 
 
 def prompt_tokens_file(run_dir: str, step: int) -> str:
@@ -382,10 +382,12 @@ class PipelineSession:
 		if rc.returncode != 0:
 			raise PipelineSessionError(f"{stage.name} prompt token file write failed rc={rc.returncode}: {rc.stderr.strip()}")
 
-	def build_stage_probe_command(self, stage: StageConfig, run_id: str, step: int, prompt_file: str, input_file: str | None, output_file: str | None) -> str:
+	def build_stage_probe_command(self, stage: StageConfig, run_id: str, step: int, prompt_file: str, input_file: str | None, output_file: str | None, token_count: int) -> str:
 		env = [
 			f"DS4_CUDA_STACK_PROBE_LAYER_BEGIN={stage.layer_begin}",
 			f"DS4_CUDA_STACK_PROBE_LAYER_END={stage.layer_end}",
+			"DS4_CUDA_SKIP_STARTUP_MODEL_CACHE=1",
+			"DS4_CUDA_STACK_PROBE_PRELOAD_STAGE=1",
 			"DS4_CUDA_MOE_SLICE_TILE8=1",
 		]
 		if stage.stage_id == 0:
@@ -401,17 +403,22 @@ class PipelineSession:
 			"-m",
 			q(stage.model),
 			"--cuda-batch-stack-probe",
-			"--batch",
-			str(DEFAULT_BATCH),
-			"--emit-output-head-argmax",
+			"--cuda-moe-tokens",
+			str(token_count),
+			"--cuda-moe-iters",
+			"1",
+			"--ctx",
+			str(DEFAULT_CTX),
 		]
+		if stage.include_head:
+			argv.append("--emit-output-head-argmax")
 		if stage.stage_id == 0:
 			argv.extend(["--prompt-tokens-file", q(prompt_file)])
 		cmd = " ".join(env + argv)
 		return f"mkdir -p {q(self.remote_step_dir(run_id, step))}; cd {q(stage.ds4_dir)}; PATH=.:$PATH env {cmd}"
 
-	def run_stage_probe(self, stage: StageConfig, run_id: str, step: int, prompt_file: str, input_file: str | None, output_file: str | None, out_dir: Path) -> dict[str, Any]:
-		cmd = self.build_stage_probe_command(stage, run_id, step, prompt_file, input_file, output_file)
+	def run_stage_probe(self, stage: StageConfig, run_id: str, step: int, prompt_file: str, input_file: str | None, output_file: str | None, token_count: int, out_dir: Path) -> dict[str, Any]:
+		cmd = self.build_stage_probe_command(stage, run_id, step, prompt_file, input_file, output_file, token_count)
 		rc = self.runner(stage, cmd, self.ssh_config, self.known_hosts, 2400)
 		(out_dir / f"stage{stage.stage_id}_step{step}.out").write_text(rc.stdout, encoding="utf-8")
 		(out_dir / f"stage{stage.stage_id}_step{step}.err").write_text(rc.stderr, encoding="utf-8")
@@ -421,10 +428,10 @@ class PipelineSession:
 		(out_dir / f"stage{stage.stage_id}_step{step}.json").write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 		return obj
 
-	def tcp_transfer_file(self, src: StageConfig, dst: StageConfig, src_path: str, dst_path: str, port: int, out_dir: Path, label: str) -> dict[str, Any]:
+	def tcp_transfer_file(self, src: StageConfig, dst: StageConfig, src_path: str, dst_path: str, port: int, out_dir: Path, label: str, token_count: int = DEFAULT_BATCH) -> dict[str, Any]:
 		if src.host == dst.host:
 			item = {
-				"bytes": boundary_bytes(),
+				"bytes": boundary_bytes(token_count),
 				"src": src.name,
 				"dst": dst.name,
 				"label": label,
@@ -435,7 +442,7 @@ class PipelineSession:
 			return item
 		if not dst.listen:
 			raise PipelineSessionError(f"{dst.name} is missing listen IP for TCP boundary transfer")
-		expected = boundary_bytes()
+		expected = boundary_bytes(token_count)
 		recv_cmd = "python3 -c {} {} {} {}".format(q(RECV_CODE), port, q(dst_path), expected)
 		send_cmd = "python3 -c {} {} {} {} {} {}".format(q(SEND_CODE), q(dst.listen), port, q(src_path), 120.0, expected)
 		recv = popen_remote(dst, recv_cmd, self.ssh_config, self.known_hosts)
@@ -481,17 +488,18 @@ class PipelineSession:
 	def decode_one(self, run_id: str, step: int, token_ids: list[int], out_dir: Path) -> GeneratedStep:
 		stage0, stage1, stage2 = self.stages
 		run_dir = self.remote_step_dir(run_id, step)
+		token_count = len(token_ids)
 		prompt_file = prompt_tokens_file(run_dir, step)
 		stage0_out_pattern = pattern_path(run_dir, "stage0_out")
 		stage1_in_pattern = pattern_path(run_dir, "stage1_in")
 		stage1_out_pattern = pattern_path(run_dir, "stage1_out")
 		stage2_in_pattern = pattern_path(run_dir, "stage2_in")
 		self.write_remote_prompt_tokens(stage0, prompt_file, token_ids)
-		r0 = self.run_stage_probe(stage0, run_id, step, prompt_file, None, stage0_out_pattern, out_dir)
-		self.tcp_transfer_file(stage0, stage1, actual_pattern_file(stage0_out_pattern), actual_pattern_file(stage1_in_pattern), 19100 + step, out_dir, f"step{step}_stage0_to_stage1")
-		r1 = self.run_stage_probe(stage1, run_id, step, prompt_file, stage1_in_pattern, stage1_out_pattern, out_dir)
-		self.tcp_transfer_file(stage1, stage2, actual_pattern_file(stage1_out_pattern), actual_pattern_file(stage2_in_pattern), 19200 + step, out_dir, f"step{step}_stage1_to_stage2")
-		r2 = self.run_stage_probe(stage2, run_id, step, prompt_file, stage2_in_pattern, None, out_dir)
+		r0 = self.run_stage_probe(stage0, run_id, step, prompt_file, None, stage0_out_pattern, token_count, out_dir)
+		self.tcp_transfer_file(stage0, stage1, actual_pattern_file(stage0_out_pattern), actual_pattern_file(stage1_in_pattern), 19100 + step, out_dir, f"step{step}_stage0_to_stage1", token_count)
+		r1 = self.run_stage_probe(stage1, run_id, step, prompt_file, stage1_in_pattern, stage1_out_pattern, token_count, out_dir)
+		self.tcp_transfer_file(stage1, stage2, actual_pattern_file(stage1_out_pattern), actual_pattern_file(stage2_in_pattern), 19200 + step, out_dir, f"step{step}_stage1_to_stage2", token_count)
+		r2 = self.run_stage_probe(stage2, run_id, step, prompt_file, stage2_in_pattern, None, token_count, out_dir)
 		token_id = self.committed_token(r2)
 		hashes: list[str] = []
 		nonfinites: list[int] = []
