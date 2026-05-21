@@ -1,7 +1,7 @@
 {
   "schema": "ds4.sparkmodels.v1",
   "last_inventory_utc": "2026-05-20T0835Z",
-  "last_candidate_scan_utc": "2026-05-20T1015Z",
+  "last_candidate_scan_utc": "2026-05-21T1227Z",
   "last_required_placement_verified_utc": "2026-05-20T1025Z",
   "canonical_root_template": "/home/{spark_user}/models",
   "ring_order": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6"],
@@ -87,6 +87,7 @@
     "phi": "https://huggingface.co/api/models?author=microsoft&search=phi&sort=lastModified&direction=-1&limit=100",
     "llama": "https://huggingface.co/api/models?author=meta-llama&sort=lastModified&direction=-1&limit=80",
     "glm": "https://huggingface.co/api/models?author=zai-org&sort=lastModified&direction=-1&limit=80",
+    "hy_mt": "https://huggingface.co/api/models?author=tencent&search=Hy-MT&sort=lastModified&direction=-1&limit=50",
     "kimi": "https://huggingface.co/api/models?author=moonshotai&sort=lastModified&direction=-1&limit=80"
   },
   "candidate_storage_policy": {
@@ -121,6 +122,12 @@
     "Qwen/Qwen3.5-2B",
     "Qwen/Qwen3.5-4B",
     "Qwen/Qwen3.5-9B",
+    "tencent/Hy-MT2-1.8B-2Bit-GGUF",
+    "tencent/Hy-MT2-1.8B-1.25Bit-GGUF",
+    "tencent/Hy-MT2-1.8B-GGUF",
+    "tencent/Hy-MT2-1.8B",
+    "tencent/Hy-MT2-7B-GGUF",
+    "tencent/Hy-MT2-7B-FP8",
     "Qwen/Qwen3.6-27B-FP8",
     "Qwen/Qwen3.6-35B-A3B-FP8",
     "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4",
@@ -459,6 +466,37 @@
           "zai-org/GLM-4.5V",
           "zai-org/GLM-4.5V-FP8",
           "zai-org/GLM-4.1V-9B-Thinking"
+        ]
+      }
+    },
+    {
+      "family": "hy_mt2",
+      "org": "tencent",
+      "source": "hy_mt",
+      "license_note": "Tencent Hy-MT2 repos were public and ungated in the 2026-05-21 Hugging Face API scan; verify each repo LICENSE before production use.",
+      "scan_note": "Hy-MT2 is translation-focused; prioritize 1.8B GGUF/2-bit GGUF for tiny single-Spark smoke tests and 7B GGUF/FP8 for quality checks.",
+      "tiers": {
+        "small_translation": [
+          "tencent/Hy-MT2-1.8B-2Bit-GGUF",
+          "tencent/Hy-MT2-1.8B-1.25Bit-GGUF",
+          "tencent/Hy-MT2-1.8B-GGUF",
+          "tencent/Hy-MT2-1.8B",
+          "tencent/Hy-MT2-1.8B-FP8",
+          "tencent/Hy-MT2-7B-GGUF",
+          "tencent/Hy-MT2-7B-FP8",
+          "tencent/Hy-MT2-7B"
+        ],
+        "single_spark_moe_candidate": [
+          "tencent/Hy-MT2-30B-A3B-FP8",
+          "tencent/Hy-MT2-30B-A3B"
+        ],
+        "hy_mt15_reference": [
+          "tencent/Hy-MT1.5-1.8B-2bit-GGUF",
+          "tencent/Hy-MT1.5-1.8B-2bit",
+          "tencent/Hy-MT1.5-1.8B-1.25bit-GGUF",
+          "tencent/Hy-MT1.5-1.8B-1.25bit",
+          "tencent/HY-MT1.5-1.8B-GGUF",
+          "tencent/HY-MT1.5-1.8B"
         ]
       }
     },

@@ -48,14 +48,14 @@ Spark0 was the initial superset source on the 2026-05-20 inventory. After the
 ## Candidate Shelf
 
 `sparkmodels.json` is also the DRY candidate manifest. It includes the latest
-scan of the Qwen, DeepSeek, Gemma, Mistral, Phi, Llama, GLM, and Kimi Hugging
-Face organizations as of 2026-05-20.
+scan of the Qwen, DeepSeek, Gemma, Mistral, Phi, Llama, GLM, Tencent Hy-MT, and
+Kimi Hugging Face organizations as of 2026-05-21.
 
 Use the candidate tiers this way:
 
-- `next_seed_priority`: pull these first. They are text/code/reasoning repos
-  that should run on one Spark and are smaller than the current DeepSeek V4
-  footprint. Pull complete repos, not weight-only subsets.
+- `next_seed_priority`: pull these first. They are text/code/reasoning/translation
+  repos that should run on one Spark and are smaller than the current DeepSeek
+  V4 footprint. Pull complete repos, not weight-only subsets.
 - `single_spark_mirror_policy`: this is the replication gate for any future
   addition to `next_seed_priority`.
 - `small_and_mid_llm`, `ministral3_gguf`, `phi4_current`, and similar tiers are
