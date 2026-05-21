@@ -56,11 +56,19 @@ On every runtime, run these steps in order. Stop at the first one that produces 
      (another track may have claimed in parallel; if so, retry with next).
    → post a "claiming" comment with your name and an ETA.
 
-4. Idle exit
-   No compatible work. Post one comment on the coordination issue:
-     "track:<N> idle, no compatible work matching free hardware <list>"
-   Then exit. Do not generate documentation about being idle. Do not write
-   status reports. Exit.
+4. Idle exit (gated)
+   You may exit idle ONLY if all three are true:
+     a. You posted the five-question comment from the Anti-stall protocol
+        on whatever you were just doing (if you were working).
+     b. lane_claim_next.sh <your-N> with EVERY free hw label you can use,
+        including hw:none, returned "none".
+     c. Your idle comment on #1190 names at least one specific backlog gap
+        (an issue that would let you work if it existed). Do not just say
+        "no compatible work."
+
+   If any of (a)(b)(c) is not satisfied, you have not earned idle exit.
+   Go back to step 3. The decision tree does not have an "I don't feel
+   like the available work" branch.
 ```
 
 ## Claim atomicity
@@ -90,10 +98,68 @@ On claim, edit the coordination table via a new comment with the full updated ta
 
 Never `--add-label` directly to the coordination issue's hw rows. The table-in-comment pattern is the protocol.
 
-## Idle and stall thresholds
+## Anti-stall protocol (read this twice)
 
-- **Soft idle:** no commit or comment from your track on its in-progress issue for >2 hours. You self-detect this on next runtime: post a status update with what's blocking, even if it's "still running, awaiting Spark6 eval completion."
-- **Stall (auto-block):** no commit or comment for >4 hours. Any other track may, on next runtime, comment `/release-stalled track:<your-N>` on the stalled issue, after which the stalled issue's track label is moved back to `track:backlog` and `status:queued`. The original track does not get to "reclaim" without a fresh claim.
+The most common failure mode of agents in this system is **writing a status report and stopping**. An agent hits friction, posts a `status:blocked` comment describing what blocked them, and considers themselves done. **This is not done. This is abandonment with paperwork.**
+
+A blocker is a *handoff request*, not a completion state. The work item is still in flight; you have only changed who is being asked to look at it next.
+
+### Three distinct states, three different protocols
+
+| State | Definition | What it requires |
+|---|---|---|
+| **`status:in-progress`** | You are actively working | Commits/comments/PRs every ≤2 hours |
+| **`status:blocked`** | External dependency genuinely prevents progress: hardware down, unmerged dependency issue, missing credentials, server unreachable | Five-question gate (below) + claim another backlog issue *in the same runtime* |
+| **`status:in-progress` with a posted "stuck" note** | You tried, code or logic defeated you, you need human input | Posts a comment naming exactly what you tried, with raw output of failures. Stays in-progress; not "blocked." Human decides. |
+
+What does NOT exist as a legitimate state: **"abandoned because hard."** If you stopped without a real external block and without naming what defeated you, you have not finished. You are stalling.
+
+### The five-question gate for `status:blocked`
+
+Before applying `status:blocked` you must post a comment answering all five questions verbatim, with raw evidence not summary:
+
+1. **What did you try?** Paste raw command output (the actual stderr/error/log), not a paraphrase.
+2. **What alternative paths exist?** List at least 2.
+3. **Which alternatives did you actually try?** With raw output for each attempt.
+4. **What specifically would unblock you?** Name the action, the actor, and the artifact (e.g. "Spark0 SSH restored," "issue #1208 closed with the corrected baseline number," "user provides the model manifest path").
+5. **What did you claim from backlog instead?** Cite the issue number. If nothing in backlog is compatible with your free hardware, name two issues you would like to see filed.
+
+A `status:blocked` comment missing any of these five is **invalid**. The work item stays `status:in-progress` and you keep working.
+
+### Backlog claim is mandatory before idle exit
+
+The autonomous loop's "idle exit" branch is only legitimate if all of these are true:
+
+- You posted the five-question comment.
+- You ran `scripts/lane_claim_next.sh <your-N> hw:none,<any-other-free-hw>` and it returned `none`.
+- Your idle comment on #1190 names at least one specific backlog gap (an issue that would let you work if it existed).
+
+If `lane_claim_next.sh` returns an issue, you claim it. Period. You do not get to look at the backlog, decide it's not interesting enough, and exit. The backlog is in priority order; the top item is the next item.
+
+### Stall thresholds
+
+- **Soft check-in:** every 2 hours during `status:in-progress`, post a comment with current step + next sub-step. Silence past 2 hours is itself an anti-pattern.
+- **Hard reaper:** 4 hours without commit/comment activity → any other track may comment `/release-stalled track:<N>` and the issue returns to `track:backlog` + `status:queued`. The reaping track gets first claim on the next round.
+- **Repeat offenders:** if a track triggers `/release-stalled` twice in 24 hours, the work item is also de-prioritized to make the pattern visible. The dashboard `Stall ledger` records these.
+
+### Concrete examples of valid vs invalid blocker comments
+
+**Invalid (current pattern, do not do this):**
+> /block: could not figure out how to discover preloaded models on Spark2. Posting blocker comment.
+
+This is abandonment. You did not list what you tried, you did not try alternatives, you did not claim from backlog, you did not name what would unblock you.
+
+**Valid:**
+> Five-question gate per LANES.md:
+> 1. What I tried: `ssh spark2 'ls ~/models/ /opt/models/ /var/cache/huggingface/'` returned `<raw 12-line output here>`. Then `ssh spark2 'find / -name "*.gguf" 2>/dev/null | head'` returned `<raw output>`.
+> 2. Alternatives: (a) read `~/.cache/huggingface/hub` directly; (b) query the running vLLM API at `/v1/models`; (c) ask user for a manifest.
+> 3. Tried (a): `<output showing 14 GGUF models found>`. Tried (b): `<output: connection refused, vLLM not running on spark2>`.
+> 4. Unblock action: I can proceed using approach (a), 14 GGUF files. The HF-hub-only inventory may be incomplete relative to what's actually preloaded; user clarification on whether more models exist outside HF cache would help, but does not block this iteration.
+> 5. Claimed from backlog: #1208 (vLLM regression investigation) since it's P0 and `hw:spark-3-4-5` is compatible with my session.
+>
+> Continuing on #1213 with approach (a). NOT applying `status:blocked` because I have a path forward.
+
+The second example is twice as long but represents work; the first is twenty seconds of typing.
 
 ## PR linkage (mandatory)
 
@@ -110,7 +176,10 @@ Fixtures you authored by hand are not evidence. Fixtures that are the artifact-o
 ## Forbidden patterns
 
 - **Writing "vXX notes," "iteration N status," "lane progress ledger" documents.** These are the dogfood-anti-pattern. The work is the deliverable.
-- **Closing an issue with `status:in-progress` without a merged PR.** If you can't finish, transition to `status:blocked` with a specific blocker comment.
+- **Treating `status:blocked` as a completion state.** It is a handoff request. See the Anti-stall protocol. Posting a blocker comment and stopping is abandonment with paperwork.
+- **Calling code/logic problems "blocked."** If the build error is confusing, that is `status:in-progress with a stuck note`, not blocked. Blocked is reserved for genuine external dependencies (hardware down, unmerged dep, missing credential).
+- **Exiting idle without first claiming from backlog.** `lane_claim_next.sh` must return `none` before idle is legitimate.
+- **Closing an issue with `status:in-progress` without a merged PR.** If you can't finish, transition to `status:blocked` with the full five-question gate.
 - **Adding more contract/artifact schemas to dodge writing code.** If a working PR would require >2 new JSON shapes before any code runs, you are stalling.
 - **`try/except ImportError` fallbacks** or any silent-degradation pattern. Dependencies must be installed; crash loudly if missing.
 - **Guessing C struct fields** in any patch. View the file, cite line numbers.
@@ -118,13 +187,17 @@ Fixtures you authored by hand are not evidence. Fixtures that are the artifact-o
 ## Decision tree summary (memorize)
 
 ```
-in-progress for me?  → resume
+in-progress for me?       → resume work, post 2-hr check-in
   no
-claimed for me?      → start
+claimed for me?           → transition to in-progress, start
   no
-backlog + free hw?   → claim top P0
+backlog top + free hw?    → claim it (priority order, no cherry-picking)
+  no compatible item
+hit a blocker just now?   → five-question gate, claim from backlog, continue
   no
-                     → comment idle, exit
+backlog has anything?     → CLAIM IT, even at hw:none lowest priority
+  truly nothing
+                          → post idle comment naming gap, exit
 ```
 
-That is the entire loop. No human instructions required between runtimes. Strategic re-prioritization happens via the human editing issue labels or priorities; you re-read them on next startup.
+That is the entire loop. "I don't feel like the top backlog item" is not a branch. "I wrote a blocker comment so I'm done" is not a branch. The only legitimate exits are merged PR or fully-gated idle.
