@@ -4,7 +4,7 @@ Load this file first for any Centaur/Spark networking work. The machine-readable
 source of truth is [`sparknetwork.json`](sparknetwork.json); this document is the
 human runbook derived from it.
 
-Last verified: `2026-05-21T0057Z` UTC.
+Last verified: `2026-05-21T0537Z` UTC.
 
 ## Rule Zero
 
@@ -153,6 +153,40 @@ Use separate planes for separate jobs:
 | Ring sync | Previous/next 200G neighbors only | Manifests, object sync, shard movement, high-volume transfers |
 | Data plane | 200G fabric | Runtime/model traffic |
 
+## Rescue Control Plane
+
+Spark2 through Spark6 now run a first-pass software rescue layer on the 10G
+control plane:
+
+- Service: `ds4-rescue-agent.service`, user systemd unit.
+- Port: `25100/tcp` on `10.20.0.12-10.20.0.16`.
+- Token: per-cluster secret file, installed on each node at
+  `~/.ds4-rescue/token`; do not commit or print it.
+- Persistence: `loginctl enable-linger` is enabled for `spark2` through
+  `spark6`, so the user service can start at boot without an active SSH login.
+- SSH self-heal: `ds4-sshd-watchdog.timer` runs every minute as root and
+  restarts SSH only when the local banner probe fails.
+- Narrow sudo: `/etc/sudoers.d/ds4-sshd-rescue` allows only `systemctl restart
+  ssh`, `systemctl restart sshd`, and `/usr/local/sbin/ds4-sshd-watchdog`.
+
+Use the checked-in client from Mac Studio:
+
+```bash
+python3 scripts/ds4_rescue_client.py 10.20.0.12 health
+python3 scripts/ds4_rescue_client.py 10.20.0.12 ssh-probe
+python3 scripts/ds4_rescue_client.py 10.20.0.12 restart-ssh
+```
+
+Replace the last octet for `spark3` through `spark6`. `spark0` and `spark1`
+did not receive this layer yet because they were not SSH-reachable during the
+2026-05-21 deployment.
+
+Deploy or refresh it on reachable nodes with:
+
+```bash
+DS4_RESCUE_ROOT=1 scripts/ds4_deploy_rescue_agent.sh spark2 spark3 spark4 spark5 spark6
+```
+
 For bulk data, prefer [`docs/spark-ring-fast-transfer.md`](docs/spark-ring-fast-transfer.md)
 and `scripts/spark_ring_fast_copy.py --engine native` for regular files. Use
 the Python engine for directory trees. SSH-based rsync/scp is a control-plane
@@ -226,6 +260,7 @@ From Mac Studio:
 ```bash
 for h in spark0 spark1 spark2 spark3 spark4 spark5 spark6; do ssh "$h" hostname; done
 for ip in 10.20.0.10 10.20.0.11 10.20.0.12 10.20.0.13 10.20.0.14 10.20.0.15 10.20.0.16; do ping -c 1 "$ip"; done
+for ip in 10.20.0.12 10.20.0.13 10.20.0.14 10.20.0.15 10.20.0.16; do python3 scripts/ds4_rescue_client.py "$ip" ssh-probe; done
 ssh spark3 'for ip in 10.10.5.2 10.10.6.2 10.10.7.2 10.10.8.2; do ping -c 1 "$ip"; done'
 ssh spark5 'for ip in 10.10.9.1 10.10.10.1 10.10.11.2 10.10.12.2; do ping -c 1 "$ip"; done'
 ```

@@ -1,6 +1,6 @@
 {
   "schema": "ds4.sparknetwork.v1",
-  "last_verified_utc": "2026-05-21T0057Z",
+  "last_verified_utc": "2026-05-21T0537Z",
   "operator": {
     "name": "Mac Studio",
     "hostname": "Mac-Studio.local",
@@ -181,6 +181,38 @@
       "Use raw TCP multi-stream transfer for initial bulk payload movement; reserve rsync over SSH for final metadata/delta checks.",
       "Never send model payloads through the controller API."
     ]
+  },
+  "rescue_control": {
+    "schema": "ds4.rescue.v1",
+    "verified_utc": "2026-05-21T0537Z",
+    "deployed_nodes": ["spark2", "spark3", "spark4", "spark5", "spark6"],
+    "not_deployed_nodes": [
+      {"node": "spark0", "reason": "not SSH-reachable during deployment"},
+      {"node": "spark1", "reason": "not SSH-reachable during deployment"}
+    ],
+    "plane": "10G control",
+    "port": 25100,
+    "token_file_remote": "~/.ds4-rescue/token",
+    "token_file_local_default": "/private/tmp/ds4_rescue_token",
+    "client": "scripts/ds4_rescue_client.py",
+    "deploy": "DS4_RESCUE_ROOT=1 scripts/ds4_deploy_rescue_agent.sh spark2 spark3 spark4 spark5 spark6",
+    "service": {
+      "type": "user systemd",
+      "unit": "ds4-rescue-agent.service",
+      "linger_enabled": true,
+      "endpoints": ["/health", "/status", "/ssh-probe", "/action restart_ssh"]
+    },
+    "sshd_watchdog": {
+      "unit": "ds4-sshd-watchdog.timer",
+      "frequency": "1 minute",
+      "root_script": "/usr/local/sbin/ds4-sshd-watchdog",
+      "sudoers": "/etc/sudoers.d/ds4-sshd-rescue",
+      "allowed_sudo": [
+        "/usr/bin/systemctl restart ssh",
+        "/usr/bin/systemctl restart sshd",
+        "/usr/local/sbin/ds4-sshd-watchdog"
+      ]
+    }
   },
   "bulk_transfer": {
     "default_tool": "scripts/spark_ring_fast_copy.py",
