@@ -68,6 +68,30 @@ class SparkRingFastCopyTest(unittest.TestCase):
             self.assertIn("engine=native", text)
             self.assertIn("dry-run source stat skipped: missing source", text)
 
+    def test_python_helper_retries_blocking_sendfile(self) -> None:
+        helper_ns = {}
+        exec(fast_copy.HELPER, helper_ns)
+
+        class FakeSocket:
+            def __init__(self) -> None:
+                self.sent = b""
+
+            def fileno(self) -> int:
+                return 99
+
+            def sendall(self, data: bytes) -> None:
+                self.sent += data
+
+        with tempfile.NamedTemporaryFile() as f:
+            f.write(b"abcdef")
+            f.flush()
+            fake = FakeSocket()
+            with patch.object(helper_ns["os"], "sendfile", side_effect=[BlockingIOError(), 6]) as sendfile, patch.object(helper_ns["time"], "sleep") as sleep:
+                helper_ns["send_file_range"](fake, f.name, "repo/file.bin", 0, 6, 6, 0o644, 1)
+            self.assertEqual(sendfile.call_count, 2)
+            sleep.assert_called_once_with(0.001)
+            self.assertIn(b'"kind":"file"', fake.sent)
+
 
 if __name__ == "__main__":
     unittest.main()

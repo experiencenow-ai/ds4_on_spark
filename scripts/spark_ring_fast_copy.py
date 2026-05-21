@@ -177,7 +177,11 @@ def send_file_range(sock, path, rel, offset, length, size, mode, mtime_ns):
     try:
         sent_total = 0
         while sent_total < length:
-            sent = os.sendfile(sock.fileno(), fd, int(offset) + sent_total, int(length) - sent_total)
+            try:
+                sent = os.sendfile(sock.fileno(), fd, int(offset) + sent_total, int(length) - sent_total)
+            except BlockingIOError:
+                time.sleep(0.001)
+                continue
             if sent == 0:
                 raise RuntimeError("sendfile returned 0")
             sent_total += sent
@@ -237,6 +241,7 @@ def enqueue_path_tasks(src, root_name, chunk_size, tasks):
 def send_worker(idx, dst_ips, port, task_q, stats, lock, socket_buffer_mib):
     ip = dst_ips[idx % len(dst_ips)]
     sock = socket.create_connection((ip, int(port)), timeout=30)
+    sock.settimeout(None)
     set_sock_buffers(sock, socket_buffer_mib)
     try:
         while True:
