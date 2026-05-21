@@ -20,13 +20,17 @@ class VllmPrefixCacheBenchTest(unittest.TestCase):
 	def test_metric_parser_computes_cached_prompt_token_delta(self) -> None:
 		before = bench.prefix_metric_snapshot(
 			"vllm:prompt_tokens_total 100\n"
+			"vllm:prompt_tokens_by_source_total{source=\"local_compute\"} 100\n"
 			"vllm:prompt_tokens_cached_total 10\n"
 			"vllm:prefix_cache_hits_total 1\n"
+			"vllm:prefix_cache_hits_created 999\n"
 		)
 		after = bench.prefix_metric_snapshot(
 			"vllm:prompt_tokens_total 300\n"
+			"vllm:prompt_tokens_by_source_total{source=\"local_compute\"} 300\n"
 			"vllm:prompt_tokens_cached_total 160\n"
 			"vllm:prefix_cache_hits_total 51\n"
+			"vllm:prefix_cache_hits_created 999\n"
 		)
 		delta = bench.delta_metrics(before, after)
 		self.assertEqual(delta["prompt_tokens_total"], 200.0)

@@ -162,6 +162,18 @@ def metric_value(line: str) -> tuple[str, float] | None:
 		return(None)
 
 
+def metric_exact_sum(text: str, metric_name: str) -> float:
+	total = 0.0
+	for line in text.splitlines():
+		item = metric_value(line)
+		if item is None:
+			continue
+		name, value = item
+		if name == metric_name:
+			total += value
+	return(total)
+
+
 def metric_sum(text: str, required_terms: tuple[str, ...], excluded_terms: tuple[str, ...] = ()) -> float:
 	total = 0.0
 	for line in text.splitlines():
@@ -177,10 +189,10 @@ def metric_sum(text: str, required_terms: tuple[str, ...], excluded_terms: tuple
 
 def prefix_metric_snapshot(text: str) -> dict[str, float]:
 	return({
-		"prompt_tokens_total": metric_sum(text, ("prompt", "tokens", "total"), ("cached",)),
-		"prompt_tokens_cached_total": metric_sum(text, ("prompt", "tokens", "cached")),
-		"prefix_cache_hits_total": metric_sum(text, ("prefix", "cache", "hit")),
-		"prefix_cache_queries_total": metric_sum(text, ("prefix", "cache"), ("hit",)),
+		"prompt_tokens_total": metric_exact_sum(text, "vllm:prompt_tokens_total"),
+		"prompt_tokens_cached_total": metric_exact_sum(text, "vllm:prompt_tokens_cached_total"),
+		"prefix_cache_hits_total": metric_exact_sum(text, "vllm:prefix_cache_hits_total"),
+		"prefix_cache_queries_total": metric_exact_sum(text, "vllm:prefix_cache_queries_total"),
 	})
 
 
