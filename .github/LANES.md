@@ -1,12 +1,10 @@
 # Lane coordination protocol
 
-This document is the autonomous-loop spec every xhigh track reads on startup. The pinned issue **🚦 Lane coordination state — DO NOT CLOSE** is the live source of truth for track ownership and hardware allocation.
+This document is the autonomous-loop spec every xhigh track reads on startup. The pinned issue **🚦 Lane coordination state — DO NOT CLOSE** (#1190) is the live source of truth for track ownership and hardware allocation. For where each component of the Centaur system sits in overall progress, see [`docs/CENTAUR_DASHBOARD.md`](../docs/CENTAUR_DASHBOARD.md).
 
 ## Scope of work — multi-repo
 
-The coordination *hub* — where labels, issues, and this protocol live — is `experiencenow-ai/ds4_on_spark`. The *work* a track does can target any repo in the experiencenow-ai org or its sanctioned forks:
-
-| Target repo | Typical work |
+The coordination *hub* — where labels, issues, and this protocol live — is `experiencenow-ai/ds4_on_spark`. The *work* a track does can target any repo in the experiencenow-ai org or its sanctioned forks:| Target repo | Typical work |
 |---|---|
 | `experiencenow-ai/ds4_on_spark` | Spark deployment, layer-pipeline patches, evaluation harnesses, vLLM/SGLang benchmarks, coordination infrastructure |
 | `experiencenow-ai/centaur` | State-machine factory core, provider bindings, model-router qualification, evolution domains, dogfood projects |
