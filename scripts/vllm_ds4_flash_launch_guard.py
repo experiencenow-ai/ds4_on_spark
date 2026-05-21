@@ -15,6 +15,11 @@ FORMAT = "ds4-vllm-dsv4-flash-launch-guard-v1"
 BAD = "blocked"
 OK = "passed"
 WARN = "warn"
+DS4_FLASH_SPARK_GB10_TOTAL_GIB = 119.7
+DS4_FLASH_BASE_RESIDENT_GIB = 78.0
+DS4_FLASH_BATCH_KV_GIB_AT_8192_TP2 = 4.0
+DS4_FLASH_SEQUENCE_OVERHEAD_GIB = 0.004
+DS4_FLASH_DEFAULT_MIN_HEADROOM_GIB = 8.0
 
 
 def strip_value(raw: str) -> str:
@@ -119,6 +124,20 @@ def float_flag(flags: dict[str, list[str | bool]], name: str, default: float) ->
 		return(default)
 
 
+def float_default(defaults: dict[str, Any], key: str, default: float) -> float:
+	try:
+		return(float(defaults.get(key, default)))
+	except (TypeError, ValueError):
+		return(default)
+
+
+def int_default(defaults: dict[str, Any], key: str, default: int) -> int:
+	try:
+		return(int(defaults.get(key, default)))
+	except (TypeError, ValueError):
+		return(default)
+
+
 def prefix_policy(tokens: list[str]) -> str:
 	policy = "default"
 	for tok in tokens:
@@ -134,6 +153,45 @@ def is_dsv4_flash(command: str) -> bool:
 	return("deepseek-v4-flash" in needle or "deepseek_v4" in needle)
 
 
+def add_issue(issues: list[dict[str, str]], kind: str, blocker_kind: str, detail: str, recommended_fix: str) -> None:
+	issues.append({
+		"kind": kind,
+		"blocker_kind": blocker_kind,
+		"detail": detail,
+		"recommended_fix": recommended_fix,
+	})
+
+
+def estimate_memory(defaults: dict[str, Any], max_num_batched_tokens: int, max_num_seqs: int, gpu_memory_utilization: float) -> dict[str, Any]:
+	tp = max(int_default(defaults, "tensor_parallel_size", 2), 1)
+	total_gib = float_default(defaults, "total_gpu_memory_gib", DS4_FLASH_SPARK_GB10_TOTAL_GIB)
+	util = gpu_memory_utilization if gpu_memory_utilization > 0.0 else float_default(defaults, "gpu_memory_utilization", 0.8)
+	utilized_gib = (total_gib * util)
+	available_gib = float_default(defaults, "available_gpu_memory_gib", utilized_gib)
+	free_gib = float_default(defaults, "free_gpu_memory_gib", available_gib)
+	budget_gib = min(available_gib, free_gib)
+	min_headroom_gib = float_default(defaults, "declared_headroom_gib", DS4_FLASH_DEFAULT_MIN_HEADROOM_GIB)
+	batch_kv_gib = (DS4_FLASH_BATCH_KV_GIB_AT_8192_TP2 * (float(max(max_num_batched_tokens, 0)) / 8192.0) * (2.0 / float(tp)))
+	sequence_gib = (float(max(max_num_seqs, 0)) * DS4_FLASH_SEQUENCE_OVERHEAD_GIB)
+	estimated_request_gib = (DS4_FLASH_BASE_RESIDENT_GIB + batch_kv_gib + sequence_gib)
+	headroom_after_estimate_gib = (budget_gib - estimated_request_gib)
+	return({
+		"basis": "spark4_spark5_empirical_guard",
+		"tensor_parallel_size": tp,
+		"total_gpu_memory_gib": round(total_gib, 3),
+		"gpu_memory_utilization": round(util, 4),
+		"available_gpu_memory_gib": round(available_gib, 3),
+		"free_gpu_memory_gib": round(free_gib, 3),
+		"budget_gpu_memory_gib": round(budget_gib, 3),
+		"base_resident_gib": round(DS4_FLASH_BASE_RESIDENT_GIB, 3),
+		"batch_kv_gib": round(batch_kv_gib, 3),
+		"sequence_overhead_gib": round(sequence_gib, 3),
+		"estimated_request_gib": round(estimated_request_gib, 3),
+		"minimum_headroom_gib": round(min_headroom_gib, 3),
+		"headroom_after_estimate_gib": round(headroom_after_estimate_gib, 3),
+	})
+
+
 def validate_command(path: Path, defaults: dict[str, Any], command: str) -> dict[str, Any]:
 	tokens = command_tokens(command)
 	flags = flag_values(tokens)
@@ -146,26 +204,17 @@ def validate_command(path: Path, defaults: dict[str, Any], command: str) -> dict
 	warnings: list[dict[str, str]] = []
 	dupes = {k: v for k, v in flags.items() if len(v) > 1}
 	if "--max-num-batched-tokens" in dupes:
-		issues.append({
-			"kind": "duplicate_max_num_batched_tokens",
-			"detail": "duplicate --max-num-batched-tokens makes the effective graph/KV profile ambiguous",
-		})
+		add_issue(issues, "duplicate_max_num_batched_tokens", "ambiguous_duplicate_max_num_batched_tokens", "duplicate --max-num-batched-tokens makes the effective graph/KV profile ambiguous", "remove the duplicate flag and keep exactly one measured scheduler-token value")
+	memory = estimate_memory(defaults, max_num_batched_tokens, max_num_seqs, gpu_memory_utilization)
 	if is_dsv4_flash(command):
 		if prefix != "disabled":
-			issues.append({
-				"kind": "prefix_cache_c512_rank0_kill_risk",
-				"detail": "DeepSeek-V4-Flash Spark4/Spark5 c512 stress reproduced rank0/API death unless --no-enable-prefix-caching is explicit",
-			})
+			add_issue(issues, "prefix_cache_c512_rank0_kill_risk", "prefix_enabled_c512_risk", "DeepSeek-V4-Flash Spark4/Spark5 c512 stress reproduced rank0/API death unless --no-enable-prefix-caching is explicit", "add --no-enable-prefix-caching before retrying c512 or long-context DS4 Flash profiles")
 		if max_model_len >= 200000 and max_num_batched_tokens <= 512:
-			issues.append({
-				"kind": "cuda_graph_kv_starvation_risk",
-				"detail": "200k context with max_num_batched_tokens<=512 produced 512-size graph capture, low KV headroom, worker exit, and Spark4 SSH banner timeouts",
-			})
+			add_issue(issues, "cuda_graph_kv_starvation_risk", "unavailable_kv_headroom", "200k context with max_num_batched_tokens<=512 produced 512-size graph capture, low KV headroom, worker exit, and Spark4 SSH banner timeouts", "use the measured 8192 scheduler-token profile or lower context/concurrency before launch")
 		if max_model_len >= 200000 and max_num_batched_tokens > 8192:
-			issues.append({
-				"kind": "kv_allocation_risk",
-				"detail": "existing tuning evidence rejected >8192 scheduler tokens for the 200k-context Spark4/Spark5 lane",
-			})
+			add_issue(issues, "kv_allocation_risk", "unavailable_kv_headroom", "existing tuning evidence rejected >8192 scheduler tokens for the 200k-context Spark4/Spark5 lane", "cap --max-num-batched-tokens at 8192 until a larger profile has measured launch evidence")
+		if float(memory["headroom_after_estimate_gib"]) < float(memory["minimum_headroom_gib"]):
+			add_issue(issues, "insufficient_memory_headroom", "low_free_memory", "estimated DS4 Flash resident+KV/request memory leaves less than declared headroom", "free GPU memory, lower max-num-batched-tokens/max-num-seqs, or lower gpu-memory-utilization before launch")
 		if max_num_seqs >= 512 and max_model_len >= 200000:
 			warnings.append({
 				"kind": "high_sequence_budget",
@@ -184,6 +233,7 @@ def validate_command(path: Path, defaults: dict[str, Any], command: str) -> dict
 			"max_num_batched_tokens": max_num_batched_tokens,
 			"gpu_memory_utilization": gpu_memory_utilization,
 		},
+		"memory_estimate": memory,
 		"issues": issues,
 		"warnings": warnings,
 	})
