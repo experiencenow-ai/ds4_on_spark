@@ -1,8 +1,21 @@
 diff --git a/ds4.c b/ds4.c
-index f0f8cc1..1cb8748 100644
+index f0f8cc1..72c9ae3 100644
 --- a/ds4.c
 +++ b/ds4.c
-@@ -1367,12 +1367,21 @@ static uint64_t accelerator_cuda_preload_span_bytes(void) {
+@@ -514,6 +514,12 @@ static double now_sec(void) {
+     return (double)ts.tv_sec + (double)ts.tv_nsec * 1.0e-9;
+ }
+
++static double wall_sec(void) {
++    struct timespec ts;
++    clock_gettime(CLOCK_REALTIME, &ts);
++    return (double)ts.tv_sec + (double)ts.tv_nsec * 1.0e-9;
++}
++
+ static const char *ds4_log_color_code(ds4_log_type type) {
+     switch (type) {
+     case DS4_LOG_PREFILL:
+@@ -1367,12 +1373,21 @@ static uint64_t accelerator_cuda_preload_span_bytes(void) {
          unsigned long long v = strtoull(env, &end, 10);
          if (end != env && v > 0) mb = (uint64_t)v;
      }
@@ -26,7 +39,7 @@ index f0f8cc1..1cb8748 100644
      accelerator_tensor_span *spans = xmalloc((size_t)m->n_tensors * sizeof(spans[0]));
      uint64_t nspan = 0;
      for (uint64_t i = 0; i < m->n_tensors; i++) {
-@@ -1406,6 +1415,15 @@ static bool accelerator_cache_model_tensor_spans(const ds4_model *m, uint64_t *c
+@@ -1406,6 +1421,15 @@ static bool accelerator_cache_model_tensor_spans(const ds4_model *m, uint64_t *c
              char label[96];
              snprintf(label, sizeof(label), "tensor-span:%" PRIu64, merged);
              if (ds4_gpu_cache_model_range(m->map, m->size, off, chunk_end - off, label) == 0) {
@@ -42,7 +55,7 @@ index f0f8cc1..1cb8748 100644
                  fprintf(stderr,
                          "ds4: accelerator failed to cache model tensor span %" PRIu64
                          " at offset %" PRIu64 "\n",
-@@ -1416,6 +1434,7 @@ static bool accelerator_cache_model_tensor_spans(const ds4_model *m, uint64_t *c
+@@ -1416,6 +1440,7 @@ static bool accelerator_cache_model_tensor_spans(const ds4_model *m, uint64_t *c
              cached += chunk_end - off;
              merged++;
              off = chunk_end;
@@ -50,7 +63,7 @@ index f0f8cc1..1cb8748 100644
          }
      }
      free(spans);
-@@ -1423,16 +1442,19 @@ static bool accelerator_cache_model_tensor_spans(const ds4_model *m, uint64_t *c
+@@ -1423,16 +1448,19 @@ static bool accelerator_cache_model_tensor_spans(const ds4_model *m, uint64_t *c
      return true;
  }
 
@@ -72,7 +85,7 @@ index f0f8cc1..1cb8748 100644
      if (getenv("DS4_CUDA_Q8_F16_PRELOAD") != NULL ||
          getenv("DS4_CUDA_Q8_F32_PRELOAD") != NULL) {
          for (uint64_t i = 0; i < m->n_tensors; i++) {
-@@ -1460,9 +1482,10 @@ static bool accelerator_cache_model_tensors(ds4_backend backend, const ds4_model
+@@ -1460,9 +1488,10 @@ static bool accelerator_cache_model_tensors(ds4_backend backend, const ds4_model
      return true;
  }
  #else
@@ -84,7 +97,7 @@ index f0f8cc1..1cb8748 100644
      return true;
  }
  #endif
-@@ -8713,11 +8736,14 @@ static bool metal_graph_alloc_raw_cap(
+@@ -8713,11 +8742,14 @@ static bool metal_graph_alloc_raw_cap(
      g->output_embd = ds4_gpu_tensor_alloc((uint64_t)DS4_N_EMBD * sizeof(float));
      g->output_norm = ds4_gpu_tensor_alloc((uint64_t)DS4_N_EMBD * sizeof(float));
      g->logits = ds4_gpu_tensor_alloc(vocab_dim * sizeof(float));
@@ -100,7 +113,7 @@ index f0f8cc1..1cb8748 100644
       */
      if (enable_mtp) {
          g->mtp_embed = ds4_gpu_tensor_alloc((uint64_t)DS4_N_EMBD * sizeof(float));
-@@ -8730,9 +8756,12 @@ static bool metal_graph_alloc_raw_cap(
+@@ -8730,9 +8762,12 @@ static bool metal_graph_alloc_raw_cap(
          g->mtp_state_hc = ds4_gpu_tensor_alloc(hc_dim * sizeof(float));
          g->mtp_next_hc = ds4_gpu_tensor_alloc(hc_dim * sizeof(float));
          g->mtp_raw_cache = ds4_gpu_tensor_alloc((uint64_t)raw_cap * DS4_N_HEAD_DIM * sizeof(float));
@@ -114,7 +127,7 @@ index f0f8cc1..1cb8748 100644
 
      g->prefill_tokens = ds4_gpu_tensor_alloc(pc * sizeof(int32_t));
      g->batch_cur_hc = ds4_gpu_tensor_alloc(pc * hc_dim * sizeof(float));
-@@ -8817,6 +8846,7 @@ static bool metal_graph_alloc_raw_cap(
+@@ -8817,6 +8852,7 @@ static bool metal_graph_alloc_raw_cap(
                      g->after_ffn_hc &&
                      g->output_pre && g->output_weights && g->output_embd &&
                      g->output_norm && g->logits &&
@@ -122,7 +135,7 @@ index f0f8cc1..1cb8748 100644
                      (!enable_mtp ||
                       (g->mtp_embed && g->mtp_enorm && g->mtp_eproj &&
                        g->mtp_eproj_hc && g->mtp_hnorm_hc && g->mtp_hproj_hc &&
-@@ -9954,6 +9984,76 @@ static bool metal_graph_encode_output_head_batch(
+@@ -9954,6 +9990,76 @@ static bool metal_graph_encode_output_head_batch(
      return ok;
  }
 
@@ -199,7 +212,7 @@ index f0f8cc1..1cb8748 100644
  static bool metal_graph_matmul_plain_tensor(
          ds4_gpu_tensor       *out,
          const ds4_model        *model,
-@@ -15164,6 +15264,405 @@ ds4_context_memory ds4_context_memory_estimate(ds4_backend backend, int ctx_size
+@@ -15164,6 +15270,413 @@ ds4_context_memory ds4_context_memory_estimate(ds4_backend backend, int ctx_size
  }
  #endif
 
@@ -515,6 +528,8 @@ index f0f8cc1..1cb8748 100644
 +    if (ok && getenv("DS4_CUDA_STACK_PROBE_PRELOAD_STAGE") != NULL) ok = cuda_stack_probe_preload_stage(model, weights);
 +    if (ok) ok = metal_graph_alloc_raw_cap(&g, weights, &weights->layer[0], raw_cap, ctx_size, prompt_len, false);
 +    if (ok) ok = metal_graph_upload_prompt_tokens(g.prefill_tokens, &prompt, 0, prompt_len);
++    double step_wall_start = wall_sec();
++    double step_mono_start = now_sec();
 +    if (ok && begin == 0) {
 +        ok = metal_graph_upload_prompt_embeddings_hc(g.batch_cur_hc, g.prefill_tokens, model, weights, &prompt, 0, prompt_len);
 +    } else if (ok) {
@@ -538,9 +553,11 @@ index f0f8cc1..1cb8748 100644
 +    } else if (ok) {
 +        ok = pipeline_write_hc_file(g.batch_cur_hc, output_pattern, 0, host_prompt_hc, prompt_hc_floats, &stage_hash, &stage_nonfinite);
 +    }
++    double step_wall_end = wall_sec();
++    double step_elapsed_ms = (now_sec() - step_mono_start) * 1000.0;
 +    if (ok) {
-+        printf("{\"event\":\"pipeline_session_step\",\"stage_id\":%u,\"step\":0,\"path_kind\":\"prefill\",\"layer_begin\":%u,\"layer_end\":%u,\"token_count\":%u,\"hc_or_logits_fnv64\":\"%016" PRIx64 "\",\"nonfinite\":%" PRIu64 ",\"pipeline_argmax_token\":%d}\n",
-+               stage_id, begin, end, prompt_len, stage_hash, stage_nonfinite, next_token);
++        printf("{\"event\":\"pipeline_session_step\",\"stage_id\":%u,\"step\":0,\"path_kind\":\"prefill\",\"layer_begin\":%u,\"layer_end\":%u,\"token_count\":%u,\"wall_start_s\":%.6f,\"wall_end_s\":%.6f,\"elapsed_ms\":%.3f,\"hc_or_logits_fnv64\":\"%016" PRIx64 "\",\"nonfinite\":%" PRIu64 ",\"pipeline_argmax_token\":%d}\n",
++               stage_id, begin, end, prompt_len, step_wall_start, step_wall_end, step_elapsed_ms, stage_hash, stage_nonfinite, next_token);
 +        if (include_head) {
 +            printf("{\"event\":\"pipeline_session_token\",\"stage_id\":%u,\"step\":0,\"token_id\":%d", stage_id, next_token);
 +            pipeline_print_token_bytes(e, next_token);
@@ -550,6 +567,8 @@ index f0f8cc1..1cb8748 100644
 +    }
 +    for (uint32_t step = 1; ok && step < max_tokens; step++) {
 +        int32_t input_token = -1;
++        step_wall_start = wall_sec();
++        step_mono_start = now_sec();
 +        if (include_head && token_out_pattern) {
 +            if (!pipeline_read_token_step(token_out_pattern, step - 1u, wait_ms, &input_token)) ok = false;
 +        } else if (token_in_pattern) {
@@ -577,9 +596,11 @@ index f0f8cc1..1cb8748 100644
 +        } else if (ok) {
 +            ok = pipeline_write_hc_file(g.cur_hc, output_pattern, step, host_decode_hc, hc_dim, &stage_hash, &stage_nonfinite);
 +        }
++        step_wall_end = wall_sec();
++        step_elapsed_ms = (now_sec() - step_mono_start) * 1000.0;
 +        if (ok) {
-+            printf("{\"event\":\"pipeline_session_step\",\"stage_id\":%u,\"step\":%u,\"path_kind\":\"decode\",\"layer_begin\":%u,\"layer_end\":%u,\"token_count\":1,\"input_token\":%d,\"hc_or_logits_fnv64\":\"%016" PRIx64 "\",\"nonfinite\":%" PRIu64 ",\"pipeline_argmax_token\":%d}\n",
-+                   stage_id, step, begin, end, input_token, stage_hash, stage_nonfinite, next_token);
++            printf("{\"event\":\"pipeline_session_step\",\"stage_id\":%u,\"step\":%u,\"path_kind\":\"decode\",\"layer_begin\":%u,\"layer_end\":%u,\"token_count\":1,\"input_token\":%d,\"wall_start_s\":%.6f,\"wall_end_s\":%.6f,\"elapsed_ms\":%.3f,\"hc_or_logits_fnv64\":\"%016" PRIx64 "\",\"nonfinite\":%" PRIu64 ",\"pipeline_argmax_token\":%d}\n",
++                   stage_id, step, begin, end, input_token, step_wall_start, step_wall_end, step_elapsed_ms, stage_hash, stage_nonfinite, next_token);
 +            if (include_head) {
 +                printf("{\"event\":\"pipeline_session_token\",\"stage_id\":%u,\"step\":%u,\"token_id\":%d", stage_id, step, next_token);
 +                pipeline_print_token_bytes(e, next_token);
@@ -605,7 +626,7 @@ index f0f8cc1..1cb8748 100644
  /* =========================================================================
   * Engine API and Process Lock.
   * =========================================================================
-@@ -15263,27 +15762,6 @@ static void ds4_acquire_instance_lock(void) {
+@@ -15263,27 +15776,6 @@ static void ds4_acquire_instance_lock(void) {
      atexit(ds4_release_instance_lock);
  }
 
@@ -633,7 +654,7 @@ index f0f8cc1..1cb8748 100644
  /* =========================================================================
   * Session Snapshot Payloads.
   * =========================================================================
-@@ -16384,14 +16862,1629 @@ int ds4_engine_metal_graph_prompt_test(ds4_engine *e, const ds4_tokens *prompt,
+@@ -16384,10 +16876,1625 @@ int ds4_engine_metal_graph_prompt_test(ds4_engine *e, const ds4_tokens *prompt,
  #endif
  }
 
@@ -648,11 +669,9 @@ index f0f8cc1..1cb8748 100644
 +            uint32_t v = (t * 1103515245u) ^ (i * 2654435761u) ^ 0x9e3779b9u;
 +            x[(uint64_t)t * n_dim + i] = ((float)(int32_t)(v & 1023u) - 511.5f) * (1.0f / 8192.0f);
 +        }
-     }
++    }
 +}
-
--    const ds4_model *model = &e->model;
--    const ds4_vocab *vocab = &e->vocab;
++
 +static void cuda_probe_fill_f32(float *x, uint64_t n, uint32_t seed) {
 +    for (uint64_t i = 0; i < n; i++) {
 +        uint32_t v = ((uint32_t)i * 2654435761u) ^ (seed * 1103515245u) ^ 0x7f4a7c15u;
@@ -2262,14 +2281,10 @@ index f0f8cc1..1cb8748 100644
 +    if (!prompt || prompt->len <= 0) {
 +        fprintf(stderr, "ds4: head test requires a non-empty prompt\n");
 +        return 1;
-+    }
-+
-+    const ds4_model *model = &e->model;
-+    const ds4_vocab *vocab = &e->vocab;
-     const ds4_weights *weights = &e->weights;
-     const ds4_layer_weights *layer0 = &weights->layer[0];
+     }
 
-@@ -16597,6 +18690,7 @@ int ds4_engine_open(ds4_engine **out, const ds4_engine_options *opt) {
+     const ds4_model *model = &e->model;
+@@ -16597,6 +18704,7 @@ int ds4_engine_open(ds4_engine **out, const ds4_engine_options *opt) {
          }
          ds4_gpu_set_quality(e->quality);
          (void)ds4_gpu_set_model_fd(e->model.fd);
@@ -2277,7 +2292,7 @@ index f0f8cc1..1cb8748 100644
          if (!ds4_gpu_set_model_map_range(e->model.map,
                                             e->model.size,
                                             e->model.tensor_data_pos,
-@@ -16610,11 +18704,11 @@ int ds4_engine_open(ds4_engine **out, const ds4_engine_options *opt) {
+@@ -16610,11 +18718,11 @@ int ds4_engine_open(ds4_engine **out, const ds4_engine_options *opt) {
              *out = NULL;
              return 1;
          }
@@ -2293,7 +2308,7 @@ index f0f8cc1..1cb8748 100644
          {
              fprintf(stderr,
                      "ds4: %s failed to map MTP model views; aborting startup. "
-@@ -16624,7 +18718,18 @@ int ds4_engine_open(ds4_engine **out, const ds4_engine_options *opt) {
+@@ -16624,7 +18732,18 @@ int ds4_engine_open(ds4_engine **out, const ds4_engine_options *opt) {
              *out = NULL;
              return 1;
          }

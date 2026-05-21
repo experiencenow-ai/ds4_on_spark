@@ -26,6 +26,16 @@ def print_record(label: str, obj: object) -> None:
 	print(json.dumps(payload, indent=2, sort_keys=True))
 
 
+def print_timing(prefix: str, run: object) -> None:
+	steps = getattr(run, "steps")
+	latencies = [round(float(getattr(step, "coordinator_wall_ms", 0.0) or max(getattr(step, "stage_elapsed_ms", []) or [0.0])), 3) for step in steps]
+	stage_elapsed = [[round(float(v), 3) for v in getattr(step, "stage_elapsed_ms", [])] for step in steps]
+	print(f"{prefix}_STEP_LATENCIES_MS={latencies}")
+	print(f"{prefix}_STAGE_ELAPSED_MS={stage_elapsed}")
+	print(f"{prefix}_AGGREGATE_TOK_S_INCLUDING_STEP0={getattr(run, 'aggregate_tok_s_including_step0'):.3f}")
+	print(f"{prefix}_STEADY_TOK_S_EXCLUDING_STEP0={getattr(run, 'steady_tok_s_excluding_step0'):.3f}")
+
+
 def main(argv: list[str]) -> int:
 	ap = argparse.ArgumentParser()
 	ap.add_argument("--prompt", required=True)
@@ -51,6 +61,7 @@ def main(argv: list[str]) -> int:
 			print_record("pp3", pp3)
 			print(f"PP3_TOKEN_IDS={pp3.generated_token_ids}")
 			print(f"PP3_TEXT={pp3.generated_text!r}")
+			print_timing("PP3", pp3)
 		except PipelineSessionError as e:
 			blocked = {
 				"blocker_kind": "pp3_pipeline_session_failed",
@@ -64,15 +75,18 @@ def main(argv: list[str]) -> int:
 				return rc
 	if args.mode in ("pp1", "all"):
 		try:
-			pp1 = session.run_pp1_baseline(args.prompt, args.max_tokens, out_dir / "pp1")
+			pp1 = session.run_pp1_session_baseline(args.prompt, args.max_tokens, out_dir / "pp1")
 			print_record("pp1", pp1)
 			print(f"PP1_TOKEN_IDS={pp1.generated_token_ids}")
 			print(f"PP1_TEXT={pp1.generated_text!r}")
+			print_timing("PP1", pp1)
 			if pp3_ids and pp3_ids[:args.max_tokens] != pp1.generated_token_ids[:args.max_tokens]:
 				print("PP_COMPARE=fail", file=sys.stderr)
 				return 3
 			if pp3_ids:
 				print("PP_COMPARE=identical_first_tokens")
+				if pp1.steady_tok_s_excluding_step0 > 0:
+					print(f"PP3_VS_PP1_STEADY_TOK_S_RATIO={pp3.steady_tok_s_excluding_step0 / pp1.steady_tok_s_excluding_step0:.3f}")
 		except PipelineSessionError as e:
 			print_record("pp1_failed", {"blocker_kind": "pp1_failed", "blocker_detail": str(e)})
 			return 2

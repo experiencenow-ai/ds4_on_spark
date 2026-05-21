@@ -128,6 +128,12 @@ class GeneratedStep:
 	bytes: list[int]
 	stage_logits_hashes: list[str]
 	stage_logits_nonfinite: list[int]
+	stage_elapsed_ms: list[float] = dataclasses.field(default_factory=list)
+	stage_wall_start_s: list[float] = dataclasses.field(default_factory=list)
+	stage_wall_end_s: list[float] = dataclasses.field(default_factory=list)
+	coordinator_wall_start_s: float = 0.0
+	coordinator_wall_end_s: float = 0.0
+	coordinator_wall_ms: float = 0.0
 
 
 @dataclasses.dataclass(frozen=True)
@@ -142,6 +148,10 @@ class PromptRun:
 	raw_log_path: str
 	blocker_kind: str = "none"
 	blocker_detail: str = ""
+	aggregate_wall_ms_including_step0: float = 0.0
+	aggregate_tok_s_including_step0: float = 0.0
+	steady_wall_ms_excluding_step0: float = 0.0
+	steady_tok_s_excluding_step0: float = 0.0
 
 
 def default_stages() -> list[StageConfig]:
@@ -315,6 +325,23 @@ def validate_decode_steps(steps: list[GeneratedStep], stage_count: int = 3) -> N
 		for value in step.stage_logits_nonfinite:
 			if int(value) != 0:
 				raise PipelineSessionError(f"decode step {step.step} has nonfinite logits")
+
+
+def step_latency_ms(step: GeneratedStep) -> float:
+	if step.coordinator_wall_ms > 0:
+		return step.coordinator_wall_ms
+	if step.stage_elapsed_ms:
+		return max(float(value) for value in step.stage_elapsed_ms)
+	return 0.0
+
+
+def summarize_step_timings(steps: list[GeneratedStep]) -> tuple[float, float, float, float]:
+	total_ms = sum(step_latency_ms(step) for step in steps)
+	total_tok_s = (len(steps) * 1000.0 / total_ms) if total_ms > 0 else 0.0
+	steady = steps[1:]
+	steady_ms = sum(step_latency_ms(step) for step in steady)
+	steady_tok_s = (len(steady) * 1000.0 / steady_ms) if steady_ms > 0 else 0.0
+	return total_ms, total_tok_s, steady_ms, steady_tok_s
 
 
 def assert_matching_token_prefix(pp3_ids: list[int], pp1_ids: list[int], count: int) -> None:
@@ -531,7 +558,7 @@ class PipelineSession:
 			env.append(f"DS4_PIPELINE_SESSION_OUTPUT_HC_FILE={q(pattern_path(run_dir, f'stage{stage.stage_id}_out'))}")
 		if stage.stage_id != 0:
 			env.append(f"DS4_PIPELINE_SESSION_INPUT_HC_FILE={q(pattern_path(run_dir, f'stage{stage.stage_id}_in'))}")
-		if stage.stage_id in (0, 1):
+		if stage.layer_begin == 0 or not stage.include_head:
 			env.append(f"DS4_PIPELINE_SESSION_TOKEN_IN_FILE={q(token_pattern)}")
 		if stage.include_head:
 			env.append(f"DS4_PIPELINE_SESSION_TOKEN_OUT_FILE={q(token_pattern)}")
@@ -570,11 +597,14 @@ class PipelineSession:
 			events[stage.stage_id] = items
 		return events
 
-	def build_session_steps(self, events: dict[int, list[dict[str, Any]]], tokens: list[int]) -> list[GeneratedStep]:
+	def build_session_steps(self, events: dict[int, list[dict[str, Any]]], tokens: list[int], coordinator_timings: dict[int, tuple[float, float]] | None = None) -> list[GeneratedStep]:
 		steps: list[GeneratedStep] = []
 		for step, token_id in enumerate(tokens):
 			hashes: list[str] = []
 			nonfinites: list[int] = []
+			elapsed: list[float] = []
+			wall_starts: list[float] = []
+			wall_ends: list[float] = []
 			for stage in self.stages:
 				matches = [item for item in events.get(stage.stage_id, []) if item.get("event") == "pipeline_session_step" and int(item.get("step", -1)) == step]
 				if len(matches) != 1:
@@ -582,11 +612,15 @@ class PipelineSession:
 				item = matches[0]
 				hashes.append(format_fnv(item.get("hc_or_logits_fnv64")))
 				nonfinites.append(int(item.get("nonfinite", 0)))
+				elapsed.append(float(item.get("elapsed_ms", 0.0)))
+				wall_starts.append(float(item.get("wall_start_s", 0.0)))
+				wall_ends.append(float(item.get("wall_end_s", 0.0)))
 			token_events = [item for item in events.get(self.stages[-1].stage_id, []) if item.get("event") == "pipeline_session_token" and int(item.get("step", -1)) == step]
 			raw_bytes = token_events[0].get("token_bytes", []) if token_events else []
 			if not isinstance(raw_bytes, list) or not all(isinstance(v, int) for v in raw_bytes):
 				raw_bytes = []
-			steps.append(GeneratedStep(step, token_id, bytes_to_text(raw_bytes), raw_bytes, hashes, nonfinites))
+			c0, c1 = (coordinator_timings or {}).get(step, (0.0, 0.0))
+			steps.append(GeneratedStep(step, token_id, bytes_to_text(raw_bytes), raw_bytes, hashes, nonfinites, elapsed, wall_starts, wall_ends, c0, c1, ((c1 - c0) * 1000.0) if c1 > c0 else 0.0))
 		return steps
 
 	def decode_session_workers(self, run_id: str, token_ids: list[int], max_tokens: int, out_dir: Path) -> list[GeneratedStep]:
@@ -595,24 +629,39 @@ class PipelineSession:
 		for stage in self.stages:
 			self.write_remote_prompt_tokens(stage, prompt_files[stage.stage_id], token_ids)
 		procs = self.launch_session_workers(run_id, prompt_files, max_tokens)
-		stage0, stage1, stage2 = self.stages
+		if len(self.stages) == 1 and self.stages[0].include_head:
+			events = self.collect_session_workers(procs, out_dir)
+			token_events = [item for item in events.get(self.stages[0].stage_id, []) if item.get("event") == "pipeline_session_token"]
+			token_events.sort(key=lambda item: int(item.get("step", -1)))
+			generated = [int(item["token_id"]) for item in token_events if isinstance(item.get("token_id"), int)]
+			if len(generated) != max_tokens:
+				raise PipelineSessionError(f"single-stage session emitted {len(generated)} tokens, expected {max_tokens}")
+			steps = self.build_session_steps(events, generated)
+			validate_decode_steps(steps, len(self.stages))
+			return steps
 		token_pattern = session_token_pattern(run_dir)
 		generated: list[int] = []
+		coordinator_timings: dict[int, tuple[float, float]] = {}
+		step_start = time.time()
 		for step in range(max_tokens):
 			rows = len(token_ids) if step == 0 else 1
-			stage0_out = actual_pattern_file(pattern_path(run_dir, "stage0_out"), step)
-			stage1_in = actual_pattern_file(pattern_path(run_dir, "stage1_in"), step)
-			stage1_out = actual_pattern_file(pattern_path(run_dir, "stage1_out"), step)
-			stage2_in = actual_pattern_file(pattern_path(run_dir, "stage2_in"), step)
-			self.tcp_transfer_file(stage0, stage1, stage0_out, stage1_in, 19100 + step, out_dir, f"session_step{step}_stage0_to_stage1", rows)
-			self.tcp_transfer_file(stage1, stage2, stage1_out, stage2_in, 19200 + step, out_dir, f"session_step{step}_stage1_to_stage2", rows)
-			token = self.read_remote_token(stage2, token_pattern, step)
+			for index in range(len(self.stages) - 1):
+				src = self.stages[index]
+				dst = self.stages[index + 1]
+				src_out = actual_pattern_file(pattern_path(run_dir, f"stage{src.stage_id}_out"), step)
+				dst_in = actual_pattern_file(pattern_path(run_dir, f"stage{dst.stage_id}_in"), step)
+				self.tcp_transfer_file(src, dst, src_out, dst_in, 19100 + (1000 * index) + step, out_dir, f"session_step{step}_stage{src.stage_id}_to_stage{dst.stage_id}", rows)
+			token = self.read_remote_token(self.stages[-1], token_pattern, step)
+			step_end = time.time()
+			coordinator_timings[step] = (step_start, step_end)
 			generated.append(token)
 			if step + 1 < max_tokens:
-				self.write_remote_prompt_tokens(stage0, actual_pattern_file(token_pattern, step), [token])
-				self.write_remote_prompt_tokens(stage1, actual_pattern_file(token_pattern, step), [token])
+				for stage in self.stages:
+					if stage.layer_begin == 0 or not stage.include_head:
+						self.write_remote_prompt_tokens(stage, actual_pattern_file(token_pattern, step), [token])
+				step_start = time.time()
 		events = self.collect_session_workers(procs, out_dir)
-		steps = self.build_session_steps(events, generated)
+		steps = self.build_session_steps(events, generated, coordinator_timings)
 		validate_decode_steps(steps, len(self.stages))
 		return steps
 
@@ -640,7 +689,7 @@ class PipelineSession:
 			nonfinites.append(nf)
 		return GeneratedStep(step, token_id, "", [], hashes, nonfinites)
 
-	def run_pp3(self, prompt: str, max_tokens: int, out_dir: Path, system: str = DEFAULT_SYSTEM) -> PromptRun:
+	def run_pipeline_session(self, mode: str, prompt: str, max_tokens: int, out_dir: Path, system: str = DEFAULT_SYSTEM) -> PromptRun:
 		out_dir.mkdir(parents=True, exist_ok=True)
 		rendered = render_chat_prompt(prompt, system, think=False)
 		token_ids = self.tokenize_rendered_prompt(rendered)
@@ -654,7 +703,16 @@ class PipelineSession:
 		raw_path = out_dir / "pp3_steps.json"
 		raw_path.write_text(json.dumps([dataclasses.asdict(s) for s in steps], indent=2, sort_keys=True) + "\n", encoding="utf-8")
 		text = bytes([b for step in steps for b in step.bytes]).decode("utf-8", errors="replace")
-		return PromptRun("pp3", prompt, rendered, token_ids, generated_ids, text, steps, str(raw_path))
+		total_ms, total_tok_s, steady_ms, steady_tok_s = summarize_step_timings(steps)
+		return PromptRun(mode, prompt, rendered, token_ids, generated_ids, text, steps, str(raw_path), "none", "", total_ms, total_tok_s, steady_ms, steady_tok_s)
+
+	def run_pp3(self, prompt: str, max_tokens: int, out_dir: Path, system: str = DEFAULT_SYSTEM) -> PromptRun:
+		return self.run_pipeline_session("pp3", prompt, max_tokens, out_dir, system)
+
+	def run_pp1_session_baseline(self, prompt: str, max_tokens: int, out_dir: Path, system: str = DEFAULT_SYSTEM) -> PromptRun:
+		stage0 = self.stages[0]
+		pp1_stage = StageConfig(0, f"{stage0.name}_pp1", stage0.host, stage0.ds4_dir, stage0.model, 0, 43, True, stage0.listen, stage0.proxy)
+		return PipelineSession([pp1_stage], self.ssh_config, self.known_hosts, self.runner).run_pipeline_session("pp1", prompt, max_tokens, out_dir, system)
 
 
 def main_args(argv: list[str]) -> int:

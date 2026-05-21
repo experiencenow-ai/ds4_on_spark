@@ -14,6 +14,7 @@ class PipelineOnePromptTest(unittest.TestCase):
 		text = PATCH.read_text(encoding="utf-8")
 		for needle in [
 			"pipeline_session_step",
+			"elapsed_ms",
 			"DS4_PIPELINE_SESSION_TOKEN_OUT_FILE",
 			"metal_graph_encode_decode_layer",
 			"pipeline_emit_output_head",
@@ -72,6 +73,16 @@ class PipelineOnePromptTest(unittest.TestCase):
 		self.assertIn("DS4_CUDA_STACK_PROBE_LAYER_END=43", cmd)
 		self.assertNotIn("--cuda-batch-stack-probe", cmd)
 
+	def test_single_stage_worker_supports_pp1_timing_baseline(self) -> None:
+		stage = dataclasses.replace(ps.default_stages()[0], layer_begin=0, layer_end=43, include_head=True)
+		session = ps.PipelineSession(stages=[stage])
+		cmd = session.build_session_worker_command(stage, "run", "/tmp/run/prompt.bin", 64)
+		self.assertIn("DS4_CUDA_STACK_PROBE_LAYER_BEGIN=0", cmd)
+		self.assertIn("DS4_CUDA_STACK_PROBE_LAYER_END=43", cmd)
+		self.assertIn("DS4_PIPELINE_SESSION_TOKEN_IN_FILE=", cmd)
+		self.assertIn("DS4_PIPELINE_SESSION_TOKEN_OUT_FILE=", cmd)
+		self.assertNotIn("DS4_CUDA_STACK_PROBE_NO_HEAD=1", cmd)
+
 	def test_same_host_handoff_skips_tcp_listener(self) -> None:
 		stage = ps.StageConfig(0, "s", "spark1", "/d", "/m", 0, 1, False)
 		session = ps.PipelineSession(stages=[stage, dataclasses.replace(stage, stage_id=1)])
@@ -82,16 +93,29 @@ class PipelineOnePromptTest(unittest.TestCase):
 	def test_pp3_worker_steps_require_real_stage_events(self) -> None:
 		session = ps.PipelineSession(stages=ps.default_stages())
 		events = {
-			0: [{"event": "pipeline_session_step", "step": 0, "hc_or_logits_fnv64": "1", "nonfinite": 0}],
-			1: [{"event": "pipeline_session_step", "step": 0, "hc_or_logits_fnv64": "2", "nonfinite": 0}],
+			0: [{"event": "pipeline_session_step", "step": 0, "hc_or_logits_fnv64": "1", "nonfinite": 0, "elapsed_ms": 10.0}],
+			1: [{"event": "pipeline_session_step", "step": 0, "hc_or_logits_fnv64": "2", "nonfinite": 0, "elapsed_ms": 12.0}],
 			2: [
-				{"event": "pipeline_session_step", "step": 0, "hc_or_logits_fnv64": "3", "nonfinite": 0},
+				{"event": "pipeline_session_step", "step": 0, "hc_or_logits_fnv64": "3", "nonfinite": 0, "elapsed_ms": 14.0},
 				{"event": "pipeline_session_token", "step": 0, "token_bytes": [52]},
 			],
 		}
 		steps = session.build_session_steps(events, [20])
 		self.assertEqual(steps[0].stage_logits_hashes, ["fnv64:1", "fnv64:2", "fnv64:3"])
+		self.assertEqual(steps[0].stage_elapsed_ms, [10.0, 12.0, 14.0])
 		self.assertEqual(steps[0].text, "4")
+
+	def test_timing_summary_uses_steady_decode_window(self) -> None:
+		steps = [
+			ps.GeneratedStep(0, 1, "", [], ["fnv64:1"], [0], [100.0]),
+			ps.GeneratedStep(1, 2, "", [], ["fnv64:2"], [0], [25.0]),
+			ps.GeneratedStep(2, 3, "", [], ["fnv64:3"], [0], [25.0]),
+		]
+		total_ms, total_tps, steady_ms, steady_tps = ps.summarize_step_timings(steps)
+		self.assertEqual(total_ms, 150.0)
+		self.assertAlmostEqual(total_tps, 20.0)
+		self.assertEqual(steady_ms, 50.0)
+		self.assertAlmostEqual(steady_tps, 40.0)
 
 	def test_decode_step_validation_requires_all_stage_hashes(self) -> None:
 		step = ps.GeneratedStep(0, 42, "4", [52], ["fnv64:1", "fnv64:2"], [0, 0])
