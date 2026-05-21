@@ -1,0 +1,104 @@
+{
+  "aggregate_metrics": {
+    "mean_tok_s": 9.594032099702924,
+    "median_tok_s": 10.889822973906536,
+    "p95_latency_ms": 751.588,
+    "pass_count": 0,
+    "pass_rate": 0.0,
+    "prompt_count": 4
+  },
+  "batch_index": 27,
+  "cost_proxy_estimate": {
+    "basis": "model_size_params_billion / max(pass_rate, 0.05)",
+    "model_size_params": null,
+    "score": null
+  },
+  "eval_set_id": "small-model-eval-v1",
+  "format": "small-model-qualification-v1",
+  "hardware_node": "spark2",
+  "model_dtype": "bfloat16",
+  "model_id": "hf-zai-org-GLM-4.7-Flash",
+  "model_path": "/home/spark2/models/hf/zai-org/GLM-4.7-Flash",
+  "model_size_params": null,
+  "per_prompt_results": [
+    {
+      "expected_answer": "4",
+      "generated_token_count": 8,
+      "generated_tokens": [
+        "1.",
+        "**Analyze",
+        "the",
+        "Request"
+      ],
+      "latency_ms": 1675.001,
+      "observed_answer": "1.  **Analyze the Request",
+      "passed": false,
+      "prompt": "Return exactly 4 for 2+2.",
+      "returncode": 0,
+      "stderr_tail": "ing weights:  85%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c | 640/751 [00:33<00:05, 19.27it/s]\nLoading weights:  86%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c | 645/751 [00:34<00:07, 13.47it/s]\nLoading weights:  87%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b | 656/751 [00:34<00:04, 19.68it/s]\nLoading weights:  88%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a | 661/751 [00:36<00:10,  8.73it/s]\nLoading weights:  89%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2589 | 672/751 [00:36<00:05, 13.26it/s]\nLoading weights:  90%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588 | 677/751 [00:38<00:08,  8.23it/s]\nLoading weights:  92%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258f| 688/751 [00:39<00:07,  8.04it/s]\nLoading weights:  92%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258f| 691/751 [00:40<00:09,  6.54it/s]\nLoading weights:  94%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258e| 704/751 [00:41<00:04, 11.20it/s]\nLoading weights:  94%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258d| 709/751 [00:41<00:04,  9.38it/s]\nLoading weights:  96%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c| 720/751 [00:42<00:02, 14.12it/s]\nLoading weights:  97%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b| 725/751 [00:42<00:02, 11.59it/s]\nLoading weights:  98%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a| 736/751 [00:42<00:00, 17.29it/s]\nLoading weights:  99%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a| 741/751 [00:43<00:00, 14.55it/s]\nLoading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 751/751 [00:43<00:00, 17.27it/s]",
+      "task_id": "simple_math",
+      "task_kind": "simple_math",
+      "tok_s": 4.776116551572208
+    },
+    {
+      "expected_answer": "BLUE",
+      "generated_token_count": 8,
+      "generated_tokens": [
+        "1.",
+        "**Analyze",
+        "the",
+        "Request"
+      ],
+      "latency_ms": 751.588,
+      "observed_answer": "1.  **Analyze the Request",
+      "passed": false,
+      "prompt": "Return exactly BLUE if the sky is blue on a clear day.",
+      "returncode": 0,
+      "stderr_tail": "ing weights:  85%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c | 640/751 [00:33<00:05, 19.27it/s]\nLoading weights:  86%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c | 645/751 [00:34<00:07, 13.47it/s]\nLoading weights:  87%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b | 656/751 [00:34<00:04, 19.68it/s]\nLoading weights:  88%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a | 661/751 [00:36<00:10,  8.73it/s]\nLoading weights:  89%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2589 | 672/751 [00:36<00:05, 13.26it/s]\nLoading weights:  90%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588 | 677/751 [00:38<00:08,  8.23it/s]\nLoading weights:  92%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258f| 688/751 [00:39<00:07,  8.04it/s]\nLoading weights:  92%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258f| 691/751 [00:40<00:09,  6.54it/s]\nLoading weights:  94%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258e| 704/751 [00:41<00:04, 11.20it/s]\nLoading weights:  94%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258d| 709/751 [00:41<00:04,  9.38it/s]\nLoading weights:  96%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c| 720/751 [00:42<00:02, 14.12it/s]\nLoading weights:  97%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b| 725/751 [00:42<00:02, 11.59it/s]\nLoading weights:  98%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a| 736/751 [00:42<00:00, 17.29it/s]\nLoading weights:  99%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a| 741/751 [00:43<00:00, 14.55it/s]\nLoading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 751/751 [00:43<00:00, 17.27it/s]",
+      "task_id": "factual_recall",
+      "task_kind": "factual_recall",
+      "tok_s": 10.644129496479454
+    },
+    {
+      "expected_answer": "OK",
+      "generated_token_count": 8,
+      "generated_tokens": [
+        "1.",
+        "**Analyze",
+        "the",
+        "Request"
+      ],
+      "latency_ms": 676.798,
+      "observed_answer": "1.  **Analyze the Request",
+      "passed": false,
+      "prompt": "Return exactly OK if this JSON is valid: {\"x\":1}.",
+      "returncode": 0,
+      "stderr_tail": "ing weights:  85%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c | 640/751 [00:33<00:05, 19.27it/s]\nLoading weights:  86%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c | 645/751 [00:34<00:07, 13.47it/s]\nLoading weights:  87%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b | 656/751 [00:34<00:04, 19.68it/s]\nLoading weights:  88%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a | 661/751 [00:36<00:10,  8.73it/s]\nLoading weights:  89%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2589 | 672/751 [00:36<00:05, 13.26it/s]\nLoading weights:  90%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588 | 677/751 [00:38<00:08,  8.23it/s]\nLoading weights:  92%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258f| 688/751 [00:39<00:07,  8.04it/s]\nLoading weights:  92%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258f| 691/751 [00:40<00:09,  6.54it/s]\nLoading weights:  94%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258e| 704/751 [00:41<00:04, 11.20it/s]\nLoading weights:  94%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258d| 709/751 [00:41<00:04,  9.38it/s]\nLoading weights:  96%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c| 720/751 [00:42<00:02, 14.12it/s]\nLoading weights:  97%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b| 725/751 [00:42<00:02, 11.59it/s]\nLoading weights:  98%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a| 736/751 [00:42<00:00, 17.29it/s]\nLoading weights:  99%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a| 741/751 [00:43<00:00, 14.55it/s]\nLoading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 751/751 [00:43<00:00, 17.27it/s]",
+      "task_id": "schema_check",
+      "task_kind": "schema_check",
+      "tok_s": 11.820365899426417
+    },
+    {
+      "expected_answer": "PASS",
+      "generated_token_count": 8,
+      "generated_tokens": [
+        "1.",
+        "**Analyze",
+        "the",
+        "Request"
+      ],
+      "latency_ms": 718.422,
+      "observed_answer": "1.  **Analyze the Request",
+      "passed": false,
+      "prompt": "Return exactly PASS if replacing foo with bar is a simple code edit.",
+      "returncode": 0,
+      "stderr_tail": "ing weights:  85%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c | 640/751 [00:33<00:05, 19.27it/s]\nLoading weights:  86%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c | 645/751 [00:34<00:07, 13.47it/s]\nLoading weights:  87%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b | 656/751 [00:34<00:04, 19.68it/s]\nLoading weights:  88%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a | 661/751 [00:36<00:10,  8.73it/s]\nLoading weights:  89%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2589 | 672/751 [00:36<00:05, 13.26it/s]\nLoading weights:  90%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588 | 677/751 [00:38<00:08,  8.23it/s]\nLoading weights:  92%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258f| 688/751 [00:39<00:07,  8.04it/s]\nLoading weights:  92%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258f| 691/751 [00:40<00:09,  6.54it/s]\nLoading weights:  94%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258e| 704/751 [00:41<00:04, 11.20it/s]\nLoading weights:  94%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258d| 709/751 [00:41<00:04,  9.38it/s]\nLoading weights:  96%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c| 720/751 [00:42<00:02, 14.12it/s]\nLoading weights:  97%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b| 725/751 [00:42<00:02, 11.59it/s]\nLoading weights:  98%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a| 736/751 [00:42<00:00, 17.29it/s]\nLoading weights:  99%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a| 741/751 [00:43<00:00, 14.55it/s]\nLoading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 751/751 [00:43<00:00, 17.27it/s]",
+      "task_id": "simple_code",
+      "task_kind": "simple_code",
+      "tok_s": 11.135516451333617
+    }
+  ],
+  "qualification_timestamp": "2026-05-21T13:59:37.277240Z",
+  "serve_backend": "transformers",
+  "status": "passed"
+}

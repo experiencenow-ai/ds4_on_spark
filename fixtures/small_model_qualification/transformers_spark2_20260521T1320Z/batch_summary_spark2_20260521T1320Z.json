@@ -1,0 +1,213 @@
+{
+  "batch_timestamp": "2026-05-21T13:59:37.278660Z",
+  "failed_models": [
+    {
+      "model_id": "hf-Qwen-Qwen3.5-35B-A3B-GPTQ-Int4",
+      "reason": "qualification failed: transformers qualification command failed rc=1 stderr=ss.from_pretrained(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/modeling_utils.py\", line 4181, in from_pretrained\n    hf_quantizer, config, device_map = get_hf_quantizer(\n                                       ^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/quantizers/auto.py\", line 334, in get_hf_quantizer\n    hf_quantizer = AutoHfQuantizer.from_config(\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/quantizers/auto.py\", line 211, in from_config\n    return target_cls(quantization_config, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/quantizers/quantizer_gptq.py\", line 53, in __init__\n    raise ImportError(\"Loading a GPTQ quantized model requires optimum (`pip install optimum`)\")\nImportError: Loading a GPTQ quantized model requires optimum (`pip install optimum`)"
+    },
+    {
+      "model_id": "hf-Qwen-Qwen3.6-35B-A3B-FP8",
+      "reason": "qualification failed: transformers qualification command failed rc=1 stderr=Traceback (most recent call last):\n  File \"<string>\", line 11, in <module>\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/auto/auto_factory.py\", line 405, in from_pretrained\n    return model_class.from_pretrained(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/modeling_utils.py\", line 4181, in from_pretrained\n    hf_quantizer, config, device_map = get_hf_quantizer(\n                                       ^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/quantizers/auto.py\", line 342, in get_hf_quantizer\n    hf_quantizer.validate_environment(\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/quantizers/quantizer_finegrained_fp8.py\", line 32, in validate_environment\n    raise ImportError(\"Loading an FP8 quantized model requires accelerate (`pip install accelerate`)\")\nImportError: Loading an FP8 quantized model requires accelerate (`pip install accelerate`)"
+    },
+    {
+      "model_id": "hf-moonshotai-Moonlight-16B-A3B-Instruct",
+      "reason": "qualification failed: transformers qualification command failed rc=1 stderr=c_module_utils.py\", line 627, in get_class_from_dynamic_module\n    return get_class_in_module(class_name, final_module, force_reload=force_download)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/dynamic_module_utils.py\", line 309, in get_class_in_module\n    module_spec.loader.exec_module(module)\n  File \"<frozen importlib._bootstrap_external>\", line 995, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 488, in _call_with_frames_removed\n  File \"/root/.cache/huggingface/modules/transformers_modules/Moonlight_hyphen_16B_hyphen_A3B_hyphen_Instruct/59fdd7213ce4d058/modeling_deepseek.py\", line 57, in <module>\n    from transformers.utils.import_utils import is_torch_fx_available\nImportError: cannot import name 'is_torch_fx_available' from 'transformers.utils.import_utils' (/usr/local/lib/python3.12/dist-packages/transformers/utils/import_utils.py). Did you mean: 'is_torch_available'?"
+    },
+    {
+      "model_id": "hf-zai-org-SWE-Dev-9B",
+      "reason": "qualification failed: transformers qualification command failed rc=1 stderr=:\n  File \"<string>\", line 11, in <module>\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/auto/auto_factory.py\", line 390, in from_pretrained\n    return model_class.from_pretrained(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/modeling_utils.py\", line 4252, in from_pretrained\n    model = cls(config, *model_args, **model_kwargs)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/.cache/huggingface/modules/transformers_modules/SWE_hyphen_Dev_hyphen_9B/041b850d361b46d3/modeling_chatglm.py\", line 918, in __init__\n    self.max_sequence_length = config.max_length\n                               ^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/configuration_utils.py\", line 434, in __getattribute__\n    return super().__getattribute__(key)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'ChatGLMConfig' object has no attribute 'max_length'. Did you mean: 'seq_length'?"
+    },
+    {
+      "model_id": "hf-Qwen-Qwen3.5-122B-A10B-GPTQ-Int4",
+      "reason": "qualification failed: transformers qualification command failed rc=1 stderr=ss.from_pretrained(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/modeling_utils.py\", line 4181, in from_pretrained\n    hf_quantizer, config, device_map = get_hf_quantizer(\n                                       ^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/quantizers/auto.py\", line 334, in get_hf_quantizer\n    hf_quantizer = AutoHfQuantizer.from_config(\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/quantizers/auto.py\", line 211, in from_config\n    return target_cls(quantization_config, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/quantizers/quantizer_gptq.py\", line 53, in __init__\n    raise ImportError(\"Loading a GPTQ quantized model requires optimum (`pip install optimum`)\")\nImportError: Loading a GPTQ quantized model requires optimum (`pip install optimum`)"
+    },
+    {
+      "model_id": "hf-mistralai-Devstral-Small-2-24B-Instruct-2512",
+      "reason": "qualification failed: transformers qualification command failed rc=1 stderr=, MinistralConfig, Ministral3Config, MistralConfig, MixtralConfig, MllamaConfig, ModernBertDecoderConfig, MoshiConfig, MptConfig, MusicgenConfig, MusicgenMelodyConfig, MvpConfig, NanoChatConfig, NemotronConfig, NemotronHConfig, OlmoConfig, Olmo2Config, Olmo3Config, OlmoHybridConfig, OlmoeConfig, OpenAIGPTConfig, OPTConfig, PegasusConfig, PersimmonConfig, PhiConfig, Phi3Config, Phi4MultimodalConfig, PhimoeConfig, PLBartConfig, ProphetNetConfig, Qwen2Config, Qwen2MoeConfig, Qwen3Config, Qwen3_5Config, Qwen3_5MoeConfig, Qwen3_5MoeTextConfig, Qwen3_5TextConfig, Qwen3MoeConfig, Qwen3NextConfig, RecurrentGemmaConfig, ReformerConfig, RemBertConfig, RobertaConfig, RobertaPreLayerNormConfig, RoCBertConfig, RoFormerConfig, RwkvConfig, SeedOssConfig, SmolLM3Config, SolarOpenConfig, StableLmConfig, Starcoder2Config, TrOCRConfig, VaultGemmaConfig, WhisperConfig, XGLMConfig, XLMConfig, XLMRobertaConfig, XLMRobertaXLConfig, XLNetConfig, xLSTMConfig, XmodConfig, YoutuConfig, ZambaConfig, Zamba2Config."
+    },
+    {
+      "model_id": "hf-Qwen-Qwen3.6-27B-FP8",
+      "reason": "qualification failed: transformers qualification command failed rc=1 stderr=Traceback (most recent call last):\n  File \"<string>\", line 11, in <module>\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/auto/auto_factory.py\", line 405, in from_pretrained\n    return model_class.from_pretrained(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/modeling_utils.py\", line 4181, in from_pretrained\n    hf_quantizer, config, device_map = get_hf_quantizer(\n                                       ^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/quantizers/auto.py\", line 342, in get_hf_quantizer\n    hf_quantizer.validate_environment(\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/quantizers/quantizer_finegrained_fp8.py\", line 32, in validate_environment\n    raise ImportError(\"Loading an FP8 quantized model requires accelerate (`pip install accelerate`)\")\nImportError: Loading an FP8 quantized model requires accelerate (`pip install accelerate`)"
+    },
+    {
+      "model_id": "hf-deepseek-ai-DeepSeek-V4-Flash",
+      "reason": "qualification failed: transformers qualification command failed rc=1 stderr='attention_factor'}\nTraceback (most recent call last):\n  File \"<string>\", line 11, in <module>\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/auto/auto_factory.py\", line 405, in from_pretrained\n    return model_class.from_pretrained(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/modeling_utils.py\", line 4181, in from_pretrained\n    hf_quantizer, config, device_map = get_hf_quantizer(\n                                       ^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/quantizers/auto.py\", line 342, in get_hf_quantizer\n    hf_quantizer.validate_environment(\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/quantizers/quantizer_finegrained_fp8.py\", line 32, in validate_environment\n    raise ImportError(\"Loading an FP8 quantized model requires accelerate (`pip install accelerate`)\")\nImportError: Loading an FP8 quantized model requires accelerate (`pip install accelerate`)"
+    },
+    {
+      "model_id": "hf-deepseek-ai-DeepSeek-V4-Flash-inference",
+      "reason": "qualification failed: transformers qualification command failed rc=1 stderr=^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/configuration_utils.py\", line 840, in from_dict\n    config = cls(**config_dict)\n             ^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/huggingface_hub/dataclasses.py\", line 275, in init_with_validate\n    initial_init(self, *args, **kwargs)  # type: ignore [call-arg]\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/huggingface_hub/dataclasses.py\", line 190, in __init__\n    self.__post_init__(**additional_kwargs)\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/configuration_utils.py\", line 254, in __post_init__\n    self.dtype = getattr(torch, self.dtype)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/__init__.py\", line 2881, in __getattr__\n    raise AttributeError(f\"module '{__name__}' has no attribute '{name}'\")\nAttributeError: module 'torch' has no attribute 'fp8'"
+    },
+    {
+      "model_id": "hf-microsoft-Phi-4-mini-flash-reasoning",
+      "reason": "qualification failed: transformers qualification command failed rc=1 stderr=ry.py\", line 379, in from_pretrained\n    model_class = get_class_from_dynamic_module(\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/dynamic_module_utils.py\", line 616, in get_class_from_dynamic_module\n    final_module = get_cached_module_file(\n                   ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/dynamic_module_utils.py\", line 445, in get_cached_module_file\n    modules_needed = check_imports(resolved_module_file)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/dynamic_module_utils.py\", line 258, in check_imports\n    raise ImportError(\nImportError: This modeling file requires the following packages that were not found in your environment: causal_conv1d, causal_conv1d_cuda, flash_attn, mamba_ssm, selective_scan_cuda. Run `pip install causal_conv1d causal_conv1d_cuda flash_attn mamba_ssm selective_scan_cuda`"
+    },
+    {
+      "model_id": "hf-microsoft-Phi-4-mini-instruct",
+      "reason": "qualification failed: transformers qualification command failed rc=1 stderr=           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/dynamic_module_utils.py\", line 627, in get_class_from_dynamic_module\n    return get_class_in_module(class_name, final_module, force_reload=force_download)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/dynamic_module_utils.py\", line 309, in get_class_in_module\n    module_spec.loader.exec_module(module)\n  File \"<frozen importlib._bootstrap_external>\", line 995, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 488, in _call_with_frames_removed\n  File \"/root/.cache/huggingface/modules/transformers_modules/Phi_hyphen_4_hyphen_mini_hyphen_instruct/3886b25a63d271ee/modeling_phi3.py\", line 37, in <module>\n    from transformers.utils import (\nImportError: cannot import name 'LossKwargs' from 'transformers.utils' (/usr/local/lib/python3.12/dist-packages/transformers/utils/__init__.py)"
+    }
+  ],
+  "failure_count": 11,
+  "format": "small-model-qualification-batch-v1",
+  "hardware_node": "spark2",
+  "inventory_model_count": 64,
+  "passed_record_count": 16,
+  "record_count": 27,
+  "record_dir": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z",
+  "top_by_cost_proxy": [
+    {
+      "cost_proxy": 1.0666666666666667,
+      "model_id": "hf-Qwen-Qwen3.5-0.8B",
+      "status": "passed"
+    },
+    {
+      "cost_proxy": 2.0,
+      "model_id": "hf-Qwen-Qwen3.5-2B",
+      "status": "passed"
+    },
+    {
+      "cost_proxy": 3.0,
+      "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-1.5B",
+      "status": "passed"
+    },
+    {
+      "cost_proxy": 7.0,
+      "model_id": "hf-zai-org-SWE-Dev-7B",
+      "status": "passed"
+    },
+    {
+      "cost_proxy": 14.0,
+      "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-7B",
+      "status": "passed"
+    },
+    {
+      "cost_proxy": 32.0,
+      "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Llama-8B",
+      "status": "passed"
+    },
+    {
+      "cost_proxy": 32.0,
+      "model_id": "hf-zai-org-SWE-Dev-32B",
+      "status": "passed"
+    },
+    {
+      "cost_proxy": 56.0,
+      "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-14B",
+      "status": "passed"
+    },
+    {
+      "cost_proxy": 60.0,
+      "model_id": "hf-Qwen-Qwen3.5-35B-A3B-GPTQ-Int4",
+      "status": "failed"
+    },
+    {
+      "cost_proxy": 60.0,
+      "model_id": "hf-Qwen-Qwen3.6-35B-A3B-FP8",
+      "status": "failed"
+    }
+  ],
+  "top_by_mean_tok_s": [
+    {
+      "mean_tok_s": 40.747303634839035,
+      "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-1.5B",
+      "status": "passed"
+    },
+    {
+      "mean_tok_s": 40.21930060317706,
+      "model_id": "hf-Qwen-Qwen3.5-0.8B",
+      "status": "passed"
+    },
+    {
+      "mean_tok_s": 24.793756596290248,
+      "model_id": "hf-Qwen-Qwen3.5-2B",
+      "status": "passed"
+    },
+    {
+      "mean_tok_s": 19.182116582232027,
+      "model_id": "hf-microsoft-Phi-4-mini-reasoning",
+      "status": "passed"
+    },
+    {
+      "mean_tok_s": 13.603121658254722,
+      "model_id": "hf-Qwen-Qwen3.5-4B",
+      "status": "passed"
+    },
+    {
+      "mean_tok_s": 12.085627730025637,
+      "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Llama-8B",
+      "status": "passed"
+    },
+    {
+      "mean_tok_s": 10.326384271364883,
+      "model_id": "hf-deepseek-ai-DeepSeek-R1-0528-Qwen3-8B",
+      "status": "passed"
+    },
+    {
+      "mean_tok_s": 9.668916746240205,
+      "model_id": "hf-Qwen-Qwen3.5-9B",
+      "status": "passed"
+    },
+    {
+      "mean_tok_s": 9.594032099702924,
+      "model_id": "hf-zai-org-GLM-4.7-Flash",
+      "status": "passed"
+    },
+    {
+      "mean_tok_s": 9.141823227736843,
+      "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-7B",
+      "status": "passed"
+    }
+  ],
+  "top_by_pass_rate": [
+    {
+      "model_id": "hf-Qwen-Qwen3.5-2B",
+      "pass_rate": 1.0,
+      "status": "passed"
+    },
+    {
+      "model_id": "hf-zai-org-SWE-Dev-7B",
+      "pass_rate": 1.0,
+      "status": "passed"
+    },
+    {
+      "model_id": "hf-zai-org-SWE-Dev-32B",
+      "pass_rate": 1.0,
+      "status": "passed"
+    },
+    {
+      "model_id": "hf-Qwen-Qwen3.5-0.8B",
+      "pass_rate": 0.75,
+      "status": "passed"
+    },
+    {
+      "model_id": "hf-microsoft-Phi-4-reasoning",
+      "pass_rate": 0.75,
+      "status": "passed"
+    },
+    {
+      "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-1.5B",
+      "pass_rate": 0.5,
+      "status": "passed"
+    },
+    {
+      "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-7B",
+      "pass_rate": 0.5,
+      "status": "passed"
+    },
+    {
+      "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Llama-8B",
+      "pass_rate": 0.25,
+      "status": "passed"
+    },
+    {
+      "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-14B",
+      "pass_rate": 0.25,
+      "status": "passed"
+    },
+    {
+      "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-32B",
+      "pass_rate": 0.25,
+      "status": "passed"
+    }
+  ],
+  "wall_clock_seconds": 2742.084
+}

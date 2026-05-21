@@ -1,0 +1,116 @@
+{
+  "aggregate_metrics": {
+    "mean_tok_s": 3.303875467424595,
+    "median_tok_s": 3.5410227654316935,
+    "p95_latency_ms": 2262.139,
+    "pass_count": 1,
+    "pass_rate": 0.25,
+    "prompt_count": 4
+  },
+  "batch_index": 18,
+  "cost_proxy_estimate": {
+    "basis": "model_size_params_billion / max(pass_rate, 0.05)",
+    "model_size_params": 32000000000,
+    "score": 128.0
+  },
+  "eval_set_id": "small-model-eval-v1",
+  "format": "small-model-qualification-v1",
+  "hardware_node": "spark2",
+  "model_dtype": "bfloat16",
+  "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-32B",
+  "model_path": "/home/spark2/models/hf/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+  "model_size_params": 32000000000,
+  "per_prompt_results": [
+    {
+      "expected_answer": "4",
+      "generated_token_count": 8,
+      "generated_tokens": [
+        "I",
+        "need",
+        "to",
+        "calculate",
+        "the",
+        "sum",
+        "of"
+      ],
+      "latency_ms": 3096.374,
+      "observed_answer": "I need to calculate the sum of",
+      "passed": false,
+      "prompt": "Return exactly 4 for 2+2.",
+      "returncode": 0,
+      "stderr_tail": "Loading weights:   0%|          | 0/771 [00:00<?, ?it/s]\nLoading weights:  42%|\u2588\u2588\u2588\u2588\u258f     | 322/771 [00:00<00:00, 3148.14it/s]\nLoading weights:  85%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c | 657/771 [00:00<00:00, 3265.53it/s]\nLoading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 771/771 [00:00<00:00, 3307.88it/s]",
+      "task_id": "simple_math",
+      "task_kind": "simple_math",
+      "tok_s": 2.5836672184949236
+    },
+    {
+      "expected_answer": "BLUE",
+      "generated_token_count": 8,
+      "generated_tokens": [
+        "Okay,",
+        "so",
+        "I",
+        "need",
+        "to",
+        "figure",
+        "out"
+      ],
+      "latency_ms": 2262.139,
+      "observed_answer": "Okay, so I need to figure out",
+      "passed": false,
+      "prompt": "Return exactly BLUE if the sky is blue on a clear day.",
+      "returncode": 0,
+      "stderr_tail": "Loading weights:   0%|          | 0/771 [00:00<?, ?it/s]\nLoading weights:  42%|\u2588\u2588\u2588\u2588\u258f     | 322/771 [00:00<00:00, 3148.14it/s]\nLoading weights:  85%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c | 657/771 [00:00<00:00, 3265.53it/s]\nLoading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 771/771 [00:00<00:00, 3307.88it/s]",
+      "task_id": "factual_recall",
+      "task_kind": "factual_recall",
+      "tok_s": 3.536475875266727
+    },
+    {
+      "expected_answer": "OK",
+      "generated_token_count": 8,
+      "generated_tokens": [
+        "Okay,",
+        "so",
+        "I",
+        "need",
+        "to",
+        "figure",
+        "out"
+      ],
+      "latency_ms": 2256.337,
+      "observed_answer": "Okay, so I need to figure out",
+      "passed": true,
+      "prompt": "Return exactly OK if this JSON is valid: {\"x\":1}.",
+      "returncode": 0,
+      "stderr_tail": "Loading weights:   0%|          | 0/771 [00:00<?, ?it/s]\nLoading weights:  42%|\u2588\u2588\u2588\u2588\u258f     | 322/771 [00:00<00:00, 3148.14it/s]\nLoading weights:  85%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c | 657/771 [00:00<00:00, 3265.53it/s]\nLoading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 771/771 [00:00<00:00, 3307.88it/s]",
+      "task_id": "schema_check",
+      "task_kind": "schema_check",
+      "tok_s": 3.54556965559666
+    },
+    {
+      "expected_answer": "PASS",
+      "generated_token_count": 8,
+      "generated_tokens": [
+        "Okay,",
+        "so",
+        "I",
+        "need",
+        "to",
+        "figure",
+        "out"
+      ],
+      "latency_ms": 2253.655,
+      "observed_answer": "Okay, so I need to figure out",
+      "passed": false,
+      "prompt": "Return exactly PASS if replacing foo with bar is a simple code edit.",
+      "returncode": 0,
+      "stderr_tail": "Loading weights:   0%|          | 0/771 [00:00<?, ?it/s]\nLoading weights:  42%|\u2588\u2588\u2588\u2588\u258f     | 322/771 [00:00<00:00, 3148.14it/s]\nLoading weights:  85%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c | 657/771 [00:00<00:00, 3265.53it/s]\nLoading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 771/771 [00:00<00:00, 3307.88it/s]",
+      "task_id": "simple_code",
+      "task_kind": "simple_code",
+      "tok_s": 3.5497891203400695
+    }
+  ],
+  "qualification_timestamp": "2026-05-21T13:39:26.602903Z",
+  "serve_backend": "transformers",
+  "status": "passed"
+}
