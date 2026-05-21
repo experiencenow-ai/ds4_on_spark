@@ -1,8 +1,7 @@
 {
   "api_endpoint": "http://127.0.0.1:8000/v1",
   "api_ready": true,
-  "artifact_sha256": "5081d2e5bdde76e7ae61dd04cbc81a4a206f599063c1138bea7bb561fd2d99f7",
-  "batch_size": 1,
+  "artifact_sha256": "d64ef1669bdff0ecb20b701de1f83efed95fcf8f1feed4f94aef56b58e55b51a",
   "baseline_no_mtp_attempt": {
     "api_ready": false,
     "baseline_tokens_per_second": null,
@@ -12,6 +11,7 @@
     "speculative_config": null,
     "status": "blocked"
   },
+  "batch_size": 1,
   "benchmark_id": "ds4-vllm-existing-solution-tp2-mtp2-spark10-20260521",
   "benchmark_status": "passed",
   "block_size": 256,
@@ -58,7 +58,8 @@
     "This run uses the published no-Ray TP=2 vLLM DeepSeek-V4-Flash path instead of the removed custom Ray/PP/fallback probe stack.",
     "Startup, model load, torch.compile, kernel warmup, and CUDA graph capture are excluded from timed generation samples.",
     "The first concurrency=2 round included an extra latency spike; later rounds reached 41.3-43.3 aggregate tok/s with the recipe cap max_num_seqs=2.",
-    "vLLM normalized the deprecated deepseek_mtp method name to mtp while keeping num_speculative_tokens=2."
+    "vLLM normalized the deprecated deepseek_mtp method name to mtp while keeping num_speculative_tokens=2.",
+    "MTP speedup for this Spark1/Spark0 artifact remains unverified because the same-stack no-MTP endpoint was not ready within the 600s attempt; do not use this artifact as a speedup claim."
   ],
   "output_mode": "full_vocab",
   "parse_valid": true,
@@ -72,6 +73,9 @@
   "runtime_pr_head": "7a3249e3b4826233972c147a4fe2c6f791227a0b",
   "runtime_repo": "https://github.com/eugr/spark-vllm-docker.git",
   "runtime_version": "0.1.dev16581+gdda4668b5.d20260521",
+  "same_stack_mtp_speedup_status": "unverified - needs same-stack no-MTP baseline",
+  "same_stack_no_mtp_baseline_tokens_per_second": null,
+  "same_stack_speedup_vs_no_mtp": null,
   "single_stream_samples": [
     {
       "completion_tokens": 128,
@@ -145,27 +149,25 @@
     "total_completion_tokens": 1280,
     "total_seconds": 61.24889490395435
   },
-  "same_stack_no_mtp_baseline_tokens_per_second": null,
-  "same_stack_speedup_vs_no_mtp": null,
   "source_recipe_commit": "84387a446ae42ca1c98ca912c8136642043ea9c6",
   "source_recipe_repo": "https://github.com/tonyd2wild/deepseek-v4-flash-dual-spark-recipe",
-  "spec_decode_metrics_after_single_stream": {
-    "accepted_tokens": 774,
-    "accepted_tokens_position_0": 540,
-    "accepted_tokens_position_1": 234,
-    "acceptance_rate": 0.588145896656535,
-    "draft_tokens": 1316,
-    "generation_tokens": 1440,
-    "num_drafts": 658
-  },
   "spec_decode_metrics_after_concurrency_2": {
+    "acceptance_rate": 0.6947136563876652,
     "accepted_tokens": 1577,
     "accepted_tokens_position_0": 1014,
     "accepted_tokens_position_1": 563,
-    "acceptance_rate": 0.6947136563876652,
     "draft_tokens": 2270,
     "generation_tokens": 2720,
     "num_drafts": 1135
+  },
+  "spec_decode_metrics_after_single_stream": {
+    "acceptance_rate": 0.588145896656535,
+    "accepted_tokens": 774,
+    "accepted_tokens_position_0": 540,
+    "accepted_tokens_position_1": 234,
+    "draft_tokens": 1316,
+    "generation_tokens": 1440,
+    "num_drafts": 658
   },
   "speculative_config": {
     "method": "mtp",
