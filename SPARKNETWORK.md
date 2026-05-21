@@ -4,7 +4,7 @@ Load this file first for any Centaur/Spark networking work. The machine-readable
 source of truth is [`sparknetwork.json`](sparknetwork.json); this document is the
 human runbook derived from it.
 
-Last verified: `2026-05-20T0752Z` UTC.
+Last verified: `2026-05-21T0057Z` UTC.
 
 ## Rule Zero
 
@@ -20,6 +20,17 @@ Do not confuse SSH login names with network hostnames.
 
 ## Current Physical Topology
 
+The 10G control plane now uses two switches:
+
+```text
+fiber modem -> TP-Link 5-port -> Mac Studio en0
+                              -> 8-port Spark switch -> spark0-spark6 enP7s7
+```
+
+The 5-port switch carries only the fiber modem, Mac Studio, and the uplink to
+the 8-port Spark switch. The 8-port switch carries all seven Spark `enP7s7`
+ports plus that uplink.
+
 The 200G fabric is currently an open line, not a closed ring:
 
 ```text
@@ -27,19 +38,20 @@ spark0 -> spark1 -> spark2 -> spark3 -> spark4 -> spark5 -> spark6
 ```
 
 The intended `spark6 -> spark0` 200G return edge is missing because the cable is
-too short. Spark6 has a temporary 10G copper direct link to Spark0 instead.
+too short. The 10G switch plane is not a substitute for the 200G return edge; it
+is the operator/control plane.
 
 ## Canonical Inventory
 
 | Node | SSH alias | Network hostname | Current primary path from Mac |
 |------|-----------|------------------|-------------------------------|
-| Spark0 | `ssh spark0` | `aitopatom-9ab9.local` | Mac -> Spark3 -> Spark2 -> Spark1 -> Spark0 over 200G |
-| Spark1 | `ssh spark1` | `edgexpert-d623.local` | Mac -> Spark3 -> Spark2 -> Spark1 over 200G |
-| Spark2 | `ssh spark2` | `aitopatom-931a.local` | Mac -> Spark3 -> Spark2 over 200G |
+| Spark0 | `ssh spark0` | `aitopatom-9ab9.local` | Direct private 10G, `10.20.0.10` |
+| Spark1 | `ssh spark1` | `edgexpert-d623.local` | Direct private 10G, `10.20.0.11` |
+| Spark2 | `ssh spark2` | `aitopatom-931a.local` | Direct private 10G, `10.20.0.12` |
 | Spark3 | `ssh spark3` | `aitopatom-a18f.local` | Direct private 10G, `10.20.0.13` |
 | Spark4 | `ssh spark4` | `aitopatom-c342.local` | Direct private 10G, `10.20.0.14` |
 | Spark5 | `ssh spark5` | `aitopatom-a36d.local` | Direct private 10G, `10.20.0.15` |
-| Spark6 | `ssh spark6` | `aitopatom-c637.local` | Mac -> Spark5 -> Spark6 over 200G |
+| Spark6 | `ssh spark6` | `aitopatom-c637.local` | Direct private 10G, `10.20.0.16` |
 
 The Mac Studio `~/.ssh/config` has a `DS4 SPARKNETWORK` block matching this
 table. Verified commands:
@@ -68,14 +80,17 @@ Private 10G assignments:
 | Node | Interface | Address | State |
 |------|-----------|---------|-------|
 | Mac Studio | `en0` | `10.20.0.1/24` | switch/control alias |
-| Spark0 | `enP7s7` | `10.20.0.10/24` | temporary direct link to Spark6 |
+| Spark0 | `enP7s7` | `10.20.0.10/24` | 8-port switch control, private-only |
+| Spark1 | `enP7s7` | `10.20.0.11/24` | 8-port switch control, plus DHCP `125.129.239.251/24` |
+| Spark2 | `enP7s7` | `10.20.0.12/24` | 8-port switch control, private-only; 30m cable, carrier reports 10G, DHCP times out |
 | Spark3 | `enP7s7` | `10.20.0.13/24` | switch control, plus DHCP `125.129.239.57/24` |
 | Spark4 | `enP7s7` | `10.20.0.14/24` | switch control, plus DHCP `175.193.138.138/24` |
 | Spark5 | `enP7s7` | `10.20.0.15/24` | switch control, plus DHCP `175.193.138.193/24` |
-| Spark6 | `enP7s7` | `10.20.0.16/24` | temporary direct link to Spark0 |
+| Spark6 | `enP7s7` | `10.20.0.16/24` | 8-port switch control, private-only |
 
-Spark1 and Spark2 currently have `enP7s7` down; reach them through the 200G
-line via `ssh spark1` and `ssh spark2`.
+All seven private addresses answered Mac Studio ping on 2026-05-21. Spark2 is
+the cable-risk node because it is temporarily on a 30m cable, but it negotiated
+10G and `10.20.0.12` is reachable from Mac Studio.
 
 If Mac Studio ever loses the private alias, reinstall it as a `/24`:
 
@@ -117,14 +132,15 @@ Wi-Fi is not the primary operator plane.
 
 ## Internet Status
 
-Spark3, Spark4, and Spark5 have working wired internet through `enP7s7`; a
-Cloudflare trace returned ICN for all three. Spark0, Spark1, Spark2, and Spark6
-are reachable for control and ring traffic, but do not currently have a working
-internet route. Spark0-Spark2 default to the older `192.168.0.0/24` Wi-Fi LAN,
-and Spark6 defaults to `192.168.1.0/24`; those paths failed the trace check.
+Spark1, Spark3, Spark4, and Spark5 have working wired internet through
+`enP7s7`; a Cloudflare trace returned ICN for all four. Spark6 has working
+internet through Wi-Fi. Spark0 and Spark2 are reachable for control and ring
+traffic, but their current default Wi-Fi routes failed DNS resolution during the
+trace check.
 
-Do not use internet availability as a Spark health signal until every node is on
-the new switch or a deliberate routed/NAT path is installed.
+Do not use internet availability as a Spark health signal until every node has a
+deliberate routed/NAT path. Use `10.20.0.10-10.20.0.16` reachability as the
+control-plane health signal.
 
 ## Communication Contract
 
@@ -137,12 +153,23 @@ Use separate planes for separate jobs:
 | Ring sync | Previous/next 200G neighbors only | Manifests, object sync, shard movement, high-volume transfers |
 | Data plane | 200G fabric | Runtime/model traffic |
 
+For bulk data, prefer [`docs/spark-ring-fast-transfer.md`](docs/spark-ring-fast-transfer.md)
+and `scripts/spark_ring_fast_copy.py --engine native` for regular files. Use
+the Python engine for directory trees. SSH-based rsync/scp is a control-plane
+fallback, not the default for initial model/runtime payload movement.
+
+For model placement, load [`sparkmodels.json`](sparkmodels.json) and
+[`docs/spark-model-cache.md`](docs/spark-model-cache.md). The canonical cache is
+`/home/sparkN/models` on every Spark, mirrored hop-by-hop over the 200G ring.
+
 The low-bandwidth control service should expose only allowlisted operations:
 
 - `health`: hostname, user, uptime, interfaces, disk, service versions.
 - `probe_links`: ping, jumbo ping, TCP/port checks for declared neighbors.
 - `stage_manifest`: receive a manifest/checksum list, not bulk model payloads.
-- `sync_pull` / `sync_push`: run bounded rsync/zstd jobs over 200G neighbor links.
+- `sync_pull` / `sync_push`: trigger bounded neighbor transfers over the 200G
+  ring using the fast-transfer path, with rsync reserved for final metadata or
+  delta validation.
 - `service`: start/stop/status allowlisted Centaur services.
 
 Do not send model payloads through the controller API. Use the ring sync plane.
@@ -198,8 +225,7 @@ From Mac Studio:
 
 ```bash
 for h in spark0 spark1 spark2 spark3 spark4 spark5 spark6; do ssh "$h" hostname; done
+for ip in 10.20.0.10 10.20.0.11 10.20.0.12 10.20.0.13 10.20.0.14 10.20.0.15 10.20.0.16; do ping -c 1 "$ip"; done
 ssh spark3 'for ip in 10.10.5.2 10.10.6.2 10.10.7.2 10.10.8.2; do ping -c 1 "$ip"; done'
 ssh spark5 'for ip in 10.10.9.1 10.10.10.1 10.10.11.2 10.10.12.2; do ping -c 1 "$ip"; done'
-ssh spark0-10g hostname
-ssh spark6-10g hostname
 ```

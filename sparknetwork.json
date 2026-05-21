@@ -1,12 +1,32 @@
 {
   "schema": "ds4.sparknetwork.v1",
-  "last_verified_utc": "2026-05-20T0752Z",
+  "last_verified_utc": "2026-05-21T0057Z",
   "operator": {
     "name": "Mac Studio",
     "hostname": "Mac-Studio.local",
     "primary_interface": "en0",
     "office_ipv4": "175.193.138.31/24",
     "private_10g_ipv4": "10.20.0.1/24"
+  },
+  "switch_topology": {
+    "verified_utc": "2026-05-21T0057Z",
+    "upstream_switch": "TP-Link 5-port",
+    "upstream_switch_ports": ["fiber modem", "Mac Studio en0", "8-port Spark switch uplink"],
+    "spark_switch": "8-port 10G switch",
+    "spark_switch_ports": [
+      "spark0 enP7s7",
+      "spark1 enP7s7",
+      "spark2 enP7s7",
+      "spark3 enP7s7",
+      "spark4 enP7s7",
+      "spark5 enP7s7",
+      "spark6 enP7s7"
+    ],
+    "notes": [
+      "All seven Spark enP7s7 links answer from Mac Studio on 10.20.0.10-10.20.0.16.",
+      "Spark2 is temporarily using a 30m copper cable; carrier reports 10G and 10.20.0.12 pings from Mac Studio, but DHCP times out.",
+      "The 200G fabric remains a separate open line for neighbor data movement."
+    ]
   },
   "ssh_policy": {
     "users_match_ring_names": true,
@@ -21,10 +41,10 @@
       "hostname": "aitopatom-9ab9",
       "mdns": "aitopatom-9ab9.local",
       "ssh_alias": "spark0",
-      "ssh_path": "mac -> spark3 -> spark2 -> spark1 -> spark0",
+      "ssh_path": "mac -> spark0 over direct 10G private switch",
       "interfaces": {
         "wifi": {"device": "wlP9s9", "ipv4": "192.168.0.155/24", "role": "fallback"},
-        "ten_g": {"device": "enP7s7", "ipv4": "10.20.0.10/24", "role": "temporary direct to spark6"}
+        "ten_g": {"device": "enP7s7", "private_ipv4": "10.20.0.10/24", "role": "8-port switch control, private-only"}
       }
     },
     {
@@ -33,10 +53,10 @@
       "hostname": "edgexpert-d623",
       "mdns": "edgexpert-d623.local",
       "ssh_alias": "spark1",
-      "ssh_path": "mac -> spark3 -> spark2 -> spark1",
+      "ssh_path": "mac -> spark1 over direct 10G private switch",
       "interfaces": {
         "wifi": {"device": "wlP9s9", "ipv4": "192.168.0.146/24", "role": "fallback"},
-        "ten_g": {"device": "enP7s7", "state": "down", "role": "not on switch right now"}
+        "ten_g": {"device": "enP7s7", "private_ipv4": "10.20.0.11/24", "dhcp_ipv4": "125.129.239.251/24", "role": "8-port switch control plus wired internet"}
       }
     },
     {
@@ -45,10 +65,10 @@
       "hostname": "aitopatom-931a",
       "mdns": "aitopatom-931a.local",
       "ssh_alias": "spark2",
-      "ssh_path": "mac -> spark3 -> spark2",
+      "ssh_path": "mac -> spark2 over direct 10G private switch",
       "interfaces": {
         "wifi": {"device": "wlP9s9", "ipv4": "192.168.0.116/24", "role": "fallback"},
-        "ten_g": {"device": "enP7s7", "state": "down", "role": "not on switch right now"}
+        "ten_g": {"device": "enP7s7", "private_ipv4": "10.20.0.12/24", "role": "8-port switch control, private-only on 30m cable; DHCP times out"}
       }
     },
     {
@@ -57,7 +77,7 @@
       "hostname": "aitopatom-a18f",
       "mdns": "aitopatom-a18f.local",
       "ssh_alias": "spark3",
-      "ssh_path": "mac -> spark3",
+      "ssh_path": "mac -> spark3 over direct 10G private switch",
       "interfaces": {
         "wifi": {"device": "wlP9s9", "ipv4": "192.168.1.110/24", "ssid": "TP-Link_D660_5G", "role": "fallback"},
         "ten_g": {"device": "enP7s7", "dhcp_ipv4": "125.129.239.57/24", "private_ipv4": "10.20.0.13/24", "role": "switch control"}
@@ -69,7 +89,7 @@
       "hostname": "aitopatom-c342",
       "mdns": "aitopatom-c342.local",
       "ssh_alias": "spark4",
-      "ssh_path": "mac -> spark4",
+      "ssh_path": "mac -> spark4 over direct 10G private switch",
       "interfaces": {
         "wifi": {"device": "wlP9s9", "ipv4": "192.168.1.137/24", "ssid": "TP-Link_D660_5G", "role": "fallback"},
         "ten_g": {"device": "enP7s7", "dhcp_ipv4": "175.193.138.138/24", "private_ipv4": "10.20.0.14/24", "role": "switch control"}
@@ -81,7 +101,7 @@
       "hostname": "aitopatom-a36d",
       "mdns": "aitopatom-a36d.local",
       "ssh_alias": "spark5",
-      "ssh_path": "mac -> spark5",
+      "ssh_path": "mac -> spark5 over direct 10G private switch",
       "interfaces": {
         "wifi": {"device": "wlP9s9", "state": "down", "role": "fallback"},
         "ten_g": {"device": "enP7s7", "dhcp_ipv4": "175.193.138.193/24", "private_ipv4": "10.20.0.15/24", "role": "switch control"}
@@ -93,10 +113,10 @@
       "hostname": "aitopatom-c637",
       "mdns": "aitopatom-c637.local",
       "ssh_alias": "spark6",
-      "ssh_path": "mac -> spark5 -> spark6",
+      "ssh_path": "mac -> spark6 over direct 10G private switch",
       "interfaces": {
         "wifi": {"device": "wlP9s9", "ipv4": "192.168.1.185/24", "ssid": "TP-Link_D660_5G", "role": "fallback"},
-        "ten_g": {"device": "enP7s7", "ipv4": "10.20.0.16/24", "role": "temporary direct to spark0"}
+        "ten_g": {"device": "enP7s7", "private_ipv4": "10.20.0.16/24", "role": "8-port switch control, private-only"}
       }
     }
   ],
@@ -105,25 +125,29 @@
     "assignments": {
       "macstudio": "10.20.0.1",
       "spark0": "10.20.0.10",
+      "spark1": "10.20.0.11",
+      "spark2": "10.20.0.12",
       "spark3": "10.20.0.13",
       "spark4": "10.20.0.14",
       "spark5": "10.20.0.15",
       "spark6": "10.20.0.16"
     },
     "notes": [
-      "spark3, spark4, and spark5 are on the 10G switch with Mac Studio.",
-      "spark0 and spark6 are on a temporary direct 10G copper link.",
-      "spark1 and spark2 enP7s7 are currently down."
+      "All seven Sparks are on the 8-port 10G switch with Mac Studio reachable through the upstream 5-port switch.",
+      "Spark2 is using a 30m cable and is private-only; carrier reports 10G and Mac ping succeeds.",
+      "Use 10.20.0.10-10.20.0.16 for operator/control SSH; keep 200G for ring data movement."
     ]
   },
   "internet_status": {
-    "verified_utc": "2026-05-20T0756Z",
-    "working_wired_internet": ["spark3", "spark4", "spark5"],
-    "reachable_but_no_internet_route": ["spark0", "spark1", "spark2", "spark6"],
+    "verified_utc": "2026-05-21T0057Z",
+    "working_wired_internet": ["spark1", "spark3", "spark4", "spark5"],
+    "working_wifi_internet": ["spark6"],
+    "reachable_but_no_internet_route": ["spark0", "spark2"],
     "notes": [
-      "spark3, spark4, and spark5 returned Cloudflare trace over enP7s7.",
-      "spark0, spark1, and spark2 default to the older 192.168.0.0/24 Wi-Fi LAN and failed trace.",
-      "spark6 defaults to 192.168.1.0/24 Wi-Fi and failed trace."
+      "spark1, spark3, spark4, and spark5 returned Cloudflare trace over enP7s7.",
+      "spark6 returned Cloudflare trace over Wi-Fi.",
+      "spark0 defaults to the older 192.168.0.0/24 Wi-Fi LAN and failed DNS resolution.",
+      "spark2 defaults to the older 192.168.0.0/24 Wi-Fi LAN and DNS resolution timed out; its enP7s7 is private-only on 10.20.0.12."
     ]
   },
   "ring_200g": {
@@ -154,7 +178,18 @@
       "Use SSH for break-glass only.",
       "Use the HTTP controller/agent plane for low-bandwidth commands and health.",
       "Use 200G neighbor links for manifests, object sync, and data movement.",
+      "Use raw TCP multi-stream transfer for initial bulk payload movement; reserve rsync over SSH for final metadata/delta checks.",
       "Never send model payloads through the controller API."
     ]
+  },
+  "bulk_transfer": {
+    "default_tool": "scripts/spark_ring_fast_copy.py",
+    "model_manifest": "sparkmodels.json",
+    "model_runbook": "docs/spark-model-cache.md",
+    "regular_file_engine": "native nc/dd workers over raw TCP ring IPs",
+    "directory_engine": "python helper over raw TCP ring IPs",
+    "neighbor_only": true,
+    "ssh_payload_copy": "fallback and final metadata/delta validation only",
+    "recommended_regular_file_args": ["--engine", "native", "--parallel", "32", "--chunk-mib", "512", "--link", "both"]
   }
 }
