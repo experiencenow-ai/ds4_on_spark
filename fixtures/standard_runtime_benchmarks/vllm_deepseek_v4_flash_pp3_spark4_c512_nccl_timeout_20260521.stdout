@@ -1,0 +1,260 @@
+(APIServer pid=15) INFO:     10.20.0.1:54537 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54538 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54539 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54534 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54540 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54541 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54544 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54543 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54545 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54542 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54548 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54552 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54550 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54547 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54546 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54553 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54554 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54555 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54558 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54551 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54563 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54561 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54559 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54560 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54562 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54565 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54557 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54567 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54566 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54568 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54569 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54570 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54564 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54574 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54549 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54573 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54571 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54577 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54575 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54572 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54578 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54579 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54580 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54576 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54581 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54583 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54585 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54582 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54584 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54586 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54587 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54589 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54596 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54592 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54590 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54600 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54588 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54591 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54593 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54595 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54594 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54599 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54603 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54602 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54604 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54597 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54598 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54607 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54606 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54601 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54608 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54605 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54609 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54610 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54611 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54613 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54612 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54614 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54615 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54616 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54617 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54618 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54619 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54620 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54621 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54622 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54623 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54624 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54625 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54626 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54627 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54628 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54629 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54630 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54631 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54632 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54633 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54634 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54635 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54636 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54637 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54638 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54639 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54640 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54641 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54642 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54643 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54644 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54645 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54646 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54647 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54648 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54649 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54650 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54651 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54652 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54653 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54654 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54655 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54656 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54657 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54658 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54659 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54660 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54661 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54662 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54663 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54664 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54665 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54666 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54667 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54668 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54669 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54670 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54671 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54672 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54673 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54674 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54675 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54676 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54677 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54678 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54679 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54680 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54681 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54682 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54683 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54684 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54685 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54686 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54687 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54688 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54689 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54690 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54691 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54692 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54693 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54694 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54695 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54696 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54697 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54698 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54699 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54700 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54701 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54702 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54703 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54704 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54705 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54706 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54707 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54708 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54709 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54710 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54711 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54712 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54713 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54714 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54715 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54716 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54717 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54718 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54719 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54720 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54721 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54722 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54723 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54724 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54725 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54726 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54727 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54728 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54729 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54730 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54731 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54732 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54733 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54734 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54735 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54736 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54737 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54738 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     10.20.0.1:54739 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+(APIServer pid=15) INFO:     Shutting down
+(APIServer pid=15) INFO:     Waiting for application shutdown.
+(APIServer pid=15) INFO:     Application shutdown complete.
+(APIServer pid=15) INFO:     Finished server process [15]
+[rank0]:[E521 23:01:28.434759520 ProcessGroupNCCL.cpp:689] [Rank 0] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=661, OpType=SEND, NumelIn=8388608, NumelOut=8388608, Timeout(ms)=600000) ran for 600008 milliseconds before timing out.
+[rank0]:[E521 23:01:28.477138060 ProcessGroupNCCL.cpp:2303] [PG ID 5 PG GUID 21 Rank 0]  failure detected by watchdog at work sequence id: 661 PG status: last enqueued work: 662, last completed work: 660
+[rank0]:[E521 23:01:28.478189093 ProcessGroupNCCL.cpp:733] Stack trace of the failed collective: 
+#0 isend from /usr/local/lib/python3.12/dist-packages/torch/distributed/distributed_c10d.py:2552
+#1 isend_tensor_dict from /usr/local/lib/python3.12/dist-packages/vllm/distributed/parallel_state.py:907
+#2 execute_model from /usr/local/lib/python3.12/dist-packages/vllm/v1/worker/gpu_worker.py:865
+#3 decorate_context from /usr/local/lib/python3.12/dist-packages/torch/utils/_contextlib.py:124
+#4 execute_model from /usr/local/lib/python3.12/dist-packages/vllm/v1/worker/worker_base.py:337
+#5 worker_busy_loop from /usr/local/lib/python3.12/dist-packages/vllm/v1/executor/multiproc_executor.py:957
+#6 worker_main from /usr/local/lib/python3.12/dist-packages/vllm/v1/executor/multiproc_executor.py:861
+#7 run from /usr/lib/python3.12/multiprocessing/process.py:108
+#8 _bootstrap from /usr/lib/python3.12/multiprocessing/process.py:314
+#9 _main from /usr/lib/python3.12/multiprocessing/spawn.py:135
+#10 spawn_main from /usr/lib/python3.12/multiprocessing/spawn.py:122
+#11 <module> from <string>:1
+
+[rank0]:[E521 23:01:28.478252355 ProcessGroupNCCL.cpp:2636] [PG ID 5 PG GUID 21 Rank 0] First PG on this rank to signal dumping.
+[rank0]:[E521 23:01:28.702265738 ProcessGroupNCCL.cpp:1914] [PG ID 0 PG GUID 0 Rank 0] Received a dump signal due to a collective timeout from this local rank and we will try our best to dump the debug info. Last enqueued NCCL work: -1, last completed NCCL work: -1.This is most likely caused by incorrect usages of collectives, e.g., wrong sizes used across ranks, the order of collectives is not same for all ranks or the scheduled collective, for some reason, didn't run. Additionally, this can be caused by GIL deadlock or other reasons such as network errors or bugs in the communications library (e.g. NCCL), etc. 
+[rank0]:[E521 23:01:28.702443668 ProcessGroupNCCL.cpp:1628] [PG ID 0 PG GUID 0 Rank 0] ProcessGroupNCCL preparing to dump debug info. Include stack trace: 1, only active collectives: 0
+[rank0]:[E521 23:02:28.478424877 ProcessGroupNCCL.cpp:750] [Rank 0] Some NCCL operations have failed or timed out. Due to the asynchronous nature of CUDA kernels, subsequent GPU operations might run on corrupted/incomplete data.
+[rank0]:[E521 23:02:28.478446893 ProcessGroupNCCL.cpp:764] [Rank 0] To avoid data inconsistency, we are taking the entire process down.
+[rank0]:[E521 23:02:28.515962577 ProcessGroupNCCL.cpp:2119] [PG ID 5 PG GUID 21 Rank 0] Process group watchdog thread terminated with exception: [Rank 0] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=661, OpType=SEND, NumelIn=8388608, NumelOut=8388608, Timeout(ms)=600000) ran for 600008 milliseconds before timing out.
+Exception raised from checkTimeout at /pytorch/torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:692 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0xc8 (0xeeb1217966e8 in /usr/local/lib/python3.12/dist-packages/torch/lib/libc10.so)
+frame #1: c10d::ProcessGroupNCCL::WorkNCCL::checkTimeout(std::optional<std::chrono::duration<long, std::ratio<1l, 1000l> > >) + 0x228 (0xeeb1226825c8 in /usr/local/lib/python3.12/dist-packages/torch/lib/libtorch_cuda.so)
+frame #2: c10d::ProcessGroupNCCL::Watchdog::runLoop() + 0xea0 (0xeeb12268a9b0 in /usr/local/lib/python3.12/dist-packages/torch/lib/libtorch_cuda.so)
+frame #3: c10d::ProcessGroupNCCL::Watchdog::run() + 0x108 (0xeeb12268bdd8 in /usr/local/lib/python3.12/dist-packages/torch/lib/libtorch_cuda.so)
+frame #4: <unknown function> + 0xe1ae0 (0xeeb1d0841ae0 in /usr/lib/aarch64-linux-gnu/libstdc++.so.6)
+frame #5: <unknown function> + 0x8595c (0xeeb1d150595c in /usr/lib/aarch64-linux-gnu/libc.so.6)
+frame #6: <unknown function> + 0xebb4c (0xeeb1d156bb4c in /usr/lib/aarch64-linux-gnu/libc.so.6)
+
+terminate called after throwing an instance of 'c10::DistBackendError'
+  what():  [PG ID 5 PG GUID 21 Rank 0] Process group watchdog thread terminated with exception: [Rank 0] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=661, OpType=SEND, NumelIn=8388608, NumelOut=8388608, Timeout(ms)=600000) ran for 600008 milliseconds before timing out.
+Exception raised from checkTimeout at /pytorch/torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:692 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0xc8 (0xeeb1217966e8 in /usr/local/lib/python3.12/dist-packages/torch/lib/libc10.so)
+frame #1: c10d::ProcessGroupNCCL::WorkNCCL::checkTimeout(std::optional<std::chrono::duration<long, std::ratio<1l, 1000l> > >) + 0x228 (0xeeb1226825c8 in /usr/local/lib/python3.12/dist-packages/torch/lib/libtorch_cuda.so)
+frame #2: c10d::ProcessGroupNCCL::Watchdog::runLoop() + 0xea0 (0xeeb12268a9b0 in /usr/local/lib/python3.12/dist-packages/torch/lib/libtorch_cuda.so)
+frame #3: c10d::ProcessGroupNCCL::Watchdog::run() + 0x108 (0xeeb12268bdd8 in /usr/local/lib/python3.12/dist-packages/torch/lib/libtorch_cuda.so)
+frame #4: <unknown function> + 0xe1ae0 (0xeeb1d0841ae0 in /usr/lib/aarch64-linux-gnu/libstdc++.so.6)
+frame #5: <unknown function> + 0x8595c (0xeeb1d150595c in /usr/lib/aarch64-linux-gnu/libc.so.6)
+frame #6: <unknown function> + 0xebb4c (0xeeb1d156bb4c in /usr/lib/aarch64-linux-gnu/libc.so.6)
+
+Exception raised from run at /pytorch/torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:2125 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0xc8 (0xeeb1217966e8 in /usr/local/lib/python3.12/dist-packages/torch/lib/libc10.so)
+frame #1: c10d::ProcessGroupNCCL::Watchdog::run() + 0x5e8 (0xeeb12268c2b8 in /usr/local/lib/python3.12/dist-packages/torch/lib/libtorch_cuda.so)
+frame #2: <unknown function> + 0xe1ae0 (0xeeb1d0841ae0 in /usr/lib/aarch64-linux-gnu/libstdc++.so.6)
+frame #3: <unknown function> + 0x8595c (0xeeb1d150595c in /usr/lib/aarch64-linux-gnu/libc.so.6)
+frame #4: <unknown function> + 0xebb4c (0xeeb1d156bb4c in /usr/lib/aarch64-linux-gnu/libc.so.6)
+
+/usr/lib/python3.12/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+/usr/lib/python3.12/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 2 leaked shared_memory objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

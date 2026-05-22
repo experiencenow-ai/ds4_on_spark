@@ -1,0 +1,89 @@
+WARNING 05-22 00:34:08 [envs.py:1914] Unknown vLLM environment variable detected: VLLM_BASE_DIR
+INFO 05-22 00:34:08 [config.py:800] Detected quantization_config.scale_fmt=ue8m0; enabling UE8M0 for DeepGEMM.
+INFO 05-22 00:34:14 [model.py:568] Resolved architecture: DeepseekV4ForCausalLM
+INFO 05-22 00:34:14 [model.py:1697] Using max model len 8192
+INFO 05-22 00:34:14 [cache.py:261] Using fp8 data type to store kv cache. It reduces the GPU memory footprint and boosts the performance. Meanwhile, it may cause accuracy drop without a proper scaling factor
+INFO 05-22 00:34:14 [arg_utils.py:1844] Inferred data_parallel_rank 0 from node_rank 2
+INFO 05-22 00:34:14 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=8192.
+INFO 05-22 00:34:14 [vllm.py:895] Asynchronous scheduling is enabled.
+INFO 05-22 00:34:14 [kernel.py:212] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+WARNING 05-22 00:34:15 [vllm.py:1309] Auto-initialization of reasoning token IDs failed. Please check whether your reasoning parser has implemented the `reasoning_start_str` and `reasoning_end_str`.
+INFO 05-22 00:34:15 [compilation.py:312] Enabled custom fusions: norm_quant, act_quant
+INFO 05-22 00:34:15 [serve.py:186] Launching vLLM (v0.1.dev16581+gdda4668b5.d20260521) headless multiproc executor, with head node address 192.168.1.110:29526 for torch.distributed process group.
+WARNING 05-22 00:34:15 [multiproc_executor.py:1029] Reducing Torch parallelism from 20 threads to 1 to avoid unnecessary CPU contention. Set OMP_NUM_THREADS in the external environment to tune this value as needed.
+(Worker pid=126) INFO 05-22 00:34:18 [parallel_state.py:1410] world_size=3 rank=2 local_rank=0 distributed_init_method=tcp://192.168.1.110:29526 backend=nccl
+(Worker pid=126) INFO 05-22 00:34:35 [parallel_state.py:1723] rank 2 in world size 3 is assigned as DP rank 0, PP rank 2, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:34:35 [utils.py:130] Hidden layers were unevenly partitioned: [14,15,14]. This can be manually overridden using the VLLM_PP_LAYER_PARTITION environment variable
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:34:36 [deepseek_v4.py:168] DeepSeek V4 expert_dtype resolved to 'fp4'
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:34:37 [deepseek_v4_attention.py:750] Using DeepSeek's fp8_ds_mla KV cache format. To use standard fp8 kv-cache format, please set `--attention-backend FLASHINFER_MLA_SPARSE`
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:34:37 [mxfp4.py:555] Using 'MARLIN' Mxfp4 MoE backend.
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:34:37 [deepseek_v4_attention.py:1680] Using FP8 indexer cache for Lightning Indexer.
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:34:39 [weight_utils.py:952] Filesystem type for checkpoints: EXT4. Checkpoint size: 148.66 GiB. Available RAM: 64.99 GiB.
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:34:39 [weight_utils.py:982] Auto-prefetch is disabled because the filesystem (EXT4) is not a recognized network FS (NFS/Lustre) and the checkpoint size (148.66 GiB) exceeds 90% of available RAM (64.99 GiB).
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:35:57 [default_loader.py:405] Loading weights took 77.92 seconds
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:35:57 [mxfp4.py:1500] Using MoEPrepareAndFinalizeNoDPEPModular
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:04 [gpu_model_runner.py:5053] Model loading took 48.18 GiB memory and 88.874481 seconds
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:07 [backends.py:1089] Using cache directory: /root/.cache/vllm/torch_compile_cache/c0075f211c/rank_2_0/backbone for vLLM's torch.compile
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:07 [backends.py:1148] Dynamo bytecode transform time: 2.13 s
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:09 [backends.py:378] Cache the graph of compile range (1, 8192) for later use
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:11 [backends.py:393] Compiling a graph for compile range (1, 8192) takes 3.81 s
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:13 [decorators.py:708] saved AOT compiled function to /root/.cache/vllm/torch_compile_cache/torch_aot_compile/6bb6efedaa71da6d7f9526449babb50218c150d7f81dcbfdfdfe02ef6d109a0f/rank_2_0/model
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:13 [monitor.py:53] torch.compile took 8.20 s in total
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:36:15  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:36:17  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:18 [fp8_utils.py:803] Using configuration from /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=1536,K=4096,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json for W8A8 Block FP8 kernel.
+(Worker_PP2_EP0 pid=126) WARNING 05-22 00:36:19 [fp8_utils.py:812] Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=32768,K=1024,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json
+(Worker_PP2_EP0 pid=126) WARNING 05-22 00:36:20 [fp8_utils.py:812] Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=4096,K=8192,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:36:20  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_post_tilelang` with `out_idx=None`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:36:22  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_post_tilelang`
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:23 [fp8_utils.py:803] Using configuration from /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=4096,K=4096,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json for W8A8 Block FP8 kernel.
+(Worker_PP2_EP0 pid=126) WARNING 05-22 00:36:24 [fp8_utils.py:812] Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=4096,K=2048,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:34 [fp8_utils.py:803] Using configuration from /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=8192,K=1024,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json for W8A8 Block FP8 kernel.
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:36:36  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `hc_head_fuse_tilelang` with `out_idx=None`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:36:38  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `hc_head_fuse_tilelang`
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:38 [monitor.py:81] Initial profiling/warmup run took 25.31 s
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:43 [gpu_model_runner.py:6167] Profiling CUDA graph memory: PIECEWISE=51 (largest=512), FULL=51 (largest=512)
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:36:43  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:36:46  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:54 [gpu_model_runner.py:6246] Estimated CUDA graph memory: 0.53 GiB total
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:55 [gpu_worker.py:462] Available KV cache memory: 48.66 GiB
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:55 [gpu_worker.py:477] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.8500 is equivalent to --gpu-memory-utilization=0.8457 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.8543. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:36:58 [deepseek_v4_mhc_warmup.py:232] Warming up DeepSeek V4 mHC TileLang kernels for token sizes: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512, 1024, 2048, 4096, 8192]
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:36:59  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:02  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:04  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:07  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:08  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:11  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:12  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:15  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:17  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:19  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:20  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:23  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:25  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:27  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:37:28 [deepseek_v4_mhc_warmup.py:241] DeepSeek V4 mHC TileLang warmup finished in 30.31 seconds.
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:37:28 [kernel_warmup.py:371] Warming up DeepSeek V4 sparse MLA attention for mixed tokens=16, prefill tokens=8192, and MTP uniform decode requests=[].
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:31  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_fused_tilelang` with `out_idx=None`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:33  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_fused_tilelang`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:33  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:37:36  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:38:46 [kernel_warmup.py:208] Warming up DeepSeek V4 request preparation kernels.
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:38:48,137 - INFO - autotuner.py:622 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:38:48,181 - INFO - autotuner.py:641 - flashinfer.jit: [Autotuner]: Autotuning process ends
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:39:12  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_fused_tilelang` with `out_idx=None`
+(Worker_PP2_EP0 pid=126) 2026-05-22 00:39:14  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_fused_tilelang`
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:39:37 [gpu_model_runner.py:6347] Graph capturing finished in 49 secs, took 1.64 GiB
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:39:37 [gpu_worker.py:621] CUDA graph pool memory: 1.64 GiB (actual), 0.53 GiB (estimated), difference: 1.11 GiB (67.8%).
+(Worker_PP2_EP0 pid=126) INFO 05-22 00:39:37 [jit_monitor.py:54] Kernel JIT monitor activated — Triton JIT compilations during inference will be logged as warnings.
+
+[2026-05-22 00:34:34] aitopatom-a36d:126:126 [0] misc/ibvwrap.cc:173 NCCL WARN lib wrapper not initialized.
+[rank2]:[W522 00:40:03.960881395 ProcessGroupNCCL.cpp:4094] Warning: An unbatched P2P op (send/recv) was called on this ProcessGroup with size 3.  In lazy initialization mode, this will result in a new 2-rank NCCL communicator to be created. (function operator())
+(Worker_PP2_EP0 pid=126) WARNING 05-22 00:40:03 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _combine_topk_swa_indices_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_PP2_EP0 pid=126) WARNING 05-22 00:40:09 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _compute_prefill_metadata_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_PP2_EP0 pid=126) WARNING 05-22 00:40:28 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _tf32_hc_prenorm_gemm_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_PP2_EP0 pid=126) WARNING 05-22 00:40:28 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _w8a8_triton_block_scaled_mm. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_PP2_EP0 pid=126) WARNING 05-22 00:40:29 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _deepseek_v4_sm12x_fp8_einsum_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_PP2_EP0 pid=126) WARNING 05-22 00:41:28 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _build_prefill_chunk_metadata_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_PP2_EP0 pid=126) WARNING 05-22 00:44:32 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _fp8_paged_mqa_logits_rowwise_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.

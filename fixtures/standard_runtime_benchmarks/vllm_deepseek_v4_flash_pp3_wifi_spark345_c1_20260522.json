@@ -1,0 +1,106 @@
+{
+  "api_endpoint": "http://192.168.1.110:8026/v1",
+  "artifact_sha256": "ef11bc085717e504a310a8f2237e1f82aef50f7bfa6cc22a89c40a91a0967d00",
+  "batch_size": 1,
+  "benchmark_id": "ds4-vllm-pp3-wifi-spark345-c1-20260522",
+  "benchmark_status": "passed",
+  "blocker_detail": "",
+  "blocker_kind": "none",
+  "concurrency_levels": [
+    1
+  ],
+  "context_length": 8192,
+  "created_utc": "2026-05-22T00:41:17Z",
+  "format": "centaur-standard-runtime-model-benchmark-v1",
+  "hardware": {
+    "fabric": "wifi_control_no_routed_200g_all_pairs",
+    "head_node": "spark3",
+    "launcher_node": "mac",
+    "machine": "DGX Spark",
+    "worker_node": "spark4,spark5"
+  },
+  "ignore_eos": true,
+  "launch_command": "python3 scripts/launch_vllm_pp3_spark.py start --nodes spark3:0:192.168.1.110,spark4:1:192.168.1.137,spark5:2:192.168.1.245 --container vllm_deepseek_v4_flash_pp3_track3_1196_wifi --port 8026 --master-port 29526 --master-addr 192.168.1.110 --socket-ifname wlP9s9",
+  "memory_used_gib": 75.76,
+  "model_family": "deepseek_v4_flash",
+  "model_format": "safetensors",
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "mtp_enabled": false,
+  "mtp_supported": true,
+  "ngram_spec_enabled": false,
+  "notes": [
+    "Wi-Fi-only NCCL/control baseline after 200G Spark3-Spark5 non-adjacent routing failed; not a 2x candidate."
+  ],
+  "output_mode": "full_vocab",
+  "parse_valid": true,
+  "prompt_processing_tokens_per_second": 0.0,
+  "prompt_processing_tokens_per_second_source": "not separately measured by the non-streaming completions matrix",
+  "prompt_shape": "antirez_dir_steering_eval_prompts_realistic_output_length_sweep",
+  "prompt_source": "",
+  "prompt_source_sha256": "",
+  "provider_id": "standard-vllm-deepseek-v4-flash-pp3-spark345-wifi-no-mtp",
+  "quantization": "official FP8 checkpoint with fp8 KV cache and fp4 expert path",
+  "raw_rounds": [
+    {
+      "aggregate_tps": 13.889506929748585,
+      "completion_tokens": 128,
+      "concurrency": 1,
+      "errors": 0,
+      "finished_utc": "2026-05-22T00:41:17Z",
+      "output_length": 128,
+      "prompt_tokens": 26,
+      "requests_per_second": 0.10851177288866082,
+      "round_index": 0,
+      "rows": [
+        {
+          "completion_tokens": 128,
+          "concurrency": 1,
+          "error": "",
+          "prompt_chars": 133,
+          "prompt_tokens": 26,
+          "request_index": 0,
+          "round_index": 0,
+          "text_preview": " Each row must be a complete JSON object. No markdown, no code fences, no explanations. Only valid JSON. No trailing commas. Use double quotes. Must be valid JS",
+          "wall_s": 9.213086042000214
+        }
+      ],
+      "started_utc": "2026-05-22T00:41:08Z",
+      "wall_s": 9.215589915999772
+    }
+  ],
+  "realistic_workload_matrix": [
+    {
+      "concurrency": 1,
+      "max_aggregate_tps": 13.889506929748585,
+      "mean_aggregate_tps": 13.889506929748585,
+      "mean_completion_tokens_per_request": 128.0,
+      "mean_per_stream_tps": 13.889506929748585,
+      "mean_requests_per_second": 0.10851177288866082,
+      "median_aggregate_tps": 13.889506929748585,
+      "min_aggregate_tps": 13.889506929748585,
+      "output_length": 128,
+      "rounds": 1,
+      "successful_rounds": 1,
+      "total_completion_tokens": 128,
+      "total_errors": 0,
+      "total_prompt_tokens": 26
+    }
+  ],
+  "recommendation": "For ~256-token Centaur eval outputs, use concurrency 1: nearest measured output_length=128 had 13.890 aggregate tok/s and 13.890 per-stream tok/s.",
+  "request_output_lengths": [
+    128
+  ],
+  "runtime": "vllm",
+  "runtime_version": "0.1.dev16581+gdda4668b5.d20260521",
+  "speculative_config": {},
+  "task_quality_score": null,
+  "time_to_first_token_ms": 0.0,
+  "time_to_first_token_source": "not separately measured by the non-streaming completions matrix",
+  "tokens_per_second": 13.889506929748585,
+  "topline_result": {
+    "best_aggregate_tps": 13.889506929748585,
+    "best_concurrency": 1,
+    "best_output_length": 128,
+    "mean_per_stream_tps": 13.889506929748585
+  }
+}

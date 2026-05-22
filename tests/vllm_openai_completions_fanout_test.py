@@ -80,6 +80,44 @@ class VllmOpenAICompletionsFanoutTest(unittest.TestCase):
 		self.assertEqual(obj["tokens_per_second"], 10.0)
 		self.assertEqual(obj["artifact_sha256"], fanout.canonical_hash(obj))
 
+	def test_standard_artifact_uses_max_tokens_when_list_empty(self) -> None:
+		class Args:
+			pass
+		args = Args()
+		args.benchmark_id = "bench"
+		args.provider_id = "provider"
+		args.model_id = "model"
+		args.model_family = "family"
+		args.runtime_version = "runtime"
+		args.quantization = "quant"
+		args.hardware_fabric = "fabric"
+		args.hardware_head_node = "head"
+		args.hardware_launcher_node = "launcher"
+		args.hardware_machine = "machine"
+		args.hardware_worker_node = "worker"
+		args.launch_command = "launch"
+		args.endpoint = "http://127.0.0.1:8000/v1/completions"
+		args.context_length = 10
+		args.concurrency = "1"
+		args.max_tokens = 128
+		args.max_tokens_list = ""
+		args.prompt_source = "source"
+		args.ignore_eos = True
+		args.time_to_first_token_ms = 0.0
+		args.time_to_first_token_source = "unit"
+		args.prompt_processing_tokens_per_second = 0.0
+		args.prompt_processing_tokens_per_second_source = "unit"
+		args.memory_used_gib = 1.0
+		args.note = []
+		raw = {
+			"created_utc": "2026-05-21T00:00:00Z",
+			"prompt_source_sha256": "abc",
+			"summaries": [{"concurrency": 1, "output_length": 128, "mean_aggregate_tps": 10.0, "mean_per_stream_tps": 10.0}],
+			"rounds": [],
+		}
+		obj = fanout.build_standard_runtime_artifact(args, raw)
+		self.assertEqual(obj["request_output_lengths"], [128])
+
 
 if __name__ == "__main__":
 	unittest.main()

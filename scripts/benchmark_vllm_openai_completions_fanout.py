@@ -239,6 +239,7 @@ def recommendation(summaries: list[dict[str, Any]]) -> str:
 def build_standard_runtime_artifact(args: argparse.Namespace, raw: dict[str, Any]) -> dict[str, Any]:
 	summaries = list(raw.get("summaries", []))
 	best = best_summary(summaries)
+	token_lengths = parse_ints(args.max_tokens_list) if args.max_tokens_list else [args.max_tokens]
 	obj: dict[str, Any] = {
 		"format": STANDARD_RUNTIME_FORMAT,
 		"artifact_sha256": "",
@@ -279,7 +280,7 @@ def build_standard_runtime_artifact(args: argparse.Namespace, raw: dict[str, Any
 		"blocker_detail": "",
 		"created_utc": raw.get("created_utc", ""),
 		"benchmark_status": "passed",
-		"request_output_lengths": parse_ints(args.max_tokens_list),
+		"request_output_lengths": token_lengths,
 		"concurrency_levels": parse_ints(args.concurrency),
 		"prompt_source": args.prompt_source,
 		"prompt_source_sha256": raw.get("prompt_source_sha256", ""),
@@ -382,7 +383,8 @@ def main() -> int:
 	with open(args.output, "w", encoding="utf-8") as f:
 		json.dump(artifact, f, indent=2, sort_keys=True)
 		f.write("\n")
-	print(json.dumps({"output": args.output, "best_summary": artifact.get("best_summary", {})}, indent=2, sort_keys=True))
+	topline = artifact.get("best_summary", {}) or artifact.get("topline_result", {})
+	print(json.dumps({"output": args.output, "topline": topline}, indent=2, sort_keys=True))
 	return(0)
 
 
