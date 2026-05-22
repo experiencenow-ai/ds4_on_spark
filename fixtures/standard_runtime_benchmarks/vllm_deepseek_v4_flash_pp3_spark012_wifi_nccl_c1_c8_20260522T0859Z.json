@@ -1,0 +1,226 @@
+{
+  "api_endpoint": "http://192.168.1.127:8037/v1",
+  "artifact_sha256": "f7df3c42f0c89d1bf3a67e1f4df6955364d92eccc1ed6d0eacf86e372e7ab251",
+  "batch_size": 8,
+  "benchmark_id": "ds4-vllm-pp3-wifi-nccl-spark012-c1-c8-20260522",
+  "benchmark_status": "passed",
+  "blocker_detail": "",
+  "blocker_kind": "none",
+  "concurrency_levels": [
+    1,
+    8
+  ],
+  "context_length": 8192,
+  "created_utc": "2026-05-22T08:59:05Z",
+  "format": "centaur-standard-runtime-model-benchmark-v1",
+  "hardware": {
+    "fabric": "wifi_nccl_with_ring_master",
+    "head_node": "spark0",
+    "launcher_node": "mac-studio",
+    "machine": "DGX Spark",
+    "worker_node": "spark1,spark2"
+  },
+  "ignore_eos": false,
+  "launch_command": "scripts/launch_vllm_pp3_spark.py start --nodes spark0-wifi:0:10.10.100.10...,spark1-wifi:1:10.10.100.11...,spark2-wifi:2:10.10.100.12... --socket-ifname wlP9s9 --gloo-socket-ifname wlP9s9 --port 8037",
+  "memory_used_gib": 75.76,
+  "model_family": "deepseek_v4_flash",
+  "model_format": "safetensors",
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "mtp_enabled": false,
+  "mtp_supported": true,
+  "ngram_spec_enabled": false,
+  "notes": [
+    "Fallback discriminator: NCCL over wlP9s9 served; NCCL over lo selected 127.0.0.1 and failed, so this is not 200G economic-gate evidence."
+  ],
+  "output_mode": "full_vocab",
+  "parse_valid": true,
+  "prompt_processing_tokens_per_second": 0.0,
+  "prompt_processing_tokens_per_second_source": "not separately measured by the non-streaming completions matrix",
+  "prompt_shape": "antirez_dir_steering_eval_prompts_realistic_output_length_sweep",
+  "prompt_source": "",
+  "prompt_source_sha256": "",
+  "provider_id": "standard-vllm-deepseek-v4-flash-pp3-wifi-nccl-spark012",
+  "quantization": "official FP8 checkpoint with fp8 KV cache and fp4 expert path",
+  "raw_rounds": [
+    {
+      "aggregate_tps": 9.982775422924512,
+      "completion_tokens": 32,
+      "concurrency": 1,
+      "errors": 0,
+      "finished_utc": "2026-05-22T08:58:50Z",
+      "output_length": 32,
+      "prompt_tokens": 26,
+      "requests_per_second": 0.311961731966391,
+      "round_index": 0,
+      "rows": [
+        {
+          "completion_tokens": 32,
+          "concurrency": 1,
+          "error": "",
+          "prompt_chars": 133,
+          "prompt_tokens": 26,
+          "request_index": 0,
+          "round_index": 0,
+          "text_preview": " Use the same format as the examples. Use the same format as the examples. Use the same format as the examples. Use the same format as the examples.",
+          "wall_s": 3.2027308749984513
+        }
+      ],
+      "started_utc": "2026-05-22T08:58:46Z",
+      "wall_s": 3.20552137499908
+    },
+    {
+      "aggregate_tps": 17.17133501662468,
+      "completion_tokens": 256,
+      "concurrency": 8,
+      "errors": 0,
+      "finished_utc": "2026-05-22T08:59:05Z",
+      "output_length": 32,
+      "prompt_tokens": 795,
+      "requests_per_second": 0.5366042192695213,
+      "round_index": 0,
+      "rows": [
+        {
+          "completion_tokens": 32,
+          "concurrency": 8,
+          "error": "",
+          "prompt_chars": 133,
+          "prompt_tokens": 26,
+          "request_index": 0,
+          "round_index": 0,
+          "text_preview": " The user is a customer who is reporting a problem. The user's message is: {user_message}\",             \"user_message\": \"I've been trying",
+          "wall_s": 14.90236320799886
+        },
+        {
+          "completion_tokens": 32,
+          "concurrency": 8,
+          "error": "",
+          "prompt_chars": 233,
+          "prompt_tokens": 58,
+          "request_index": 1,
+          "round_index": 0,
+          "text_preview": " case_1_0_3 case_1_0_4 case_1_0_5 case_1_0_6 case_1_",
+          "wall_s": 14.906571125000482
+        },
+        {
+          "completion_tokens": 32,
+          "concurrency": 8,
+          "error": "",
+          "prompt_chars": 318,
+          "prompt_tokens": 88,
+          "request_index": 2,
+          "round_index": 0,
+          "text_preview": " case_2_0_6 case_2_0_7 case_2_0_8 case_2_0_9 case_2_",
+          "wall_s": 14.901178750000327
+        },
+        {
+          "completion_tokens": 32,
+          "concurrency": 8,
+          "error": "",
+          "prompt_chars": 418,
+          "prompt_tokens": 127,
+          "request_index": 3,
+          "round_index": 0,
+          "text_preview": " case_3_0_9 case_3_0_10 case_3_0_11 case_3_0_12 case_3_",
+          "wall_s": 14.901467417001186
+        },
+        {
+          "completion_tokens": 32,
+          "concurrency": 8,
+          "error": "",
+          "prompt_chars": 512,
+          "prompt_tokens": 153,
+          "request_index": 4,
+          "round_index": 0,
+          "text_preview": " case_4_0_12 case_4_0_13 case_4_0_14 case_4_0_15 case_4_",
+          "wall_s": 14.900290042000051
+        },
+        {
+          "completion_tokens": 32,
+          "concurrency": 8,
+          "error": "",
+          "prompt_chars": 304,
+          "prompt_tokens": 131,
+          "request_index": 5,
+          "round_index": 0,
+          "text_preview": " case_5_0_15 case_5_0_16 case_5_0_17 case_5_0_18 case_5_",
+          "wall_s": 14.899199208999562
+        },
+        {
+          "completion_tokens": 32,
+          "concurrency": 8,
+          "error": "",
+          "prompt_chars": 396,
+          "prompt_tokens": 165,
+          "request_index": 6,
+          "round_index": 0,
+          "text_preview": " case_6_0_18 case_6_0_19 case_6_0_20 case_6_0_21 case_6_",
+          "wall_s": 14.903391416000886
+        },
+        {
+          "completion_tokens": 32,
+          "concurrency": 8,
+          "error": "",
+          "prompt_chars": 248,
+          "prompt_tokens": 47,
+          "request_index": 7,
+          "round_index": 0,
+          "text_preview": " If the user asks for two, you MUST provide exactly two sentences. Do not use bullet points or numbered lists. Do not repeat the user's request. Do",
+          "wall_s": 14.898309500000323
+        }
+      ],
+      "started_utc": "2026-05-22T08:58:50Z",
+      "wall_s": 14.90856708299907
+    }
+  ],
+  "realistic_workload_matrix": [
+    {
+      "concurrency": 1,
+      "max_aggregate_tps": 9.982775422924512,
+      "mean_aggregate_tps": 9.982775422924512,
+      "mean_completion_tokens_per_request": 32.0,
+      "mean_per_stream_tps": 9.982775422924512,
+      "mean_requests_per_second": 0.311961731966391,
+      "median_aggregate_tps": 9.982775422924512,
+      "min_aggregate_tps": 9.982775422924512,
+      "output_length": 32,
+      "rounds": 1,
+      "successful_rounds": 1,
+      "total_completion_tokens": 32,
+      "total_errors": 0,
+      "total_prompt_tokens": 26
+    },
+    {
+      "concurrency": 8,
+      "max_aggregate_tps": 17.17133501662468,
+      "mean_aggregate_tps": 17.17133501662468,
+      "mean_completion_tokens_per_request": 32.0,
+      "mean_per_stream_tps": 2.146416877078085,
+      "mean_requests_per_second": 0.5366042192695213,
+      "median_aggregate_tps": 17.17133501662468,
+      "min_aggregate_tps": 17.17133501662468,
+      "output_length": 32,
+      "rounds": 1,
+      "successful_rounds": 1,
+      "total_completion_tokens": 256,
+      "total_errors": 0,
+      "total_prompt_tokens": 795
+    }
+  ],
+  "recommendation": "For ~256-token Centaur eval outputs, use concurrency 8: nearest measured output_length=32 had 17.171 aggregate tok/s and 2.146 per-stream tok/s.",
+  "request_output_lengths": [
+    32
+  ],
+  "runtime": "vllm",
+  "runtime_version": "0.1.dev16581+gdda4668b5.d20260521",
+  "speculative_config": {},
+  "task_quality_score": null,
+  "time_to_first_token_ms": 0.0,
+  "time_to_first_token_source": "not separately measured by the non-streaming completions matrix",
+  "tokens_per_second": 17.17133501662468,
+  "topline_result": {
+    "best_aggregate_tps": 17.17133501662468,
+    "best_concurrency": 8,
+    "best_output_length": 32,
+    "mean_per_stream_tps": 2.146416877078085
+  }
+}

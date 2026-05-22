@@ -1,0 +1,16 @@
+aitopatom-9ab9
+10.10.100.10    spark0-ring
+10.10.100.11    spark1-ring
+10.10.100.12    spark2-ring
+PING spark1-ring (10.10.100.11) 8972(9000) bytes of data.
+8980 bytes from spark1-ring (10.10.100.11): icmp_seq=1 ttl=64 time=0.215 ms
+
+--- spark1-ring ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.215/0.215/0.215/0.000 ms
+PING spark2-ring (10.10.100.12) 8972(9000) bytes of data.
+8980 bytes from spark2-ring (10.10.100.12): icmp_seq=1 ttl=63 time=0.398 ms
+
+--- spark2-ring ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.398/0.398/0.398/0.000 ms

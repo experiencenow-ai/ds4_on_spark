@@ -1,0 +1,218 @@
+WARNING 05-22 08:51:50 [envs.py:1914] Unknown vLLM environment variable detected: VLLM_BASE_DIR
+INFO 05-22 08:51:50 [config.py:800] Detected quantization_config.scale_fmt=ue8m0; enabling UE8M0 for DeepGEMM.
+INFO 05-22 08:51:56 [model.py:568] Resolved architecture: DeepseekV4ForCausalLM
+INFO 05-22 08:51:56 [model.py:1697] Using max model len 8192
+INFO 05-22 08:51:56 [cache.py:261] Using fp8 data type to store kv cache. It reduces the GPU memory footprint and boosts the performance. Meanwhile, it may cause accuracy drop without a proper scaling factor
+INFO 05-22 08:51:56 [arg_utils.py:1844] Inferred data_parallel_rank 0 from node_rank 1
+INFO 05-22 08:51:56 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=8192.
+INFO 05-22 08:51:56 [vllm.py:895] Asynchronous scheduling is enabled.
+INFO 05-22 08:51:56 [kernel.py:212] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+WARNING 05-22 08:51:56 [vllm.py:1309] Auto-initialization of reasoning token IDs failed. Please check whether your reasoning parser has implemented the `reasoning_start_str` and `reasoning_end_str`.
+INFO 05-22 08:51:56 [compilation.py:312] Enabled custom fusions: norm_quant, act_quant
+INFO 05-22 08:51:56 [serve.py:186] Launching vLLM (v0.1.dev16581+gdda4668b5.d20260521) headless multiproc executor, with head node address 10.10.100.10:29537 for torch.distributed process group.
+WARNING 05-22 08:51:56 [multiproc_executor.py:1029] Reducing Torch parallelism from 20 threads to 1 to avoid unnecessary CPU contention. Set OMP_NUM_THREADS in the external environment to tune this value as needed.
+(Worker pid=126) INFO 05-22 08:52:00 [parallel_state.py:1410] world_size=3 rank=1 local_rank=0 distributed_init_method=tcp://10.10.100.10:29537 backend=nccl
+edgexpert-d623:126:126 [0] NCCL INFO ncclOsDlopen(libnccl-env.so) failed: libnccl-env.so: cannot open shared object file: No such file or directory
+edgexpert-d623:126:126 [0] NCCL INFO ENV/Plugin: Could not find: libnccl-env.so
+edgexpert-d623:126:126 [0] NCCL INFO cudaDriverVersion 13020
+edgexpert-d623:126:126 [0] NCCL INFO NCCL_SOCKET_FAMILY set by environment to AF_INET
+edgexpert-d623:126:126 [0] NCCL INFO NCCL_SOCKET_IFNAME set by environment to wlP9s9
+edgexpert-d623:126:126 [0] NCCL INFO Bootstrap: Using wlP9s9:192.168.1.226<0>
+edgexpert-d623:126:126 [0] NCCL INFO NCCL version 2.30.4+cuda13.2
+edgexpert-d623:126:126 [0] NCCL INFO NCCL git version HEAD 747384637
+edgexpert-d623:126:126 [0] NCCL INFO ncclOsDlopen(libnccl-net.so) failed: libnccl-net.so: cannot open shared object file: No such file or directory
+edgexpert-d623:126:126 [0] NCCL INFO NET/Plugin: Could not find: libnccl-net.so
+edgexpert-d623:126:126 [0] NCCL INFO NCCL_IB_DISABLE set by environment to 1.
+edgexpert-d623:126:126 [0] NCCL INFO transport/net_ib/init.cc:448 -> 3
+edgexpert-d623:126:126 [0] NCCL INFO Failed to initialize NET plugin IB
+edgexpert-d623:126:126 [0] NCCL INFO NCCL_SOCKET_FAMILY set by environment to AF_INET
+edgexpert-d623:126:126 [0] NCCL INFO NCCL_SOCKET_IFNAME set by environment to wlP9s9
+edgexpert-d623:126:126 [0] NCCL INFO NET/Socket : Using [0]wlP9s9:192.168.1.226<0>
+edgexpert-d623:126:126 [0] NCCL INFO Initialized NET plugin Socket
+edgexpert-d623:126:126 [0] NCCL INFO Assigned NET plugin Socket to comm
+edgexpert-d623:126:126 [0] NCCL INFO ncclOsDlopen(libnccl-gin.so) failed: libnccl-gin.so: cannot open shared object file: No such file or directory
+edgexpert-d623:126:126 [0] NCCL INFO GIN/Plugin: Could not find: libnccl-gin.so
+
+[2026-05-22 08:52:15] edgexpert-d623:126:126 [0] misc/ibvwrap.cc:173 NCCL WARN lib wrapper not initialized.
+edgexpert-d623:126:126 [0] NCCL INFO transport/net_ib/gdr.cc:56 -> 3
+edgexpert-d623:126:126 [0] NCCL INFO Failed to initialize any GIN plugin
+edgexpert-d623:126:126 [0] NCCL INFO Using network Socket
+edgexpert-d623:126:126 [0] NCCL INFO Loaded NVML from libnvidia-ml.so.1
+edgexpert-d623:126:126 [0] NCCL INFO [Rank 1] ncclCommInitRank comm 0x357c2070 rank 1 nranks 3 cudaDev 0 nvmlDev 0 busId f01000 commId 0xc4e9fada42aa8eae - Init START
+edgexpert-d623:126:126 [0] NCCL INFO RAS client listening socket at 127.0.0.1<28028>
+edgexpert-d623:126:126 [0] NCCL INFO Bootstrap timings total 0.042658 (create 0.000026, send 0.018034, recv 0.011575, ring 0.008268, delay 0.000000)
+edgexpert-d623:126:126 [0] NCCL INFO ncclTopoGetCpuAffinity: Affinity for GPU 0 is empty, ignoring. (GPU affinity =  ; CPU affinity = 0-19).
+edgexpert-d623:126:126 [0] NCCL INFO Rank 1: 1 Net devices
+edgexpert-d623:126:126 [0] NCCL INFO Rank 1: 0 CollNet devices
+edgexpert-d623:126:126 [0] NCCL INFO comm 0x357c2070 rank 1 nRanks 3 nNodes 3 localRanks 1 localRank 0 MNNVL 0
+edgexpert-d623:126:126 [0] NCCL INFO Trees [0] -1/-1/-1->1->2 [1] -1/-1/-1->1->2 [2] -1/-1/-1->1->2 [3] 0/-1/-1->1->-1 [4] 0/-1/-1->1->-1 [5] 0/-1/-1->1->-1
+edgexpert-d623:126:126 [0] NCCL INFO P2P Chunksize set to 262144
+edgexpert-d623:126:126 [0] NCCL INFO Tuning P2P operations with maxP2pPeers = 3
+edgexpert-d623:126:126 [0] NCCL INFO ncclOsDlopen(libnccl-profiler.so) failed: libnccl-profiler.so: cannot open shared object file: No such file or directory
+edgexpert-d623:126:126 [0] NCCL INFO PROFILER/Plugin: Could not find: libnccl-profiler.so
+edgexpert-d623:126:126 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0 isAllCudaP2p 1
+edgexpert-d623:126:163 [0] NCCL INFO [Proxy Service] Device 0 CPU core 11
+edgexpert-d623:126:164 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 6
+edgexpert-d623:126:126 [0] NCCL INFO ncclOsDlopen(libnccl-tuner.so) failed: libnccl-tuner.so: cannot open shared object file: No such file or directory
+edgexpert-d623:126:126 [0] NCCL INFO TUNER/Plugin: Could not find: libnccl-tuner.so
+edgexpert-d623:126:126 [0] NCCL INFO threadThresholds 8/8/64 | 24/8/64 | 512 | 512
+edgexpert-d623:126:126 [0] NCCL INFO 6 coll channels, 6 collnet channels, 0 nvls(Worker pid=126) INFO 05-22 08:52:15 [parallel_state.py:1723] rank 1 in world size 3 is assigned as DP rank 0, PP rank 1, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:52:16 [utils.py:130] Hidden layers were unevenly partitioned: [14,15,14]. This can be manually overridden using the VLLM_PP_LAYER_PARTITION environment variable
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:52:17 [deepseek_v4.py:168] DeepSeek V4 expert_dtype resolved to 'fp4'
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:52:17 [deepseek_v4_attention.py:1680] Using FP8 indexer cache for Lightning Indexer.
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:52:17 [deepseek_v4_attention.py:750] Using DeepSeek's fp8_ds_mla KV cache format. To use standard fp8 kv-cache format, please set `--attention-backend FLASHINFER_MLA_SPARSE`
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:52:17 [mxfp4.py:555] Using 'MARLIN' Mxfp4 MoE backend.
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:52:19 [weight_utils.py:952] Filesystem type for checkpoints: EXT4. Checkpoint size: 148.66 GiB. Available RAM: 53.78 GiB.
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:52:19 [weight_utils.py:982] Auto-prefetch is disabled because the filesystem (EXT4) is not a recognized network FS (NFS/Lustre) and the checkpoint size (148.66 GiB) exceeds 90% of available RAM (53.78 GiB).
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:53:53 [default_loader.py:405] Loading weights took 93.41 seconds
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:53:54 [mxfp4.py:1500] Using MoEPrepareAndFinalizeNoDPEPModular
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:01 [gpu_model_runner.py:5053] Model loading took 50.29 GiB memory and 104.715953 seconds
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:04 [backends.py:1089] Using cache directory: /root/.cache/vllm/torch_compile_cache/b47cdd79de/rank_1_0/backbone for vLLM's torch.compile
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:04 [backends.py:1148] Dynamo bytecode transform time: 2.78 s
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:06 [backends.py:378] Cache the graph of compile range (1, 8192) for later use
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:08 [backends.py:393] Compiling a graph for compile range (1, 8192) takes 3.36 s
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:10 [decorators.py:708] saved AOT compiled function to /root/.cache/vllm/torch_compile_cache/torch_aot_compile/6b1cf88444311e3a8f34c02e17d3f1ca392460f472055ba6ba7a40d7198c1bf8/rank_1_0/model
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:10 [monitor.py:53] torch.compile took 8.50 s in total
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:54:12  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:54:15  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:15 [fp8_utils.py:803] Using configuration from /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=1536,K=4096,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json for W8A8 Block FP8 kernel.
+(Worker_PP1_EP0 pid=126) WARNING 05-22 08:54:16 [fp8_utils.py:812] Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=32768,K=1024,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:16 [fp8_utils.py:803] Using configuration from /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=8192,K=1024,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json for W8A8 Block FP8 kernel.
+(Worker_PP1_EP0 pid=126) WARNING 05-22 08:54:17 [fp8_utils.py:812] Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=4096,K=8192,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:54:18  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_post_tilelang` with `out_idx=None`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:54:20  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_post_tilelang`
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:20 [fp8_utils.py:803] Using configuration from /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=4096,K=4096,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json for W8A8 Block FP8 kernel.
+(Worker_PP1_EP0 pid=126) WARNING 05-22 08:54:21 [fp8_utils.py:812] Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=4096,K=2048,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:32 [monitor.py:81] Initial profiling/warmup run took 22.73 s
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:33 [gpu_model_runner.py:6167] Profiling CUDA graph memory: PIECEWISE=51 (largest=512), FULL=51 (largest=512)
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:54:33  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:54:36  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:44 [gpu_model_runner.py:6246] Estimated CUDA graph memory: 1.39 GiB total
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:44 [gpu_worker.py:462] Available KV cache memory: 45.3 GiB
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:44 [gpu_worker.py:477] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.8500 is equivalent to --gpu-memory-utilization=0.8386 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.8614. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:54:58 [deepseek_v4_mhc_warmup.py:232] Warming up DeepSeek V4 mHC TileLang kernels for token sizes: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512, 1024, 2048, 4096, 8192]
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:02  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:07  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:09  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:12  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:14  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:17  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:18  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:21  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:22  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:25  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:26  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:29  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:30  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:33  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:36  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `hc_head_fuse_tilelang` with `out_idx=None`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:38  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `hc_head_fuse_tilelang`
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:55:39 [deepseek_v4_mhc_warmup.py:241] DeepSeek V4 mHC TileLang warmup finished in 40.75 seconds.
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:55:39 [kernel_warmup.py:371] Warming up DeepSeek V4 sparse MLA attention for mixed tokens=16, prefill tokens=8192, and MTP uniform decode requests=[].
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:43  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_fused_tilelang` with `out_idx=None`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:44  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_fused_tilelang`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:45  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:55:47  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:57:07 [kernel_warmup.py:208] Warming up DeepSeek V4 request preparation kernels.
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:57:08,520 - INFO - autotuner.py:622 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:57:08,570 - INFO - autotuner.py:641 - flashinfer.jit: [Autotuner]: Autotuning process ends
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:57:38  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_fused_tilelang` with `out_idx=None`
+(Worker_PP1_EP0 pid=126) 2026-05-22 08:57:40  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_fused_tilelang`
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:58:03 [gpu_model_runner.py:6347] Graph capturing finished in 55 secs, took 1.81 GiB
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:58:03 [gpu_worker.py:621] CUDA graph pool memory: 1.81 GiB (actual), 1.39 GiB (estimated), difference: 0.42 GiB (23.4%).
+(Worker_PP1_EP0 pid=126) INFO 05-22 08:58:03 [jit_monitor.py:54] Kernel JIT monitor activated — Triton JIT compilations during inference will be logged as warnings.
+ channels, 8 p2p channels, 1 p2p channels per peer
+edgexpert-d623:126:126 [0] NCCL INFO Symmetric memory is not supported. cuMemEnable 1, globalGinSupport 0, globalNicFused 0 cuMemGdrSupport 0
+edgexpert-d623:126:126 [0] NCCL INFO ncclCommInitRank comm 0x357c2070 rank 1 nranks 3 cudaDev 0 nvmlDev 0 busId f01000 commId 0xc4e9fada42aa8eae - Init COMPLETE
+edgexpert-d623:126:126 [0] NCCL INFO Init timings - ncclCommInitRank: rank 1 nranks 3 total 0.23 (kernels 0.14, alloc 0.00, bootstrap 0.04, allgathers 0.02, topo 0.01, graphs 0.00, connections 0.00, rest 0.00)
+edgexpert-d623:126:126 [0] NCCL INFO Channel 03/0 : 0[0] -> 1[0] [receive] via NET/Socket/0
+edgexpert-d623:126:126 [0] NCCL INFO Channel 04/0 : 0[0] -> 1[0] [receive] via NET/Socket/0
+edgexpert-d623:126:165 [0] NCCL INFO [Proxy Progress] Device 0 CPU core 19
+edgexpert-d623:126:126 [0] NCCL INFO Channel 05/0 : 0[0] -> 1[0] [receive] via NET/Socket/0
+edgexpert-d623:126:126 [0] NCCL INFO Channel 00/0 : 1[0] -> 2[0] [send] via NET/Socket/0
+edgexpert-d623:126:126 [0] NCCL INFO Channel 01/0 : 1[0] -> 2[0] [send] via NET/Socket/0
+edgexpert-d623:126:126 [0] NCCL INFO Channel 02/0 : 1[0] -> 2[0] [send] via NET/Socket/0
+edgexpert-d623:126:126 [0] NCCL INFO Channel 00/0 : 2[0] -> 1[0] [receive] via NET/Socket/0
+edgexpert-d623:126:126 [0] NCCL INFO Channel 01/0 : 2[0] -> 1[0] [receive] via NET/Socket/0
+edgexpert-d623:126:126 [0] NCCL INFO Channel 02/0 : 2[0] -> 1[0] [receive] via NET/Socket/0
+edgexpert-d623:126:126 [0] NCCL INFO Channel 03/0 : 1[0] -> 0[0] [send] via NET/Socket/0
+edgexpert-d623:126:126 [0] NCCL INFO Channel 04/0 : 1[0] -> 0[0] [send] via NET/Socket/0
+edgexpert-d623:126:126 [0] NCCL INFO Channel 05/0 : 1[0] -> 0[0] [send] via NET/Socket/0
+edgexpert-d623:126:126 [0] NCCL INFO Connected all trees
+[rank1]:[W522 08:58:47.036656503 ProcessGroupNCCL.cpp:4094] Warning: An unbatched P2P op (send/recv) was called on this ProcessGroup with size 3.  In lazy initialization mode, this will result in a new 2-rank NCCL communicator to be created. (function operator())
+(Worker_PP1_EP0 pid=126) WARNING 05-22 08:58:47 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _combine_topk_swa_indices_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_PP1_EP0 pid=126) /usr/local/lib/python3.12/dist-packages/vllm/distributed/parallel_state.py:674: UserWarning: The given buffer is not writable, and PyTorch does not support non-writable tensors. This means you can write to the underlying (supposedly non-writable) buffer using the tensor. You may want to copy the buffer to protect its data or make it writable before converting it to a tensor. This type of warning will be suppressed for the rest of this program. (Triggered internally at /pytorch/torch/csrc/utils/tensor_new.cpp:1586.)
+(Worker_PP1_EP0 pid=126)   object_tensor = torch.frombuffer(pickle.dumps(obj), dtype=torch.uint8)
+edgexpert-d623:126:126 [0] NCCL INFO Comm config Blocking set to 1
+edgexpert-d623:126:126 [0] NCCL INFO Initialized NET plugin Socket
+edgexpert-d623:126:126 [0] NCCL INFO Assigned NET plugin Socket to comm
+edgexpert-d623:126:126 [0] NCCL INFO Failed to initialize any GIN plugin
+edgexpert-d623:126:126 [0] NCCL INFO Using network Socket
+edgexpert-d623:126:126 [0] NCCL INFO [Rank 1] ncclCommInitRankConfig comm 0xac6e0ef0 rank 1 nranks 2 cudaDev 0 nvmlDev 0 busId f01000 commId 0xc8f133a9c20a43da - Init START
+edgexpert-d623:126:126 [0] NCCL INFO Bootstrap timings total 0.021021 (create 0.000035, send 0.003198, recv 0.010608, ring 0.003139, delay 0.000000)
+edgexpert-d623:126:126 [0] NCCL INFO ncclTopoGetCpuAffinity: Affinity for GPU 0 is empty, ignoring. (GPU affinity =  ; CPU affinity = 0-19).
+edgexpert-d623:126:126 [0] NCCL INFO Rank 1: 1 Net devices
+edgexpert-d623:126:126 [0] NCCL INFO Rank 1: 0 CollNet devices
+edgexpert-d623:126:126 [0] NCCL INFO comm 0xac6e0ef0 rank 1 nRanks 2 nNodes 2 localRanks 1 localRank 0 MNNVL 0
+edgexpert-d623:126:126 [0] NCCL INFO Trees [0] -1/-1/-1->1->0 [1] -1/-1/-1->1->0 [2] -1/-1/-1->1->0 [3] 0/-1/-1->1->-1 [4] 0/-1/-1->1->-1 [5] 0/-1/-1->1->-1
+edgexpert-d623:126:126 [0] NCCL INFO P2P Chunksize set to 262144
+edgexpert-d623:126:126 [0] NCCL INFO Tuning P2P operations with maxP2pPeers = 2
+edgexpert-d623:126:126 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0 isAllCudaP2p 1
+edgexpert-d623:126:1059 [0] NCCL INFO [Proxy Service] Device 0 CPU core 12
+edgexpert-d623:126:1060 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 1
+edgexpert-d623:126:126 [0] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+edgexpert-d623:126:126 [0] NCCL INFO 6 coll channels, 6 collnet channels, 0 nvls channels, 8 p2p channels, 1 p2p channels per peer
+edgexpert-d623:126:126 [0] NCCL INFO Symmetric memory is not supported. cuMemEnable 1, globalGinSupport 0, globalNicFused 0 cuMemGdrSupport 0
+edgexpert-d623:126:126 [0] NCCL INFO ncclCommInitRankConfig comm 0xac6e0ef0 rank 1 nranks 2 cudaDev 0 nvmlDev 0 busId f01000 commId 0xc8f133a9c20a43da - Init COMPLETE
+edgexpert-d623:126:126 [0] NCCL INFO Init timings - ncclCommInitRankConfig: rank 1 nranks 2 total 0.13 (kernels 0.08, alloc 0.01, bootstrap 0.02, allgathers 0.02, topo 0.00, graphs 0.00, connections 0.00, rest 0.00)
+edgexpert-d623:126:126 [0] NCCL INFO Channel 04/1 : 0[0] -> 1[0] [receive] via NET/Socket/0/Shared
+edgexpert-d623:126:1061 [0] NCCL INFO [Proxy Progress] Device 0 CPU core 12
+[rank1]:[W522 08:58:47.459837637 ProcessGroupNCCL.cpp:4094] Warning: An unbatched P2P op (send/recv) was called on this ProcessGroup with size 3.  In lazy initialization mode, this will result in a new 2-rank NCCL communicator to be created. (function operator())
+edgexpert-d623:126:126 [0] NCCL INFO Comm config Blocking set to 1
+edgexpert-d623:126:126 [0] NCCL INFO Initialized NET plugin Socket
+edgexpert-d623:126:126 [0] NCCL INFO Assigned NET plugin Socket to comm
+edgexpert-d623:126:126 [0] NCCL INFO Failed to initialize any GIN plugin
+edgexpert-d623:126:126 [0] NCCL INFO Using network Socket
+edgexpert-d623:126:126 [0] NCCL INFO [Rank 0] ncclCommInitRankConfig comm 0xac893f60 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId f01000 commId 0x415da433b7dcb0f0 - Init START
+edgexpert-d623:126:126 [0] NCCL INFO Bootstrap timings total 0.038724 (create 0.000014, send 0.000080, recv 0.025625, ring 0.002973, delay 0.000000)
+edgexpert-d623:126:126 [0] NCCL INFO ncclTopoGetCpuAffinity: Affinity for GPU 0 is empty, ignoring. (GPU affinity =  ; CPU affinity = 0-19).
+edgexpert-d623:126:126 [0] NCCL INFO Rank 0: 1 Net devices
+edgexpert-d623:126:126 [0] NCCL INFO Rank 0: 0 CollNet devices
+edgexpert-d623:126:126 [0] NCCL INFO Local Net device counts across ranks: min 1 max 1
+edgexpert-d623:126:126 [0] NCCL INFO Local CollNet device counts across ranks: min 0 max 0
+edgexpert-d623:126:126 [0] NCCL INFO comm 0xac893f60 rank 0 nRanks 2 nNodes 2 localRanks 1 localRank 0 MNNVL 0
+edgexpert-d623:126:126 [0] NCCL INFO Channel 00/06 : 0 1
+edgexpert-d623:126:126 [0] NCCL INFO Channel 01/06 : 0 1
+edgexpert-d623:126:126 [0] NCCL INFO Channel 02/06 : 0 1
+edgexpert-d623:126:126 [0] NCCL INFO Channel 03/06 : 0 1
+edgexpert-d623:126:126 [0] NCCL INFO Channel 04/06 : 0 1
+edgexpert-d623:126:126 [0] NCCL INFO Channel 05/06 : 0 1
+edgexpert-d623:126:126 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] 1/-1/-1->0->-1 [2] 1/-1/-1->0->-1 [3] -1/-1/-1->0->1 [4] -1/-1/-1->0->1 [5] -1/-1/-1->0->1
+edgexpert-d623:126:126 [0] NCCL INFO P2P Chunksize set to 262144
+edgexpert-d623:126:126 [0] NCCL INFO Tuning P2P operations with maxP2pPeers = 2
+edgexpert-d623:126:126 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0 isAllCudaP2p 1
+edgexpert-d623:126:1064 [0] NCCL INFO [Proxy Service] Device 0 CPU core 19
+edgexpert-d623:126:1065 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 5
+edgexpert-d623:126:126 [0] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+edgexpert-d623:126:126 [0] NCCL INFO 6 coll channels, 6 collnet channels, 0 nvls channels, 8 p2p channels, 1 p2p channels per peer
+edgexpert-d623:126:126 [0] NCCL INFO Symmetric memory is not supported. cuMemEnable 1, globalGinSupport 0, globalNicFused 0 cuMemGdrSupport 0
+edgexpert-d623:126:126 [0] NCCL INFO CC Off, workFifoBytes 1048576
+edgexpert-d623:126:126 [0] NCCL INFO ncclCommInitRankConfig comm 0xac893f60 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId f01000 commId 0x415da433b7dcb0f0 - Init COMPLETE
+edgexpert-d623:126:126 [0] NCCL INFO Init timings - ncclCommInitRankConfig: rank 0 nranks 2 total 0.05 (kernels 0.00, alloc 0.00, bootstrap 0.04, allgathers 0.01, topo 0.00, graphs 0.00, connections 0.00, rest 0.00)
+edgexpert-d623:126:126 [0] NCCL INFO Channel 04/1 : 0[0] -> 1[0] [send] via NET/Socket/0/Shared
+edgexpert-d623:126:1066 [0] NCCL INFO [Proxy Progress] Device 0 CPU core 19
+edgexpert-d623:126:126 [0] NCCL INFO Comm config Blocking set to 1
+edgexpert-d623:126:126 [0] NCCL INFO Initialized NET plugin Socket
+edgexpert-d623:126:126 [0] NCCL INFO Assigned NET plugin Socket to comm
+edgexpert-d623:126:126 [0] NCCL INFO Failed to initialize any GIN plugin
+edgexpert-d623:126:126 [0] NCCL INFO Using network Socket
+edgexpert-d623:126:126 [0] NCCL INFO [Rank 1] ncclCommInitRankConfig comm 0xacaab110 rank 1 nranks 3 cudaDev 0 nvmlDev 0 busId f01000 commId 0xee405f99e37992e7 - Init START
+edgexpert-d623:126:126 [0] NCCL INFO Bootstrap timings total 0.205928 (create 0.000024, send 0.015053, recv 0.172994, ring 0.012291, delay 0.000000)
+edgexpert-d623:126:126 [0] NCCL INFO ncclTopoGetCpuAffinity: Affinity for GPU 0 is empty, ignoring. (GPU affinity =  ; CPU affinity = 0-19).
+edgexpert-d623:126:126 [0] NCCL INFO Rank 1: 1 Net devices
+edgexpert-d623:126:126 [0] NCCL INFO Rank 1: 0 CollNet devices
+edgexpert-d623:126:126 [0] NCCL INFO comm 0xacaab110 rank 1 nRanks 3 nNodes 3 localRanks 1 (Worker_PP1_EP0 pid=126) WARNING 05-22 08:58:51 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _compute_prefill_metadata_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_PP1_EP0 pid=126) WARNING 05-22 08:58:54 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _tf32_hc_prenorm_gemm_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_PP1_EP0 pid=126) WARNING 05-22 08:58:54 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _w8a8_triton_block_scaled_mm. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_PP1_EP0 pid=126) WARNING 05-22 08:58:55 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _deepseek_v4_sm12x_fp8_einsum_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_PP1_EP0 pid=126) WARNING 05-22 08:59:33 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _build_prefill_chunk_metadata_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.

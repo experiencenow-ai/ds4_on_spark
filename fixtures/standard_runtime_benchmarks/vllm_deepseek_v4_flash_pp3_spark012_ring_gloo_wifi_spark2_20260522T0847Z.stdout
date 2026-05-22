@@ -1,0 +1,151 @@
+WARNING 05-22 08:47:18 [envs.py:1914] Unknown vLLM environment variable detected: VLLM_BASE_DIR
+INFO 05-22 08:47:18 [config.py:800] Detected quantization_config.scale_fmt=ue8m0; enabling UE8M0 for DeepGEMM.
+INFO 05-22 08:47:24 [model.py:568] Resolved architecture: DeepseekV4ForCausalLM
+INFO 05-22 08:47:24 [model.py:1697] Using max model len 8192
+INFO 05-22 08:47:24 [cache.py:261] Using fp8 data type to store kv cache. It reduces the GPU memory footprint and boosts the performance. Meanwhile, it may cause accuracy drop without a proper scaling factor
+INFO 05-22 08:47:24 [arg_utils.py:1844] Inferred data_parallel_rank 0 from node_rank 2
+INFO 05-22 08:47:24 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=8192.
+INFO 05-22 08:47:24 [vllm.py:895] Asynchronous scheduling is enabled.
+INFO 05-22 08:47:24 [kernel.py:212] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+WARNING 05-22 08:47:25 [vllm.py:1309] Auto-initialization of reasoning token IDs failed. Please check whether your reasoning parser has implemented the `reasoning_start_str` and `reasoning_end_str`.
+INFO 05-22 08:47:25 [compilation.py:312] Enabled custom fusions: norm_quant, act_quant
+INFO 05-22 08:47:25 [serve.py:186] Launching vLLM (v0.1.dev16581+gdda4668b5.d20260521) headless multiproc executor, with head node address 10.10.100.10:29536 for torch.distributed process group.
+WARNING 05-22 08:47:25 [multiproc_executor.py:1029] Reducing Torch parallelism from 20 threads to 1 to avoid unnecessary CPU contention. Set OMP_NUM_THREADS in the external environment to tune this value as needed.
+(Worker pid=125) INFO 05-22 08:47:28 [parallel_state.py:1410] world_size=3 rank=2 local_rank=0 distributed_init_method=tcp://10.10.100.10:29536 backend=nccl
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsDlopen(libnccl-env.so) failed: libnccl-env.so: cannot open shared object file: No such file or directory
+aitopatom-931a:125:125 [0] NCCL INFO ENV/Plugin: Could not find: libnccl-env.so
+aitopatom-931a:125:125 [0] NCCL INFO cudaDriverVersion 13020
+aitopatom-931a:125:125 [0] NCCL INFO NCCL_SOCKET_FAMILY set by environment to AF_INET
+aitopatom-931a:125:125 [0] NCCL INFO NCCL_SOCKET_IFNAME set by environment to lo
+aitopatom-931a:125:125 [0] NCCL INFO Bootstrap: Using lo:127.0.0.1<0>
+aitopatom-931a:125:125 [0] NCCL INFO NCCL version 2.30.4+cuda13.2
+aitopatom-931a:125:125 [0] NCCL INFO NCCL git version HEAD 747384637
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsDlopen(libnccl-net.so) failed: libnccl-net.so: cannot open shared object file: No such file or directory
+aitopatom-931a:125:125 [0] NCCL INFO NET/Plugin: Could not find: libnccl-net.so
+aitopatom-931a:125:125 [0] NCCL INFO NCCL_IB_DISABLE set by environment to 1.
+aitopatom-931a:125:125 [0] NCCL INFO transport/net_ib/init.cc:448 -> 3
+aitopatom-931a:125:125 [0] NCCL INFO Failed to initialize NET plugin IB
+aitopatom-931a:125:125 [0] NCCL INFO NCCL_SOCKET_FAMILY set by environment to AF_INET
+aitopatom-931a:125:125 [0] NCCL INFO NCCL_SOCKET_IFNAME set by environment to lo
+aitopatom-931a:125:125 [0] NCCL INFO NET/Socket : Using [0]lo:127.0.0.1<0>
+aitopatom-931a:125:125 [0] NCCL INFO Initialized NET plugin Socket
+aitopatom-931a:125:125 [0] NCCL INFO Assigned NET plugin Socket to comm
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsDlopen(libnccl-gin.so) failed: libnccl-gin.so: cannot open shared object file: No such file or directory
+aitopatom-931a:125:125 [0] NCCL INFO GIN/Plugin: Could not find: libnccl-gin.so
+
+[2026-05-22 08:47:46] aitopatom-931a:125:125 [0] misc/ibvwrap.cc:173 NCCL WARN lib wrapper not initialized.
+aitopatom-931a:125:125 [0] NCCL INFO transport/net_ib/gdr.cc:56 -> 3
+aitopatom-931a:125:125 [0] NCCL INFO Failed to initialize any GIN plugin
+aitopatom-931a:125:125 [0] NCCL INFO Using network Socket
+aitopatom-931a:125:125 [0] NCCL INFO Loaded NVML from libnvidia-ml.so.1
+aitopatom-931a:125:125 [0] NCCL INFO [Rank 2] ncclCommInitRank comm 0x245da8f0 rank 2 nranks 3 cudaDev 0 nvmlDev 0 busId f01000 commId 0x4a5d80f184eb621a - Init START
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (1/34) after sleep for 100 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (2/34) after sleep for 200 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (3/34) after sleep for 300 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (4/34) after sleep for 400 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (5/34) after sleep for 500 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (6/34) after sleep for 600 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (7/34) after sleep for 700 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (8/34) after sleep for 800 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (9/34) after sleep for 900 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (10/34) after sleep for 1000 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (11/34) after sleep for 1100 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (12/34) after sleep for 1200 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (13/34) after sleep for 1300 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (14/34) after sleep for 1400 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (15/34) after sleep for 1500 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (16/34) after sleep for 1600 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (17/34) after sleep for 1700 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (18/34) after sleep for 1800 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (19/34) after sleep for 1900 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (20/34) after sleep for 2000 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (21/34) after sleep for 2100 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (22/34) after sleep for 2200 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (23/34) after sleep for 2300 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (24/34) after sleep for 2400 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (25/34) after sleep for 2500 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (26/34) after sleep for 2600 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (27/34) after sleep for 2700 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (28/34) after sleep for 2800 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (29/34) after sleep for 2900 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (30/34) after sleep for 3000 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (31/34) after sleep for 3100 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (32/34) after sleep for 3200 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (33/34) after sleep for 3300 msec
+aitopatom-931a:125:125 [0] NCCL INFO ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, retrying (34/34) after sleep for 3400 msec
+
+[2026-05-22 08:48:46] aitopatom-931a:125:125 [0] os/linux.cc:276 NCCL WARN ncclOsSocketPollConnect: connect to 127.0.0.1<33507> returned Connection refused, exceeded error retry count after 35 attempts
+aitopatom-931a:125:125 [0] NCCL INFO misc/socket.cc:394 -> 6
+aitopatom-931a:125:125 [0] NCCL INFO misc/socket.cc:443 -> 6
+aitopatom-931a:125:125 [0] NCCL INFO bootstrap.cc:660 -> 6
+aitopatom-931a:125:125 [0] NCCL INFO bootstrap.cc:7(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870] WorkerProc failed to start.
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870] Traceback (most recent call last):
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/executor/multiproc_executor.py", line 837, in worker_main
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     worker = WorkerProc(*args, **kwargs)
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]   File "/usr/local/lib/python3.12/dist-packages/vllm/tracing/otel.py", line 178, in sync_wrapper
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     return func(*args, **kwargs)
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]            ^^^^^^^^^^^^^^^^^^^^^
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/executor/multiproc_executor.py", line 611, in __init__
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     self.worker.init_device()
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/worker/worker_base.py", line 317, in init_device
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     self.worker.init_device()  # type: ignore
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     ^^^^^^^^^^^^^^^^^^^^^^^^^
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]   File "/usr/local/lib/python3.12/dist-packages/vllm/tracing/otel.py", line 178, in sync_wrapper
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     return func(*args, **kwargs)
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]            ^^^^^^^^^^^^^^^^^^^^^
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/worker/gpu_worker.py", line 283, in init_device
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     init_worker_distributed_environment(
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/worker/gpu_worker.py", line 1151, in init_worker_distributed_environment
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     ensure_model_parallel_initialized(
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]   File "/usr/local/lib/python3.12/dist-packages/vllm/distributed/parallel_state.py", line 1755, in ensure_model_parallel_initialized
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     initialize_model_parallel(
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]   File "/usr/local/lib/python3.12/dist-packages/vllm/distributed/parallel_state.py", line 1649, in initialize_model_parallel
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     _PP = init_model_parallel_group(
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]   File "/usr/local/lib/python3.12/dist-packages/vllm/distributed/parallel_state.py", line 1167, in init_model_parallel_group
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     return GroupCoordinator(
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]            ^^^^^^^^^^^^^^^^^
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]   File "/usr/local/lib/python3.12/dist-packages/vllm/distributed/parallel_state.py", line 376, in __init__
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     self.device_communicator = device_comm_cls(
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]                                ^^^^^^^^^^^^^^^^
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]   File "/usr/local/lib/python3.12/dist-packages/vllm/distributed/device_communicators/cuda_communicator.py", line 75, in __init__
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     self.pynccl_comm = PyNcclCommunicator(
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]                        ^^^^^^^^^^^^^^^^^^^
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]   File "/usr/local/lib/python3.12/dist-packages/vllm/distributed/device_communicators/pynccl.py", line 137, in __init__
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     self.comm: ncclComm_t = self.nccl.ncclCommInitRank(
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]   File "/usr/local/lib/python3.12/dist-packages/vllm/distributed/device_communicators/pynccl_wrapper.py", line 422, in ncclCommInitRank
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     self.NCCL_CHECK(
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]   File "/usr/local/lib/python3.12/dist-packages/vllm/distributed/device_communicators/pynccl_wrapper.py", line 388, in NCCL_CHECK
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870]     raise RuntimeError(f"NCCL error: {error_str}")
+(Worker pid=125) ERROR 05-22 08:48:46 [multiproc_executor.py:870] RuntimeError: NCCL error: remote process exited or there was a network error
+64 -> 6
+aitopatom-931a:125:125 [0] NCCL INFO init.cc:1840 -> 6
+aitopatom-931a:125:125 [0] NCCL INFO init.cc:2387 -> 6
+aitopatom-931a:125:125 [0] NCCL INFO init.cc:2414 -> 6
+[rank2]:[W522 08:48:46.880679496 ProcessGroupNCCL.cpp:1575] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+Traceback (most recent call last):
+  File "/usr/local/bin/vllm", line 10, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/cli/main.py", line 92, in main
+    args.dispatch_function(args)
+  File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/cli/serve.py", line 116, in cmd
+    run_headless(args)
+  File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/cli/serve.py", line 193, in run_headless
+    executor = MultiprocExecutor(vllm_config, monitor_workers=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/vllm/v1/executor/multiproc_executor.py", line 107, in __init__
+    super().__init__(vllm_config)
+  File "/usr/local/lib/python3.12/dist-packages/vllm/tracing/otel.py", line 178, in sync_wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/vllm/v1/executor/abstract.py", line 109, in __init__
+    self._init_executor()
+  File "/usr/local/lib/python3.12/dist-packages/vllm/v1/executor/multiproc_executor.py", line 200, in _init_executor
+    self.workers = WorkerProc.wait_for_ready(unready_workers)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/vllm/v1/executor/multiproc_executor.py", line 747, in wait_for_ready
+    raise e from None
+Exception: WorkerProc initialization failed due to an exception in a background process. See stack trace for root cause.

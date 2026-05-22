@@ -15,7 +15,8 @@ from pathlib import Path
 
 MODEL_MOUNT = "/models/deepseek-v4-flash"
 DEFAULT_MODEL_HOST_PATH = "/home/{host}/models/hf/deepseek-ai/DeepSeek-V4-Flash"
-DEFAULT_NODES = "spark3:0:192.168.1.110,spark4:1:192.168.1.137,spark5:2:192.168.1.245"
+DEFAULT_NODES = "spark3:0:10.10.100.13,spark4:1:10.10.100.14,spark5:2:10.10.100.15"
+DEFAULT_MASTER_ADDR = "10.10.100.13"
 
 
 @dataclass(frozen=True)
@@ -70,11 +71,9 @@ def check(result: subprocess.CompletedProcess[str]) -> None:
 def env_args(node: Node, args: argparse.Namespace) -> list[str]:
 	env = {
 		"FLASHINFER_DISABLE_VERSION_CHECK": "1",
-		"GLOO_SOCKET_IFNAME": args.socket_ifname,
-		"MN_IF_NAME": args.socket_ifname,
-		"NCCL_DEBUG": "WARN",
+		"NCCL_DEBUG": args.nccl_debug,
+		"NCCL_SOCKET_FAMILY": "AF_INET",
 		"NCCL_SOCKET_IFNAME": args.socket_ifname,
-		"OMPI_MCA_btl_tcp_if_include": args.socket_ifname,
 		"RAY_NODE_IP_ADDRESS": node.addr,
 		"RAY_memory_monitor_refresh_ms": "0",
 		"RAY_num_prestart_python_workers": "0",
@@ -82,12 +81,12 @@ def env_args(node: Node, args: argparse.Namespace) -> list[str]:
 		"RAY_OVERRIDE_NODE_IP_ADDRESS": node.addr,
 		"TILELANG_CLEANUP_TEMP_FILES": "1",
 		"TORCH_CUDA_ARCH_LIST": "12.1a",
-		"TP_SOCKET_IFNAME": args.socket_ifname,
-		"UCX_NET_DEVICES": args.socket_ifname,
 		"VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1",
 		"VLLM_HOST_IP": node.addr,
 		"VLLM_TRITON_MLA_SPARSE": "1",
 	}
+	if args.gloo_socket_ifname != "":
+		env["GLOO_SOCKET_IFNAME"] = args.gloo_socket_ifname
 	if not args.enable_ib:
 		env["NCCL_IB_DISABLE"] = "1"
 	return([f"-e {shlex.quote(k + '=' + v)}" for k,v in env.items()])
@@ -95,11 +94,13 @@ def env_args(node: Node, args: argparse.Namespace) -> list[str]:
 
 def docker_run_command(node: Node, args: argparse.Namespace) -> str:
 	bind = f"{node.model_path}:{MODEL_MOUNT}:ro"
+	log_bind = f"{args.host_log_dir}:/host_tmp"
 	env = " ".join(env_args(node,args))
 	return(
 		f"docker run -d --rm --name {shlex.quote(args.container)} --network host "
 		f"--privileged --gpus all --ipc host --security-opt label=disable "
-		f"-v {shlex.quote(bind)} {env} {shlex.quote(args.image)} sleep infinity"
+		f"-v {shlex.quote(bind)} -v {shlex.quote(log_bind)} "
+		f"{env} {shlex.quote(args.image)} sleep infinity"
 	)
 
 
@@ -177,16 +178,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 	p.add_argument("--container", default="vllm_deepseek_v4_flash_pp3_track3_1196")
 	p.add_argument("--image", default="vllm-node-dsv4")
 	p.add_argument("--model-name", default="deepseek-v4-flash")
-	p.add_argument("--master-addr", default="192.168.1.110")
+	p.add_argument("--master-addr", default=DEFAULT_MASTER_ADDR)
 	p.add_argument("--master-port", type=int, default=29516)
 	p.add_argument("--port", type=int, default=8016)
-	p.add_argument("--socket-ifname", default="enp1s0,enP2p1s0,wlP9s9")
+	p.add_argument("--socket-ifname", default="wlP9s9")
+	p.add_argument("--gloo-socket-ifname", default="wlP9s9")
+	p.add_argument("--nccl-debug", default="INFO")
 	p.add_argument("--enable-ib", action="store_true")
 	p.add_argument("--max-model-len", type=int, default=8192)
 	p.add_argument("--max-num-seqs", type=int, default=512)
 	p.add_argument("--max-num-batched-tokens", type=int, default=8192)
 	p.add_argument("--gpu-memory-utilization", type=float, default=0.85)
-	p.add_argument("--remote-log-path", default="/tmp/vllm_pp3_track3_1196.log")
+	p.add_argument("--host-log-dir", default="/tmp")
+	p.add_argument("--remote-log-path", default="/host_tmp/vllm_pp3_track3_1196.log")
 	p.add_argument("--node-start-gap-s", type=float, default=2.0)
 	p.add_argument("--log-tail", type=int, default=80)
 	p.add_argument("--dry-run", action="store_true")

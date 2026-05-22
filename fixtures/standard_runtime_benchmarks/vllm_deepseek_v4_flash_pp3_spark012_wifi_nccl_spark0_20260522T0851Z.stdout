@@ -1,0 +1,346 @@
+(APIServer pid=37) INFO 05-22 08:51:55 [utils.py:306] 
+(APIServer pid=37) INFO 05-22 08:51:55 [utils.py:306]        █     █     █▄   ▄█
+(APIServer pid=37) INFO 05-22 08:51:55 [utils.py:306]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.1.dev16581+gdda4668b5.d20260521
+(APIServer pid=37) INFO 05-22 08:51:55 [utils.py:306]   █▄█▀ █     █     █     █  model   /models/deepseek-v4-flash
+(APIServer pid=37) INFO 05-22 08:51:55 [utils.py:306]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
+(APIServer pid=37) INFO 05-22 08:51:55 [utils.py:306] 
+(APIServer pid=37) INFO 05-22 08:51:55 [utils.py:240] non-default args: {'model_tag': '/models/deepseek-v4-flash', 'default_chat_template_kwargs': {'thinking': True}, 'enable_auto_tool_choice': True, 'tool_call_parser': 'deepseek_v4', 'host': '0.0.0.0', 'port': 8037, 'model': '/models/deepseek-v4-flash', 'tokenizer_mode': 'deepseek_v4', 'trust_remote_code': True, 'max_model_len': 8192, 'served_model_name': ['deepseek-v4-flash'], 'load_format': 'safetensors', 'reasoning_parser': 'deepseek_v4', 'pipeline_parallel_size': 3, 'master_addr': '10.10.100.10', 'master_port': 29537, 'nnodes': 3, 'enable_expert_parallel': True, 'block_size': 256, 'gpu_memory_utilization': 0.85, 'kv_cache_dtype': 'fp8', 'enable_prefix_caching': False, 'max_num_batched_tokens': 8192, 'max_num_seqs': 512}
+(APIServer pid=37) WARNING 05-22 08:51:55 [envs.py:1914] Unknown vLLM environment variable detected: VLLM_BASE_DIR
+(APIServer pid=37) INFO 05-22 08:51:55 [config.py:800] Detected quantization_config.scale_fmt=ue8m0; enabling UE8M0 for DeepGEMM.
+(APIServer pid=37) INFO 05-22 08:52:00 [model.py:568] Resolved architecture: DeepseekV4ForCausalLM
+(APIServer pid=37) INFO 05-22 08:52:00 [model.py:1697] Using max model len 8192
+(APIServer pid=37) INFO 05-22 08:52:01 [cache.py:261] Using fp8 data type to store kv cache. It reduces the GPU memory footprint and boosts the performance. Meanwhile, it may cause accuracy drop without a proper scaling factor
+(APIServer pid=37) INFO 05-22 08:52:01 [arg_utils.py:1844] Inferred data_parallel_rank 0 from node_rank 0
+(APIServer pid=37) INFO 05-22 08:52:01 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=8192.
+(APIServer pid=37) INFO 05-22 08:52:01 [vllm.py:895] Asynchronous scheduling is enabled.
+(APIServer pid=37) INFO 05-22 08:52:01 [kernel.py:212] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(APIServer pid=37) WARNING 05-22 08:52:01 [vllm.py:1309] Auto-initialization of reasoning token IDs failed. Please check whether your reasoning parser has implemented the `reasoning_start_str` and `reasoning_end_str`.
+(APIServer pid=37) INFO 05-22 08:52:01 [compilation.py:312] Enabled custom fusions: norm_quant, act_quant
+(EngineCore pid=132) INFO 05-22 08:52:04 [core.py:109] Initializing a V1 LLM engine (v0.1.dev16581+gdda4668b5.d20260521) with config: model='/models/deepseek-v4-flash', speculative_config=None, tokenizer='/models/deepseek-v4-flash', skip_tokenizer_init=False, tokenizer_mode=deepseek_v4, revision=None, tokenizer_revision=None, trust_remote_code=True, dtype=torch.bfloat16, max_seq_len=8192, download_dir=None, load_format=safetensors, tensor_parallel_size=1, pipeline_parallel_size=3, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=True, quantization=deepseek_v4_fp8, quantization_config=None, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=fp8, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='deepseek_v4', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False), seed=0, served_model_name=deepseek-v4-flash, enable_prefix_caching=False, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.VLLM_COMPILE: 3>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['+quant_fp8', 'none', '+quant_fp8'], 'ir_enable_torch_wrap': True, 'splitting_ops': ['vllm::unified_attention_with_output', 'vllm::unified_mla_attention_with_output', 'vllm::mamba_mixer2', 'vllm::mamba_mixer', 'vllm::short_conv', 'vllm::linear_attention', 'vllm::plamo2_mamba_mixer', 'vllm::gdn_attention_core', 'vllm::gdn_attention_core_xpu', 'vllm::olmo_hybrid_gdn_full_forward', 'vllm::kda_attention', 'vllm::sparse_attn_indexer', 'vllm::rocm_aiter_sparse_attn_indexer', 'vllm::deepseek_v4_attention', 'vllm::deepseek_v4_fp8_einsum', 'vllm::unified_kv_cache_update', 'vllm::unified_mla_kv_cache_update'], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [8192], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'size_asserts': False, 'alignment_asserts': False, 'scalar_asserts': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_AND_PIECEWISE: (2, 1)>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': True, 'fuse_act_quant': True, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False}, 'max_cudagraph_capture_size': 512, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native']), enable_flashinfer_autotune=True, moe_backend='auto')
+(EngineCore pid=132) WARNING 05-22 08:52:04 [multiproc_executor.py:1029] Reducing Torch parallelism from 20 threads to 1 to avoid unnecessary CPU contention. Set OMP_NUM_THREADS in the external environment to tune this value as needed.
+(EngineCore pid=132) INFO 05-22 08:52:04 [multiproc_executor.py:139] DP group leader: node_rank=0, node_rank_within_dp=0, master_addr=10.10.100.10, mq_connect_ip=10.10.100.10 (local), world_size=3, local_world_size=1
+(Worker pid=182) INFO 05-22 08:52:07 [parallel_state.py:1410] world_size=3 rank=0 local_rank=0 distributed_init_method=tcp://10.10.100.10:29537 backend=nccl
+(Worker pid=182) INFO 05-22 08:52:14 [pynccl.py:113] vLLM is using nccl==2.30.4
+aitopatom-9ab9:182:182 [0] NCCL INFO ncclOsDlopen(libnccl-env.so) failed: libnccl-env.so: cannot open shared object file: No such file or directory
+aitopatom-9ab9:182:182 [0] NCCL INFO ENV/Plugin: Could not find: libnccl-env.so
+aitopatom-9ab9:182:182 [0] NCCL INFO NCCL_SOCKET_FAMILY set by environment to AF_INET
+aitopatom-9ab9:182:182 [0] NCCL INFO NCCL_SOCKET_IFNAME set by environment to wlP9s9
+aitopatom-9ab9:182:182 [0] NCCL INFO Bootstrap: Using wlP9s9:192.168.1.127<0>
+aitopatom-9ab9:182:182 [0] NCCL INFO cudaDriverVersion 13020
+aitopatom-9ab9:182:182 [0] NCCL INFO NCCL version 2.30.4+cuda13.2
+aitopatom-9ab9:182:182 [0] NCCL INFO NCCL git version HEAD 747384637
+aitopatom-9ab9:182:182 [0] NCCL INFO ncclOsDlopen(libnccl-net.so) failed: libnccl-net.so: cannot open shared object file: No such file or directory
+aitopatom-9ab9:182:182 [0] NCCL INFO NET/Plugin: Could not find: libnccl-net.so
+aitopatom-9ab9:182:182 [0] NCCL INFO NCCL_IB_DISABLE set by environment to 1.
+aitopatom-9ab9:182:182 [0] NCCL INFO transport/net_ib/init.cc:448 -> 3
+aitopatom-9ab9:182:182 [0] NCCL INFO Failed to initialize NET plugin IB
+aitopatom-9ab9:182:182 [0] NCCL INFO NCCL_SOCKET_FAMILY set by environment to AF_INET
+aitopatom-9ab9:182:182 [0] NCCL INFO NCCL_SOCKET_IFNAME set by environment to wlP9s9
+aitopatom-9ab9:182:182 [0] NCCL INFO NET/Socket : Using [0]wlP9s9:192.168.1.127<0>
+aitopatom-9ab9:182:182 [0] NCCL INFO Initialized NET plugin Socket
+aitopatom-9ab9:182:182 [0] NCCL INFO Assigned NET plugin Socket to comm
+aitopatom-9ab9:182:182 [0] NCCL INFO ncclOsDlopen(libnccl-gin.so) failed: libnccl-gin.so: cannot open shared object file: No such file or directory
+aitopatom-9ab9:182:182 [0] NCCL INFO GIN/Plugin: Could not find: libnccl-gin.so
+
+[2026-05-22 08:52:15] aitopatom-9ab9:182:182 [0] misc/ibvwrap.cc:173 NCCL WARN lib wrapper not initialized.
+aitopatom-9ab9:182:182 [0] NCCL INFO transport/net_ib/gdr.cc:56 -> 3
+aitopatom-9ab9:182:182 [0] NCCL INFO Failed to initialize any GIN plugin
+aitopatom-9ab9:182:182 [0] NCCL INFO Using network Socket
+aitopatom-9ab9:182:182 [0] NCCL INFO Loaded NVML from libnvidia-ml.so.1
+aitopatom-9ab9:182:182 [0] NCCL INFO [Rank 0] ncclCommInitRank comm 0x4580baa0 rank 0 nranks 3 cudaDev 0 nvmlDev 0 busId f01000 commId 0xc4e9fada42aa8eae - Init START
+aitopatom-9ab9:182:182 [0] NCCL INFO RAS client listening socket at 127.0.0.1<28028>
+aitopatom-9ab9:182:182 [0] NCCL INFO Bootstrap timings total 0.045830 (create 0.000024, send 0.000091, recv 0.020605, ring 0.022069, delay 0.000000)
+aitopatom-9ab9:182:182 [0] NCCL INFO ncclTopoGetCpuAffinity: Affinity for GPU 0 is empty, ignoring. (GPU affinity =  ; CPU affinity = 0-19).
+aitopatom-9ab9:182:182 [0] NCCL INFO Rank 0: 1 Net devices
+aitopatom-9ab9:182:182 [0] NCCL INFO Rank 0: 0 CollNet devices
+aitopatom-9ab9:182:182 [0] NCCL INFO Local Net device counts across ranks: min 1 max 1
+aitopatom-9ab9:182:182 [0] NCCL INFO Local CollNet device counts across ranks: min 0 max 0
+aitopatom-9ab9:182:182 [0] NCCL INFO comm 0x4580baa0 rank 0 nRanks 3 nNodes 3 localRanks 1 localRank 0 MNNVL 0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 00/06 : 0 1 2
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 01/06 : 0 1 2
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 02/06 : 0 1 2
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 03/06 : 0 1 2
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 04/06 : 0 1 2
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 05/06 : 0 1 2
+aitopatom-9ab9:182:182 [0] NCCL INFO Trees [0] 2/-1/-1->0->-1 [1] 2/-1/-1->0->-1 [2] 2/-1/-1->0->-1 [3] 2/-1/-1->0->1 [4] 2/-1/-1->0->1 [5] 2/-1/-1->0->1
+aitopatom-9ab9:182:182 [0] NCCL INFO P2P Chunksize set to 262144
+aitopatom-9ab9:182:182 [0] NCCL INFO Tuning P2P operations with maxP2pPeers = 3
+aitopatom-9ab9:182:182 [0] NCCL INFO ncclOsDlopen(libnccl-profiler.so) failed: libnccl-profiler.so: cannot open shared object file: No such file or directory
+aitopatom-9ab9:182:182 [0] NCCL INFO PROFILER/Plugin: Could not find: libnccl-profiler.so
+aitopatom-9ab9:182:182 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0 isAllCudaP2p 1
+aitopatom-9ab9:182:22(Worker pid=182) INFO 05-22 08:52:15 [parallel_state.py:1723] rank 0 in world size 3 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+(Worker pid=182) INFO 05-22 08:52:15 [topk_topp_sampler.py:45] Using FlashInfer for top-p & top-k sampling.
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:52:15 [gpu_model_runner.py:4951] Starting to load model /models/deepseek-v4-flash...
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:52:16 [utils.py:130] Hidden layers were unevenly partitioned: [14,15,14]. This can be manually overridden using the VLLM_PP_LAYER_PARTITION environment variable
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:52:17 [deepseek_v4.py:168] DeepSeek V4 expert_dtype resolved to 'fp4'
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:52:17 [__init__.py:410] Selected TritonFp8BlockScaledMMKernel for Fp8LinearMethod
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:52:17 [deepseek_v4_attention.py:750] Using DeepSeek's fp8_ds_mla KV cache format. To use standard fp8 kv-cache format, please set `--attention-backend FLASHINFER_MLA_SPARSE`
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:52:17 [mxfp4.py:555] Using 'MARLIN' Mxfp4 MoE backend.
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:52:17 [deepseek_v4_attention.py:1680] Using FP8 indexer cache for Lightning Indexer.
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:52:19 [weight_utils.py:952] Filesystem type for checkpoints: EXT4. Checkpoint size: 148.66 GiB. Available RAM: 54.88 GiB.
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:52:19 [weight_utils.py:982] Auto-prefetch is disabled because the filesystem (EXT4) is not a recognized network FS (NFS/Lustre) and the checkpoint size (148.66 GiB) exceeds 90% of available RAM (54.88 GiB).
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:   0% Completed | 0/46 [00:00<?, ?it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:   2% Completed | 1/46 [00:06<05:07,  6.83s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:   4% Completed | 2/46 [00:10<03:41,  5.04s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:   7% Completed | 3/46 [00:14<03:13,  4.49s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:   9% Completed | 4/46 [00:18<03:09,  4.50s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  11% Completed | 5/46 [00:24<03:15,  4.76s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  13% Completed | 6/46 [00:29<03:17,  4.94s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  15% Completed | 7/46 [00:34<03:10,  4.87s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  17% Completed | 8/46 [00:39<03:11,  5.04s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  20% Completed | 9/46 [00:44<03:03,  4.95s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  22% Completed | 10/46 [00:49<02:57,  4.93s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  24% Completed | 11/46 [00:54<02:56,  5.05s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  26% Completed | 12/46 [00:59<02:52,  5.08s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  28% Completed | 13/46 [01:04<02:48,  5.10s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  30% Completed | 14/46 [01:09<02:40,  5.02s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  33% Completed | 15/46 [01:15<02:38,  5.12s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  35% Completed | 16/46 [01:15<01:54,  3.82s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  37% Completed | 17/46 [01:16<01:24,  2.91s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  39% Completed | 18/46 [01:17<01:01,  2.21s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  41% Completed | 19/46 [01:17<00:47,  1.76s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  43% Completed | 20/46 [01:18<00:36,  1.40s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  46% Completed | 21/46 [01:19<00:28,  1.15s/it]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  48% Completed | 22/46 [01:19<00:23,  1.04it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  50% Completed | 23/46 [01:20<00:18,  1.21it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  52% Completed | 24/46 [01:20<00:16,  1.36it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  54% Completed | 25/46 [01:21<00:14,  1.48it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  57% Completed | 26/46 [01:21<00:12,  1.57it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  59% Completed | 27/46 [01:22<00:12,  1.53it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  61% Completed | 28/46 [01:22<00:11,  1.58it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  63% Completed | 29/46 [01:23<00:10,  1.59it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  65% Completed | 30/46 [01:24<00:09,  1.63it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  67% Completed | 31/46 [01:24<00:09,  1.62it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  70% Completed | 32/46 [01:25<00:08,  1.65it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  72% Completed | 33/46 [01:25<00:07,  1.69it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  74% Completed | 34/46 [01:26<00:06,  1.73it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  76% Completed | 35/46 [01:27<00:06,  1.79it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  78% Completed | 36/46 [01:27<00:05,  1.83it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  80% Completed | 37/46 [01:28<00:05,  1.80it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  83% Completed | 38/46 [01:28<00:04,  1.79it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  85% Completed | 39/46 [01:29<00:04,  1.75it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  87% Completed | 40/46 [01:29<00:03,  1.75it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  89% Completed | 41/46 [01:30<00:02,  1.76it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  91% Completed | 42/46 [01:30<00:02,  1.81it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  93% Completed | 43/46 [01:31<00:01,  1.83it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards:  96% Completed | 44/46 [01:31<00:01,  1.86it/s]
+(Worker_PP0_EP0 pid=182) Loading safetensors checkpoint shards: 100% Completed | 46/46 [01:32<00:00,  2.00s/it]
+(Worker_PP0_EP0 pid=182) 
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:53:51 [default_loader.py:405] Loading weights took 92.02 seconds
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:53:51 [mxfp4.py:1500] Using MoEPrepareAndFinalizeNoDPEPModular
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:53:58 [gpu_model_runner.py:5053] Model loading took 48.15 GiB memory and 102.177825 seconds
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:54:03 [backends.py:1089] Using cache directory: /root/.cache/vllm/torch_compile_cache/536429ded8/rank_0_0/backbone for vLLM's torch.compile
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:54:03 [backends.py:1148] Dynamo bytecode transform time: 2.30 s
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:54:06 [backends.py:378] Cache the graph of compile range (1, 8192) for later use
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:54:08 [backends.py:393] Compiling a graph for compile range (1, 8192) takes 3.56 s
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:54:09 [decorators.py:708] saved AOT compiled function to /root/.cache/vllm/torch_compile_cache/torch_aot_compile/3a5188c45be5cb4a493bb9fc515c1b6102b9baaebc9057978cc96c089108f5aa/rank_0_0/model
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:54:09 [monitor.py:53] torch.compile took 8.11 s in total
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:54:11  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:54:14  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:54:15 [fp8_utils.py:803] Using configuration from /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=1536,K=4096,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json for W8A8 Block FP8 kernel.
+(Worker_PP0_EP0 pid=182) WARNING 05-22 08:54:16 [fp8_utils.py:812] Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=32768,K=1024,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json
+(Worker_PP0_EP0 pid=182) WARNING 05-22 08:54:16 [fp8_utils.py:812] Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=4096,K=8192,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:54:17  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_post_tilelang` with `out_idx=None`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:54:19  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_post_tilelang`
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:54:20 [fp8_utils.py:803] Using configuration from /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=4096,K=4096,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json for W8A8 Block FP8 kernel.
+(Worker_PP0_EP0 pid=182) WARNING 05-22 08:54:21 [fp8_utils.py:812] Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=4096,K=2048,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:54:30 [fp8_utils.py:803] Using configuration from /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/utils/configs/N=8192,K=1024,device_name=NVIDIA_GB10,dtype=fp8_w8a8,block_shape=[128,128].json for W8A8 Block FP8 kernel.
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:54:32 [monitor.py:81] Initial profiling/warmup run took 22.28 s
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:54:32 [gpu_model_runner.py:6167] Profiling CUDA graph memory: PIECEWISE=51 (largest=512), FULL=51 (largest=512)
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:54:32  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:54:35  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:54:43 [gpu_model_runner.py:6246] Estimated CUDA graph memory: 1.27 GiB total
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:54:43 [gpu_worker.py:462] Available KV cache memory: 46.26 GiB
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:54:43 [gpu_worker.py:477] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.8500 is equivalent to --gpu-memory-utilization=0.8394 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.8606. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.
+(EngineCore pid=132) INFO 05-22 08:54:51 [kv_cache_utils.py:1710] GPU KV cache size: 342,011 tokens
+(EngineCore pid=132) INFO 05-22 08:54:51 [kv_cache_utils.py:1711] Maximum concurrency for 8,192 tokens per request: 41.75x
+(EngineCore pid=132) INFO 05-22 08:54:51 [kv_cache_utils.py:1710] GPU KV cache size: 357,750 tokens
+(EngineCore pid=132) INFO 05-22 08:54:51 [kv_cache_utils.py:1711] Maximum concurrency for 8,192 tokens per request: 43.67x
+(EngineCore pid=132) INFO 05-22 08:54:51 [kv_cache_utils.py:1710] GPU KV cache size: 345,872 tokens
+(EngineCore pid=132) INFO 05-22 08:54:51 [kv_cache_utils.py:1711] Maximum concurrency for 8,192 tokens per request: 42.22x
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:54:58 [deepseek_v4_mhc_warmup.py:232] Warming up DeepSeek V4 mHC TileLang kernels for token sizes: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512, 1024, 2048, 4096, 8192]
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:54:58  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:00  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:02  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:05  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:06  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:09  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:10  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:13  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:14  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:17  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:18  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:20  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:22  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:25  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:25  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `hc_head_fuse_tilelang` with `out_idx=None`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:28  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `hc_head_fuse_tilelang`
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:55:28 [deepseek_v4_mhc_warmup.py:241] DeepSeek V4 mHC TileLang warmup finished in 30.49 seconds.
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:55:28 [kernel_warmup.py:371] Warming up DeepSeek V4 sparse MLA attention for mixed tokens=16, prefill tokens=8192, and MTP uniform decode requests=[].
+(EngineCore pid=132) INFO 05-22 08:55:58 [shm_broadcast.py:698] No available shared memory broadcast block found in 60 seconds. This typically happens when some processes are hanging or doing some time-consuming work (e.g. compilation, weight/kv cache quantization).
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:29  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_fused_tilelang` with `out_idx=None`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:31  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_fused_tilelang`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:31  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_pre_big_fuse_tilelang` with `out_idx=None`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:55:34  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_pre_big_fuse_tilelang`
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:56:37 [kernel_warmup.py:208] Warming up DeepSeek V4 request preparation kernels.
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:56:38,234 - INFO - autotuner.py:622 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:56:38,286 - INFO - autotuner.py:641 - flashinfer.jit: [Autotuner]: Autotuning process ends
+(Worker_PP0_EP0 pid=182) Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/51 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   2%|▏         | 1/51 [00:00<00:14,  3.41it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   4%|▍         | 2/51 [00:00<00:13,  3.54it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   6%|▌         | 3/51 [00:00<00:16,  2.89it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   8%|▊         | 4/51 [00:01<00:17,  2.71it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  10%|▉         | 5/51 [00:01<00:17,  2.57it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  12%|█▏        | 6/51 [00:02<00:17,  2.52it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  14%|█▎        | 7/51 [00:02<00:17,  2.51it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  16%|█▌        | 8/51 [00:03<00:16,  2.53it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  18%|█▊        | 9/51 [00:03<00:23,  1.80it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  20%|█▉        | 10/51 [00:04<00:20,  2.00it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  22%|██▏       | 11/51 [00:04<00:18,  2.16it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  24%|██▎       | 12/51 [00:05<00:16,  2.30it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  25%|██▌       | 13/51 [00:05<00:15,  2.39it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  27%|██▋       | 14/51 [00:05<00:15,  2.46it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  29%|██▉       | 15/51 [00:06<00:14,  2.53it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  31%|███▏      | 16/51 [00:06<00:13,  2.60it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  33%|███▎      | 17/51 [00:06<00:12,  2.64it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  35%|███▌      | 18/51 [00:08<00:25,  1.30it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  37%|███▋      | 19/51 [00:08<00:20,  1.55it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  39%|███▉      | 20/51 [00:09<00:17,  1.80it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  41%|████      | 21/51 [00:09<00:14,  2.01it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  43%|████▎     | 22/51 [00:10<00:13,  2.18it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  45%|████▌     | 23/51 [00:10<00:12,  2.30it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  47%|████▋     | 24/51 [00:10<00:11,  2.38it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  49%|████▉     | 25/51 [00:11<00:14,  1.74it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  51%|█████     | 26/51 [00:12<00:17,  1.46it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  53%|█████▎    | 27/51 [00:13<00:14,  1.69it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  55%|█████▍    | 28/51 [00:13<00:12,  1.91it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  57%|█████▋    | 29/51 [00:13<00:10,  2.11it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  59%|█████▉    | 30/51 [00:14<00:09,  2.25it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  61%|██████    | 31/51 [00:14<00:08,  2.37it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  63%|██████▎   | 32/51 [00:14<00:07,  2.44it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  65%|██████▍   | 33/51 [00:15<00:07,  2.56it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  67%|██████▋   | 34/51 [00:15<00:06,  2.65it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  69%|██████▊   | 35/51 [00:15<00:05,  2.72it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  71%|███████   | 36/51 [00:16<00:05,  2.80it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  73%|███████▎  | 37/51 [00:17<00:06,  2.11it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  75%|███████▍  | 38/51 [00:17<00:06,  1.86it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  76%|███████▋  | 39/51 [00:18<00:05,  2.13it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  78%|███████▊  | 40/51 [00:18<00:04,  2.38it/s](EngineCore pid=132) INFO 05-22 08:56:58 [shm_broadcast.py:698] No available shared memory broadcast block found in 60 seconds. This typically happens when some processes are hanging or doing some time-consuming work (e.g. compilation, weight/kv cache quantization).
+Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  80%|████████  | 41/51 [00:18<00:03,  2.61it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  82%|████████▏ | 42/51 [00:18<00:03,  2.76it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  84%|████████▍ | 43/51 [00:19<00:03,  2.17it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  86%|████████▋ | 44/51 [00:20<00:03,  1.90it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  88%|████████▊ | 45/51 [00:20<00:02,  2.17it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  90%|█████████ | 46/51 [00:21<00:02,  1.76it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  92%|█████████▏| 47/51 [00:21<00:01,  2.24it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  94%|█████████▍| 48/51 [00:22<00:01,  1.99it/s]                                                                                                        Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  94%|█████████▍| 48/51 [00:22<00:01,  1.99it/s]                                                                                                        Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  94%|█████████▍| 48/51 [00:23<00:01,  1.99it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  96%|█████████▌| 49/51 [00:24<00:02,  1.06s/it]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  98%|█████████▊| 50/51 [00:25<00:00,  1.06it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 51/51 [00:26<00:00,  1.17s/it]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 51/51 [00:26<00:00,  1.89it/s]
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:57:02  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:133): TileLang begins to compile kernel `mhc_fused_tilelang` with `out_idx=None`
+(Worker_PP0_EP0 pid=182) 2026-05-22 08:57:03  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:141): TileLang completes to compile kernel `mhc_fused_tilelang`
+(Worker_PP0_EP0 pid=182) Capturing CUDA graphs (decode, FULL):   0%|          | 0/51 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL):   2%|▏         | 1/51 [00:00<00:10,  4.81it/s]Capturing CUDA graphs (decode, FULL):   4%|▍         | 2/51 [00:00<00:09,  4.97it/s]Capturing CUDA graphs (decode, FULL):   6%|▌         | 3/51 [00:00<00:16,  2.99it/s]Capturing CUDA graphs (decode, FULL):   8%|▊         | 4/51 [00:01<00:18,  2.55it/s]Capturing CUDA graphs (decode, FULL):  10%|▉         | 5/51 [00:01<00:19,  2.39it/s]Capturing CUDA graphs (decode, FULL):  12%|█▏        | 6/51 [00:02<00:19,  2.30it/s]Capturing CUDA graphs (decode, FULL):  14%|█▎        | 7/51 [00:02<00:19,  2.25it/s]Capturing CUDA graphs (decode, FULL):  16%|█▌        | 8/51 [00:03<00:19,  2.22it/s]Capturing CUDA graphs (decode, FULL):  18%|█▊        | 9/51 [00:03<00:18,  2.22it/s]Capturing CUDA graphs (decode, FULL):  20%|█▉        | 10/51 [00:04<00:18,  2.24it/s]Capturing CUDA graphs (decode, FULL):  22%|██▏       | 11/51 [00:04<00:17,  2.24it/s]Capturing CUDA graphs (decode, FULL):  24%|██▎       | 12/51 [00:05<00:17,  2.26it/s]Capturing CUDA graphs (decode, FULL):  25%|██▌       | 13/51 [00:05<00:16,  2.32it/s]Capturing CUDA graphs (decode, FULL):  27%|██▋       | 14/51 [00:05<00:15,  2.33it/s]Capturing CUDA graphs (decode, FULL):  29%|██▉       | 15/51 [00:06<00:15,  2.40it/s]Capturing CUDA graphs (decode, FULL):  31%|███▏      | 16/51 [00:06<00:14,  2.44it/s]Capturing CUDA graphs (decode, FULL):  33%|███▎      | 17/51 [00:07<00:13,  2.47it/s]Capturing CUDA graphs (decode, FULL):  35%|███▌      | 18/51 [00:07<00:13,  2.50it/s]Capturing CUDA graphs (decode, FULL):  37%|███▋      | 19/51 [00:07<00:12,  2.54it/s]Capturing CUDA graphs (decode, FULL):  39%|███▉      | 20/51 [00:08<00:12,  2.52it/s]Capturing CUDA graphs (decode, FULL):  41%|████      | 21/51 [00:08<00:11,  2.55it/s]Capturing CUDA graphs (decode, FULL):  43%|████▎     | 22/51 [00:08<00:11,  2.58it/s]Capturing CUDA graphs (decode, FULL):  45%|████▌     | 23/51 [00:09<00:10,  2.61it/s]Capturing CUDA graphs (decode, FULL):  47%|████▋     | 24/51 [00:09<00:10,  2.60it/s]Capturing CUDA graphs (decode, FULL):  49%|████▉     | 25/51 [00:10<00:09,  2.62it/s]Capturing CUDA graphs (decode, FULL):  51%|█████     | 26/51 [00:10<00:09,  2.65it/s]Capturing CUDA graphs (decode, FULL):  53%|█████▎    | 27/51 [00:10<00:08,  2.68it/s]Capturing CUDA graphs (decode, FULL):  55%|█████▍    | 28/51 [00:11<00:08,  2.65it/s]Capturing CUDA graphs (decode, FULL):  57%|█████▋    | 29/51 [00:11<00:08,  2.69it/s]Capturing CUDA graphs (decode, FULL):  59%|█████▉    | 30/51 [00:11<00:07,  2.69it/s]Capturing CUDA graphs (decode, FULL):  61%|██████    | 31/51 [00:12<00:07,  2.70it/s]Capturing CUDA graphs (decode, FULL):  63%|██████▎   | 32/51 [00:12<00:06,  2.72it/s]Capturing CUDA graphs (decode, FULL):  65%|██████▍   | 33/51 [00:13<00:06,  2.76it/s]Capturing CUDA graphs (decode, FULL):  67%|██████▋   | 34/51 [00:13<00:06,  2.77it/s]Capturing CUDA graphs (decode, FULL):  69%|██████▊   | 35/51 [00:13<00:05,  2.80it/s]Capturing CUDA graphs (decode, FULL):  71%|███████   | 36/51 [00:14<00:05,  2.81it/s]Capturing CUDA graphs (decode, FULL):  73%|███████▎  | 37/51 [00:14<00:04,  2.86it/s]Capturing CUDA graphs (decode, FULL):  75%|███████▍  | 38/51 [00:14<00:04,  2.87it/s]Capturing CUDA graphs (decode, FULL):  76%|███████▋  | 39/51 [00:15<00:04,  2.89it/s]Capturing CUDA graphs (decode, FULL):  78%|███████▊  | 40/51 [00:15<00:03,  2.92it/s]Capturing CUDA graphs (decode, FULL):  80%|████████  | 41/51 [00:15<00:03,  2.98it/s]Capturing CUDA graphs (decode, FULL):  82%|████████▏ | 42/51 [00:16<00:02,  3.02it/s]Capturing CUDA graphs (decode, FULL):  84%|████████▍ | 43/51 [00:16<00:02,  3.05it/s]Capturing CUDA graphs (decode, FULL):  86%|████████▋ | 44/51 [00:16<00:02,  3.05it/s]Capturing CUDA graphs (decode, FULL):  88%|████████▊ | 45/51 [00:17<00:01,  3.00it/s]Capturing CUDA graphs (decode, FULL):  90%|█████████ | 46/51 [00:17<00:01,  2.93it/s]Capturing CUDA graphs (decode, FULL):  92%|█████████▏| 47/51 [00:17<00:01,  2.96it/s]Capturing CUDA graphs (decode, FULL):  94%|█████████▍| 48/51 [00:17<00:00,  3.36it/s]Capturing CUDA graphs (decode, FULL):  96%|█████████▌| 49/51 [00:18<00:00,  2.97it/s]Capturing CUDA graphs (decode, FULL):  98%|█████████▊| 50/51 [00:18<00:00,  2.96it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 51/51 [00:19<00:00,  2.52it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 51/51 [00:19<00:00,  2.65it/s]
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:57:26 [gpu_model_runner.py:6347] Graph capturing finished in 48 secs, took 1.86 GiB
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:57:26 [gpu_worker.py:621] CUDA graph pool memory: 1.86 GiB (actual), 1.27 GiB (estimated), difference: 0.59 GiB (31.8%).
+(Worker_PP0_EP0 pid=182) INFO 05-22 08:57:26 [jit_monitor.py:54] Kernel JIT monitor activated — Triton JIT compilations during inference will be logged as warnings.
+(EngineCore pid=132) INFO 05-22 08:58:03 [core.py:299] init engine (profile, create kv cache, warmup model) took 241.69 s (compilation: 8.90 s)
+(EngineCore pid=132) INFO 05-22 08:58:04 [vllm.py:895] Asynchronous scheduling is enabled.
+(EngineCore pid=132) INFO 05-22 08:58:04 [kernel.py:212] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(EngineCore pid=132) WARNING 05-22 08:58:04 [vllm.py:1309] Auto-initialization of reasoning token IDs failed. Please check whether your reasoning parser has implemented the `reasoning_start_str` and `reasoning_end_str`.
+(EngineCore pid=132) INFO 05-22 08:58:04 [compilation.py:312] Enabled custom fusions: norm_quant, act_quant
+(APIServer pid=37) INFO 05-22 08:58:04 [api_server.py:599] Supported tasks: ['generate']
+(APIServer pid=37) INFO 05-22 08:58:04 [parser_manager.py:202] "auto" tool choice has been enabled.
+(APIServer pid=37) WARNING 05-22 08:58:04 [model.py:1454] Default vLLM sampling parameters have been overridden by the model's `generation_config.json`: `{'temperature': 1.0, 'top_p': 1.0}`. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+(APIServer pid=37) INFO 05-22 08:58:04 [api_server.py:603] Starting vLLM server on http://0.0.0.0:8037
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:37] Available routes are:
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /openapi.json, Methods: GET, HEAD
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /docs, Methods: GET, HEAD
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /docs/oauth2-redirect, Methods: GET, HEAD
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /redoc, Methods: GET, HEAD
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /tokenize, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /detokenize, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /load, Methods: GET
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /version, Methods: GET
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /health, Methods: GET
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /metrics, Methods: GET
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /v1/models, Methods: GET
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /ping, Methods: GET
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /ping, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /invocations, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /v1/chat/completions, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /v1/chat/completions/batch, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /v1/responses, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /v1/responses/{response_id}, Methods: GET
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /v1/responses/{response_id}/cancel, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /v1/completions, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /v1/messages, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /v1/messages/count_tokens, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /inference/v1/generate, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /scale_elastic_ep, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /is_scaling_elastic_ep, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /generative_scoring, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /v1/chat/completions/render, Methods: POST
+(APIServer pid=37) INFO 05-22 08:58:04 [launcher.py:46] Route: /v1/completions/render, Methods: POST
+(APIServer pid=37) INFO:     Started server process [37]
+(APIServer pid=37) INFO:     Waiting for application startup.
+(APIServer pid=37) INFO:     Application startup complete.
+(APIServer pid=37) INFO:     192.168.1.128:55803 - "GET /v1/models HTTP/1.1" 200 OK
+(Worker_PP0_EP0 pid=182) WARNING 05-22 08:58:47 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _combine_topk_swa_indices_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_PP0_EP0 pid=182) /usr/local/lib/python3.12/dist-packages/vllm/distributed/parallel_state.py:674: UserWarning: The given buffer is not writable, and PyTorch does not support non-writable tensors. This means you can write to the underlying (supposedly non-writable) buffer using the tensor. You may want to copy the buffer to protect its data or make it writable before converting it to a tensor. This type of warning will be suppressed for the rest of this program. (Triggered internally at /pytorch/torch/csrc/utils/tensor_new.cpp:1586.)
+(Worker_PP0_EP0 pid=182)   object_tensor = torch.frombuffer(pickle.dumps(obj), dtype=torch.uint8)
+1 [0] NCCL INFO [Proxy Service] Device 0 CPU core 8
+aitopatom-9ab9:182:222 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 17
+aitopatom-9ab9:182:182 [0] NCCL INFO ncclOsDlopen(libnccl-tuner.so) failed: libnccl-tuner.so: cannot open shared object file: No such file or directory
+aitopatom-9ab9:182:182 [0] NCCL INFO TUNER/Plugin: Could not find: libnccl-tuner.so
+aitopatom-9ab9:182:182 [0] NCCL INFO threadThresholds 8/8/64 | 24/8/64 | 512 | 512
+aitopatom-9ab9:182:182 [0] NCCL INFO 6 coll channels, 6 collnet channels, 0 nvls channels, 8 p2p channels, 1 p2p channels per peer
+aitopatom-9ab9:182:182 [0] NCCL INFO Symmetric memory is not supported. cuMemEnable 1, globalGinSupport 0, globalNicFused 0 cuMemGdrSupport 0
+aitopatom-9ab9:182:182 [0] NCCL INFO CC Off, workFifoBytes 1048576
+aitopatom-9ab9:182:182 [0] NCCL INFO ncclCommInitRank comm 0x4580baa0 rank 0 nranks 3 cudaDev 0 nvmlDev 0 busId f01000 commId 0xc4e9fada42aa8eae - Init COMPLETE
+aitopatom-9ab9:182:182 [0] NCCL INFO Init timings - ncclCommInitRank: rank 0 nranks 3 total 0.24 (kernels 0.16, alloc 0.00, bootstrap 0.05, allgathers 0.02, topo 0.01, graphs 0.00, connections 0.00, rest 0.00)
+aitopatom-9ab9:182:223 [0] NCCL INFO [Proxy Progress] Device 0 CPU core 9
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 00/0 : 2[0] -> 0[0] [receive] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 01/0 : 2[0] -> 0[0] [receive] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 02/0 : 2[0] -> 0[0] [receive] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 03/0 : 2[0] -> 0[0] [receive] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 04/0 : 2[0] -> 0[0] [receive] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 05/0 : 2[0] -> 0[0] [receive] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 03/0 : 0[0] -> 1[0] [send] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 04/0 : 0[0] -> 1[0] [send] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 05/0 : 0[0] -> 1[0] [send] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 03/0 : 1[0] -> 0[0] [receive] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 04/0 : 1[0] -> 0[0] [receive] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 05/0 : 1[0] -> 0[0] [receive] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 00/0 : 0[0] -> 2[0] [send] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 01/0 : 0[0] -> 2[0] [send] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 02/0 : 0[0] -> 2[0] [send] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 03/0 : 0[0] -> 2[0] [send] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 04/0 : 0[0] -> 2[0] [send] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 05/0 : 0[0] -> 2[0] [send] via NET/Socket/0
+aitopatom-9ab9:182:182 [0] NCCL INFO Connected all trees
+[rank0]:[W522 08:58:47.031335686 ProcessGroupNCCL.cpp:4094] Warning: An unbatched P2P op (send/recv) was called on this ProcessGroup with size 3.  In lazy initialization mode, this will result in a new 2-rank NCCL communicator to be created. (function operator())
+aitopatom-9ab9:182:182 [0] NCCL INFO Comm config Blocking set to 1
+aitopatom-9ab9:182:182 [0] NCCL INFO Initialized NET plugin Socket
+aitopatom-9ab9:182:182 [0] NCCL INFO Assigned NET plugin Socket to comm
+aitopatom-9ab9:182:182 [0] NCCL INFO Failed to initialize any GIN plugin
+aitopatom-9ab9:182:182 [0] NCCL INFO Using network Socket
+aitopatom-9ab9:182:182 [0] NCCL INFO [Rank 0] ncclCommInitRankConfig comm 0xb9d7d290 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId f01000 commId 0xc8f133a9c20a43da - Init START
+aitopatom-9ab9:182:182 [0] NCCL INFO Bootstrap timings total 0.114087 (create 0.000053, send 0.000334, recv 0.098149, ring 0.002587, delay 0.000000)
+aitopatom-9ab9:182:182 [0] NCCL INFO ncclTopoGetCpuAffinity: Affinity for GPU 0 is empty, ignoring. (GPU affinity =  ; CPU affinity = 0-19).
+aitopatom-9ab9:182:182 [0] NCCL INFO Rank 0: 1 Net devices
+aitopatom-9ab9:182:182 [0] NCCL INFO Rank 0: 0 CollNet devices
+aitopatom-9ab9:182:182 [0] NCCL INFO Local Net device counts across ranks: min 1 max 1
+aitopatom-9ab9:182:182 [0] NCCL INFO Local CollNet device counts across ranks: min 0 max 0
+aitopatom-9ab9:182:182 [0] NCCL INFO comm 0xb9d7d290 rank 0 nRanks 2 nNodes 2 localRanks 1 localRank 0 MNNVL 0
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 00/06 : 0 1
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 01/06 : 0 1
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 02/06 : 0 1
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 03/06 : 0 1
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 04/06 : 0 1
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 05/06 : 0 1
+aitopatom-9ab9:182:182 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] 1/-1/-1->0->-1 [2] 1/-1/-1->0->-1 [3] -1/-1/-1->0->1 [4] -1/-1/-1->0->1 [5] -1/-1/-1->0->1
+aitopatom-9ab9:182:182 [0] NCCL INFO P2P Chunksize set to 262144
+aitopatom-9ab9:182:182 [0] NCCL INFO Tuning P2P operations with maxP2pPeers = 2
+aitopatom-9ab9:182:182 [0] NCCL INFO Check P2P Type isAllDirectP2p 1 directMode 0 isAllCudaP2p 1
+aitopatom-9ab9:182:1176 [0] NCCL INFO [Proxy Service] Device 0 CPU core 19
+aitopatom-9ab9:182:1177 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 7
+aitopatom-9ab9:182:182 [0] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+aitopatom-9ab9:182:182 [0] NCCL INFO 6 coll channels, 6 collnet channels, 0 nvls channels, 8 p2p channels, 1 p2p channels per peer
+aitopatom-9ab9:182:182 [0] NCCL INFO Symmetric memory is not supported. cuMemEnable 1, globalGinSupport 0, globalNicFused 0 cuMemGdrSupport 0
+aitopatom-9ab9:182:182 [0] NCCL INFO CC Off, workFifoBytes 1048576
+aitopatom-9ab9:182:182 [0] NCCL INFO ncclCommInitRankConfig comm 0xb9d7d290 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId f01000 commId 0xc8f133a9c20a43da - Init COMPLETE
+aitopatom-9ab9:182:182 [0] NCCL INFO Init timings - ncclCommInitRankConfig: rank 0 nranks 2 total 0.14 (kernels 0.00, alloc 0.00, bootstrap 0.11, allgathers 0.01, topo 0.00, graphs 0.00, connections 0.00, rest 0.01)
+aitopatom-9ab9:182:182 [0] NCCL INFO Channel 04/1 : 0[0] -> 1[0] [send] via NET/Socket/0/Shared
+aitopatom-9ab9:182:1178 [0] NCCL INFO [Proxy Progress] Device 0 CPU core 18
+aitopatom-9ab9:182:182 [0] NCCL INFO Comm config Blocking set to 1
+aitopatom-9ab9:182:182 [0] NCCL INFO Initialized NET plugin Socket
+aitopatom-9ab9:182:182 [0] NCCL INFO Assigned NET plugin Socket to comm
+aitopatom-9ab9:182:182 [0] NCCL INFO Failed to initialize any GIN plugin
+aitopatom-9ab9:182:182 [0] NCCL INFO Using network Socket
+aitopatom-9ab9:182:182 [0] NCCL INFO [Rank 0] ncclCommInitRankConfig comm 0xb9f56f80 rank 0 nranks 3 cudaDev 0 nvmlDev 0 busId f01000 commId 0xee405f99e37992e7 - Init START
+aitopatom-9ab9:182:182 [0] NCCL INFO Bootstrap timings total 0.535412 (create 0.000016, send 0.000075, recv 0.347593, ring 0.005891, delay 0.000000)
+aitopatom-9ab9:182:182 [0] NCCL INFO ncclTopoGetCpuAffinity: Affinity for GPU 0 is empty, ignoring. (GPU affinity =  ; CPU affinity = 0-19).
+aitopatom-9ab9:182:182 [0] NCCL INFO Rank 0: 1 Net devices
+aitopatom-9ab9:182:182 [0] NCCL INFO Rank 0: 0 CollNet devices
+aitopatom-9ab9:182:182 [0] NCCL INFO Local Net device counts across ranks: min 1 max 1
+aito(APIServer pid=37) INFO:     192.168.1.128:55817 - "POST /v1/completions HTTP/1.1" 200 OK
+(Worker_PP0_EP0 pid=182) WARNING 05-22 08:58:50 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _compute_prefill_metadata_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_PP0_EP0 pid=182) WARNING 05-22 08:58:50 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _tf32_hc_prenorm_gemm_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_PP0_EP0 pid=182) WARNING 05-22 08:58:50 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _w8a8_triton_block_scaled_mm. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_PP0_EP0 pid=182) WARNING 05-22 08:58:50 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _deepseek_v4_sm12x_fp8_einsum_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(APIServer pid=37) INFO 05-22 08:58:54 [loggers.py:271] Engine 000: Avg prompt throughput: 2.6 tokens/s, Avg generation throughput: 3.2 tokens/s, Running: 8 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.1%, Prefix cache hit rate: 0.0%
+(APIServer pid=37) INFO 05-22 08:59:04 [loggers.py:271] Engine 000: Avg prompt throughput: 79.5 tokens/s, Avg generation throughput: 23.2 tokens/s, Running: 8 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.1%, Prefix cache hit rate: 0.0%
+(APIServer pid=37) INFO:     192.168.1.128:55818 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO:     192.168.1.128:55819 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO:     192.168.1.128:55820 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO:     192.168.1.128:55822 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO:     192.168.1.128:55821 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO:     192.168.1.128:55823 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO:     192.168.1.128:55824 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO:     192.168.1.128:55825 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO 05-22 08:59:14 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 2.4 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=37) INFO 05-22 08:59:24 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 0.0 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(Worker_PP0_EP0 pid=182) WARNING 05-22 08:59:32 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _build_prefill_chunk_metadata_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(APIServer pid=37) INFO 05-22 08:59:34 [loggers.py:271] Engine 000: Avg prompt throughput: 2.6 tokens/s, Avg generation throughput: 0.3 tokens/s, Running: 8 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.1%, Prefix cache hit rate: 0.0%
+(APIServer pid=37) INFO 05-22 08:59:44 [loggers.py:271] Engine 000: Avg prompt throughput: 76.9 tokens/s, Avg generation throughput: 17.6 tokens/s, Running: 8 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.1%, Prefix cache hit rate: 0.0%
+(APIServer pid=37) INFO 05-22 08:59:54 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 44.8 tokens/s, Running: 8 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.2%, Prefix cache hit rate: 0.0%
+(APIServer pid=37) INFO:     192.168.1.128:55842 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO:     192.168.1.128:55844 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO:     192.168.1.128:55843 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO:     192.168.1.128:55845 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO:     192.168.1.128:55846 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO:     192.168.1.128:55848 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO:     192.168.1.128:55847 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO:     192.168.1.128:55849 - "POST /v1/completions HTTP/1.1" 200 OK
+(APIServer pid=37) INFO 05-22 09:00:04 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 39.7 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
+(APIServer pid=37) INFO 05-22 09:00:14 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 0.0 tokens/s, Running: 0 reqs, Waiting: 0 reqs, GPU KV cache usage: 0.0%, Prefix cache hit rate: 0.0%
