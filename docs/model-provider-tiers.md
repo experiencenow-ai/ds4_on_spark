@@ -121,6 +121,7 @@ Centaur-facing dry selection is available without importing any runtime code:
 ```sh
 python3 scripts/select_model_provider.py --tier near_frontier_local --lane hard_reasoning --batch-tokens 16384
 python3 scripts/select_model_provider.py --tier local_small --lane candidate_prefilter --batch-tokens 1024 --allow-non-production
+python3 scripts/route_model_provider_requests.py fixtures/model_provider_routes/centaur_provider_route_requests_20260522.example.json --allow-blocked
 ```
 
 The selector emits `centaur-provider-selection-v1` JSON. It treats `--tier` as
@@ -129,6 +130,14 @@ requested lane and batch/wait constraints, and defaults to
 `production_eligible=true` providers only. If nothing matches, it returns a
 structured `no_eligible_provider` blocker rather than silently falling back to
 an unrelated provider.
+
+For a Centaur-shaped batch of LLM node requirements, use
+`scripts/route_model_provider_requests.py`. It accepts
+`centaur-provider-route-requests-v1` JSON and emits
+`centaur-provider-routing-plan-v1` with one route per node, aggregate provider
+load, selected/blocked counts, and blocker summaries. The example fixture
+intentionally includes one too-tight wait-budget request so consumers can test
+both the selected-provider and structured-blocker paths.
 
 ## Centaur Boundary
 
