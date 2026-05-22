@@ -1,0 +1,166 @@
+{
+  "artifact_sha256": "b8dbf8dafca0e25cd098b60cd3d3fea62ae17f8f91138381e95e3a0c7b98a64b",
+  "attempts": [
+    {
+      "attempt_id": "pp3_c1_16",
+      "blocker_detail": "Launch pinned NCCL/GLOO/TP and VLLM host IPs to wlP9s9 / 192.168.1.x, so distributed traffic used Wi-Fi.",
+      "blocker_kind": "wifi_distributed_dataplane",
+      "fabric": "wifi_control_plane",
+      "max_model_len": 8192,
+      "max_num_batched_tokens": 8192,
+      "max_num_seqs": 512,
+      "pipeline_parallel_size": 3,
+      "raw_artifact": "fixtures/vllm_config_tuning/ds4_vllm_pp3_spark345_no_mtp_c1_16_64tok_20260522.raw.json",
+      "raw_artifact_sha256": "2129b5855324ede53f33235994dafd331bf9782d6682f1f9b987fda90e4ba451",
+      "safety_status": "rejected_wifi_dataplane",
+      "startup_status": "passed",
+      "tokens_per_second_by_concurrency": {
+        "1": 12.231686391460117,
+        "16": 41.13370950626182,
+        "2": 21.015312262525953,
+        "4": 30.346550345484,
+        "8": 31.40516106060998
+      }
+    },
+    {
+      "attempt_id": "pp3_c32_128",
+      "blocker_detail": "Launch pinned NCCL/GLOO/TP and VLLM host IPs to wlP9s9 / 192.168.1.x, so distributed traffic used Wi-Fi.",
+      "blocker_kind": "wifi_distributed_dataplane",
+      "fabric": "wifi_control_plane",
+      "max_model_len": 8192,
+      "max_num_batched_tokens": 8192,
+      "max_num_seqs": 512,
+      "pipeline_parallel_size": 3,
+      "raw_artifact": "fixtures/vllm_config_tuning/ds4_vllm_pp3_spark345_no_mtp_c32_128_64tok_20260522.raw.json",
+      "raw_artifact_sha256": "e6ca62a4d3bf110826ad153a1467fb86e434ee73260d3525bae50ee2c3eaedf8",
+      "safety_status": "rejected_wifi_dataplane",
+      "startup_status": "passed",
+      "tokens_per_second_by_concurrency": {
+        "128": 38.734921826889085,
+        "32": 32.98971071581617,
+        "64": 54.699450476548314
+      }
+    },
+    {
+      "attempt_id": "pp2_c1_32",
+      "blocker_detail": "",
+      "blocker_kind": "none",
+      "fabric": "direct_200g_pair",
+      "max_model_len": 8192,
+      "max_num_batched_tokens": 8192,
+      "max_num_seqs": 512,
+      "pipeline_parallel_size": 2,
+      "raw_artifact": "fixtures/vllm_config_tuning/ds4_vllm_pp2_spark45_200g_no_mtp_c1_32_64tok_20260522.raw.json",
+      "raw_artifact_sha256": "f24d22f5ffdea930a3f03e358e41698ca7fb00006bfcffdfef923d22a58443b4",
+      "safety_status": "passed",
+      "startup_status": "passed",
+      "tokens_per_second_by_concurrency": {
+        "1": 14.005308011737775,
+        "16": 68.22553197428698,
+        "2": 25.257243625333878,
+        "32": 94.81343980046216,
+        "4": 34.94733302107257,
+        "8": 43.141509079034215
+      }
+    },
+    {
+      "attempt_id": "pp2_c64_128",
+      "blocker_detail": "",
+      "blocker_kind": "none",
+      "fabric": "direct_200g_pair",
+      "max_model_len": 8192,
+      "max_num_batched_tokens": 8192,
+      "max_num_seqs": 512,
+      "pipeline_parallel_size": 2,
+      "raw_artifact": "fixtures/vllm_config_tuning/ds4_vllm_pp2_spark45_200g_no_mtp_c64_128_64tok_20260522.raw.json",
+      "raw_artifact_sha256": "1522269c3f3e7c826c9ff68f0fbefe68276217a0770385f2e8c46413504c07f6",
+      "safety_status": "passed",
+      "startup_status": "passed",
+      "tokens_per_second_by_concurrency": {
+        "128": 144.81242147813424,
+        "64": 121.63421567560253
+      }
+    },
+    {
+      "attempt_id": "pp2_c256",
+      "blocker_detail": "",
+      "blocker_kind": "none",
+      "fabric": "direct_200g_pair",
+      "max_model_len": 8192,
+      "max_num_batched_tokens": 8192,
+      "max_num_seqs": 512,
+      "pipeline_parallel_size": 2,
+      "raw_artifact": "fixtures/vllm_config_tuning/ds4_vllm_pp2_spark45_200g_no_mtp_c256_64tok_20260522.raw.json",
+      "raw_artifact_sha256": "0d5e621f390fdb6e2e1ab6f9eed2847dcc2f0538af59a42b6ba0a766b1ff4299",
+      "safety_status": "passed",
+      "startup_status": "passed",
+      "tokens_per_second_by_concurrency": {
+        "256": 171.855906406208
+      }
+    },
+    {
+      "attempt_id": "pp2_c512",
+      "blocker_detail": "",
+      "blocker_kind": "none",
+      "fabric": "direct_200g_pair",
+      "max_model_len": 8192,
+      "max_num_batched_tokens": 8192,
+      "max_num_seqs": 512,
+      "pipeline_parallel_size": 2,
+      "raw_artifact": "fixtures/vllm_config_tuning/ds4_vllm_pp2_spark45_200g_no_mtp_c512_64tok_20260522.raw.json",
+      "raw_artifact_sha256": "52f4ef9ed336b9e6c56007c5355da65883789085eb7c6e8841b25aa8ff71a89d",
+      "safety_status": "passed",
+      "startup_status": "passed",
+      "tokens_per_second_by_concurrency": {
+        "512": 165.469330964015
+      }
+    }
+  ],
+  "benchmark_id": "ds4-vllm-pp2-200g-vs-pp3-wifi-no-mtp-20260522",
+  "conclusion": {
+    "best_measured_config": "pp2_200g_c256_64tok_no_mtp",
+    "best_measured_tokens_per_second": 171.855906406208,
+    "c512_tokens_per_second": 165.469330964015,
+    "do_not_apply": [
+      "Do not use NCCL_SOCKET_IFNAME/GLOO_SOCKET_IFNAME/TP_SOCKET_IFNAME=wlP9s9 for multi-node DeepSeek-V4-Flash vLLM measurements."
+    ],
+    "improved_vllm_performance": true,
+    "next_code_change": "Make the DS4 vLLM launch path refuse Wi-Fi distributed data-plane settings and prefer direct 200G PP=2 until PP=3 has explicit 200G routes.",
+    "speedup_vs_wifi_pp3_best": 3.141821442610086,
+    "wifi_pp3_best_tokens_per_second": 54.699450476548314
+  },
+  "created_utc": "2026-05-22T01:07:00Z",
+  "custom_ds4_lessons_tested": [
+    {
+      "lesson": "Use the fast fabric for distributed decode, not the operator Wi-Fi path.",
+      "result": "PP=2 direct 200G reached 171.856 tok/s at c256 versus Wi-Fi PP=3 best 54.699 tok/s."
+    },
+    {
+      "lesson": "Bigger concurrency helps until queueing dominates.",
+      "result": "PP=2 rose from 14.005 tok/s at c1 to 171.856 at c256, then dipped to 165.469 at c512."
+    }
+  ],
+  "format": "ds4-vllm-config-tuning-v1",
+  "hardware": {
+    "comparison_nodes": "spark3/spark4/spark5 Wi-Fi PP3",
+    "head_node": "spark4",
+    "machine": "DGX Spark",
+    "worker_node": "spark5"
+  },
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "runtime": "vllm",
+  "runtime_commit": "dda4668b59567416f86956cfe7bbc1eab371a61e",
+  "runtime_version": "0.1.dev16581+gdda4668b5.d20260521",
+  "selected_config": {
+    "fabric": "direct_200g_pair",
+    "max_model_len": 8192,
+    "max_num_batched_tokens": 8192,
+    "max_num_seqs": 256,
+    "reason": "Best measured no-MTP batch lane is PP=2 over the direct Spark4-Spark5 200G edge, capped operationally at c256 because c512 is slightly slower.",
+    "safety_status": "passed",
+    "source_fixture": "fixtures/vllm_config_tuning/ds4_vllm_pp2_spark45_200g_no_mtp_c256_64tok_20260522.raw.json",
+    "tokens_per_second_at_c256": 171.855906406208,
+    "tokens_per_second_at_c512": null,
+    "tokens_per_second_single_stream": 14.005308011737775
+  }
+}
