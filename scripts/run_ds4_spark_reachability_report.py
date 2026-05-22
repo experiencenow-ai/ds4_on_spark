@@ -117,8 +117,8 @@ def _read_line_inventory(root: Path, default_user: str, targets: dict[str, str],
             _record_target(targets, configured_hosts, item, default_user)
 
 
-def _read_inventory_targets(root: Path, default_user: str) -> tuple[dict[str, str], list[str]]:
-    targets = {host: f"{default_user}@{host}" for host in DEFAULT_HOSTS}
+def _read_inventory_targets(root: Path, default_user: str, include_defaults: bool) -> tuple[dict[str, str], list[str]]:
+    targets = {host: f"{default_user}@{host}" for host in DEFAULT_HOSTS} if include_defaults else {}
     configured_hosts: set[str] = set()
     _read_line_inventory(root, default_user, targets, configured_hosts)
     manifest_dir = root / "fixtures" / "stage_handoff_manifests"
@@ -235,9 +235,9 @@ def _direct_ip_results(ip_hosts: list[str], ping_results: dict[str, Any], ssh_re
 def build_report(args: argparse.Namespace) -> dict[str, Any]:
     root = Path(args.root)
     if args.include_inventory:
-        targets, configured_inventory_hosts = _read_inventory_targets(root, args.ssh_user)
+        targets, configured_inventory_hosts = _read_inventory_targets(root, args.ssh_user, args.include_default_hosts)
     else:
-        targets = {host: f"{args.ssh_user}@{host}" for host in DEFAULT_HOSTS}
+        targets = {host: f"{args.ssh_user}@{host}" for host in DEFAULT_HOSTS} if args.include_default_hosts else {}
         configured_inventory_hosts = []
     for host in args.host:
         targets[_host_only(host)] = host if "@" in host else f"{args.ssh_user}@{host}"
@@ -306,6 +306,7 @@ def main() -> int:
     parser.add_argument("--host", action="append", default=[])
     parser.add_argument("--ssh-user", default="spark0")
     parser.add_argument("--no-include-inventory", dest="include_inventory", action="store_false", default=True)
+    parser.add_argument("--no-default-hosts", dest="include_default_hosts", action="store_false", default=True)
     parser.add_argument("--lookup-timeout-s", type=float, default=3.0)
     parser.add_argument("--ping-timeout-s", type=float, default=3.0)
     parser.add_argument("--ssh-timeout-s", type=float, default=5.0)

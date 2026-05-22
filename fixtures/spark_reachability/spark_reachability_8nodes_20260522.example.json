@@ -1,0 +1,710 @@
+{
+  "artifact_hash": "sha256:55ee653bc093c5bcf3ae6f5d649c5471bade3cea47f73fe843cc3d2e01040470",
+  "artifact_sha256": "sha256:55ee653bc093c5bcf3ae6f5d649c5471bade3cea47f73fe843cc3d2e01040470",
+  "blocker_detail": "At least one Spark host accepted SSH.",
+  "blocker_kind": "none",
+  "checked_at": "2026-05-22T08:28:47Z",
+  "configured_inventory_hosts": [
+    "spark0@spark0-wifi",
+    "spark1@spark1-wifi",
+    "spark2@spark2-wifi",
+    "spark3@spark3-wifi",
+    "spark4@spark4-wifi",
+    "spark5@spark5-wifi",
+    "spark6@spark6-wifi",
+    "spark7@spark7"
+  ],
+  "direct_ip_results": {},
+  "dns_results": {
+    "spark0-wifi": {
+      "addresses": [],
+      "command": [
+        "dscacheutil",
+        "-q",
+        "host",
+        "-a",
+        "name",
+        "spark0-wifi"
+      ],
+      "elapsed_ms": 83.243,
+      "error": "no host record returned",
+      "returncode": 0,
+      "status": "not_found",
+      "stderr": "",
+      "stdout": ""
+    },
+    "spark1-wifi": {
+      "addresses": [],
+      "command": [
+        "dscacheutil",
+        "-q",
+        "host",
+        "-a",
+        "name",
+        "spark1-wifi"
+      ],
+      "elapsed_ms": 100.503,
+      "error": "no host record returned",
+      "returncode": 0,
+      "status": "not_found",
+      "stderr": "",
+      "stdout": ""
+    },
+    "spark2-wifi": {
+      "addresses": [],
+      "command": [
+        "dscacheutil",
+        "-q",
+        "host",
+        "-a",
+        "name",
+        "spark2-wifi"
+      ],
+      "elapsed_ms": 96.299,
+      "error": "no host record returned",
+      "returncode": 0,
+      "status": "not_found",
+      "stderr": "",
+      "stdout": ""
+    },
+    "spark3-wifi": {
+      "addresses": [],
+      "command": [
+        "dscacheutil",
+        "-q",
+        "host",
+        "-a",
+        "name",
+        "spark3-wifi"
+      ],
+      "elapsed_ms": 107.065,
+      "error": "no host record returned",
+      "returncode": 0,
+      "status": "not_found",
+      "stderr": "",
+      "stdout": ""
+    },
+    "spark4-wifi": {
+      "addresses": [],
+      "command": [
+        "dscacheutil",
+        "-q",
+        "host",
+        "-a",
+        "name",
+        "spark4-wifi"
+      ],
+      "elapsed_ms": 96.499,
+      "error": "no host record returned",
+      "returncode": 0,
+      "status": "not_found",
+      "stderr": "",
+      "stdout": ""
+    },
+    "spark5-wifi": {
+      "addresses": [],
+      "command": [
+        "dscacheutil",
+        "-q",
+        "host",
+        "-a",
+        "name",
+        "spark5-wifi"
+      ],
+      "elapsed_ms": 104.938,
+      "error": "no host record returned",
+      "returncode": 0,
+      "status": "not_found",
+      "stderr": "",
+      "stdout": ""
+    },
+    "spark6-wifi": {
+      "addresses": [],
+      "command": [
+        "dscacheutil",
+        "-q",
+        "host",
+        "-a",
+        "name",
+        "spark6-wifi"
+      ],
+      "elapsed_ms": 90.832,
+      "error": "no host record returned",
+      "returncode": 0,
+      "status": "not_found",
+      "stderr": "",
+      "stdout": ""
+    },
+    "spark7": {
+      "addresses": [],
+      "command": [
+        "dscacheutil",
+        "-q",
+        "host",
+        "-a",
+        "name",
+        "spark7"
+      ],
+      "elapsed_ms": 10.228,
+      "error": "no host record returned",
+      "returncode": 0,
+      "status": "not_found",
+      "stderr": "",
+      "stdout": ""
+    }
+  },
+  "expected_hosts": [
+    "spark0-wifi",
+    "spark1-wifi",
+    "spark2-wifi",
+    "spark3-wifi",
+    "spark4-wifi",
+    "spark5-wifi",
+    "spark6-wifi",
+    "spark7"
+  ],
+  "format": "ds4-spark-reachability-report-v1",
+  "known_hosts_status": {
+    "spark0-wifi": {
+      "command": [
+        "ssh-keygen",
+        "-F",
+        "spark0-wifi"
+      ],
+      "elapsed_ms": 6.636,
+      "error": "",
+      "returncode": 1,
+      "status": "missing",
+      "stderr": "",
+      "stdout": ""
+    },
+    "spark1-wifi": {
+      "command": [
+        "ssh-keygen",
+        "-F",
+        "spark1-wifi"
+      ],
+      "elapsed_ms": 4.87,
+      "error": "",
+      "returncode": 1,
+      "status": "missing",
+      "stderr": "",
+      "stdout": ""
+    },
+    "spark2-wifi": {
+      "command": [
+        "ssh-keygen",
+        "-F",
+        "spark2-wifi"
+      ],
+      "elapsed_ms": 4.085,
+      "error": "",
+      "returncode": 1,
+      "status": "missing",
+      "stderr": "",
+      "stdout": ""
+    },
+    "spark3-wifi": {
+      "command": [
+        "ssh-keygen",
+        "-F",
+        "spark3-wifi"
+      ],
+      "elapsed_ms": 4.505,
+      "error": "",
+      "returncode": 1,
+      "status": "missing",
+      "stderr": "",
+      "stdout": ""
+    },
+    "spark4-wifi": {
+      "command": [
+        "ssh-keygen",
+        "-F",
+        "spark4-wifi"
+      ],
+      "elapsed_ms": 4.402,
+      "error": "",
+      "returncode": 1,
+      "status": "missing",
+      "stderr": "",
+      "stdout": ""
+    },
+    "spark5-wifi": {
+      "command": [
+        "ssh-keygen",
+        "-F",
+        "spark5-wifi"
+      ],
+      "elapsed_ms": 4.619,
+      "error": "",
+      "returncode": 1,
+      "status": "missing",
+      "stderr": "",
+      "stdout": ""
+    },
+    "spark6-wifi": {
+      "command": [
+        "ssh-keygen",
+        "-F",
+        "spark6-wifi"
+      ],
+      "elapsed_ms": 3.784,
+      "error": "",
+      "returncode": 1,
+      "status": "missing",
+      "stderr": "",
+      "stdout": ""
+    },
+    "spark7": {
+      "command": [
+        "ssh-keygen",
+        "-F",
+        "spark7"
+      ],
+      "elapsed_ms": 4.683,
+      "error": "",
+      "returncode": 1,
+      "status": "missing",
+      "stderr": "",
+      "stdout": ""
+    }
+  },
+  "local_host": {
+    "hostname": "Mac-Studio.local",
+    "platform": "macOS-14.6-arm64-arm-64bit-Mach-O"
+  },
+  "mdns_results": {
+    "spark0-wifi": {
+      "command": [
+        "dns-sd",
+        "-G",
+        "v4v6",
+        "spark0-wifi"
+      ],
+      "elapsed_ms": 1005.633,
+      "error": "mDNS lookup did not return a usable host record",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
+    },
+    "spark1-wifi": {
+      "command": [
+        "dns-sd",
+        "-G",
+        "v4v6",
+        "spark1-wifi"
+      ],
+      "elapsed_ms": 1004.453,
+      "error": "mDNS lookup did not return a usable host record",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
+    },
+    "spark2-wifi": {
+      "command": [
+        "dns-sd",
+        "-G",
+        "v4v6",
+        "spark2-wifi"
+      ],
+      "elapsed_ms": 1004.063,
+      "error": "mDNS lookup did not return a usable host record",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
+    },
+    "spark3-wifi": {
+      "command": [
+        "dns-sd",
+        "-G",
+        "v4v6",
+        "spark3-wifi"
+      ],
+      "elapsed_ms": 1004.221,
+      "error": "mDNS lookup did not return a usable host record",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
+    },
+    "spark4-wifi": {
+      "command": [
+        "dns-sd",
+        "-G",
+        "v4v6",
+        "spark4-wifi"
+      ],
+      "elapsed_ms": 1003.436,
+      "error": "mDNS lookup did not return a usable host record",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
+    },
+    "spark5-wifi": {
+      "command": [
+        "dns-sd",
+        "-G",
+        "v4v6",
+        "spark5-wifi"
+      ],
+      "elapsed_ms": 1005.134,
+      "error": "mDNS lookup did not return a usable host record",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
+    },
+    "spark6-wifi": {
+      "command": [
+        "dns-sd",
+        "-G",
+        "v4v6",
+        "spark6-wifi"
+      ],
+      "elapsed_ms": 1005.354,
+      "error": "mDNS lookup did not return a usable host record",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
+    },
+    "spark7": {
+      "command": [
+        "dns-sd",
+        "-G",
+        "v4v6",
+        "spark7"
+      ],
+      "elapsed_ms": 1006.553,
+      "error": "mDNS lookup did not return a usable host record",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
+    }
+  },
+  "network_interface_summary": {
+    "active_interfaces": [
+      "awdl0",
+      "en0",
+      "en1"
+    ],
+    "error": "",
+    "hostname": "Mac-Studio.local",
+    "ifconfig_status": "success",
+    "mdnsresponder_process_status": "not_observed",
+    "networksetup_error": "AuthorizationCreate() failed: -60008",
+    "networksetup_status": "failed",
+    "platform": "macOS-14.6-arm64-arm-64bit-Mach-O",
+    "process_check_status": "failed",
+    "scutil_dns_error": "DNS configuration\n\nresolver #1\n  nameserver[0] : 8.8.8.8\n  flags    : Request A records\n  reach    : 0x00000002 (Reachable)\n\nresolver #2\n  domain   : local\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 300000\n\nresolver #3\n  domain   : 254.169.in-addr.arpa\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 300200\n\nresolver #4\n  domain   : 8.e.f.ip6.arpa\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 300400\n\nresolver #5\n  domain   : 9.e.f.ip6.arpa\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 300600\n\nresolver #6\n  domain   : a.e.f.ip6.arpa\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 300800\n\nresolver #7\n  domain   : b.e.f.ip6.arpa\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 301000\n\nDNS configuration (for scoped queries)\n\nresolver #1\n  nameserver[0] : 8.8.8.8\n  if_index : 23 (en1)\n  flags    : Scoped, Request A records\n  reach    : 0x00000002 (Reachable)",
+    "scutil_dns_status": "success"
+  },
+  "ping_results": {
+    "spark0-wifi": {
+      "command": [
+        "ping",
+        "-c",
+        "1",
+        "-W",
+        "1000",
+        "spark0-wifi"
+      ],
+      "elapsed_ms": 6.068,
+      "error": "ping: cannot resolve spark0-wifi: Unknown host",
+      "returncode": 68,
+      "status": "failed",
+      "stderr": "ping: cannot resolve spark0-wifi: Unknown host",
+      "stdout": ""
+    },
+    "spark1-wifi": {
+      "command": [
+        "ping",
+        "-c",
+        "1",
+        "-W",
+        "1000",
+        "spark1-wifi"
+      ],
+      "elapsed_ms": 7.806,
+      "error": "ping: cannot resolve spark1-wifi: Unknown host",
+      "returncode": 68,
+      "status": "failed",
+      "stderr": "ping: cannot resolve spark1-wifi: Unknown host",
+      "stdout": ""
+    },
+    "spark2-wifi": {
+      "command": [
+        "ping",
+        "-c",
+        "1",
+        "-W",
+        "1000",
+        "spark2-wifi"
+      ],
+      "elapsed_ms": 5.664,
+      "error": "ping: cannot resolve spark2-wifi: Unknown host",
+      "returncode": 68,
+      "status": "failed",
+      "stderr": "ping: cannot resolve spark2-wifi: Unknown host",
+      "stdout": ""
+    },
+    "spark3-wifi": {
+      "command": [
+        "ping",
+        "-c",
+        "1",
+        "-W",
+        "1000",
+        "spark3-wifi"
+      ],
+      "elapsed_ms": 5.177,
+      "error": "ping: cannot resolve spark3-wifi: Unknown host",
+      "returncode": 68,
+      "status": "failed",
+      "stderr": "ping: cannot resolve spark3-wifi: Unknown host",
+      "stdout": ""
+    },
+    "spark4-wifi": {
+      "command": [
+        "ping",
+        "-c",
+        "1",
+        "-W",
+        "1000",
+        "spark4-wifi"
+      ],
+      "elapsed_ms": 6.237,
+      "error": "ping: cannot resolve spark4-wifi: Unknown host",
+      "returncode": 68,
+      "status": "failed",
+      "stderr": "ping: cannot resolve spark4-wifi: Unknown host",
+      "stdout": ""
+    },
+    "spark5-wifi": {
+      "command": [
+        "ping",
+        "-c",
+        "1",
+        "-W",
+        "1000",
+        "spark5-wifi"
+      ],
+      "elapsed_ms": 5.631,
+      "error": "ping: cannot resolve spark5-wifi: Unknown host",
+      "returncode": 68,
+      "status": "failed",
+      "stderr": "ping: cannot resolve spark5-wifi: Unknown host",
+      "stdout": ""
+    },
+    "spark6-wifi": {
+      "command": [
+        "ping",
+        "-c",
+        "1",
+        "-W",
+        "1000",
+        "spark6-wifi"
+      ],
+      "elapsed_ms": 5.519,
+      "error": "ping: cannot resolve spark6-wifi: Unknown host",
+      "returncode": 68,
+      "status": "failed",
+      "stderr": "ping: cannot resolve spark6-wifi: Unknown host",
+      "stdout": ""
+    },
+    "spark7": {
+      "command": [
+        "ping",
+        "-c",
+        "1",
+        "-W",
+        "1000",
+        "spark7"
+      ],
+      "elapsed_ms": 6.237,
+      "error": "ping: cannot resolve spark7: Unknown host",
+      "returncode": 68,
+      "status": "failed",
+      "stderr": "ping: cannot resolve spark7: Unknown host",
+      "stdout": ""
+    }
+  },
+  "recommended_fix": "Rerun SGLang acquisition against the reachable Spark host.",
+  "run_id": "spark-reachability-8nodes-20260522",
+  "ssh_results": {
+    "spark0-wifi": {
+      "command": [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=8",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "spark0@spark0-wifi",
+        "hostname"
+      ],
+      "elapsed_ms": 2164.564,
+      "error": "",
+      "returncode": 0,
+      "status": "success",
+      "stderr": "",
+      "stdout": "aitopatom-9ab9",
+      "target": "spark0@spark0-wifi"
+    },
+    "spark1-wifi": {
+      "command": [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=8",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "spark1@spark1-wifi",
+        "hostname"
+      ],
+      "elapsed_ms": 829.215,
+      "error": "",
+      "returncode": 0,
+      "status": "success",
+      "stderr": "",
+      "stdout": "edgexpert-d623",
+      "target": "spark1@spark1-wifi"
+    },
+    "spark2-wifi": {
+      "command": [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=8",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "spark2@spark2-wifi",
+        "hostname"
+      ],
+      "elapsed_ms": 670.59,
+      "error": "",
+      "returncode": 0,
+      "status": "success",
+      "stderr": "",
+      "stdout": "aitopatom-931a",
+      "target": "spark2@spark2-wifi"
+    },
+    "spark3-wifi": {
+      "command": [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=8",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "spark3@spark3-wifi",
+        "hostname"
+      ],
+      "elapsed_ms": 449.13,
+      "error": "",
+      "returncode": 0,
+      "status": "success",
+      "stderr": "",
+      "stdout": "aitopatom-a18f",
+      "target": "spark3@spark3-wifi"
+    },
+    "spark4-wifi": {
+      "command": [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=8",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "spark4@spark4-wifi",
+        "hostname"
+      ],
+      "elapsed_ms": 501.608,
+      "error": "",
+      "returncode": 0,
+      "status": "success",
+      "stderr": "",
+      "stdout": "aitopatom-c342",
+      "target": "spark4@spark4-wifi"
+    },
+    "spark5-wifi": {
+      "command": [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=8",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "spark5@spark5-wifi",
+        "hostname"
+      ],
+      "elapsed_ms": 683.948,
+      "error": "",
+      "returncode": 0,
+      "status": "success",
+      "stderr": "",
+      "stdout": "aitopatom-a36d",
+      "target": "spark5@spark5-wifi"
+    },
+    "spark6-wifi": {
+      "command": [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=8",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "spark6@spark6-wifi",
+        "hostname"
+      ],
+      "elapsed_ms": 519.595,
+      "error": "",
+      "returncode": 0,
+      "status": "success",
+      "stderr": "",
+      "stdout": "aitopatom-c637",
+      "target": "spark6@spark6-wifi"
+    },
+    "spark7": {
+      "command": [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=8",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "spark7@spark7",
+        "hostname"
+      ],
+      "elapsed_ms": 692.478,
+      "error": "",
+      "returncode": 0,
+      "status": "success",
+      "stderr": "",
+      "stdout": "thinkstation-pgx",
+      "target": "spark7@spark7"
+    }
+  }
+}
