@@ -45,6 +45,16 @@ exit 0
 		runner.chmod(0o755)
 		return(runner, marker)
 
+	def make_probe(self, rc: int, payload: str) -> Path:
+		tmp = Path(tempfile.mkdtemp())
+		probe = tmp / "readiness.py"
+		probe.write_text(f"""#!/usr/bin/env python3
+print({payload!r})
+raise SystemExit({rc})
+""", encoding="utf-8")
+		probe.chmod(0o755)
+		return(probe)
+
 	def test_insert_dry_run_before_separator(self) -> None:
 		args = ["recipe.yaml", "--no-ray", "--", "--load-format", "safetensors"]
 		self.assertEqual(guarded.insert_dry_run_arg(args), ["recipe.yaml", "--no-ray", "--dry-run", "--", "--load-format", "safetensors"])
@@ -77,6 +87,26 @@ exit 0
 		self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
 		self.assertFalse(marker.exists())
 		self.assertIn("kv_request_exceeds_available", result.stdout)
+
+	def test_post_launch_readiness_success_runs_after_execute(self) -> None:
+		runner, marker = self.make_runner(SAFE_SCRIPT)
+		probe = self.make_probe(0, '{"status":"healthy","serving_readiness":{"serving_ready":true}}')
+		cmd = ["python3", "scripts/run_guarded_spark_vllm_recipe.py", "--runner", str(runner), "--post-launch-readiness", "--readiness-probe", str(probe), "recipe.yaml", "--no-ray"]
+		result = subprocess.run(cmd, text=True, capture_output=True)
+		self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+		self.assertTrue(marker.exists())
+		self.assertIn("post-launch readiness:", result.stdout)
+		self.assertIn('"serving_ready":true', result.stdout)
+
+	def test_post_launch_readiness_failure_returns_nonzero(self) -> None:
+		runner, marker = self.make_runner(SAFE_SCRIPT)
+		probe = self.make_probe(2, '{"status":"blocked","blocker_kind":"serving_queue_backlog"}')
+		cmd = ["python3", "scripts/run_guarded_spark_vllm_recipe.py", "--runner", str(runner), "--post-launch-readiness", "--readiness-probe", str(probe), "recipe.yaml", "--no-ray"]
+		result = subprocess.run(cmd, text=True, capture_output=True)
+		self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+		self.assertTrue(marker.exists())
+		self.assertIn('"blocker_kind":"serving_queue_backlog"', result.stdout)
+		self.assertIn("serving readiness probe failed", result.stderr)
 
 
 if __name__ == "__main__":
