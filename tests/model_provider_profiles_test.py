@@ -59,6 +59,22 @@ class ModelProviderProfilesTest(unittest.TestCase):
         errors = validator.validate_profile(obj, path)
         self.assertTrue(any("blocked" in item for item in errors))
 
+    def test_rejects_missing_local_source_ref(self) -> None:
+        path = Path("fixture.json")
+        obj = validator.load_profile(validator.default_profile_paths()[0])
+        obj = copy.deepcopy(obj)
+        obj["source_refs"] = ["fixtures/model_providers/not-present.json"]
+        errors = validator.validate_profile(obj, path)
+        self.assertTrue(any("source_refs references missing repo file" in item for item in errors))
+
+    def test_rejects_parent_traversal_probe_ref(self) -> None:
+        path = Path("fixture.json")
+        obj = validator.load_profile(validator.default_profile_paths()[0])
+        obj = copy.deepcopy(obj)
+        obj["last_probe_artifact"] = "../outside.json"
+        errors = validator.validate_profile(obj, path)
+        self.assertTrue(any("repo-relative path" in item for item in errors))
+
 
 if __name__ == "__main__":
     unittest.main()
