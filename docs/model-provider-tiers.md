@@ -135,9 +135,12 @@ For a Centaur-shaped batch of LLM node requirements, use
 `scripts/route_model_provider_requests.py`. It accepts
 `centaur-provider-route-requests-v1` JSON and emits
 `centaur-provider-routing-plan-v1` with one route per node, aggregate provider
-load, selected/blocked counts, and blocker summaries. The example fixture
-intentionally includes one too-tight wait-budget request so consumers can test
-both the selected-provider and structured-blocker paths.
+load, selected/blocked counts, blocker summaries, and measured-throughput
+capacity estimates when a selected provider has local output t/s evidence. If a
+selected provider lacks measured output throughput, the capacity estimate stays
+`null` and the provider appears in `unknown_capacity_provider_ids`. The example
+fixture intentionally includes one too-tight wait-budget request so consumers
+can test both the selected-provider and structured-blocker paths.
 
 ## Centaur Boundary
 
