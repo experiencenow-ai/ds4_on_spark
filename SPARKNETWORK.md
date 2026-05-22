@@ -4,7 +4,7 @@ Load this file first for any Centaur/Spark networking work. The machine-readable
 source of truth is [`sparknetwork.json`](sparknetwork.json); this document is the
 human runbook derived from it.
 
-Last verified: `2026-05-22T00:00Z` UTC.
+Last verified: `2026-05-22T00:26Z` UTC.
 
 ## Rule Zero
 
@@ -22,12 +22,16 @@ Do not confuse SSH login names with network hostnames.
 
 ## Current Physical Topology
 
-The 10G control plane is being reworked. Operator report: all Sparks, including
-new Spark7, are connected to the 8-port switch; fiber/wired internet is not
-connected, so internet should be considered Wi-Fi-only until reverified.
+The 10G control plane is being reworked. Operator report: internet is currently
+offline and operator SSH is via Wi-Fi. Spark0 through Spark6 have documented
+10G control entries; Spark7 has a 10G profile but no carrier, so do not treat
+Spark7 as reachable on the switch plane until a fresh link probe says so.
+Treat Wi-Fi SSH as the active break-glass/control path until the wired plane is
+repaired.
 
 ```text
-Mac Studio en0 -> TP-Link 5-port -> 8-port Spark switch -> spark0-spark7 10G
+Mac Studio en0 -> TP-Link 5-port -> 8-port Spark switch -> spark0-spark6 10G
+Spark7 10G profile exists, but link has no carrier
 Mac Studio en1 Wi-Fi -> TP-Link_D660(_5G) -> spark0-spark7 Wi-Fi
 ```
 
@@ -36,6 +40,9 @@ address and no active `10.20.0.1/24` alias, so direct Mac-to-Spark TCP/22 on
 `10.20.0.10-10.20.0.17` is not an operator path. Use direct Wi-Fi aliases for
 break-glass access and Wi-Fi plus 200G proxy hops for canonical `ssh sparkN`
 paths.
+
+Spark7 is special in the current topology: its operator path is Wi-Fi only, and
+its only verified non-Wi-Fi neighbor path is the dual 200G Spark6-Spark7 link.
 
 The 200G fabric is currently an open line, not a closed ring:
 
@@ -60,7 +67,7 @@ operator/control plane.
 | Spark6 | `ssh spark6` | `aitopatom-c637.local` | Direct Wi-Fi, `192.168.1.185` | `ssh spark6-wifi`, `192.168.1.185` |
 | Spark7 | `ssh spark7` | `thinkstation-pgx.local` | Direct Wi-Fi, `192.168.1.236` | `ssh spark7`, `192.168.1.236` |
 
-Current verified manual access paths:
+Current verified manual access paths (`2026-05-22T00:26Z`):
 
 ```bash
 ssh spark0-wifi hostname
@@ -77,8 +84,8 @@ ssh -o ProxyCommand='ssh spark4@192.168.1.137 nc 10.10.9.2 22' spark5@10.10.9.2 
 
 Spark0 and Spark1 are alive after reboot, and every node from Spark0 through
 Spark7 has a direct Wi-Fi SSH path. The Mac Studio `DS4 SPARKNETWORK` SSH block
-was updated at `2026-05-22T00:00Z`; bare `ssh spark0` through `ssh spark7` and
-`ssh spark0-wifi` through `ssh spark6-wifi` were verified after the update.
+was updated at `2026-05-22T00:00Z`; direct Wi-Fi aliases `spark0-wifi` through
+`spark6-wifi`, plus `spark7`, were verified at `2026-05-22T00:26Z`.
 
 ## 10G Control Plane
 
@@ -116,10 +123,10 @@ sudo ifconfig en0 inet 10.20.0.1 netmask 255.255.255.0 alias
 
 ## 200G Fabric
 
-Spark0 through Spark7 are reachable over the open-line 200G fabric using Wi-Fi
-jump points. Spark6-Spark7 was configured at `2026-05-21T23:56Z` using
-persistent NetworkManager profiles with MTU `9000`; both `/30` links ping in
-both directions.
+Spark0 through Spark7 form an open-line 200G fabric. Spark6-Spark7 was
+configured at `2026-05-21T23:56Z` using persistent NetworkManager profiles with
+MTU `9000`; both `/30` links ping in both directions as of
+`2026-05-22T00:26Z`. Spark7 has no other verified 200G neighbor.
 
 | Edge | Link A | Link B |
 |------|--------|--------|
@@ -151,11 +158,10 @@ Wi-Fi is not the primary operator plane.
 
 ## Internet Status
 
-Operator report for this rewire: wired/fiber internet is not connected; internet
-should be considered Wi-Fi-only until the switch plane is repaired. Mac Studio
-currently uses Wi-Fi `192.168.1.128/24`. Spark0 through Spark7 all default to
-`192.168.1.1` via `wlP9s9`, and Cloudflare trace succeeded from every node at
-`2026-05-21T23:56Z`.
+Operator report for this rewire: internet is currently offline. Mac Studio
+currently uses Wi-Fi `192.168.1.128/24` for operator SSH. Spark0 through Spark7
+have Wi-Fi reachability, but do not treat any previous Cloudflare trace as
+current internet evidence until a fresh run succeeds.
 
 Do not use internet availability as a 200G or 10G health signal. Until the 10G
 plane is flat again, use verified SSH reachability over the Wi-Fi/200G proxy
@@ -174,8 +180,10 @@ Use separate planes for separate jobs:
 
 ## Rescue Control Plane
 
-Spark0 through Spark7 now run a first-pass software rescue layer on the 10G
-control plane:
+Spark0 through Spark7 have the first-pass software rescue layer installed, but
+the remote rescue plane depends on 10G reachability. With the current fragmented
+10G state and Spark7's 10G link showing no carrier, treat local watchdog
+recovery as the reliable rescue layer until the switch plane is repaired:
 
 - Service: `ds4-rescue-agent.service`, user systemd unit.
 - Port: `25100/tcp` on each deployed node.

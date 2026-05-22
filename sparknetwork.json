@@ -1,6 +1,6 @@
 {
   "schema": "ds4.sparknetwork.v1",
-  "last_verified_utc": "2026-05-22T00:00Z",
+  "last_verified_utc": "2026-05-22T00:26Z",
   "operator": {
     "name": "Mac Studio",
     "hostname": "Mac-Studio.local",
@@ -10,7 +10,7 @@
     "private_10g_state": "en0 had no active IPv4 address during the 2026-05-21T23:34Z probe"
   },
   "switch_topology": {
-    "verified_utc": "2026-05-22T00:00Z",
+    "verified_utc": "2026-05-22T00:26Z",
     "upstream_switch": "TP-Link 5-port",
     "upstream_switch_ports": ["Mac Studio en0", "8-port Spark switch uplink"],
     "spark_switch": "8-port 10G switch",
@@ -22,14 +22,16 @@
       "spark4 enP7s7",
       "spark5 enP7s7",
       "spark6 enP7s7",
-      "spark7 10G port pending verification"
+      "spark7 enP7s7 profile installed, no carrier"
     ],
     "notes": [
-      "Operator reported all Sparks are connected to the 8-port switch; fiber/wired internet is not connected except through Wi-Fi.",
+      "Operator reported internet is currently offline and SSH is via Wi-Fi.",
+      "Spark0 through Spark6 have documented 10G control entries; Spark7 has a 10G profile but no carrier and should not be treated as switch-reachable until a fresh link probe succeeds.",
       "Mac Studio en1 is on TP-Link_D660_5G at 192.168.1.128/24.",
       "Mac Studio en0 had no active IPv4 address during the 2026-05-21T23:34Z probe; direct Mac-to-Spark TCP/22 on 10.20.0.10-10.20.0.17 is not an operator path.",
-      "Use spark0-wifi through spark6-wifi for direct Wi-Fi break-glass access; use canonical sparkN aliases for the documented Wi-Fi plus 200G paths.",
-      "Spark7 is a Lenovo ThinkStation PGX node configured as thinkstation-pgx at 192.168.1.236; the Mac spark7 alias is pinned to this IP."
+      "Use spark0-wifi through spark6-wifi plus spark7 for direct Wi-Fi break-glass access; use canonical sparkN aliases only after checking the documented proxy path.",
+      "Spark7 is a Lenovo ThinkStation PGX node configured as thinkstation-pgx at 192.168.1.236; the Mac spark7 alias is pinned to this IP.",
+      "Spark7's only verified non-Wi-Fi path is the dual 200G Spark6-Spark7 link."
     ]
   },
   "ssh_policy": {
@@ -37,7 +39,7 @@
     "known_hosts_file": "/private/tmp/ds4_office_known_hosts",
     "mac_config_block": "DS4 SPARKNETWORK",
     "mac_config_updated_utc": "2026-05-22T00:00Z",
-    "mac_config_verified_aliases": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7", "spark0-wifi", "spark1-wifi", "spark2-wifi", "spark3-wifi", "spark4-wifi", "spark5-wifi", "spark6-wifi"],
+    "mac_config_verified_aliases": ["spark7", "spark0-wifi", "spark1-wifi", "spark2-wifi", "spark3-wifi", "spark4-wifi", "spark5-wifi", "spark6-wifi"],
     "do_not_use_mdns_names": ["spark1.local", "spark2.local", "spark3.local", "spark4.local", "spark5.local", "spark6.local", "spark7.local"],
     "direct_wifi_aliases": {"spark0": "spark0-wifi", "spark1": "spark1-wifi", "spark2": "spark2-wifi", "spark3": "spark3-wifi", "spark4": "spark4-wifi", "spark5": "spark5-wifi", "spark6": "spark6-wifi", "spark7": "spark7"}
   },
@@ -164,7 +166,7 @@
       "spark7": "10.20.0.17"
     },
     "notes": [
-      "All eight Sparks are intended to be on the 8-port 10G switch.",
+      "Spark0 through Spark6 are intended to be on the 8-port 10G switch; Spark7 has a profile but no current carrier.",
       "Mac Studio en0 had no active IPv4 address during the 2026-05-21T23:34Z probe; 10.20.0.1/24 is reserved but not currently configured.",
       "Spark1 enP7s7 was link-up but had no IPv4 address during the 2026-05-21T23:34Z probe.",
       "Spark7 enP7s7 has a persistent 10.20.0.17/24 profile, but the physical link had no carrier during the 2026-05-21T23:56Z probe.",
@@ -173,17 +175,17 @@
     ]
   },
   "internet_status": {
-    "verified_utc": "2026-05-21T23:56Z",
+    "verified_utc": "2026-05-22T00:26Z",
     "working_wired_internet": [],
-    "working_wifi_internet": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7"],
-    "reachable_but_no_internet_route": [],
+    "working_wifi_internet": [],
+    "reachable_but_no_internet_route": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7"],
     "pending_nodes": [],
     "default_route": {"spark0": "192.168.1.1 via wlP9s9 src 192.168.1.127", "spark1": "192.168.1.1 via wlP9s9 src 192.168.1.226", "spark2": "192.168.1.1 via wlP9s9 src 192.168.1.166", "spark3": "192.168.1.1 via wlP9s9 src 192.168.1.110", "spark4": "192.168.1.1 via wlP9s9 src 192.168.1.137", "spark5": "192.168.1.1 via wlP9s9 src 192.168.1.245", "spark6": "192.168.1.1 via wlP9s9 src 192.168.1.185", "spark7": "192.168.1.1 via wlP9s9 src 192.168.1.236"},
     "notes": [
-      "Operator reported no wired/fiber internet is connected; internet should be considered Wi-Fi-only until the switch plane is repaired.",
-      "Mac Studio uses Wi-Fi 192.168.1.128/24 for current operator reachability.",
+      "Operator reported internet is currently offline; do not use previous Cloudflare traces as current internet evidence.",
+      "Mac Studio uses Wi-Fi 192.168.1.128/24 for current operator SSH reachability.",
       "spark0 through spark7 are directly reachable from Mac Studio over 192.168.1.0/24 Wi-Fi.",
-      "Cloudflare trace succeeded from spark0 through spark7 at 2026-05-21T23:56Z with shared public IP 59.6.237.182, location KR, WARP off."
+      "Fresh SSH hostname probes succeeded for spark0-wifi through spark6-wifi and spark7 at 2026-05-22T00:26Z."
     ]
   },
   "ring_200g": {
@@ -191,7 +193,7 @@
     "order": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7"],
     "missing_return_edge": {"from": "spark7", "to": "spark0", "reason": "return cable path not installed"},
     "mtu": 9000,
-    "verified": "spark0 through spark7 are reachable over the open-line 200G fabric using Wi-Fi jump points; Spark6-Spark7 10.10.13.0/30 and 10.10.14.0/30 ping both directions",
+    "verified": "open-line 200G fabric extends to spark7; Spark6-Spark7 10.10.13.0/30 and 10.10.14.0/30 ping both directions at 2026-05-22T00:26Z; Spark7 has no other verified 200G neighbor",
     "links": [
       {"edge": "spark0-spark1", "a": {"node": "spark0", "interface": "enp1s0f1np1", "ipv4": "10.10.1.1/30"}, "b": {"node": "spark1", "interface": "enp1s0f1np1", "ipv4": "10.10.1.2/30"}},
       {"edge": "spark0-spark1", "a": {"node": "spark0", "interface": "enP2p1s0f1np1", "ipv4": "10.10.2.1/30"}, "b": {"node": "spark1", "interface": "enP2p1s0f1np1", "ipv4": "10.10.2.2/30"}},
@@ -222,12 +224,13 @@
   },
   "rescue_control": {
     "schema": "ds4.rescue.v1",
-    "verified_utc": "2026-05-21T23:56Z",
+    "verified_utc": "2026-05-22T00:26Z",
     "deployed_nodes": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7"],
     "self_rescue_escalation_deployed_nodes": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7"],
     "self_rescue_escalation_pending_nodes": [],
     "not_deployed_nodes": [],
     "plane": "10G control",
+    "current_state": "installed on all nodes, but remote rescue is not reliable until the fragmented 10G plane is repaired; Spark7 10G has no carrier, so use local watchdog plus Wi-Fi SSH for Spark7",
     "port": 25100,
     "token_file_remote": "~/.ds4-rescue/token",
     "token_file_local_default": "/private/tmp/ds4_rescue_token",
