@@ -38,12 +38,20 @@ models/
 ```
 
 Spark0 was the initial superset source on the 2026-05-20 inventory. After the
-200G hop-by-hop mirror pass, the required cache is verified on spark0-spark6:
+2026-05-22 200G mirror pass, the required usable cache is verified on
+spark0-spark7:
 
 - 46 DeepSeek V4 Flash HF safetensor shards per node.
 - 7 required GGUF files per node.
 - The obsolete spark6 `.part` file was removed after the full canonical DS4
   file passed the byte-size check.
+- Spark0, spark1, and spark7 were rechecked at `2026-05-22T0030Z` after the
+  Spark7 expansion. Each has the same 1,639 usable files, 1,396,051,607,368
+  bytes, under `/home/sparkN/models` when `.incomplete` and `.lock` cache
+  artifacts are excluded.
+- Spark1 still has old DeepSeek `.incomplete`/`.lock` Hugging Face cache
+  fragments from a failed download. They are not part of the usable model shelf
+  and should not be propagated.
 
 ## Candidate Shelf
 
@@ -98,7 +106,7 @@ The source scan URLs are recorded in `sparkmodels.json` under
 Use the 200G neighbor ring and copy hop-by-hop:
 
 ```text
-spark0 -> spark1 -> spark2 -> spark3 -> spark4 -> spark5 -> spark6
+spark0 -> spark1 -> spark2 -> spark3 -> spark4 -> spark5 -> spark6 -> spark7
 ```
 
 For regular model files:
@@ -124,13 +132,13 @@ scripts/spark_ring_fast_copy.py --engine python --parallel 16 --chunk-mib 512 sp
 Quick placement check:
 
 ```bash
-for h in spark0 spark1 spark2 spark3 spark4 spark5 spark6; do ssh "$h" 'hostname; du -sh ~/models/* 2>/dev/null'; done
+for h in spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7; do ssh "$h" 'hostname; du -sh ~/models/* 2>/dev/null'; done
 ```
 
 For required GGUF files, compare byte sizes first:
 
 ```bash
-for h in spark0 spark1 spark2 spark3 spark4 spark5 spark6; do ssh "$h" 'find ~/models -type f -name "*.gguf" -printf "%s %p\n" | sort -nr | head -20'; done
+for h in spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7; do ssh "$h" 'find ~/models -type f -name "*.gguf" -printf "%s %p\n" | sort -nr | head -20'; done
 ```
 
 For a newly copied large file, compare SHA-256 across the source and destination
