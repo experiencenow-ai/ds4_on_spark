@@ -1,5 +1,7 @@
 # Centaur system dashboard
 
+> **Specification:** [`docs/CENTAUR_SPECIFICATION.md`](CENTAUR_SPECIFICATION.md) — system modules, end-state walkthrough, what "done" looks like. This dashboard reports progress against that spec.
+
 > Last meaningful update: **2026-05-21T22:07Z** (Spark4 back up — three P0 throughput investigations unblocked; Lane D failure analysis found corrected Spark6 73/92 is dominated by 13/19 hard 16000-token truncations; small-model qualification chain complete; track:2 silent and recommended retired)
 
 > **Naming note.** The Centaur vision document names four *workstream components* (factory core, memory domain, providers, product/UI). The coordination system uses agent *track slots* (`track:1`, `track:2`, `track:3`, `track:4`). These are not the same thing despite the unfortunate number overlap. **Any track slot may work on any workstream component.** A track is an agent handle with accumulated PR history; it is not a job description. This dashboard reports component progress; the stall ledger reports per-track-slot behavior.

@@ -1,6 +1,6 @@
 # Lane coordination protocol
 
-This document is the autonomous-loop spec every xhigh track reads on startup. The pinned issue **🚦 Lane coordination state — DO NOT CLOSE** (#1190) is the live source of truth for track ownership and hardware allocation. For where each component of the Centaur system sits in overall progress, see [`docs/CENTAUR_DASHBOARD.md`](../docs/CENTAUR_DASHBOARD.md).
+This document is the autonomous-loop spec every xhigh track reads on startup. The pinned issue **🚦 Lane coordination state — DO NOT CLOSE** (#1190) is the live source of truth for track ownership and hardware allocation. For where each component of the Centaur system sits in overall progress, see [`docs/CENTAUR_DASHBOARD.md`](../docs/CENTAUR_DASHBOARD.md). For the full system specification — modules, end-state walkthrough, what "done" looks like — see [`docs/CENTAUR_SPECIFICATION.md`](../docs/CENTAUR_SPECIFICATION.md).
 
 ## Scope of work — multi-repo
 
