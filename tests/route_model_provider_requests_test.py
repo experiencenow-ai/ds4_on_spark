@@ -26,6 +26,9 @@ class RouteModelProviderRequestsTest(unittest.TestCase):
         self.assertEqual(vllm_load["request_count"], 2)
         self.assertEqual(vllm_load["batch_tokens"], 32768)
         self.assertEqual(vllm_load["nodes"], ["n_hard_reasoning", "n_batch_judge"])
+        self.assertGreater(vllm_load["estimated_service_ms_at_measured_output_tps"], 100000.0)
+        self.assertFalse(result["capacity_summary"]["all_requests_capacity_estimated"])
+        self.assertEqual(result["capacity_summary"]["blocked_request_count"], 1)
 
     def test_blocked_route_keeps_structured_rejection_summary(self) -> None:
         plan, errors = router.load_request_plan(FIXTURE)
@@ -38,6 +41,29 @@ class RouteModelProviderRequestsTest(unittest.TestCase):
         self.assertEqual(blocked[0]["node_id"], "n_too_fast_hard_reasoning")
         self.assertEqual(blocked[0]["blocker_kind"], "no_eligible_provider")
         self.assertIn("maximum_wait_ms_exceeds_budget", blocked[0]["rejection_summary"])
+
+    def test_capacity_summary_tracks_unknown_capacity_provider(self) -> None:
+        plan, errors = router.load_request_plan(FIXTURE)
+        self.assertEqual(errors, [])
+        profiles, profile_errors = select_model_provider.load_profile_records([])
+        self.assertEqual(profile_errors, [])
+        result = router.route_request_plan(plan, profiles)
+        self.assertIn("standard-local-small-openai-compatible", result["capacity_summary"]["unknown_capacity_provider_ids"])
+        self.assertFalse(result["capacity_summary"]["all_selected_capacity_estimated"])
+        self.assertIsNone(result["provider_load"]["standard-local-small-openai-compatible"]["estimated_service_ms_at_measured_output_tps"])
+
+    def test_all_estimated_when_only_measured_vllm_nodes_route(self) -> None:
+        plan, errors = router.load_request_plan(FIXTURE)
+        self.assertEqual(errors, [])
+        measured_only = copy.deepcopy(plan)
+        measured_only["requests"] = measured_only["requests"][:2]
+        profiles, profile_errors = select_model_provider.load_profile_records([])
+        self.assertEqual(profile_errors, [])
+        result = router.route_request_plan(measured_only, profiles)
+        self.assertTrue(result["all_requests_routed"])
+        self.assertTrue(result["capacity_summary"]["all_requests_capacity_estimated"])
+        self.assertEqual(result["capacity_summary"]["unknown_capacity_provider_ids"], [])
+        self.assertGreater(result["capacity_summary"]["estimated_parallel_service_ms_at_measured_output_tps"], 100000.0)
 
     def test_rejects_duplicate_node_ids(self) -> None:
         plan, errors = router.load_request_plan(FIXTURE)
