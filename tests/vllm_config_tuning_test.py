@@ -22,6 +22,7 @@ class VllmConfigTuningTest(unittest.TestCase):
 		path = Path("fixture.json")
 		obj = tuning_validator.load(tuning_validator.default_paths()[0])
 		obj = copy.deepcopy(obj)
+		obj["conclusion"]["improved_vllm_performance"] = False
 		obj["attempts"][0]["tokens_per_second_by_concurrency"] = {"512": 999.0}
 		obj["attempts"][0]["startup_status"] = "passed"
 		obj["attempts"][0]["safety_status"] = "passed"
@@ -39,6 +40,21 @@ class VllmConfigTuningTest(unittest.TestCase):
 		obj["artifact_sha256"] = tuning_validator.canonical_hash(obj)
 		errors = tuning_validator.validate(obj, path)
 		self.assertFalse(any("selected config must not be slower" in item for item in errors), errors)
+
+	def test_selected_attempt_can_be_improved_config(self) -> None:
+		path = Path("fixture.json")
+		obj = tuning_validator.load(tuning_validator.default_paths()[0])
+		obj = copy.deepcopy(obj)
+		obj["conclusion"]["improved_vllm_performance"] = True
+		obj["selected_config"]["max_num_seqs"] = 256
+		obj["selected_config"]["tokens_per_second_at_c256"] = 333.0
+		obj["selected_config"]["tokens_per_second_at_c512"] = None
+		obj["attempts"][0]["tokens_per_second_by_concurrency"] = {"256": 333.0}
+		obj["attempts"][0]["startup_status"] = "passed"
+		obj["attempts"][0]["safety_status"] = "passed"
+		obj["artifact_sha256"] = tuning_validator.canonical_hash(obj)
+		errors = tuning_validator.validate(obj, path)
+		self.assertFalse(any("improved_vllm_performance" in item for item in errors), errors)
 
 	def test_missing_raw_artifact_rejected(self) -> None:
 		path = Path("fixture.json")
