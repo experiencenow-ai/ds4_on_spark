@@ -4,7 +4,7 @@ Load this file first for any Centaur/Spark networking work. The machine-readable
 source of truth is [`sparknetwork.json`](sparknetwork.json); this document is the
 human runbook derived from it.
 
-Last verified: `2026-05-22T00:26Z` UTC.
+Last verified: `2026-05-22T08:43Z` UTC.
 
 ## Rule Zero
 
@@ -22,16 +22,13 @@ Do not confuse SSH login names with network hostnames.
 
 ## Current Physical Topology
 
-The 10G control plane is being reworked. Operator report: internet is currently
-offline and operator SSH is via Wi-Fi. Spark0 through Spark6 have documented
-10G control entries; Spark7 has a 10G profile but no carrier, so do not treat
-Spark7 as reachable on the switch plane until a fresh link probe says so.
-Treat Wi-Fi SSH as the active break-glass/control path until the wired plane is
-repaired.
+The 10G control plane is being reworked. Operator report: the network now has
+eight Spark nodes and all nodes should be reachable. Spark7 is reachable via
+Wi-Fi from the Mac and now closes the 200G return edge into Spark0.
+Fiber/wired internet is still not a 200G health signal.
 
 ```text
-Mac Studio en0 -> TP-Link 5-port -> 8-port Spark switch -> spark0-spark6 10G
-Spark7 10G profile exists, but link has no carrier
+Mac Studio en0 -> TP-Link 5-port -> 8-port Spark switch -> spark0-spark7 10G
 Mac Studio en1 Wi-Fi -> TP-Link_D660(_5G) -> spark0-spark7 Wi-Fi
 ```
 
@@ -41,51 +38,54 @@ address and no active `10.20.0.1/24` alias, so direct Mac-to-Spark TCP/22 on
 break-glass access and Wi-Fi plus 200G proxy hops for canonical `ssh sparkN`
 paths.
 
-Spark7 is special in the current topology: its operator path is Wi-Fi only, and
-its only verified non-Wi-Fi neighbor path is the dual 200G Spark6-Spark7 link.
+Mac Studio `ssh spark0` through `ssh spark7` were repaired and verified at
+`2026-05-22T08:43Z`. The current exception is Spark0's direct Wi-Fi alias:
+`ssh spark0-wifi` to `192.168.1.127` timed out during the same check, so the
+canonical `ssh spark0` path enters through `spark1-wifi` and then the
+Spark1-Spark0 200G rail at `10.10.1.1`.
 
-The 200G fabric is currently an open line, not a closed ring:
+The 200G fabric is now a closed routed ring:
 
 ```text
-spark0 -> spark1 -> spark2 -> spark3 -> spark4 -> spark5 -> spark6 -> spark7
+spark0 -> spark1 -> spark2 -> spark3 -> spark4 -> spark5 -> spark6 -> spark7 -> spark0
 ```
 
-The intended `spark7 -> spark0` 200G return edge is still missing. The 10G
-switch plane is not a substitute for the 200G return edge; it is the
-operator/control plane.
+Spark7 now closes the return edge into Spark0. The 10G switch plane is not a
+substitute for the 200G fabric; it remains the operator/control plane.
 
 ## Canonical Inventory
 
 | Node | SSH alias | Network hostname | Current primary path from Mac | Direct Wi-Fi backup |
 |------|-----------|------------------|-------------------------------|--------------------|
-| Spark0 | `ssh spark0` | `aitopatom-9ab9.local` | Mac -> Spark3 Wi-Fi -> Spark2 200G -> Spark1 200G -> Spark0 200G | `ssh spark0-wifi`, `192.168.1.127` |
-| Spark1 | `ssh spark1` | `edgexpert-d623.local` | Mac -> Spark3 Wi-Fi -> Spark2 200G -> Spark1 200G | `ssh spark1-wifi`, `192.168.1.226` |
-| Spark2 | `ssh spark2` | `aitopatom-931a.local` | Mac -> Spark3 Wi-Fi -> Spark2 200G | `ssh spark2-wifi`, `192.168.1.166` |
+| Spark0 | `ssh spark0` | `aitopatom-9ab9.local` | Mac -> Spark1 Wi-Fi -> Spark0 200G `10.10.1.1` | `ssh spark0-wifi`, `192.168.1.127` currently times out |
+| Spark1 | `ssh spark1` | `edgexpert-d623.local` | Direct Wi-Fi, `192.168.1.226` | `ssh spark1-wifi`, `192.168.1.226` |
+| Spark2 | `ssh spark2` | `aitopatom-931a.local` | Direct Wi-Fi, `192.168.1.166` | `ssh spark2-wifi`, `192.168.1.166` |
 | Spark3 | `ssh spark3` | `aitopatom-a18f.local` | Direct Wi-Fi, `192.168.1.110` | `ssh spark3-wifi`, `192.168.1.110` |
 | Spark4 | `ssh spark4` | `aitopatom-c342.local` | Direct Wi-Fi, `192.168.1.137` | `ssh spark4-wifi`, `192.168.1.137` |
-| Spark5 | `ssh spark5` | `aitopatom-a36d.local` | Mac -> Spark4 Wi-Fi -> Spark5 200G | `ssh spark5-wifi`, `192.168.1.245` |
+| Spark5 | `ssh spark5` | `aitopatom-a36d.local` | Direct Wi-Fi, `192.168.1.245` | `ssh spark5-wifi`, `192.168.1.245` |
 | Spark6 | `ssh spark6` | `aitopatom-c637.local` | Direct Wi-Fi, `192.168.1.185` | `ssh spark6-wifi`, `192.168.1.185` |
 | Spark7 | `ssh spark7` | `thinkstation-pgx.local` | Direct Wi-Fi, `192.168.1.236` | `ssh spark7`, `192.168.1.236` |
 
-Current verified manual access paths (`2026-05-22T00:26Z`):
+Current verified manual access paths (`2026-05-22T08:43Z`):
 
 ```bash
-ssh spark0-wifi hostname
-ssh spark1-wifi hostname
-ssh spark2-wifi hostname
-ssh spark3@192.168.1.110 hostname
-ssh spark4@192.168.1.137 hostname
-ssh spark5-wifi hostname
-ssh spark6@192.168.1.185 hostname
+ssh spark0 hostname
+ssh spark1 hostname
+ssh spark2 hostname
+ssh spark3 hostname
+ssh spark4 hostname
+ssh spark5 hostname
+ssh spark6 hostname
 ssh spark7 hostname
-ssh -o ProxyCommand='ssh spark3@192.168.1.110 nc 10.10.5.2 22' spark2@10.10.5.2 hostname
-ssh -o ProxyCommand='ssh spark4@192.168.1.137 nc 10.10.9.2 22' spark5@10.10.9.2 hostname
 ```
 
 Spark0 and Spark1 are alive after reboot, and every node from Spark0 through
-Spark7 has a direct Wi-Fi SSH path. The Mac Studio `DS4 SPARKNETWORK` SSH block
-was updated at `2026-05-22T00:00Z`; direct Wi-Fi aliases `spark0-wifi` through
-`spark6-wifi`, plus `spark7`, were verified at `2026-05-22T00:26Z`.
+Spark7 is reachable from Mac Studio. The Mac Studio `DS4 SPARKNETWORK` SSH
+block was updated at `2026-05-22T08:43Z`; bare `ssh spark0` through
+`ssh spark7` were verified after the update. Direct Wi-Fi aliases
+`spark1-wifi` through `spark6-wifi`, plus `spark7`, were also verified;
+`spark0-wifi` timed out, so use bare `spark0` for Spark0 until its Wi-Fi SSH
+path is repaired.
 
 ## 10G Control Plane
 
@@ -123,23 +123,63 @@ sudo ifconfig en0 inet 10.20.0.1 netmask 255.255.255.0 alias
 
 ## 200G Fabric
 
-Spark0 through Spark7 form an open-line 200G fabric. Spark6-Spark7 was
-configured at `2026-05-21T23:56Z` using persistent NetworkManager profiles with
-MTU `9000`; both `/30` links ping in both directions as of
-`2026-05-22T00:26Z`. Spark7 has no other verified 200G neighbor.
+Spark0 through Spark7 are reachable over the closed 200G fabric. The current
+deployment uses point-to-point `/30` addresses on the physical links, plus one
+per-node loopback for services that need stable all-to-all 200G addressing.
+
+Persistent repair is installed on every Spark:
+
+- Unit: `ds4-ring-200g.service`
+- Script: `/usr/local/sbin/ds4-ring-200g-apply`
+- Boot behavior: reapplies MTU `9000`, `/30` link addresses, `sparkN-ring`
+  loopbacks, shortest-path static routes, IPv4 forwarding, rp-filter disable,
+  and a narrow Docker/FORWARD allow rule for `10.10.0.0/16`.
+- Hostnames on every Spark: `spark0-ring` through `spark7-ring`.
 
 | Edge | Link A | Link B |
 |------|--------|--------|
-| Spark0-Spark1 | Spark0 `enp1s0f1np1` `10.10.1.1/30` <-> Spark1 `enp1s0f1np1` `10.10.1.2/30` | Spark0 `enP2p1s0f1np1` `10.10.2.1/30` <-> Spark1 `enP2p1s0f1np1` `10.10.2.2/30` |
-| Spark1-Spark2 | Spark1 `enp1s0f0np0` `10.10.3.1/30` <-> Spark2 `enp1s0f0np0` `10.10.3.2/30` | Spark1 `enP2p1s0f0np0` `10.10.4.1/30` <-> Spark2 `enP2p1s0f0np0` `10.10.4.2/30` |
-| Spark2-Spark3 | Spark2 `enp1s0f1np1` `10.10.5.2/30` <-> Spark3 `enp1s0f1np1` `10.10.5.1/30` | Spark2 `enP2p1s0f1np1` `10.10.6.2/30` <-> Spark3 `enP2p1s0f1np1` `10.10.6.1/30` |
-| Spark3-Spark4 | Spark3 `enp1s0f0np0` `10.10.7.1/30` <-> Spark4 `enp1s0f1np1` `10.10.7.2/30` | Spark3 `enP2p1s0f0np0` `10.10.8.1/30` <-> Spark4 `enP2p1s0f1np1` `10.10.8.2/30` |
-| Spark4-Spark5 | Spark4 `enp1s0f0np0` `10.10.9.1/30` <-> Spark5 `enp1s0f1np1` `10.10.9.2/30` | Spark4 `enP2p1s0f0np0` `10.10.10.1/30` <-> Spark5 `enP2p1s0f1np1` `10.10.10.2/30` |
-| Spark5-Spark6 | Spark5 `enp1s0f0np0` `10.10.11.1/30` <-> Spark6 `enp1s0f1np1` `10.10.11.2/30` | Spark5 `enP2p1s0f0np0` `10.10.12.1/30` <-> Spark6 `enP2p1s0f1np1` `10.10.12.2/30` |
-| Spark6-Spark7 | Spark6 `enp1s0f0np0` `10.10.13.1/30` <-> Spark7 `enp1s0f0np0` `10.10.13.2/30` | Spark6 `enP2p1s0f0np0` `10.10.14.1/30` <-> Spark7 `enP2p1s0f0np0` `10.10.14.2/30` |
+| Spark0-Spark1 | Spark0 `enp1s0f1np1` `10.10.1.1/30` <-> Spark1 `enp1s0f0np0` `10.10.1.2/30` | Spark0 `enP2p1s0f1np1` `10.10.2.1/30` <-> Spark1 `enP2p1s0f0np0` `10.10.2.2/30` |
+| Spark1-Spark2 | Spark1 `enp1s0f1np1` `10.10.3.1/30` <-> Spark2 `enp1s0f0np0` `10.10.3.2/30` | Spark1 `enP2p1s0f1np1` `10.10.4.1/30` <-> Spark2 `enP2p1s0f0np0` `10.10.4.2/30` |
+| Spark2-Spark3 | Spark2 `enp1s0f1np1` `10.10.5.1/30` <-> Spark3 `enp1s0f0np0` `10.10.5.2/30` | Spark2 `enP2p1s0f1np1` `10.10.6.1/30` <-> Spark3 `enP2p1s0f0np0` `10.10.6.2/30` |
+| Spark3-Spark4 | Spark3 `enp1s0f1np1` `10.10.7.1/30` <-> Spark4 `enp1s0f0np0` `10.10.7.2/30` | Spark3 `enP2p1s0f1np1` `10.10.8.1/30` <-> Spark4 `enP2p1s0f0np0` `10.10.8.2/30` |
+| Spark4-Spark5 | Spark4 `enp1s0f1np1` `10.10.9.1/30` <-> Spark5 `enp1s0f0np0` `10.10.9.2/30` | Spark4 `enP2p1s0f1np1` `10.10.10.1/30` <-> Spark5 `enP2p1s0f0np0` `10.10.10.2/30` |
+| Spark5-Spark6 | Spark5 `enp1s0f1np1` `10.10.11.1/30` <-> Spark6 `enp1s0f0np0` `10.10.11.2/30` | Spark5 `enP2p1s0f1np1` `10.10.12.1/30` <-> Spark6 `enP2p1s0f0np0` `10.10.12.2/30` |
+| Spark6-Spark7 | Spark6 `enp1s0f1np1` `10.10.13.1/30` <-> Spark7 `enp1s0f0np0` `10.10.13.2/30` | Spark6 `enP2p1s0f1np1` `10.10.14.1/30` <-> Spark7 `enP2p1s0f0np0` `10.10.14.2/30` |
+| Spark7-Spark0 | Spark7 `enp1s0f1np1` `10.10.15.1/30` <-> Spark0 `enp1s0f0np0` `10.10.15.2/30` | Spark7 `enP2p1s0f1np1` `10.10.16.1/30` <-> Spark0 `enP2p1s0f0np0` `10.10.16.2/30` |
 
-Reserve `10.10.15.0/30` and `10.10.16.0/30` for the future Spark7-Spark0 200G
-return edge when the remaining cable path is installed.
+Stable routed 200G service addresses:
+
+| Node | 200G loopback | Local name |
+|------|---------------|------------|
+| Spark0 | `10.10.100.10/32` | `spark0-ring` |
+| Spark1 | `10.10.100.11/32` | `spark1-ring` |
+| Spark2 | `10.10.100.12/32` | `spark2-ring` |
+| Spark3 | `10.10.100.13/32` | `spark3-ring` |
+| Spark4 | `10.10.100.14/32` | `spark4-ring` |
+| Spark5 | `10.10.100.15/32` | `spark5-ring` |
+| Spark6 | `10.10.100.16/32` | `spark6-ring` |
+| Spark7 | `10.10.100.17/32` | `spark7-ring` |
+
+Use the loopback names for non-adjacent 200G traffic. Use the raw `/30`
+addresses only when testing a specific physical edge/rail.
+
+For bulk adjacent-node transfer at full aggregate speed, run one worker on each
+rail of the edge. Example for Spark0 -> Spark1: send one stream to
+`10.10.1.2` and one stream to `10.10.2.2`. The stable `sparkN-ring` loopbacks
+are for routed all-to-all correctness; dual-rail bulk tools should pin workers
+to the two raw rail addresses.
+
+Verification at `2026-05-22T07:54Z`:
+
+- All 16 adjacent `/30` links passed normal and 8972-byte DF jumbo ping.
+- All 56 directed `sparkN-ring` all-to-all paths passed 8972-byte DF jumbo ping.
+- Spark0 -> Spark2 routed loopback `iperf3 -P 8` measured about `100 Gbit/s`
+  through a single server process.
+- Spark0 -> Spark1 dual-rail direct `iperf3` measured `197.3 Gbit/s`
+  aggregate: `98.1 Gbit/s` on `10.10.1.0/30` plus `99.2 Gbit/s` on
+  `10.10.2.0/30`.
+- Spark7 -> Spark0 and Spark0 -> Spark7 return-edge pings on `10.10.15.0/30`
+  and `10.10.16.0/30` were rechecked at `2026-05-22T08:43Z`.
 
 ## Wi-Fi Fallbacks
 
@@ -147,7 +187,7 @@ Wi-Fi is not the primary operator plane.
 
 | Node | Wi-Fi address | SSID/role |
 |------|---------------|-----------|
-| Spark0 | `192.168.1.127/24` | fallback on `TP-Link_D660_5G`; `ssh spark0-wifi` |
+| Spark0 | `192.168.1.127/24` | fallback on `TP-Link_D660_5G`; `ssh spark0-wifi` currently times out |
 | Spark1 | `192.168.1.226/24` | fallback on `TP-Link_D660_5G`; `ssh spark1-wifi` |
 | Spark2 | `192.168.1.166/24` | fallback on `TP-Link_D660_5G`; `ssh spark2-wifi` |
 | Spark3 | `192.168.1.110/24` | fallback on `TP-Link_D660_5G`; `ssh spark3-wifi` |
@@ -158,10 +198,10 @@ Wi-Fi is not the primary operator plane.
 
 ## Internet Status
 
-Operator report for this rewire: internet is currently offline. Mac Studio
-currently uses Wi-Fi `192.168.1.128/24` for operator SSH. Spark0 through Spark7
-have Wi-Fi reachability, but do not treat any previous Cloudflare trace as
-current internet evidence until a fresh run succeeds.
+Operator report for this rewire: wired/fiber internet is not connected and
+current internet is offline. Mac Studio currently uses Wi-Fi
+`192.168.1.128/24`. Spark0 through Spark7 all default to `192.168.1.1` via
+`wlP9s9`, but internet reachability should not be assumed until reverified.
 
 Do not use internet availability as a 200G or 10G health signal. Until the 10G
 plane is flat again, use verified SSH reachability over the Wi-Fi/200G proxy
@@ -180,10 +220,8 @@ Use separate planes for separate jobs:
 
 ## Rescue Control Plane
 
-Spark0 through Spark7 have the first-pass software rescue layer installed, but
-the remote rescue plane depends on 10G reachability. With the current fragmented
-10G state and Spark7's 10G link showing no carrier, treat local watchdog
-recovery as the reliable rescue layer until the switch plane is repaired:
+Spark0 through Spark7 now run a first-pass software rescue layer on the 10G
+control plane:
 
 - Service: `ds4-rescue-agent.service`, user systemd unit.
 - Port: `25100/tcp` on each deployed node.
@@ -314,4 +352,5 @@ ssh -o ProxyCommand='ssh spark4@192.168.1.137 nc 10.10.9.2 22' spark5@10.10.9.2 
 ssh spark3@192.168.1.110 'for ip in 10.10.5.2 10.10.6.2 10.10.7.2 10.10.8.2; do ping -c 1 "$ip"; done'
 ssh spark4@192.168.1.137 'for ip in 10.10.9.2 10.10.10.2; do ping -c 1 "$ip"; done'
 ssh spark7 'for ip in 10.10.13.1 10.10.14.1; do ping -c 1 "$ip"; done'
+for h in spark0-wifi spark1-wifi spark2-wifi spark3-wifi spark4-wifi spark5-wifi spark6-wifi spark7; do ssh "$h" 'for ip in 10.10.100.10 10.10.100.11 10.10.100.12 10.10.100.13 10.10.100.14 10.10.100.15 10.10.100.16 10.10.100.17; do ping -c 1 -W 1 -M do -s 8972 "$ip" >/dev/null 2>&1 && echo "$ip jumbo"; done'; done
 ```
