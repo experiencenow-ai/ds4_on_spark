@@ -4,7 +4,7 @@ Load this file first for any Centaur/Spark networking work. The machine-readable
 source of truth is [`sparknetwork.json`](sparknetwork.json); this document is the
 human runbook derived from it.
 
-Last verified: `2026-05-22T00:26Z` UTC.
+Last verified: `2026-05-22T00:31Z` UTC.
 
 ## Rule Zero
 
@@ -67,7 +67,7 @@ operator/control plane.
 | Spark6 | `ssh spark6` | `aitopatom-c637.local` | Direct Wi-Fi, `192.168.1.185` | `ssh spark6-wifi`, `192.168.1.185` |
 | Spark7 | `ssh spark7` | `thinkstation-pgx.local` | Direct Wi-Fi, `192.168.1.236` | `ssh spark7`, `192.168.1.236` |
 
-Current verified manual access paths (`2026-05-22T00:26Z`):
+Current verified manual access paths (`2026-05-22T00:31Z`):
 
 ```bash
 ssh spark0-wifi hostname
@@ -84,8 +84,9 @@ ssh -o ProxyCommand='ssh spark4@192.168.1.137 nc 10.10.9.2 22' spark5@10.10.9.2 
 
 Spark0 and Spark1 are alive after reboot, and every node from Spark0 through
 Spark7 has a direct Wi-Fi SSH path. The Mac Studio `DS4 SPARKNETWORK` SSH block
-was updated at `2026-05-22T00:00Z`; direct Wi-Fi aliases `spark0-wifi` through
-`spark6-wifi`, plus `spark7`, were verified at `2026-05-22T00:26Z`.
+was updated at `2026-05-22T00:00Z`; bare aliases `spark0` through `spark7`
+were verified at `2026-05-22T00:31Z`, and direct Wi-Fi aliases `spark0-wifi`
+through `spark6-wifi`, plus `spark7`, were verified at `2026-05-22T00:26Z`.
 
 ## 10G Control Plane
 
@@ -126,7 +127,7 @@ sudo ifconfig en0 inet 10.20.0.1 netmask 255.255.255.0 alias
 Spark0 through Spark7 form an open-line 200G fabric. Spark6-Spark7 was
 configured at `2026-05-21T23:56Z` using persistent NetworkManager profiles with
 MTU `9000`; both `/30` links ping in both directions as of
-`2026-05-22T00:26Z`. Spark7 has no other verified 200G neighbor.
+`2026-05-22T00:31Z`. Spark7 has no other verified 200G neighbor.
 
 | Edge | Link A | Link B |
 |------|--------|--------|

@@ -1,6 +1,6 @@
 {
   "schema": "ds4.sparknetwork.v1",
-  "last_verified_utc": "2026-05-22T00:26Z",
+  "last_verified_utc": "2026-05-22T00:31Z",
   "operator": {
     "name": "Mac Studio",
     "hostname": "Mac-Studio.local",
@@ -10,7 +10,7 @@
     "private_10g_state": "en0 had no active IPv4 address during the 2026-05-21T23:34Z probe"
   },
   "switch_topology": {
-    "verified_utc": "2026-05-22T00:26Z",
+    "verified_utc": "2026-05-22T00:31Z",
     "upstream_switch": "TP-Link 5-port",
     "upstream_switch_ports": ["Mac Studio en0", "8-port Spark switch uplink"],
     "spark_switch": "8-port 10G switch",
@@ -39,7 +39,7 @@
     "known_hosts_file": "/private/tmp/ds4_office_known_hosts",
     "mac_config_block": "DS4 SPARKNETWORK",
     "mac_config_updated_utc": "2026-05-22T00:00Z",
-    "mac_config_verified_aliases": ["spark7", "spark0-wifi", "spark1-wifi", "spark2-wifi", "spark3-wifi", "spark4-wifi", "spark5-wifi", "spark6-wifi"],
+    "mac_config_verified_aliases": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7", "spark0-wifi", "spark1-wifi", "spark2-wifi", "spark3-wifi", "spark4-wifi", "spark5-wifi", "spark6-wifi"],
     "do_not_use_mdns_names": ["spark1.local", "spark2.local", "spark3.local", "spark4.local", "spark5.local", "spark6.local", "spark7.local"],
     "direct_wifi_aliases": {"spark0": "spark0-wifi", "spark1": "spark1-wifi", "spark2": "spark2-wifi", "spark3": "spark3-wifi", "spark4": "spark4-wifi", "spark5": "spark5-wifi", "spark6": "spark6-wifi", "spark7": "spark7"}
   },
@@ -175,7 +175,7 @@
     ]
   },
   "internet_status": {
-    "verified_utc": "2026-05-22T00:26Z",
+    "verified_utc": "2026-05-22T00:31Z",
     "working_wired_internet": [],
     "working_wifi_internet": [],
     "reachable_but_no_internet_route": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7"],
@@ -185,7 +185,7 @@
       "Operator reported internet is currently offline; do not use previous Cloudflare traces as current internet evidence.",
       "Mac Studio uses Wi-Fi 192.168.1.128/24 for current operator SSH reachability.",
       "spark0 through spark7 are directly reachable from Mac Studio over 192.168.1.0/24 Wi-Fi.",
-      "Fresh SSH hostname probes succeeded for spark0-wifi through spark6-wifi and spark7 at 2026-05-22T00:26Z."
+      "Fresh SSH hostname probes succeeded for bare spark0 through spark7 at 2026-05-22T00:31Z; direct Wi-Fi aliases spark0-wifi through spark6-wifi and spark7 succeeded at 2026-05-22T00:26Z."
     ]
   },
   "ring_200g": {
@@ -193,7 +193,7 @@
     "order": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7"],
     "missing_return_edge": {"from": "spark7", "to": "spark0", "reason": "return cable path not installed"},
     "mtu": 9000,
-    "verified": "open-line 200G fabric extends to spark7; Spark6-Spark7 10.10.13.0/30 and 10.10.14.0/30 ping both directions at 2026-05-22T00:26Z; Spark7 has no other verified 200G neighbor",
+    "verified": "open-line 200G fabric extends to spark7; Spark6-Spark7 10.10.13.0/30 and 10.10.14.0/30 ping both directions at 2026-05-22T00:31Z; Spark7 has no other verified 200G neighbor",
     "links": [
       {"edge": "spark0-spark1", "a": {"node": "spark0", "interface": "enp1s0f1np1", "ipv4": "10.10.1.1/30"}, "b": {"node": "spark1", "interface": "enp1s0f1np1", "ipv4": "10.10.1.2/30"}},
       {"edge": "spark0-spark1", "a": {"node": "spark0", "interface": "enP2p1s0f1np1", "ipv4": "10.10.2.1/30"}, "b": {"node": "spark1", "interface": "enP2p1s0f1np1", "ipv4": "10.10.2.2/30"}},
