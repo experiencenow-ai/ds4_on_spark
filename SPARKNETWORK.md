@@ -4,19 +4,19 @@ Load this file first for any Centaur/Spark networking work. The machine-readable
 source of truth is [`sparknetwork.json`](sparknetwork.json); this document is the
 human runbook derived from it.
 
-Last verified: `2026-05-21T23:34Z` UTC.
+Last verified: `2026-05-22T00:00Z` UTC.
 
 ## Rule Zero
 
 Do not confuse SSH login names with network hostnames.
 
 - SSH users: `spark0`, `spark1`, `spark2`, `spark3`, `spark4`, `spark5`,
-  `spark6`; `spark7` is expected for the new Lenovo node, but auth is still
-  pending.
+  `spark6`, and `spark7`.
 - Network hostnames are Bonjour/device names: `aitopatom-9ab9.local`,
   `edgexpert-d623.local`, `aitopatom-931a.local`, `aitopatom-a18f.local`,
   `aitopatom-c342.local`, `aitopatom-a36d.local`, `aitopatom-c637.local`, and
-  discovered `thinkstationpgx-1449.local` for Spark7.
+  `thinkstation-pgx.local` for Spark7. The Mac `ssh spark7` alias is pinned to
+  `192.168.1.236` so access does not depend on mDNS settling.
 - Do not use `sparkN.local` unless that alias is deliberately pinned in DNS or
   `/etc/hosts`.
 
@@ -28,7 +28,7 @@ connected, so internet should be considered Wi-Fi-only until reverified.
 
 ```text
 Mac Studio en0 -> TP-Link 5-port -> 8-port Spark switch -> spark0-spark7 10G
-Mac Studio en1 Wi-Fi -> TP-Link_D660_5G -> spark0-spark7 Wi-Fi
+Mac Studio en1 Wi-Fi -> TP-Link_D660(_5G) -> spark0-spark7 Wi-Fi
 ```
 
 Mac Studio `en1` is `192.168.1.128/24`. Mac Studio `en0` currently has no IPv4
@@ -40,12 +40,12 @@ paths.
 The 200G fabric is currently an open line, not a closed ring:
 
 ```text
-spark0 -> spark1 -> spark2 -> spark3 -> spark4 -> spark5 -> spark6
+spark0 -> spark1 -> spark2 -> spark3 -> spark4 -> spark5 -> spark6 -> spark7
 ```
 
-The intended `spark6 -> spark0` 200G return edge is missing because the cable is
-too short. The 10G switch plane is not a substitute for the 200G return edge; it
-is the operator/control plane. Spark7 is not yet integrated into the 200G fabric.
+The intended `spark7 -> spark0` 200G return edge is still missing. The 10G
+switch plane is not a substitute for the 200G return edge; it is the
+operator/control plane.
 
 ## Canonical Inventory
 
@@ -58,7 +58,7 @@ is the operator/control plane. Spark7 is not yet integrated into the 200G fabric
 | Spark4 | `ssh spark4` | `aitopatom-c342.local` | Direct Wi-Fi, `192.168.1.137` | `ssh spark4-wifi`, `192.168.1.137` |
 | Spark5 | `ssh spark5` | `aitopatom-a36d.local` | Mac -> Spark4 Wi-Fi -> Spark5 200G | `ssh spark5-wifi`, `192.168.1.245` |
 | Spark6 | `ssh spark6` | `aitopatom-c637.local` | Direct Wi-Fi, `192.168.1.185` | `ssh spark6-wifi`, `192.168.1.185` |
-| Spark7 | `ssh spark7` | `thinkstationpgx-1449.local` | Operator reports Mac SSH works; Codex key auth pending | `192.168.1.236` |
+| Spark7 | `ssh spark7` | `thinkstation-pgx.local` | Direct Wi-Fi, `192.168.1.236` | `ssh spark7`, `192.168.1.236` |
 
 Current verified manual access paths:
 
@@ -70,13 +70,14 @@ ssh spark3@192.168.1.110 hostname
 ssh spark4@192.168.1.137 hostname
 ssh spark5-wifi hostname
 ssh spark6@192.168.1.185 hostname
+ssh spark7 hostname
 ssh -o ProxyCommand='ssh spark3@192.168.1.110 nc 10.10.5.2 22' spark2@10.10.5.2 hostname
 ssh -o ProxyCommand='ssh spark4@192.168.1.137 nc 10.10.9.2 22' spark5@10.10.9.2 hostname
 ```
 
 Spark0 and Spark1 are alive after reboot, and every node from Spark0 through
-Spark6 has a direct Wi-Fi SSH alias. The Mac Studio `DS4 SPARKNETWORK` SSH block
-was replaced at `2026-05-21T23:34Z`; bare `ssh spark0` through `ssh spark6` and
+Spark7 has a direct Wi-Fi SSH path. The Mac Studio `DS4 SPARKNETWORK` SSH block
+was updated at `2026-05-22T00:00Z`; bare `ssh spark0` through `ssh spark7` and
 `ssh spark0-wifi` through `ssh spark6-wifi` were verified after the update.
 
 ## 10G Control Plane
@@ -98,7 +99,7 @@ Private 10G assignments:
 | Spark4 | `enP7s7` | `10.20.0.14/24` | switch control, plus DHCP `175.193.138.138/24` |
 | Spark5 | `enP7s7` | `10.20.0.15/24` | switch control, plus DHCP `175.193.138.193/24` |
 | Spark6 | `enP7s7` | `10.20.0.16/24` | 8-port switch control, private-only |
-| Spark7 | 10G interface pending | `10.20.0.17/24` reserved | Lenovo ThinkStation PGX discovered on Wi-Fi; 10G not verified |
+| Spark7 | `enP7s7` | `10.20.0.17/24` | static profile installed; physical link has no carrier |
 
 The latest probe did **not** see a flat private `10.20.0.0/24` control plane.
 From inside the cluster, Spark3 could reach only `10.20.0.13` and
@@ -115,8 +116,10 @@ sudo ifconfig en0 inet 10.20.0.1 netmask 255.255.255.0 alias
 
 ## 200G Fabric
 
-Spark0 through Spark6 are reachable over the open-line 200G fabric using Wi-Fi
-jump points. Spark7 is not integrated or verified yet.
+Spark0 through Spark7 are reachable over the open-line 200G fabric using Wi-Fi
+jump points. Spark6-Spark7 was configured at `2026-05-21T23:56Z` using
+persistent NetworkManager profiles with MTU `9000`; both `/30` links ping in
+both directions.
 
 | Edge | Link A | Link B |
 |------|--------|--------|
@@ -126,9 +129,10 @@ jump points. Spark7 is not integrated or verified yet.
 | Spark3-Spark4 | Spark3 `enp1s0f0np0` `10.10.7.1/30` <-> Spark4 `enp1s0f1np1` `10.10.7.2/30` | Spark3 `enP2p1s0f0np0` `10.10.8.1/30` <-> Spark4 `enP2p1s0f1np1` `10.10.8.2/30` |
 | Spark4-Spark5 | Spark4 `enp1s0f0np0` `10.10.9.1/30` <-> Spark5 `enp1s0f1np1` `10.10.9.2/30` | Spark4 `enP2p1s0f0np0` `10.10.10.1/30` <-> Spark5 `enP2p1s0f1np1` `10.10.10.2/30` |
 | Spark5-Spark6 | Spark5 `enp1s0f0np0` `10.10.11.1/30` <-> Spark6 `enp1s0f1np1` `10.10.11.2/30` | Spark5 `enP2p1s0f0np0` `10.10.12.1/30` <-> Spark6 `enP2p1s0f1np1` `10.10.12.2/30` |
+| Spark6-Spark7 | Spark6 `enp1s0f0np0` `10.10.13.1/30` <-> Spark7 `enp1s0f0np0` `10.10.13.2/30` | Spark6 `enP2p1s0f0np0` `10.10.14.1/30` <-> Spark7 `enP2p1s0f0np0` `10.10.14.2/30` |
 
-Reserve `10.10.13.0/30` and `10.10.14.0/30` for the future Spark6-Spark0 200G
-return edge when the longer cable or new switch is installed.
+Reserve `10.10.15.0/30` and `10.10.16.0/30` for the future Spark7-Spark0 200G
+return edge when the remaining cable path is installed.
 
 ## Wi-Fi Fallbacks
 
@@ -143,16 +147,15 @@ Wi-Fi is not the primary operator plane.
 | Spark4 | `192.168.1.137/24` | fallback on `TP-Link_D660_5G`; `ssh spark4-wifi` |
 | Spark5 | `192.168.1.245/24` | fallback on `TP-Link_D660_5G`; `ssh spark5-wifi` |
 | Spark6 | `192.168.1.185/24` | fallback on `TP-Link_D660_5G`; `ssh spark6-wifi` |
-| Spark7 | `192.168.1.236/24` | discovered as `thinkstationpgx-1449.local`; SSH auth pending |
+| Spark7 | `192.168.1.236/24` | fallback on `TP-Link_D660`; `ssh spark7` |
 
 ## Internet Status
 
 Operator report for this rewire: wired/fiber internet is not connected; internet
 should be considered Wi-Fi-only until the switch plane is repaired. Mac Studio
-currently uses Wi-Fi `192.168.1.128/24`. Spark0 through Spark6 all default to
+currently uses Wi-Fi `192.168.1.128/24`. Spark0 through Spark7 all default to
 `192.168.1.1` via `wlP9s9`, and Cloudflare trace succeeded from every node at
-`2026-05-21T23:34Z`. Spark7 is visible at `192.168.1.236`, but SSH auth is not
-ready, so its route and internet status were not verified.
+`2026-05-21T23:56Z`.
 
 Do not use internet availability as a 200G or 10G health signal. Until the 10G
 plane is flat again, use verified SSH reachability over the Wi-Fi/200G proxy
@@ -171,7 +174,7 @@ Use separate planes for separate jobs:
 
 ## Rescue Control Plane
 
-Spark0 through Spark6 now run a first-pass software rescue layer on the 10G
+Spark0 through Spark7 now run a first-pass software rescue layer on the 10G
 control plane:
 
 - Service: `ds4-rescue-agent.service`, user systemd unit.
@@ -179,7 +182,7 @@ control plane:
 - Token: per-cluster secret file, installed on each node at
   `~/.ds4-rescue/token`; do not commit or print it.
 - Persistence: `loginctl enable-linger` is enabled for `spark0` through
-  `spark6`, so the user service can start at boot without an active SSH login.
+  `spark7`, so the user service can start at boot without an active SSH login.
 - Local self-heal: `ds4-sshd-watchdog.timer` runs every minute as root. If the
   local SSH banner probe fails, it restarts SSH, then kills allowlisted heavy
   runtimes if SSH still does not recover.
@@ -203,25 +206,21 @@ python3 scripts/ds4_rescue_client.py 10.20.0.12 self-rescue
 ```
 
 Replace the last octet for the target node when the 10G plane is healthy.
-`spark0` and `spark1` were upgraded at `2026-05-21T23:47Z`; forced watchdog
-self-rescue returned OK on `spark0` through `spark6` after deployment. Spark7
-is discovered on Wi-Fi and the operator reports Mac SSH works, but Codex key
-auth is still pending.
+`spark0` and `spark1` were upgraded at `2026-05-21T23:47Z`; `spark7` was
+upgraded at `2026-05-21T23:56Z`. Forced watchdog self-rescue returned OK on
+`spark0` through `spark7` after deployment.
 
 For spark4-style wedges where TCP accepts but SSH and HTTP do not answer, the
 remote client will not help because the agent cannot respond. The local root
 timer is the intended recovery path: it must be deployed before the node wedges.
 The 2026-05-21 heavy-runtime kill escalation is deployed live to `spark0`
-through `spark6`.
+through `spark7`.
 
 Deploy or refresh it on reachable nodes with:
 
 ```bash
-DS4_RESCUE_ROOT=1 scripts/ds4_deploy_rescue_agent.sh spark0 spark1 spark2 spark3 spark4 spark5 spark6
+DS4_RESCUE_ROOT=1 scripts/ds4_deploy_rescue_agent.sh spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7
 ```
-
-After installing the Mac public key on Spark7, run the same deploy command for
-`spark7` and reverify with the status checklist.
 
 For bulk data, prefer [`docs/spark-ring-fast-transfer.md`](docs/spark-ring-fast-transfer.md)
 and `scripts/spark_ring_fast_copy.py --engine native` for regular files. Use
@@ -261,6 +260,7 @@ user:
 ~/centaur-smoke/v73/ring_node/hyor/node_spark4/
 ~/centaur-smoke/v73/ring_node/hyor/node_spark5/
 ~/centaur-smoke/v73/ring_node/hyor/node_spark6/
+~/centaur-smoke/v73/ring_node/hyor/node_spark7/
 ~/centaur-smoke/v73/ring_node/effective_spark0/
 ~/centaur-smoke/v73/ring_node/effective_spark1/
 ~/centaur-smoke/v73/ring_node/effective_spark2/
@@ -268,6 +268,8 @@ user:
 ~/centaur-smoke/v73/ring_node/effective_spark4/
 ~/centaur-smoke/v73/ring_node/effective_spark5/
 ~/centaur-smoke/v73/ring_node/effective_spark6/
+~/centaur-smoke/v73/ring_node/effective_spark7/
+~/models/
 /tmp/sparknetwork/                                # volatile probes/staging
 ```
 
@@ -287,7 +289,7 @@ Default ports:
 | Service | Host | Port |
 |---------|------|------|
 | HyoR controller HTTP | Spark0 | `8765` |
-| HyoR agent HTTP | Spark0-Spark6 | `8766` |
+| HyoR agent HTTP | Spark0-Spark7 | `8766` |
 
 ## Quick Verification
 
@@ -298,9 +300,10 @@ ssh spark3@192.168.1.110 hostname
 ssh spark4@192.168.1.137 hostname
 ssh spark6@192.168.1.185 hostname
 for h in spark0-wifi spark1-wifi spark2-wifi spark3-wifi spark4-wifi spark5-wifi spark6-wifi; do ssh "$h" hostname; done
-for h in spark0 spark1 spark2 spark3 spark4 spark5 spark6; do ssh "$h" hostname; done
+for h in spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7; do ssh "$h" hostname; done
 ssh -o ProxyCommand='ssh spark3@192.168.1.110 nc 10.10.5.2 22' spark2@10.10.5.2 hostname
 ssh -o ProxyCommand='ssh spark4@192.168.1.137 nc 10.10.9.2 22' spark5@10.10.9.2 hostname
 ssh spark3@192.168.1.110 'for ip in 10.10.5.2 10.10.6.2 10.10.7.2 10.10.8.2; do ping -c 1 "$ip"; done'
 ssh spark4@192.168.1.137 'for ip in 10.10.9.2 10.10.10.2; do ping -c 1 "$ip"; done'
+ssh spark7 'for ip in 10.10.13.1 10.10.14.1; do ping -c 1 "$ip"; done'
 ```
