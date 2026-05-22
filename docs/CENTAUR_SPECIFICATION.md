@@ -8,34 +8,92 @@
 
 Centaur is a **general state-machine factory**. Given any problem domain that admits an objective metric function, Centaur evolves a population of candidate state machines (hybrid workflows of deterministic operations and LLM calls) and promotes the most cost-efficient candidate that meets the domain's quality bar. The end product is not "an AI that solves your problem" but "a *machine* that builds machines that solve problems." Once a winning state machine for a domain is promoted, it is a deterministic, replayable, debuggable artifact — not a language model output — and it costs orders of magnitude less to run than a frontier LLM call because its internal nodes were strength-reduced during evolution to the cheapest sufficient provider per step.
 
-## 2. The Crenshaw forcing function
+## 2. The LongMemEval zeroth domain — fast-path proof the factory works
 
-The proof-test for the general system is **Jack Crenshaw's *Let's Build a Compiler* curriculum**. The 16 lessons compose a complete, well-scoped, incrementally-deepening domain with crisp metrics at every level.
+Before the Crenshaw curriculum (§3) drives the factory to compiler-class capability, the **first real domain** Centaur attempts is `trimind-brain`'s existing `tests/longmemeval/bench.py`. This is the fast-path. The proof-test for "the factory exists and works" comes from this domain, not from Crenshaw.
 
-| Lesson | Capability | Metric inputs |
+**Why this domain first.**
+
+- **Metrics already exist.** bench.py returns oracle accuracy (0..1) per question across a 500-question batch. Cost and latency per run are measurable as side effects.
+- **HWM is known.** The current hand-tuned high-water-mark config (tools-haiku reader, sonnet escalation, opus judge, thinking=10000, sonnet codec) hits 96.6% oracle. That's the quality bar to beat or match at lower cost.
+- **The state-machine search space is well-defined.** A LongMem state machine is a configuration plus a flow: which model handles reading, when to escalate, which judge to use, thinking budget, codec selection. Each axis is a mutation surface.
+- **Cost matters from day 1.** A 500-question batch costs real dollars. Module 14 (budget control) and Module 7 (model router) are exercised immediately, not deferred until Crenshaw stages need them.
+- **Strength reduction has concrete targets.** Can we replace opus-judge with sonnet-judge at >95% retention? Can we drop escalation entirely on questions a small reader is confident about? Each candidate state machine answers one of these empirically.
+
+**What a LongMem state machine looks like.**
+
+```
+input: a LongMemEval question + the candidate's memory store
+
+n1 (deterministic): retrieve top-K relevant memories via existing IVF-PQ search
+n2 (LLM call, role=reader, tier_required >= local_coder):
+    prompt = "given these memories, answer the question or say 'need escalation'"
+n3 (deterministic): check if reader said 'need escalation' or confidence below θ
+n4 (LLM call, role=escalator, tier_required = near_frontier_local):
+    only invoked if n3 said escalate; prompt = reader's draft + retrieval context
+n5 (LLM call, role=judge, tier_required varies):
+    score the final answer against gold
+
+output: (answer, confidence, total_cost, total_latency)
+```
+
+Mutations Centaur applies:
+
+- **Reader-tier swap**: tools-haiku → qwen-coder-7b → llama-3.2-3b → ...
+- **Skip escalation entirely**: remove n4
+- **Lower thinking budget**: 10000 → 5000 → 2000 → 500
+- **Codec swap**: sonnet → haiku
+- **Conditional judge**: use opus-judge only when reader and escalator disagree
+- **Retrieve more / fewer memories**: K = 20 → 50 → 5
+- **Add cross-check**: spawn 2 readers in parallel, score-vote
+
+**Score function.** Composite:
+
+```
+correctness = passed_questions / 500  (must be >= 0.95 — the hard floor)
+cost = 1 - clamp(dollars / domain_budget, 0, 1)
+latency = 1 - clamp(p95_question_ms / latency_budget, 0, 1)
+composite = (correctness >= 0.95) ? (0.5 * correctness + 0.4 * cost + 0.1 * latency) : 0
+```
+
+That step-function on correctness ensures Centaur cannot "win" by being cheap-and-wrong. Below 95%, the candidate scores zero. Above the floor, cost dominates because that's what Centaur should be optimizing.
+
+**End-state for this domain.** Centaur evolves a state machine that hits ≥95% oracle accuracy at materially lower cost than the HWM. If the SM hits 96.6% (matching HWM) at half the cost, that's the win. If it hits 97% at the same cost, also a win. If it cannot exceed the HWM's economics at all, that's a real finding (HWM is optimal, no slack) and the system has still demonstrated the factory works by surfacing that fact empirically.
+
+**Why this matters for the broader spec.** Crenshaw is the proof that Centaur is *general*. LongMem is the proof that Centaur *exists at all*. The 11-module critical path in §10 has been reordered so LongMem-shaped work comes first.
+
+---
+
+## 3. The Crenshaw forcing function (multi-target generality test)
+
+The general-purpose proof-test is **Jack Crenshaw's *Let's Build a Compiler* curriculum**. Per founder direction (2026-05-21), we **extract as many useful problems as possible** from Crenshaw rather than treating each lesson as a single domain. The 16 lessons contain dozens of separable sub-problems with distinct metrics — lexing, parsing, expression evaluation, control-flow lowering, type checking, register allocation, peephole optimization, error recovery, etc. Each becomes a domain in its own right, with its own gold test set and metric functions.
+
+Additionally, **assembly target diversity is itself a domain dimension**: a Crenshaw sub-problem implemented for 68000 (Crenshaw's original) is a different concrete domain from the same sub-problem implemented for x86-64. The same evolved state machine architecture should solve both with retargeted emit primitives — and the system's ability to do that retargeting is itself a generality test.
+
+| Lesson | Capability | Example extractable sub-domains |
 |---:|---|---|
-| 1 | Single-digit arithmetic expressions → assembly | Correctness on N test expressions; output assembly executes and produces correct results; generated code size; compile wall time; LLM cost |
-| 2 | Multi-digit numbers, named variables, multiplication / division | Same shape |
-| 3 | Control structures (if/else, while, do/until) | Same |
-| 4 | Boolean expressions, relational operators | Same |
-| 5 | Lexical scanning (tokenizer) | Same |
-| 6 | Parsing as a separate phase (AST) | Same |
-| 7 | Calls and procedures | Same |
-| 8 | Top-down expression parsing — full operator precedence | Same |
-| 9 | Types — char, int, long, signed/unsigned | Same |
-| 10 | Pointers and arrays | Same |
-| 11 | Multi-character identifiers, full lexer | Same |
-| 12 | Miscellany — preprocessor, comments | Same |
-| 13 | Procedure parameters, locals, recursion | Same |
-| 14 | Structures and unions | Same |
-| 15 | Back to the future — code generation refinements | Same |
-| 16 | Unit construction — multi-file compilation, linking | Same |
+| 1 | Single-digit arithmetic expressions → assembly | `expr-tokenize-onedigit`, `expr-emit-add-mul-68k`, `expr-emit-add-mul-x86`, `expr-end-to-end-onedigit` |
+| 2 | Multi-digit numbers, named variables | `lexer-numeric-multidigit`, `symbol-table-vars`, `expr-with-vars-emit` |
+| 3 | Control structures (if/else, while, do/until) | `parse-if-else`, `parse-while`, `lower-ctrl-flow-labels`, `branch-fold` |
+| 4 | Boolean expressions, relational operators | `tokenize-rel-ops`, `bool-expr-shortcircuit`, `bool-emit-flags` |
+| 5 | Lexical scanning (tokenizer as separate phase) | `tokenizer-state-machine`, `tokenizer-error-recovery` |
+| 6 | Parsing as a separate phase (AST) | `parse-to-ast`, `ast-walker`, `ast-prettyprint` |
+| 7 | Calls and procedures | `parse-decl`, `parse-call`, `call-emit-conv-68k`, `call-emit-conv-x86` |
+| 8 | Top-down expression parsing — full precedence | `parse-precedence`, `parse-assoc` |
+| 9 | Types — char, int, long, signed/unsigned | `type-tokens`, `type-promote`, `type-check-binop` |
+| 10 | Pointers and arrays | `parse-ptr-decl`, `addrof-emit`, `array-index-emit` |
+| 11 | Multi-character identifiers, full lexer | `lexer-multichar-ident`, `lexer-keyword-table` |
+| 12 | Miscellany — preprocessor, comments | `preproc-define`, `preproc-include`, `comment-strip` |
+| 13 | Procedure parameters, locals, recursion | `stack-frame-68k`, `stack-frame-x86`, `recursion-emit` |
+| 14 | Structures and unions | `parse-struct`, `struct-layout`, `union-overlap` |
+| 15 | Back to the future — code generation refinements | `peephole-pass-1`, `reg-alloc-simple`, `reg-alloc-graph-color` |
+| 16 | Unit construction — multi-file compilation, linking | `multi-tu`, `link-resolve-symbols`, `emit-object-format` |
 
-After lesson 16 (or earlier — see §10 on emergent generalization), Centaur should hold one or more state machines that, given any C source program in a defined subset, emit working assembly. The proof that the **system itself** is general is then: take a different domain (say, "write a profiler that pinpoints hotspots given a recorded execution trace") and Centaur produces a winning state machine for that too, without re-engineering the factory.
+The right-hand column is suggestive, not final — the founder will direct exactly which extractions are worth domain-ifying. Each extraction is independent work: writing test cases, metric functions, and accepting that the domain is registered.
 
-The user has explicitly named compiler construction as the proof because solving it implies solving most coding tasks (the holes being multi-threaded concurrency, systems-level bugs). Adding a debugging domain on top covers those holes.
+After enough sub-domains land (probably ~30+) Centaur should hold one or more state machines that, given any C source program in a defined subset, emit working assembly for at least one target. The **measure of generality** is then: take an unrelated domain (e.g., "find the top-3 hotspots in a recorded profile trace") and Centaur produces a winning state machine for it without re-engineering the factory.
 
-## 3. End-state walkthrough
+## 4. End-state walkthrough
 
 A founder-tier user, three months from now, has this experience:
 
@@ -68,7 +126,7 @@ $ centaur evolve crenshaw-04-bool --seed-from crenshaw-03-ctrl
 
 The user does not edit prompts. The user does not pick models. The user **does not write the state machine.** The user submits a domain specification and a budget; Centaur returns a state machine that meets the bar within budget or reports honestly that it cannot.
 
-## 4. The four-component decomposition (cross-referencing the existing vision)
+## 5. The four-component decomposition (cross-referencing the existing vision)
 
 Centaur's vision document names four workstream components. This spec keeps that decomposition and details the modules within each.
 
@@ -90,21 +148,23 @@ Cross-cutting:
     Module 2 (node library) is the shared substrate
 ```
 
-## 5. Module-by-module specification
+## 6. Module-by-module specification
 
 ### Module 1 — Domain definition
 
 **Purpose.** Specifies what "solving this problem" means in objective, runnable terms.
 
-**Schema.** A domain is a directory in `domains/<name>/` containing:
+**Schema.** A domain is a directory in `domains/<name>/` containing both Python harness code (full flexibility for domain-specific glue) and YAML metadata (declarative description for the factory). Per founder decision (2026-05-21):
 
-| File | Purpose |
-|---|---|
-| `domain.yaml` | Name, description, parent domain, accepted I/O schemas, budget hints |
-| `test_cases.jsonl` | One line per test case: input, expected output (or expected-property), gold metadata |
-| `metric_functions/` | Python modules implementing the metric callables (correctness, performance, quality, cost, custom) |
-| `seed_machines/` | Optional starter state machines provided by a human |
-| `harness.py` | Domain-specific glue: how to feed a candidate state machine an input, how to capture its output, how to invoke the metrics |
+| File | Purpose | Format |
+|---|---|---|
+| `domain.yaml` | Name, description, parent domain, accepted I/O schemas, budget hints, level membership | YAML |
+| `test_cases.jsonl` | One line per test case: input, expected output (or expected-property), gold metadata | JSONL |
+| `metric_functions/` | Python modules implementing the metric callables (correctness, performance, quality, cost, custom) | Python |
+| `seed_machines/` | Optional starter state machines provided by a human | JSON |
+| `harness.py` | Domain-specific glue: how to feed a candidate state machine an input, how to capture its output, how to invoke the metrics, how to estimate cost | Python |
+
+The split is deliberate: `domain.yaml` is the *contract* the factory reads to know how to handle the domain (what tier of provider is needed, what budget is reasonable, what the parent/level relationship is). `harness.py` is the *runtime* that knows the domain-specific gluing — exactly how to invoke `bench.py` for LongMem, or how to run a compiled assembly program for Crenshaw, or whatever the domain needs.
 
 **Acceptance for a Module 1 implementation.** `centaur domain submit <path>` validates the directory, runs all metric functions against the seed machines on a smoke subset of test cases, and either rejects with a specific schema/runtime error or registers the domain in the active set.
 
@@ -370,34 +430,81 @@ brain.retrieve(
 
 ---
 
-### Module 12 — Curriculum manager
+### Module 12 — Curriculum manager (concurrent multi-level evolution with backward injection)
 
-**Purpose.** For multi-stage curricula (Crenshaw is the canonical example), orchestrate progression — which domain to attempt next, which seed machines to carry forward, when to detect that a more general machine has emerged.
+**Purpose.** Orchestrate progression across a curriculum where many levels evolve **simultaneously**, with newly-promoted lower-level winners injected back into higher-level populations as fresh genetic material. Per founder direction (2026-05-21), the curriculum is *not* sequential ("solve level N before starting level N+1").
 
-**Curriculum definition.** A YAML file listing domains in dependency order, with explicit edges:
+**Core model.**
 
-```yaml
-curriculum: crenshaw-lets-build-a-compiler
-domains:
-  - id: crenshaw-01-single-digit
-    depends_on: []
-  - id: crenshaw-02-multi-digit-vars
-    depends_on: [crenshaw-01-single-digit]
-    inherits_seed: true
-  - id: crenshaw-03-ctrl
-    depends_on: [crenshaw-02-multi-digit-vars]
-    inherits_seed: true
-  ...
-generalization_probe:
-  every_n_domains: 3
-  test: "take the current best SM for the latest domain and run it on the test sets of all prior domains; if it scores ≥0.9 on all, promote it as a universal-stage and skip the next two domains' evolution"
+```
+Level 1: evolving continuously toward 100% (never stops)
+Level 2: spawned when Level 1 hits 90%; evolving continuously
+Level 3: spawned when Level 2 hits 90%; evolving continuously
+...
+Level K: spawned when Level K-1 hits 90%
+
+Backward injection: every time Level N promotes a new winner
+  → that winner (and its sub-paths) becomes a fresh seed in Level N+1, N+2, ...
+  → existing populations at those levels get re-shuffled with the new material
+  → diversity-preservation rules in Module 9 ensure the injection adds variation,
+    not just replaces the current best
 ```
 
-**Curriculum execution.** `centaur curriculum run <curriculum-yaml>` walks the dependency graph, running `centaur evolve` on each domain. The generalization probe is the killer feature — detecting that the system has *induced* a machine general enough to handle several upcoming domains without further evolution.
+**Why this model.** Sequential probe-and-skip discards information. The lower-level population is the most *empirically grounded* representation of "how to solve this kind of sub-problem." As that population continues to improve, the higher-level populations benefit from the improved foundation without having to rediscover it. A 95% Level-1 winner injected into Level 2 gives Level 2 a head start; when Level 1 reaches 98%, Level 2 gets another injection round and improves further. Genetic material flows upward continuously, not in one-shot.
 
-**Acceptance.** End-to-end: Crenshaw curriculum runs to lesson 16 with all 16 winners promoted, OR runs further than lesson N with a generalization probe firing at some point. The execution log shows clearly which lessons required full evolution and which were resolved by a generalized machine from earlier.
+**Curriculum specification.**
 
-**Status today.** Not built. The dogfood project pattern (`.centaur/projects.json`) has milestone tracking but not curriculum-shaped progression.
+```yaml
+curriculum: crenshaw-extracted-domains
+levels:
+  - id: level-1-lex-onedigit
+    domains: [expr-tokenize-onedigit, expr-emit-add-mul-68k]
+    target_score: 1.00
+    spawn_next_at: 0.90
+
+  - id: level-2-expr-multidigit
+    depends_on: [level-1-lex-onedigit]
+    domains: [lexer-numeric-multidigit, expr-with-vars-emit]
+    target_score: 1.00
+    spawn_next_at: 0.90
+    inject_from: [level-1-lex-onedigit]   # winners from level 1 are injected here
+
+  - id: level-3-ctrl-flow
+    depends_on: [level-2-expr-multidigit]
+    domains: [parse-if-else, parse-while, lower-ctrl-flow-labels]
+    inject_from: [level-1-lex-onedigit, level-2-expr-multidigit]
+
+  ...
+
+cross_level_injection:
+  trigger: "any time a level promotes a new winner with score Δ ≥ 0.02 over previous best"
+  payload: "promoted SM + its top sub-paths flagged for splice candidates"
+  destination: "all dependent levels currently active"
+  rate_limit: "no more than 1 injection per dependent level per N minutes (avoid thrashing)"
+
+continuous_run:
+  scheduler: "all spawned levels run concurrently as long as budget allows"
+  budget_split: "lower levels get more weight initially; redistributes as upper levels mature"
+  termination_per_level: "only when target_score is hit OR explicit human stop"
+```
+
+**Concurrent execution.** The factory's executor (Module 6) is now driving N populations simultaneously, not one. Schedule:
+
+- A budget allocator splits the curriculum-wide budget across active levels weighted by (level priority × current rate of improvement × time-since-last-promotion).
+- Within each level, the standard evolve loop runs (generate, evaluate, score, promote, mutate, repeat).
+- The promoter posts every promotion event to a curriculum bus.
+- Subscribers (other active levels with `inject_from` referencing the promoting level) consume the event and add the new winner to their next generation's seed set.
+
+**Acceptance.** End-to-end:
+
+1. Curriculum YAML defines ≥3 dependent levels.
+2. Centaur launches all 3 concurrently (subject to budget).
+3. Level 1 hits 90% → Level 2 receives its first injection.
+4. Level 1 continues to 95% → Level 2 receives a second injection.
+5. Level 2's convergence rate after the second injection is measurably faster than Level 2's solo evolution would have been (the empirical demonstration that backward injection helps).
+6. Promotion log clearly shows which Level-2 winners had Level-1-derived sub-paths in their lineage.
+
+**Status today.** Not built. The current `dogfood-*` project pattern in centaur has milestone-style sequential progression, which is the wrong shape.
 
 ---
 
@@ -465,70 +572,117 @@ Every node call checks the accumulated cost against the budget for its level. Hi
 
 ---
 
-## 6. Cross-module data flow (Crenshaw lesson 3 worked example)
+## 7. Cross-module data flow (LongMem zeroth-domain worked example)
 
-This is the trace of one full evolution run, top to bottom:
+This is the trace of one full evolution run on the LongMem domain — the first domain Centaur attempts.
 
 ```
-1. Founder authors domains/crenshaw-03-ctrl/ with control-flow test cases.
-   Module 1 validates the schema.
+1. The LongMem domain is authored as domains/longmem-oracle/ containing:
+     - domain.yaml: parent=null, level=null, target_score=0.97 at cost <= $0.50/q
+     - test_cases.jsonl: 500 LongMemEval questions (from trimind-brain/tests/longmemeval)
+     - metric_functions/oracle_accuracy.py: wraps existing bench.py judge logic
+     - metric_functions/cost_per_question.py: tracks dollar spend per question
+     - harness.py: invokes bench.py with the candidate's SM-encoded configuration
+   Module 1 validates the schema; the harness smoke-tests against a 10-question subset.
 
-2. `centaur curriculum run crenshaw.yaml` walks to lesson 3.
-   Module 12 detects lesson 2 has a promoted winner; passes it as seed.
+2. `centaur evolve longmem-oracle --budget 200.00 --generations 8 --population 16`
+   Module 4 generates 16 candidates:
+     - 1 from the HWM seed (tools-haiku/sonnet/opus/thinking=10000/sonnet-codec)
+     - 5 from mutating the HWM along a single axis (different reader, different judge, etc.)
+     - 5 from library random walk (combinations of available reader/escalation/judge nodes)
+     - 5 from cross-axis mutations (drop escalation, halve thinking budget, etc.)
 
-3. Module 4 (candidate generator) produces population of 24:
-     - 3 from mutation of the lesson-2 seed
-     - 11 from library random walks (lex+parse+emit template variants)
-     - 4 from human-seed machines committed to seed_machines/
-     - 6 from cross-domain splicing (Trimind retrieves similar past wins)
+3. For generation 1, Module 6 (executor) runs each candidate's harness.py against
+   the 500-question batch. Each LLM call inside bench.py is routed through Module 7
+   (model router) which picks the candidate's declared tier (or strength-reduces
+   if a smaller tier has been observed sufficient in past runs).
 
-4. For generation 1, Module 6 (executor) runs each candidate on the 84
-   test cases. Each LLM node call goes through Module 7 (model router),
-   which picks: deterministic for tokenize; local_coder for AST optimize;
-   near_frontier_local for hard cases. Module 14 (budget) enforces $4/gen.
+   Budget governor (Module 14) enforces: $12.50/generation (200/16); a candidate
+   that's burning faster than 16% of its share by question 50 gets aborted with
+   a budget_exhausted marker.
 
-5. Module 8 (evaluator) scores all 24 candidates against
-   correctness + asm-size + compile-wall + cost weights.
+4. Module 8 (evaluator) scores each candidate's run:
+     - correctness = passed_questions / 500 (must be >= 0.95 floor or candidate scores 0)
+     - cost = 1 - clamp(dollars / 25, 0, 1)  (the budget floor weighting)
+     - latency = 1 - clamp(p95_question_ms / 30000, 0, 1)
+     - composite = 0.5*correctness + 0.4*cost + 0.1*latency  (above the floor)
 
-6. Module 9 (promoter) keeps top 8 elites, mutates 12 from them, accepts
-   4 new template seeds for generation 2.
+   Initial generation typically shows: HWM seed scores ~0.94 (high correctness, low cost
+   weight). Mutations like "drop escalation entirely" score 0.0 because correctness
+   drops below the 0.95 floor. Mutations like "swap opus-judge to sonnet-judge"
+   score around 0.97 if correctness holds and cost drops materially.
 
-7. Generations 2-9 repeat. Convergence detected at gen 9 by score-delta
-   threshold.
+5. Module 9 (promoter) keeps top-4 elites, mutates 8 from them, accepts 4 new
+   library-walk seeds for generation 2.
 
-8. Module 10 (replay) emits the bundle for sm_3_g9_c11. Replay sanity test
-   passes byte-identical.
+6. Generations 2-6 explore the cost-correctness frontier. Generation 7 finds
+   a candidate at correctness=0.967, cost=$0.21/q (vs HWM $0.43/q) — that's
+   2x cost reduction at parity. Generation 8 sharpens; convergence detected.
 
-9. Module 11 (memory) deposits 14 facts:
-     - "tokenize+recursive-descent+llm-codegen template is strong for
-        control-flow domains"
-     - "local_coder tier sufficed for AST optimizer in this domain"
-     - "splicing a parser from crenshaw-02 won 3 candidates' starts"
-     - ... 11 more
+7. Module 10 (replay) emits the bundle. Replay sanity test: same SM, same 500
+   questions, same scored output byte-identical.
 
-10. Module 12 (curriculum) advances to lesson 4. Seed inheritance carries
-    sm_3_g9_c11 forward, Trimind retrieval primes generation 1 with similar
-    motif fragments.
+8. Module 11 (memory) deposits ~30 facts:
+     - "sonnet-judge sufficed when reader-confidence > 0.85" (90% of questions)
+     - "opus-judge only needed on the 10% of questions where reader & escalator disagreed"
+     - "thinking=5000 sufficed for 80% of questions; 10000 only needed for math-heavy"
+     - "haiku-reader sufficed when retrieval returned high-similarity memories (cosine > 0.91)"
+     - ... more
 
-11. After lesson 12, Module 12 fires the generalization probe: takes the
-    current best lesson-12 SM, runs it on all of lesson 1-11's test sets.
-    Result: scores ≥0.92 on all. Promotes as universal-stage,
-    skips lesson 13's full evolution, jumps to lesson 14 with the
-    generalized seed.
+9. Domain done. The promoted SM is the first live, replayable, mutation-history-tracked
+   state machine in the Centaur system.
 
-12. After lesson 16 (or earlier via generalization), the curriculum's
-    end-state is one or more compiler state machines that handle a
-    significant subset of C → assembly with measured (correctness, cost,
-    speed, quality) profiles.
-
-13. The founder runs `centaur evolve` on a *new* domain unrelated to
-    compilers — "given a profile trace, suggest the top-3 optimization
-    targets" — and the factory works without re-engineering. That
-    demonstrates Centaur is a general factory, not a compiler-specific
-    pipeline.
+10. (No automatic next domain — LongMem is not part of the Crenshaw curriculum.)
+    The factory itself is now validated. The Crenshaw curriculum (§3) launches next
+    as the multi-level concurrent evolution test.
 ```
 
-## 7. What "done" looks like per component
+### 7.1 Cross-module data flow (Crenshaw level-3 worked example, multi-level concurrent)
+
+After LongMem validates the factory, the Crenshaw curriculum starts. This trace shows the **concurrent multi-level + backward injection** model (per founder decision on §11 Q3) in action.
+
+```
+T=0:    centaur curriculum start crenshaw-extracted.yaml
+        Module 12 launches Level 1 (expr-tokenize-onedigit, expr-emit-add-mul-68k).
+        Level 1 starts evolving.
+
+T=2hr:  Level 1's best candidate scores 0.91 (above the 0.90 spawn threshold).
+        Module 12 spawns Level 2 (lexer-numeric-multidigit, expr-with-vars-emit)
+        with Level 1's current best as initial seed. Level 1 keeps evolving toward 1.00.
+        Curriculum bus: Level 1 has subscribers [Level 2].
+
+T=4hr:  Level 1 hits 0.94. Promotion event posted to curriculum bus.
+        Level 2 (subscribed) consumes the event: its next generation gets the new
+        Level 1 winner injected as a fresh seed candidate. Level 2's population
+        diversity-preservation rules (Module 9) ensure injection adds variety,
+        not just replaces current best.
+
+T=5hr:  Level 2 hits 0.91. Module 12 spawns Level 3 (parse-if-else, parse-while,
+        lower-ctrl-flow-labels) with Level 2's current best plus the latest Level 1
+        material as initial seeds. Curriculum bus subscribers now: Level 1 -> [L2, L3];
+        Level 2 -> [L3].
+
+T=8hr:  Three levels active. Level 1 at 0.97, Level 2 at 0.93, Level 3 at 0.89.
+        Budget allocator (Module 12) has shifted weight: Level 1 was getting 60% at
+        T=0; now Level 1 gets 25%, Level 2 gets 40%, Level 3 gets 35%. Lower-priority
+        because Level 1 is approaching the asymptote and marginal generations buy
+        diminishing returns; Level 3 is in steepest gradient.
+
+T=12hr: Level 1 hits 0.99. Promotion event posted. L2 and L3 both consume; both
+        get fresh injection material. Level 2 jumps from 0.93 to 0.95 in the
+        generation that consumed the injection (faster than the previous generation's
+        Δ of 0.01). Empirical evidence that backward injection helps.
+
+T=24hr: Level 1 at 1.00. Level 2 at 0.98. Level 3 at 0.95. Level 4 spawned at
+        T=18hr when Level 3 crossed 0.90; now active with seeds from L1, L2, L3.
+
+T=48hr: Levels 1-3 at 1.00 (asymptote). Levels 4-6 active. The factory has produced
+        12 promoted state machines across 6 active levels in 48 hours of clock time.
+```
+
+The empirical question this design answers: does backward injection produce measurably faster convergence than solo evolution at each level? Module 12 includes telemetry that records, for each promoted candidate, whether any of its lineage came from injection events (vs pure within-level mutation), so this can be measured.
+
+## 8. What "done" looks like per component
 
 | Component | "100%" means |
 |---|---|
@@ -537,7 +691,7 @@ This is the trace of one full evolution run, top to bottom:
 | **Component 3** (providers) | All five tiers have current, live, measured qualification records. Strength reduction is observed in practice: state machines that initially used `near_frontier_local` get observed-and-promoted to using `local_coder` for sub-tasks where it suffices, with cost halving. |
 | **Component 4** (product) | A user submits a domain spec and a budget; receives a winner-bundle and a replayable result; can inspect why it won within 5 minutes; can promote, reject, or hand-mutate from the UI. |
 
-## 8. Status today vs spec (rough)
+## 9. Status today vs spec (rough)
 
 | Module | % toward spec | Largest gap |
 |---:|---:|---|
@@ -559,40 +713,62 @@ This is the trace of one full evolution run, top to bottom:
 
 **Overall: ~22% of the spec realized.** Generously rounded.
 
-## 9. Critical path from today to Crenshaw lesson 1
+## 10. Critical path from today to first promoted state machine
 
-Minimum modules required to attempt lesson 1 end-to-end:
+Per founder direction (2026-05-21), the first domain Centaur attempts is **LongMem oracle** using trimind-brain's existing `tests/longmemeval/bench.py`. This is the fast path to validating the factory exists. Crenshaw extraction starts in parallel as the broader generality test.
 
-1. Module 1 (domain definition + Crenshaw-01 authored)
-2. Module 2 (with at least: regex tokenizer, recursive-descent parser primitive, emit-asm template, LLM-call shape)
-3. Module 3 (SM JSON schema + validator)
-4. Module 4 (template-based generator only; library random walk deferred)
-5. Module 6 (executor)
-6. Module 7 (already mostly there; needs #1215 to wire local_small/local_coder)
-7. Module 8 (correctness + cost scoring; quality/latency deferred)
-8. Module 9 (elitism + tournament selection; mutation policies later)
-9. Module 5 (just swap-node and reparameterize; advanced operators later)
-10. Module 10 (bundle emit; full replay can lag)
-11. Module 14 (basic per-domain budget; full hierarchy later)
+### Critical path to LongMem first promotion
 
-That's 11 modules at minimum-viable scope. Each is a discrete shippable PR or small chain. **This is the spec-derived backlog.** It supersedes the current ad-hoc backlog as the source of truth for "what to build next."
+Minimum modules required to attempt the LongMem zeroth domain end-to-end:
 
-## 10. Open questions for the founder
+1. **Module 1** (domain definition) — author `domains/longmem-oracle/` with `domain.yaml`, `test_cases.jsonl` (500 LongMemEval questions), `metric_functions/`, `harness.py` that calls `bench.py`. Schema validator exists.
+2. **Module 2** (node library, scoped subset) — at minimum: retrieve-from-trimind, llm-call (with tier-required parameter), conditional-branch (for escalation logic), score-and-judge. The harness encodes a state machine as a dict of (reader_tier, escalator_tier, judge_tier, thinking_budget, codec, K_retrieved).
+3. **Module 3** (SM JSON shape + validator) — minimal version, no graph-execution semantics; the LongMem SM is configuration-shaped, not graph-shaped.
+4. **Module 4** (candidate generator) — HWM seed mutator only. Library random walk deferred.
+5. **Module 5** (mutator) — reader-tier swap, escalator drop, thinking budget halve, codec swap, judge-tier-swap. Just these five operators.
+6. **Module 6** (executor) — invokes the harness for one candidate. Concurrency deferred (run candidates serially).
+7. **Module 7** (model router) — `near_frontier_local` is live; needs `local_small`/`local_coder` from #1215.
+8. **Module 8** (evaluator) — wraps bench.py's existing judge output as correctness; adds cost tracking.
+9. **Module 9** (promoter) — top-K elitism only; tournament/diversity deferred.
+10. **Module 10** (replay) — bundle emit with the LLM-cache; full replay verification deferred.
+11. **Module 14** (budget control) — basic per-domain budget cap with prediction (LongMem at 500 questions × candidates is expensive; cost prediction is mandatory from day 1).
 
-1. **Domain schema authoring** — do domain authors write Python harness code (full flexibility, higher friction) or YAML-only declarative specs (lower friction, may not generalize)? Recommendation: Python harness + YAML metadata; tighter than HuggingFace datasets, looser than Kaggle competitions.
+That's 11 modules at scoped-MVP scope. **This is the spec-derived backlog.** Each is a discrete shippable PR or small chain. The current ad-hoc backlog is no longer the source of truth; this is.
 
-2. **Crenshaw assembly target** — 68000 (Crenshaw's original) or x86-64 (modern but more complex)? Recommendation: 68000 verbatim for lessons 1–10, then a separate "port to x86-64" domain to test the system's ability to refactor a state machine for a new target.
+### Critical path to Crenshaw first sub-domain win
 
-3. **Generalization-probe threshold** — when does a state machine count as "general enough to skip the next lesson"? Recommendation: 0.92 mean composite score across all prior lessons' test sets, with no individual lesson scoring below 0.85.
+After LongMem first promotion lands (proving the factory works), the Crenshaw curriculum starts. Minimum additional modules:
 
-4. **Memory growth budget** — Trimind storage isn't free; at scale across hundreds of domains the brain grows. Should there be a retention policy (forget facts not retrieved in N evaluations)? Recommendation: yes, but not for v1; document the question.
+12. **Module 1 (Crenshaw instance)** — author `domains/crenshaw-01-expr-tokenize-onedigit/` and friends (see §3 table).
+13. **Module 2 (Crenshaw nodes)** — add tokenizer, parser, ast-emit, asm-emit nodes for the 68k or x86-64 targets.
+14. **Module 3 (graph-shaped SM)** — extend Module 3 from configuration-shaped to graph-shaped, with type-checked edges.
+15. **Module 6 (graph executor)** — extend Module 6 to execute typed graphs, not just call a single harness.
+16. **Module 12** (curriculum manager — concurrent multi-level + backward injection per §6 Module 12 spec).
 
-5. **Self-improvement boundary** — at what point does Centaur start evolving its own mutators (Module 15)? Recommendation: not until at least 3 unrelated domains have produced winners via the static-policy mutator, so we have a baseline.
+After this expansion, the system can run the Crenshaw curriculum in the concurrent-multi-level mode described in §7.1.
 
-6. **The vLLM 310 vs 106 tok/s number** (#1208 unblocked today) — must be resolved before any cost-based scoring is honest, since the cost model relies on knowing real provider throughput. P0 not just for throughput but for spec correctness.
+## 11. Open questions and founder's decisions
 
-## 11. What this document is and isn't
+Resolved decisions are recorded here as part of the spec's truth. Deferred items remain open.
+
+### Resolved (2026-05-21 founder direction)
+
+**Q1 — Domain schema authoring.** ✅ **Python harness + YAML metadata**, both. YAML describes the contract the factory needs; harness.py is the runtime glue. Updated in Module 1.
+
+**Q2 — Crenshaw assembly target.** ✅ **Extract as many useful problems as possible from Crenshaw.** Each Crenshaw lesson has multiple separable sub-problems (lexing, parsing, control-flow lowering, code emission per architecture, etc.). Each becomes its own domain. Target diversity (68000 vs x86-64) becomes a domain dimension — same problem, different concrete target. Updated in §3.
+
+**Q3 — Generalization-probe / level-progression threshold.** ✅ **Concurrent multi-level evolution with backward injection.** Lower levels never stop until 100%. At 90%, the next level spawns and starts evolving with the current best as seed. As lower levels continue to improve, their new winners are injected back into all dependent higher-level populations as fresh genetic material. Module 12 rewritten to reflect this; §7.1 walks through it with the Crenshaw curriculum example.
+
+### Deferred (founder will revisit when more data is available)
+
+**Q4 — Memory growth budget.** Trimind storage isn't free; at scale across hundreds of domains the brain grows. Retention policy: forget facts not retrieved in N evaluations? Status: deferred. Document the question, observe the actual growth shape, decide later.
+
+**Q5 — Self-improvement boundary.** At what point does Centaur evolve its own mutators (Module 15)? Recommendation: not until at least 3 unrelated domains have produced winners via static-policy mutator. Status: deferred. Self-improvement remains off by default; Module 15 stays in the spec but unimplemented.
+
+**Q6 — The vLLM 310 vs 106 tok/s regression (#1208).** Must resolve before any cost-based scoring is honest. Tactical work proceeding in parallel; not blocking spec sign-off. Status: hardware-track issue, not a spec question.
+
+## 12. What this document is and isn't
 
 This is the *specification*. It is not the project plan. The dashboard tracks progress against this spec. The issue backlog drives the next concrete work. The protocol coordinates the agents doing the work.
 
-This document is expected to be revised. Every revision must be a PR with a `Closes #N` reference where N is a "spec amendment" issue summarizing the change. The current revision is **draft v1, 2026-05-21T17:30Z, authored by Claude in chat from accumulated context plus founder articulation of the C-compiler test case**. Founder review and sign-off pending.
+This document is expected to be revised. Every revision must be a PR with a `Closes #N` reference where N is a "spec amendment" issue summarizing the change. The current revision is **v1.1, 2026-05-21T17:30Z** (founder review applied — Q1, Q2, Q3 resolved; Q4/Q5/Q6 deferred; LongMem zeroth-domain added per founder direction; Module 12 rewritten for concurrent multi-level + backward injection; §10 critical path now LongMem-first then Crenshaw).
