@@ -71,6 +71,9 @@ Required profile fields:
 - `quality_scores`: optional score buckets, using `null` until a local quality
   run or public-prior import has been recorded.
 - `last_probe_artifact`: required whenever measured throughput is non-null.
+- `production_eligible`: optional boolean. If true, the profile must have
+  measured output throughput, a probe artifact, no `blocked_reason`, and a
+  non-blocked endpoint status.
 
 ## Fixtures
 
@@ -79,11 +82,14 @@ Example fixtures live under `fixtures/model_providers/`:
 - `qwen_local_provider.example.json`
 - `ling_local_provider.example.json`
 - `dsv4_spark_pipeline_provider.example.json`
+- `vllm_deepseek_v4_flash_pp2_200g_near_frontier_20260522.example.json`
 - `frontier_api_placeholder_provider.example.json`
 
 They intentionally leave measured throughput and quality scores as `null`
-unless a matching artifact exists. This avoids turning source/model-card claims
-into local DS4 performance claims.
+unless a matching artifact exists. The vLLM PP=2 near-frontier fixture is the
+current measured exception: it points at the 2026-05-22 PP=2 direct-200G probe
+artifact and records the selected no-MTP batch lane. This avoids turning
+source/model-card claims into local DS4 performance claims.
 
 ## Validation
 
@@ -99,6 +105,8 @@ Validation rejects:
 - unknown tier/runtime/provider-kind values;
 - missing batching fields;
 - measured throughput without `last_probe_artifact`;
+- `production_eligible` profiles without measured output throughput or with
+  blocked endpoint metadata;
 - secret-looking endpoint fields;
 - fixed Spark-count fields such as `spark_count`, `num_sparks`, or
   `world_size`.

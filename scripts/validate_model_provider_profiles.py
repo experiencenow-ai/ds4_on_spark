@@ -144,6 +144,18 @@ def validate_profile(obj: dict[str, Any], path: Path) -> list[str]:
 		errors.append(err(path, "last_probe_artifact must be a string"))
 	elif ((measured_input is not None and measured_input > 0.0) or (measured_output is not None and measured_output > 0.0)) and last_probe.strip() == "":
 		errors.append(err(path, "measured throughput requires last_probe_artifact"))
+	production_eligible = obj.get("production_eligible")
+	if production_eligible is not None and not isinstance(production_eligible, bool):
+		errors.append(err(path, "production_eligible must be a boolean when present"))
+	if production_eligible is True:
+		if measured_output is None or measured_output <= 0.0:
+			errors.append(err(path, "production_eligible requires measured_output_tps > 0"))
+		if not isinstance(last_probe, str) or last_probe.strip() == "":
+			errors.append(err(path, "production_eligible requires last_probe_artifact"))
+		if "blocked_reason" in obj:
+			errors.append(err(path, "production_eligible cannot include blocked_reason"))
+		if isinstance(endpoint, dict) and str(endpoint.get("status", "")).lower() == "blocked":
+			errors.append(err(path, "production_eligible endpoint status cannot be blocked"))
 	quality = obj.get("quality_scores")
 	if not isinstance(quality, dict):
 		errors.append(err(path, "quality_scores must be an object"))
