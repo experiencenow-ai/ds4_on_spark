@@ -2,7 +2,7 @@
 
 > **Specification:** [`docs/CENTAUR_SPECIFICATION.md`](CENTAUR_SPECIFICATION.md) — system modules, end-state walkthrough, what "done" looks like. This dashboard reports progress against that spec.
 
-> Last meaningful update: **2026-05-21T23:50Z** (full 8-node Spark ring physically deployed — photo confirms Spark0-7 with Lenovo Spark7 as the eighth; new labels hw:spark-7 and hw:spark-0-1-2; Spark0/1 confirmed back; all P0 hw:spark-3-4-5 work unblocked)
+> Last meaningful update: **2026-05-22T09:30Z** (6 of 11 LongMem critical-path modules merged in centaur within 90 minutes; full eight-node ring deployed; track:2 revived and is the productivity star of this cycle with 4 of 6 module merges; PP=4 ring measured at 171 tok/s c=256, same as PP=2 — PP=2 stays the production lane; 200G fabric pinned for distributed providers)
 
 > **Naming note.** The Centaur vision document names four *workstream components* (factory core, memory domain, providers, product/UI). The coordination system uses agent *track slots* (`track:1`, `track:2`, `track:3`, `track:4`). These are not the same thing despite the unfortunate number overlap. **Any track slot may work on any workstream component.** A track is an agent handle with accumulated PR history; it is not a job description. This dashboard reports component progress; the stall ledger reports per-track-slot behavior.
 
@@ -27,18 +27,23 @@ The product target is `a machine that creates machines that solves domains effic
 
 ---
 
-## Component 1 — State-machine factory core (overall **45%**)
+## Component 1 — State-machine factory core (overall **65%**)
 
-| Component | % | Status | Source |
+| Module (spec §6) | % | Status | Evidence |
 |---|---:|---|---|
-| Candidate generation | 50 | `centaur_state_machine_factory.py` exists with seed/mutation primitives; never exercised on a real domain end-to-end | `centaur_state_machine_factory.py` |
-| Node execution dispatch | 65 | Provider gateway routes nodes; works through vLLM live (PR #100), works through fixture providers; ds4 PP=3 path proven economically nonviable (PR #1203) | `centaur_vllm_provider.py`, `centaur_ds4_provider.py` |
-| Scoring | 30 | Score-card structure exists, but only fixture-derived scores; **no output-derived scoring against a real domain yet** | `centaur.py` scoring subcommands |
-| Mutation | 30 | API surface defined; mutators exist for memory/codec but not validated against domain outcomes | `state-*` subcommands (18 of them) |
-| Replay bundle emit | 40 | Bundle format defined; bundles emitted by some procedures; round-trip replay-then-rescore unverified at scale | procedure registry, `procedure-*` subcommands |
-| Promotion / rejection | 20 | Single-candidate runs work; multi-candidate compare-and-promote untested against real measured outputs | factory module |
+| 1 Domain definition | 70 | `centaur domain submit` validator merged | centaur PR #105 |
+| 2 Node library | 55 | LongMem node primitives merged; type sigs + cost models still partial | centaur PR #107 |
+| 3 SM representation | 60 | LongMem state-machine JSON schema validator merged | centaur PR #106 |
+| 4 Candidate generator | 55 | LongMem HWM-seed generator + 5 single-axis mutations | centaur PR #108 |
+| 5 Mutator | 50 | LongMem mutation operators (5) merged | centaur PR #109 |
+| 6 Executor | 60 | LongMem fixture candidate executor merged; live executor pending Module 7 router | centaur PR #110 |
+| 7 Model router (LongMem-aware) | 30 | Issue #1272 filed; needs to wire all 3 live tiers | open |
+| 8 Evaluator | 25 | Issue #1273 filed; will wrap bench.py judge | open |
+| 9 Promoter | 10 | Issue #1274 filed; not started | open |
+| 10 Replay bundle | 35 | Issue #1275 filed; procedure bundles exist; SM-run bundles do not | open |
+| 14 Budget control | 25 | Issue #1276 filed; current state is loose gates | open |
 
-**Bottleneck:** Scoring-from-outputs has never been demonstrated against a real provider for a real domain. Until #1195 lands, the factory is scaffolding plus one route.
+**Bottleneck:** Modules 7-9 must land in order before a first generation can produce a real score. Module 14 must land before any live evolution runs; the 500-question batch is too expensive to run without budget guarantees.
 
 ---
 
@@ -56,7 +61,7 @@ The product target is `a machine that creates machines that solves domains effic
 
 ---
 
-## Component 3 — Provider + model portfolio (overall **55%**)
+## Component 3 — Provider + model portfolio (overall **65%**)
 
 | Tier | % | Provider(s) live | Notes |
 |---|---:|---|---|
@@ -177,11 +182,12 @@ This chain takes `local_small` and `local_coder` from 30% (no live providers) to
 
 | Window | Merges | Highlights |
 |---|---:|---|
-| 03:00–07:00Z | 5 | vLLM agent: structured-choice bench, config tuning, fanout curve, model cache manifest |
-| 09:00–11:00Z | 6 | Coordination protocol (#1201, #1202); MXFP4 audit (#1204); MoE queue projection (#1206); Centaur vLLM binding merged in centaur repo (PR #100); 4 of 4 tracks self-bootstrapped via LANES.md |
-| 12:00–16:30Z | **18** | Anti-stall protocol (#1235); track-vs-component fix (#1237); small-model qualification chain complete (#1217/#1221/#1231/#1239); Spark ring deploy automation (#1225); vLLM memory preflight (#1233/#1234); vLLM safe c256 benchmark (#1238); Lane D corrected baseline (#1170: 73/92 at 13.9 tok/s); transformers small-model backend (#1239) |
+| 03:00–07:00Z (5/21) | 5 | vLLM agent: structured-choice bench, config tuning, fanout curve, model cache manifest |
+| 09:00–11:00Z (5/21) | 6 | Coordination protocol (#1201, #1202); MXFP4 audit (#1204); MoE queue projection (#1206); Centaur vLLM binding merged (PR #100); 4 of 4 tracks self-bootstrapped via LANES.md |
+| 12:00–16:30Z (5/21) | 18 | Anti-stall protocol (#1235); track-vs-component fix (#1237); small-model qualification chain complete; Lane D corrected baseline 73/92 |
+| 23:00Z–09:30Z (5/22) | **~14** | Spec v1.1 merged (#1249); Spark7 added; 200G fabric pinned for distributed providers (#1259); PP=4 ring measured (#1269 — same throughput as PP=2 at c=256, PP=2 stays production); **6 of 11 LongMem critical-path modules merged in centaur (PRs #105, #106, #107, #108, #109, #110)**; track:2 revived with 4 of those 6 |
 
-Average post-protocol cadence: ~4.5 merges/hour vs ~1/hour pre-protocol. Structural intervention worked.
+Average post-protocol cadence: still ~4-5 merges/hour. Spec-derived backlog is now driving most of the work; tactical issues (#1208 vLLM regression, #1209 MoE queue) deferred to opportunistic claim.
 
 ## Stall ledger
 
@@ -189,20 +195,17 @@ Track-by-track behavioral pattern, updated alongside material observation.
 
 | Track slot | Sessions observed | Idle exits | Blocker comments | `/release-stalled` received | Cross-track claims shipped | Notes |
 |---|---:|---:|---:|---:|---:|---|
-| track:1 | 4 | 0 | 1 (#1218, valid hw block) | 0 | 5+ | Continues as team-player baseline. Claimed #1195 (memory_evolution_alpha) explicitly under updated rules. |
-| **track:2** | 2 | 1 | 1 (#1220, valid hw block but no follow-on claim) | 0 | 0 | **Silent for 18 hours after the block. Slot recommended retired.** |
-| track:3 | 3 | 1 | 1 | 0 | 4 | Major cross-track movement: deploy automation, small-model qualification, vLLM memory preflight, #1195 unblock check. Naming-collision fix worked. |
-| track:4 | 3 | 0 | 0 | 0 | 2 | Corrected baseline (#1170), Spark0 smoke split (#1188), transformers backend (#1239). Multi-area participant. |
+| track:1 | 5 | 0 | 1 (#1218, valid hw block) | 0 | 7+ | Continues as team-player baseline. Claimed and managed the #1258 LongMem umbrella; landed Modules 1 & 3 (centaur PRs #105, #106). |
+| **track:2** | 4 | 1 | 1 (#1220, valid hw block) | 0 | **5** | **Revived. Productivity star of the 09:30Z cycle.** Shipped centaur PRs #107, #108, #109, #110 (Modules 2, 4, 5, 6) plus #1262 (Spark reachability artifact). Slot retirement recommendation rescinded. |
+| track:3 | 4 | 1 | 1 | 0 | 4 | Cross-track movement continues: PR #1271 in-flight on vLLM PP=3 network fallback measurement. |
+| track:4 | 4 | 0 | 0 | 0 | 3 | PR #1170 corrected baseline + #1265/#1266 closed-ring topology work + Spark7 topology updates. |
 
 **Anti-pattern callouts (resolved):**
 
-- "Posted blocker comment, done" — addressed by 12:00Z anti-stall protocol. Subsequent blocker comments (#1218, #1220) include real raw evidence; #1218 follower claim of #1195 demonstrates the protocol works when followed.
-- Refusing to claim outside the "track:N matches workstream N" mental model — addressed by 12:30Z track-vs-component naming fix. Track:3 and Track:4 now actively cross-claim.
+- "Posted blocker comment, done" — addressed by 12:00Z anti-stall protocol. Blocker comments (#1218, #1220) include real raw evidence with proper follow-on claims.
+- Refusing to claim outside the "track:N matches workstream N" mental model — addressed by 12:30Z track-vs-component naming fix. All four tracks now actively cross-claim.
 - "Stepped outside my track, did one small thing, declared blocked or done" — addressed by partial-work-as-blocker rule.
-
-**Anti-pattern remaining (track:2 only):**
-
-- "Posted blocker comment, did not claim from backlog in same runtime, vanished" — the five-question gate explicitly requires backlog-claim within the same runtime. Track:2's #1220 has Q1–Q4 answered but Q5 (claimed from backlog instead) blank. They were given runtime and did not return. Slot retirement recommended.
+- "Track silent across multiple sessions" — track:2 specifically reversed this; the slot is now productive.
 
 
 
