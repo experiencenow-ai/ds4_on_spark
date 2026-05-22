@@ -71,6 +71,7 @@ Required profile fields:
 - `quality_scores`: optional score buckets, using `null` until a local quality
   run or public-prior import has been recorded.
 - `last_probe_artifact`: required whenever measured throughput is non-null.
+  Non-empty local paths must be repo-relative and must exist.
 - `production_eligible`: optional boolean. If true, the profile must have
   measured output throughput, a probe artifact, no `blocked_reason`, and a
   non-blocked endpoint status.
@@ -105,6 +106,8 @@ Validation rejects:
 - unknown tier/runtime/provider-kind values;
 - missing batching fields;
 - measured throughput without `last_probe_artifact`;
+- missing or non-repo-local local references in `last_probe_artifact`,
+  `benchmark_refs`, or `source_refs`;
 - `production_eligible` profiles without measured output throughput or with
   blocked endpoint metadata;
 - secret-looking endpoint fields;
