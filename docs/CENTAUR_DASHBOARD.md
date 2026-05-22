@@ -2,7 +2,7 @@
 
 > **Specification:** [`docs/CENTAUR_SPECIFICATION.md`](CENTAUR_SPECIFICATION.md) — system modules, end-state walkthrough, what "done" looks like. This dashboard reports progress against that spec.
 
-> Last meaningful update: **2026-05-21T22:07Z** (Spark4 back up — three P0 throughput investigations unblocked; Lane D failure analysis found corrected Spark6 73/92 is dominated by 13/19 hard 16000-token truncations; small-model qualification chain complete; track:2 silent and recommended retired)
+> Last meaningful update: **2026-05-21T23:50Z** (full 8-node Spark ring physically deployed — photo confirms Spark0-7 with Lenovo Spark7 as the eighth; new labels hw:spark-7 and hw:spark-0-1-2; Spark0/1 confirmed back; all P0 hw:spark-3-4-5 work unblocked)
 
 > **Naming note.** The Centaur vision document names four *workstream components* (factory core, memory domain, providers, product/UI). The coordination system uses agent *track slots* (`track:1`, `track:2`, `track:3`, `track:4`). These are not the same thing despite the unfortunate number overlap. **Any track slot may work on any workstream component.** A track is an agent handle with accumulated PR history; it is not a job description. This dashboard reports component progress; the stall ledger reports per-track-slot behavior.
 
@@ -100,7 +100,7 @@ Largest lead: truncation is 13/19 failures, so the 79.3% baseline should be trea
 
 ---
 
-## Hardware capacity (overall **70%**)
+## Hardware capacity (overall **85%**)
 
 | Spark | State | Owner | Role | Notes |
 |---|---|---|---|---|
