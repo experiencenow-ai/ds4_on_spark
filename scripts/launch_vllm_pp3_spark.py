@@ -25,21 +25,26 @@ class Node:
 	rank: int
 	addr: str
 	model_path: str
+	socket_ifname: str | None = None
+	gloo_socket_ifname: str | None = None
 
 
 def parse_node(raw: str) -> Node:
 	parts = raw.split(":")
-	if len(parts) not in (3,4):
-		raise ValueError("node must be host:rank:addr[:model_path]")
+	if len(parts) not in (3,4,5,6):
+		raise ValueError("node must be host:rank:addr[:model_path[:socket_ifname[:gloo_socket_ifname]]]")
 	host = parts[0]
 	rank = int(parts[1])
 	addr = parts[2]
-	model_path = parts[3] if len(parts) == 4 else DEFAULT_MODEL_HOST_PATH.format(host=host)
-	return(Node(host,rank,addr,model_path))
+	model_path = parts[3] if len(parts) >= 4 and parts[3] != "" else DEFAULT_MODEL_HOST_PATH.format(host=host)
+	socket_ifname = parts[4] if len(parts) >= 5 and parts[4] != "" else None
+	gloo_socket_ifname = parts[5] if len(parts) >= 6 else None
+	return(Node(host,rank,addr,model_path,socket_ifname,gloo_socket_ifname))
 
 
 def parse_nodes(raw: str) -> list[Node]:
-	nodes = [parse_node(part) for part in raw.split(",") if part.strip() != ""]
+	sep = ";" if ";" in raw else ","
+	nodes = [parse_node(part) for part in raw.split(sep) if part.strip() != ""]
 	if len(nodes) != 3:
 		raise ValueError("PP=3 launch requires exactly three nodes")
 	ranks = sorted(node.rank for node in nodes)
@@ -69,11 +74,13 @@ def check(result: subprocess.CompletedProcess[str]) -> None:
 
 
 def env_args(node: Node, args: argparse.Namespace) -> list[str]:
+	socket_ifname = node.socket_ifname if node.socket_ifname is not None else args.socket_ifname
+	gloo_socket_ifname = node.gloo_socket_ifname if node.gloo_socket_ifname is not None else args.gloo_socket_ifname
 	env = {
 		"FLASHINFER_DISABLE_VERSION_CHECK": "1",
 		"NCCL_DEBUG": args.nccl_debug,
 		"NCCL_SOCKET_FAMILY": "AF_INET",
-		"NCCL_SOCKET_IFNAME": args.socket_ifname,
+		"NCCL_SOCKET_IFNAME": socket_ifname,
 		"RAY_NODE_IP_ADDRESS": node.addr,
 		"RAY_memory_monitor_refresh_ms": "0",
 		"RAY_num_prestart_python_workers": "0",
@@ -85,8 +92,8 @@ def env_args(node: Node, args: argparse.Namespace) -> list[str]:
 		"VLLM_HOST_IP": node.addr,
 		"VLLM_TRITON_MLA_SPARSE": "1",
 	}
-	if args.gloo_socket_ifname != "":
-		env["GLOO_SOCKET_IFNAME"] = args.gloo_socket_ifname
+	if gloo_socket_ifname != "":
+		env["GLOO_SOCKET_IFNAME"] = gloo_socket_ifname
 	if not args.enable_ib:
 		env["NCCL_IB_DISABLE"] = "1"
 	return([f"-e {shlex.quote(k + '=' + v)}" for k,v in env.items()])
