@@ -1,0 +1,32 @@
+{
+  "format": "centaur-provider-route-requests-v1",
+  "run_id": "centaur-provider-route-smoke-20260522",
+  "requests": [
+    {
+      "node_id": "n_hard_reasoning",
+      "tier": "near_frontier_local",
+      "lane": "hard_reasoning",
+      "batch_tokens": 16384
+    },
+    {
+      "node_id": "n_batch_judge",
+      "tier": "near_frontier_local",
+      "lane": "batch_judge",
+      "batch_tokens": 16384
+    },
+    {
+      "node_id": "n_candidate_prefilter_dry",
+      "tier": "local_small",
+      "lane": "candidate_prefilter",
+      "batch_tokens": 1024,
+      "require_production_eligible": false
+    },
+    {
+      "node_id": "n_too_fast_hard_reasoning",
+      "tier": "near_frontier_local",
+      "lane": "hard_reasoning",
+      "batch_tokens": 16384,
+      "max_wait_ms": 10
+    }
+  ]
+}
