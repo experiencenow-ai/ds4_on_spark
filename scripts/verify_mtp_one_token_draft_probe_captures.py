@@ -18,6 +18,12 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any, Optional
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+	sys.path.insert(0, str(_REPO_ROOT))
+
+from scripts import diff_mtp_one_token_draft_probe as diff  # noqa: E402
+
 
 DEFAULT_PREFIXES = [
 	"trunk_token_embd",
@@ -53,17 +59,6 @@ def _load_json(path: Path) -> Any:
 		return json.load(f)
 
 
-def _is_hex_u64(s: Any) -> bool:
-	if not isinstance(s, str):
-		return False
-	if len(s) != 16:
-		return False
-	for c in s:
-		if c not in "0123456789abcdef":
-			return False
-	return True
-
-
 def _expect_int(key: str, val: Any, errors: list[str]) -> None:
 	if val is None:
 		return
@@ -83,21 +78,6 @@ def _expect_shape(key: str, val: Any, errors: list[str]) -> None:
 			return
 
 
-def _as_float_list(val: Any) -> Optional[list[float]]:
-	if val is None:
-		return None
-	if not isinstance(val, list):
-		return None
-	out: list[float] = []
-	for v in val[:1024]:
-		if isinstance(v, bool):
-			return None
-		if not isinstance(v, (int, float)):
-			return None
-		out.append(float(v))
-	return out
-
-
 def verify_probe_captures(probe: dict[str, Any], *, profile: str) -> dict[str, Any]:
 	errors: list[str] = []
 	warnings: list[str] = []
@@ -114,18 +94,7 @@ def verify_probe_captures(probe: dict[str, Any], *, profile: str) -> dict[str, A
 			"present_prefixes": [],
 		}
 
-	present_prefixes: set[str] = set()
-	for k in probe.keys():
-		if not isinstance(k, str):
-			continue
-		if not k.endswith("_fnv64"):
-			continue
-		if k.endswith("_hc_major_fnv64"):
-			continue
-		prefix = k[: -len("_fnv64")]
-		if prefix:
-			present_prefixes.add(prefix)
-
+	present_prefixes = diff._capture_prefixes(probe)
 	missing: list[str] = []
 	incomplete: list[str] = []
 
@@ -150,13 +119,13 @@ def verify_probe_captures(probe: dict[str, Any], *, profile: str) -> dict[str, A
 		if fnv is None or nbytes is None or shape is None:
 			incomplete.append(prefix)
 
-		if fnv is not None and not _is_hex_u64(fnv):
+		if fnv is not None and not diff._is_hex_u64(fnv):
 			errors.append(f"{fnv_key} is not a 16-nybble lowercase hex string")
 		_expect_int(nbytes_key, nbytes, errors)
 		_expect_shape(shape_key, shape, errors)
 
 		if sample is not None:
-			sample_list = _as_float_list(sample)
+			sample_list = diff._as_float_list(sample)
 			if sample_list is None:
 				errors.append(f"{sample_key} is present but is not a float list")
 

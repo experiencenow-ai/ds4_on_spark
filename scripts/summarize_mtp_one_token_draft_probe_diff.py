@@ -40,21 +40,6 @@ def _load_json(path: Path) -> Any:
 		return json.load(f)
 
 
-def _capture_prefixes(obj: dict[str, Any]) -> set[str]:
-	out: set[str] = set()
-	for k in obj.keys():
-		if not isinstance(k, str):
-			continue
-		if not k.endswith("_fnv64"):
-			continue
-		if k.endswith("_hc_major_fnv64"):
-			continue
-		prefix = k[: -len("_fnv64")]
-		if prefix:
-			out.add(prefix)
-	return out
-
-
 def _stage_status(a: dict[str, Any], b: dict[str, Any], prefix: str) -> dict[str, Any]:
 	fnv_key = f"{prefix}_fnv64"
 	nbytes_key = f"{prefix}_nbytes"
@@ -91,7 +76,7 @@ def _stage_status(a: dict[str, Any], b: dict[str, Any], prefix: str) -> dict[str
 def summarize_one_token_diff(a: dict[str, Any], b: dict[str, Any], *, sample_tol: float) -> dict[str, Any]:
 	base = diff.diff_one_token_mtp_probes(a, b, sample_tol=float(sample_tol))
 
-	found = sorted(_capture_prefixes(a) | _capture_prefixes(b))
+	found = sorted(diff._capture_prefixes(a) | diff._capture_prefixes(b))
 	if found:
 		prefixes = [p for p in PIPELINE_ORDER if p in found] + [p for p in found if p not in PIPELINE_ORDER]
 	else:
