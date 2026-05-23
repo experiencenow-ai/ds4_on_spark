@@ -54,7 +54,7 @@ def failure_record(model: dict[str, Any], eval_set_id: str, reason: str) -> dict
         "status": "failed",
         "failure_reason": reason,
         "per_prompt_results": [],
-        "aggregate_metrics": {"prompt_count": 0, "pass_count": 0, "pass_rate": 0.0, "mean_tok_s": 0.0, "median_tok_s": 0.0, "p95_latency_ms": 0.0},
+        "aggregate_metrics": {"prompt_count": 0, "pass_count": 0, "pass_rate": 0.0, "mean_tok_s": 0.0, "median_tok_s": 0.0, "p50_latency_ms": 0.0, "p95_latency_ms": 0.0},
         "cost_proxy_estimate": cost_proxy(model.get("model_size_params"), 0.0),
     }
 
