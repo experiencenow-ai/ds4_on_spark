@@ -12,6 +12,9 @@ class VllmOpenAICompletionsFanoutTest(unittest.TestCase):
 	def test_parse_rounds(self) -> None:
 		self.assertEqual(fanout.parse_rounds("1:5, 512:1"), {1: 5, 512: 1})
 
+	def test_parse_choices(self) -> None:
+		self.assertEqual(fanout.parse_choices("yes, no,,escalate"), ["yes", "no", "escalate"])
+
 	def test_mixed_prompts_are_distinct(self) -> None:
 		prompts = [fanout.mixed_prompt(i, 0) for i in range(8)]
 		self.assertEqual(len(set(prompts)), 8)
@@ -38,6 +41,21 @@ class VllmOpenAICompletionsFanoutTest(unittest.TestCase):
 		self.assertAlmostEqual(obj["mean_per_stream_tps"], 27.5)
 		self.assertEqual(obj["total_completion_tokens"], 64)
 		self.assertAlmostEqual(obj["mean_completion_tokens_per_request"], 8.0)
+
+	def test_summarize_uses_request_count_when_present(self) -> None:
+		rows = [
+			{"concurrency": 4, "request_count": 100, "aggregate_tps": 100.0, "requests_per_second": 25.0, "completion_tokens": 300, "prompt_tokens": 800, "errors": 0},
+		]
+		obj = fanout.summarize(4, 32, rows)
+		self.assertAlmostEqual(obj["mean_completion_tokens_per_request"], 3.0)
+
+	def test_draft_acceptance_rate_uses_total_counters(self) -> None:
+		deltas = {
+			"vllm:spec_decode_num_accepted_tokens_total": 50.0,
+			"vllm:spec_decode_num_accepted_tokens_per_pos_total": 50.0,
+			"vllm:spec_decode_num_draft_tokens_total": 100.0,
+		}
+		self.assertAlmostEqual(fanout.draft_acceptance_rate(deltas), 0.5)
 
 	def test_standard_artifact_hashes(self) -> None:
 		class Args:
