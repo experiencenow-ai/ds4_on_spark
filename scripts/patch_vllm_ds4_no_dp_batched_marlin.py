@@ -4,12 +4,18 @@
 from __future__ import annotations
 
 import argparse
-import difflib
-import glob
 import json
-import shutil
+import sys
+from functools import partial
 from pathlib import Path
 from typing import Any
+
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._lib.vllm_patch_utils import locate_vllm_package_dir
+from scripts._lib.vllm_patch_utils import replace_once
+from scripts._lib.vllm_patch_utils import write_patch_file
 
 
 PATCH_ID = "ds4-vllm-no-dp-batched-marlin-prototype"
@@ -25,45 +31,9 @@ class PatchError(RuntimeError):
 	pass
 
 
-def _replace(text: str, old: str, new: str, label: str) -> tuple[str, bool]:
-	if new in text:
-		return text, False
-	if old not in text:
-		raise PatchError(f"missing expected block: {label}")
-	return text.replace(old, new, 1), True
-
-
-def _write(path: Path, original: str, patched: str, *, backup_suffix: str, write: bool) -> dict[str, Any]:
-	changed = original != patched
-	if changed and write:
-		backup = path.with_name(path.name + backup_suffix)
-		if not backup.exists():
-			shutil.copy2(path, backup)
-		path.write_text(patched, encoding="utf-8")
-	diff = ""
-	if changed:
-		diff = "".join(
-			difflib.unified_diff(
-				original.splitlines(True),
-				patched.splitlines(True),
-				fromfile=str(path),
-				tofile=str(path),
-			)
-		)
-	return({"path": str(path), "changed": changed, "diff": diff})
-
-
-def locate_package_dir(runtime_root: Path | None, package_dir: Path | None) -> Path:
-	if package_dir is not None:
-		if not package_dir.exists():
-			raise PatchError(f"vLLM package dir not found: {package_dir}")
-		return package_dir
-	if runtime_root is None:
-		raise PatchError("either --runtime-root or --vllm-package-dir is required")
-	matches = sorted(glob.glob(str(runtime_root / "lib" / "python*" / "site-packages" / "vllm")))
-	if len(matches) != 1:
-		raise PatchError(f"expected one vLLM package dir under {runtime_root}, found {matches}")
-	return(Path(matches[0]))
+_replace = partial(replace_once, error_type=PatchError)
+_write = write_patch_file
+locate_package_dir = partial(locate_vllm_package_dir, error_type=PatchError)
 
 
 def patch_config(text: str) -> str:
