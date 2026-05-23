@@ -3,37 +3,23 @@
 
 from __future__ import annotations
 
-import argparse
 import sys
+from pathlib import Path
 
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-def _die(msg: str) -> None:
-	print(msg, file=sys.stderr)
-	raise SystemExit(2)
-
-
-def _read_text(path: str) -> str:
-	try:
-		with open(path, "r", encoding="utf-8") as f:
-			return f.read()
-	except OSError as e:
-		_die(f"failed to read {path}: {e}")
-	return ""
+from scripts._lib.patch_verify import added_patch_text
+from scripts._lib.patch_verify import removed_patch_text
+from scripts._lib.patch_verify import require_substrings
+from scripts._lib.patch_verify import run_patch_verifier
 
 
 def validate_patch_text(patch_text: str) -> list[str]:
 	errors: list[str] = []
-	added = "\n".join(
-		line[1:]
-		for line in patch_text.splitlines()
-		if line.startswith("+") and not line.startswith("+++ ")
-	)
-	removed = "\n".join(
-		line[1:]
-		for line in patch_text.splitlines()
-		if line.startswith("-") and not line.startswith("--- ")
-	)
-	required_added = [
+	added = added_patch_text(patch_text)
+	removed = removed_patch_text(patch_text)
+	require_substrings(errors, added, [
 		"static bool metal_graph_decode2_fused_output_head(",
 		"ds4_gpu_tensor_copy(g->batch_cur_hc,",
 		"metal_graph_encode_output_head_batch(g, model, weights, 2, weights->output->dim[1])",
@@ -49,10 +35,7 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"decode2_stats.output_head_rows",
 		"decode2_stats.full_vocab_logits_rows",
 		"decode2_stats.top1_only_rows",
-	]
-	for needle in required_added:
-		if needle not in added:
-			errors.append(f"missing expected added substring: {needle!r}")
+	], "expected added substring")
 	for needle in [
 		"g->cur_hc = cur0;",
 		"g->cur_hc = cur1;",
@@ -63,15 +46,7 @@ def validate_patch_text(patch_text: str) -> list[str]:
 
 
 def main() -> None:
-	ap = argparse.ArgumentParser()
-	ap.add_argument("--patch", required=True)
-	args = ap.parse_args()
-	errors = validate_patch_text(_read_text(args.patch))
-	if errors:
-		for error in errors:
-			print(f"error: {error}", file=sys.stderr)
-		raise SystemExit(2)
-	print("ok=true")
+	run_patch_verifier(validate_patch_text)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,14 @@ def added_patch_text(patch_text: str) -> str:
 	)
 
 
+def removed_patch_text(patch_text: str) -> str:
+	return "\n".join(
+		line[1:]
+		for line in patch_text.splitlines()
+		if line.startswith("-") and not line.startswith("--- ")
+	)
+
+
 def require_substrings(errors: list[str], text: str, substrings: Iterable[str], label: str = "expected substring") -> None:
 	for substring in substrings:
 		if substring not in text:
