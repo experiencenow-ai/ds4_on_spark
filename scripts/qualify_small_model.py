@@ -307,6 +307,7 @@ def aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
         "pass_rate": pass_count / len(results) if results else 0.0,
         "mean_tok_s": statistics.mean(tok_s) if tok_s else 0.0,
         "median_tok_s": statistics.median(tok_s) if tok_s else 0.0,
+        "p50_latency_ms": statistics.median(latencies) if latencies else 0.0,
         "p95_latency_ms": sorted(latencies)[min(len(latencies) - 1, int(0.95 * (len(latencies) - 1)))] if latencies else 0.0,
     }
 
