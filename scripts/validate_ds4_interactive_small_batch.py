@@ -10,14 +10,15 @@ import sys
 from pathlib import Path
 from typing import Any
 
-try:
-	from scripts._lib.json_utils import artifact_sha256
-	from scripts._lib.json_utils import load_json
-	from scripts._lib.json_utils import max_number
-except ImportError:
-	from _lib.json_utils import artifact_sha256
-	from _lib.json_utils import load_json
-	from _lib.json_utils import max_number
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._lib.artifact_cli import add_validate_subcommand
+from scripts._lib.artifact_cli import legacy_path_validation
+from scripts._lib.artifact_cli import validate_artifact_paths
+from scripts._lib.json_utils import artifact_sha256
+from scripts._lib.json_utils import load_json
+from scripts._lib.json_utils import max_number
 
 
 FORMAT = "ds4-interactive-small-batch-benchmark-v1"
@@ -177,22 +178,9 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 
 
 def main() -> int:
-	if len(sys.argv) > 1 and sys.argv[1] not in ("build", "validate", "-h", "--help"):
-		failed = False
-		for raw in sys.argv[1:]:
-			path = Path(raw)
-			try:
-				errors = validate_artifact(load_json(path))
-			except (OSError, ValueError, json.JSONDecodeError) as exc:
-				print(str(exc))
-				return 1
-			if errors:
-				failed = True
-				for error in errors:
-					print(f"error: {path}: {error}")
-			else:
-				print(f"ok: {path}")
-		return 2 if failed else 0
+	legacy = legacy_path_validation(sys.argv, ("build", "validate"), load_json, validate_artifact)
+	if legacy is not None:
+		return legacy
 	ap = argparse.ArgumentParser()
 	sub = ap.add_subparsers(dest="cmd", required=True)
 	build = sub.add_parser("build")
@@ -207,8 +195,7 @@ def main() -> int:
 	build.add_argument("--baseline-aggregate-tok-s", type=float, default=0.0)
 	build.add_argument("--end-to-end-wall-ms", type=float, default=0.0)
 	build.add_argument("--out", required=True)
-	validate = sub.add_parser("validate")
-	validate.add_argument("paths", nargs="+")
+	add_validate_subcommand(sub)
 	args = ap.parse_args()
 	try:
 		if args.cmd == "build":
@@ -219,18 +206,7 @@ def main() -> int:
 			write_json(Path(args.out), obj)
 			print(json.dumps(obj, indent=2, sort_keys=True))
 		else:
-			failed = False
-			for raw in args.paths:
-				path = Path(raw)
-				errors = validate_artifact(load_json(path))
-				if errors:
-					failed = True
-					for error in errors:
-						print(f"error: {path}: {error}")
-				else:
-					print(f"ok: {path}")
-			if failed:
-				return 2
+			return validate_artifact_paths(args.paths, load_json, validate_artifact)
 	except (OSError, ValueError, json.JSONDecodeError) as exc:
 		print(str(exc))
 		return 1

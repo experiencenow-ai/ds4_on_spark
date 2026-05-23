@@ -10,36 +10,22 @@ metadata.
 
 from __future__ import annotations
 
-import argparse
 import sys
+from pathlib import Path
 
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-def _die(msg: str) -> None:
-	print(msg, file=sys.stderr)
-	raise SystemExit(2)
-
-
-def _read_text(path: str) -> str:
-	try:
-		with open(path, "r", encoding="utf-8") as f:
-			return f.read()
-	except OSError as e:
-		_die(f"failed to read {path}: {e}")
-	return ""
+from scripts._lib.patch_verify import added_patch_text
+from scripts._lib.patch_verify import require_substrings
+from scripts._lib.patch_verify import run_patch_verifier
 
 
 def validate_patch_text(patch_text: str) -> list[str]:
 	errors: list[str] = []
-	added_lines: list[str] = []
-	for line in patch_text.splitlines():
-		if not line.startswith("+"):
-			continue
-		if line.startswith("+++ "):
-			continue
-		added_lines.append(line[1:])
-	added_text = "\n".join(added_lines)
+	added_text = added_patch_text(patch_text)
 
-	required_substrings = [
+	require_substrings(errors, patch_text, [
 		"diff --git a/ds4.c b/ds4.c",
 		"diff --git a/ds4.h b/ds4.h",
 		"diff --git a/ds4_cli.c b/ds4_cli.c",
@@ -91,12 +77,9 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"best_layer_tokens_per_s\\\":%.3f",
 		"best_rows_per_s\\\":%.3f",
 		"best_heads_per_s\\\":%.3f",
-	]
-	for s in required_substrings:
-		if s not in patch_text:
-			errors.append(f"missing expected substring: {s!r}")
+	])
 
-	required_added_substrings = [
+	require_substrings(errors, added_text, [
 		"static void cuda_moe_probe_fill(float *x, int32_t *tokens, uint32_t n_tokens, uint32_t n_dim)",
 		"if (!layer->ffn_gate_inp || !layer->ffn_gate_exps || !layer->ffn_up_exps || !layer->ffn_down_exps)",
 		"if (expert_in_dim == 0 || expert_mid_dim == 0 || out_dim == 0)",
@@ -124,27 +107,13 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"metal_graph_encode_decode_layer(g,",
 		"static bool cuda_layer_probe_run(",
 		"ffn_only ? \"ffn\" : \"layer\"",
-	]
-	for s in required_added_substrings:
-		if s not in added_text:
-			errors.append(f"missing expected added substring: {s!r}")
+	], "expected added substring")
 
 	return errors
 
 
 def main() -> None:
-	ap = argparse.ArgumentParser()
-	ap.add_argument("--patch", required=True)
-	args = ap.parse_args()
-
-	patch_text = _read_text(args.patch)
-	errors = validate_patch_text(patch_text)
-	if errors:
-		for e in errors[:64]:
-			print(f"error: {e}", file=sys.stderr)
-		raise SystemExit(2)
-
-	print("ok=true")
+	run_patch_verifier(validate_patch_text)
 
 
 if __name__ == "__main__":

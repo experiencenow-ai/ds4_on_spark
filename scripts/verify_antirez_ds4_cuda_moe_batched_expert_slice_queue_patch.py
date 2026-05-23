@@ -9,35 +9,22 @@ slice-pointer kernels.
 
 from __future__ import annotations
 
-import argparse
 import sys
+from pathlib import Path
 
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-def _die(msg: str) -> None:
-	print(msg, file=sys.stderr)
-	raise SystemExit(2)
-
-
-def _read_text(path: str) -> str:
-	try:
-		with open(path, "r", encoding="utf-8") as f:
-			return f.read()
-	except OSError as e:
-		_die(f"failed to read {path}: {e}")
-	return ""
+from scripts._lib.patch_verify import added_patch_text
+from scripts._lib.patch_verify import require_substrings
+from scripts._lib.patch_verify import run_patch_verifier
 
 
 def validate_patch_text(patch_text: str) -> list[str]:
 	errors: list[str] = []
-	added_lines: list[str] = []
-	for line in patch_text.splitlines():
-		if not line.startswith("+"):
-			continue
-		if line.startswith("+++ "):
-			continue
-		added_lines.append(line[1:])
+	added_text = added_patch_text(patch_text)
 
-	required_substrings = [
+	require_substrings(errors, patch_text, [
 		"diff --git a/ds4_cuda.cu b/ds4_cuda.cu",
 		"__global__ static void moe_gate_up_mid_sorted_qwarp32_slices_kernel(",
 		"__global__ static void moe_gate_up_mid_sorted_p2_qwarp32_slices_kernel(",
@@ -59,12 +46,9 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"moe_down_sorted_p2_qwarp32_slices_kernel<<<p2_dgrid, 256>>>",
 		"moe_down_sorted_qwarp32_slices_kernel<<<dgrid, 256>>>",
 		"if (use_batched_expert_slices) return 0;",
-	]
-	for s in required_substrings:
-		if s not in patch_text:
-			errors.append(f"missing expected substring: {s!r}")
+	])
 
-	for line in added_lines:
+	for line in added_text.splitlines():
 		if "DS4_CUDA_MOE_BATCHED_EXPERT_SLICE_CACHE" in line and "getenv(" not in line:
 			errors.append("batched slice-cache env marker should be read through getenv")
 			break
@@ -81,18 +65,7 @@ def validate_patch_text(patch_text: str) -> list[str]:
 
 
 def main() -> None:
-	ap = argparse.ArgumentParser()
-	ap.add_argument("--patch", required=True)
-	args = ap.parse_args()
-
-	patch_text = _read_text(args.patch)
-	errors = validate_patch_text(patch_text)
-	if errors:
-		for e in errors[:64]:
-			print(f"error: {e}", file=sys.stderr)
-		raise SystemExit(2)
-
-	print("ok=true")
+	run_patch_verifier(validate_patch_text)
 
 
 if __name__ == "__main__":
