@@ -12,6 +12,7 @@ import statistics
 import time
 import urllib.error
 import urllib.request
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
@@ -30,6 +31,7 @@ class RequestResult:
 	completion_tokens: int
 	wall_s: float
 	error: str
+	finish_reason: str
 	text_preview: str
 
 
@@ -83,6 +85,12 @@ def parse_rounds(raw: str) -> dict[int, int]:
 	return(out)
 
 
+def parse_choices(raw: str) -> list[str]:
+	if raw.strip() == "":
+		return([])
+	return([part.strip() for part in raw.split(",") if part.strip() != ""])
+
+
 def utc_now() -> str:
 	return(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
 
@@ -95,6 +103,64 @@ def load_prompts(path: str) -> list[str]:
 	if len(prompts) == 0:
 		raise ValueError("prompt file must contain at least one non-empty prompt")
 	return(prompts)
+
+
+def metric_name(raw: str) -> str:
+	return(raw.split("{", 1)[0])
+
+
+def read_metrics(endpoint: str, timeout_s: float) -> dict[str, float]:
+	if endpoint == "":
+		return({})
+	try:
+		with urllib.request.urlopen(endpoint, timeout=timeout_s) as resp:
+			text = resp.read().decode("utf-8", "replace")
+	except (OSError, TimeoutError, urllib.error.URLError):
+		return({})
+	out: dict[str, float] = {}
+	for line in text.splitlines():
+		if line == "" or line.startswith("#") or " " not in line:
+			continue
+		left, right = line.split(None, 1)
+		name = metric_name(left)
+		try:
+			value = float(right)
+		except ValueError:
+			continue
+		out[name] = out.get(name, 0.0) + value
+	return(out)
+
+
+def selected_metric_deltas(before: dict[str, float], after: dict[str, float]) -> dict[str, float]:
+	names = sorted(set(before) | set(after))
+	out: dict[str, float] = {}
+	for name in names:
+		low = name.lower()
+		if "spec" not in low and "draft" not in low and name not in ("vllm:generation_tokens_total", "vllm:prompt_tokens_total"):
+			continue
+		delta = float(after.get(name, 0.0)) - float(before.get(name, 0.0))
+		if delta != 0.0:
+			out[name] = delta
+	return(out)
+
+
+def draft_acceptance_rate(deltas: dict[str, float]) -> float | None:
+	if "vllm:spec_decode_num_accepted_tokens_total" in deltas and "vllm:spec_decode_num_draft_tokens_total" in deltas:
+		drafted_total = float(deltas["vllm:spec_decode_num_draft_tokens_total"])
+		if drafted_total <= 0.0:
+			return(None)
+		return(float(deltas["vllm:spec_decode_num_accepted_tokens_total"]) / drafted_total)
+	accepted = 0.0
+	drafted = 0.0
+	for name, value in deltas.items():
+		low = name.lower()
+		if "accept" in low and "token" in low:
+			accepted += float(value)
+		if "draft" in low and "token" in low:
+			drafted += float(value)
+	if drafted <= 0.0:
+		return(None)
+	return(accepted / drafted)
 
 
 def mixed_prompt(index: int, round_index: int) -> str:
@@ -112,7 +178,7 @@ def prompt_for(index: int, round_index: int, prompts: list[str]) -> str:
 	return(prompts[(index + round_index) % len(prompts)])
 
 
-def request_completion(endpoint: str, model: str, prompt: str, max_tokens: int, timeout_s: float, ignore_eos: bool) -> tuple[dict[str, Any], float, str]:
+def request_completion(endpoint: str, model: str, prompt: str, max_tokens: int, timeout_s: float, ignore_eos: bool, structured_choice: list[str]) -> tuple[dict[str, Any], float, str]:
 	payload = {
 		"model": model,
 		"prompt": prompt,
@@ -121,6 +187,8 @@ def request_completion(endpoint: str, model: str, prompt: str, max_tokens: int, 
 	}
 	if ignore_eos:
 		payload["ignore_eos"] = True
+	if structured_choice:
+		payload["structured_outputs"] = {"choice": structured_choice}
 	data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
 	req = urllib.request.Request(endpoint, data=data, headers={"Content-Type": "application/json"}, method="POST")
 	t0 = time.perf_counter()
@@ -136,26 +204,30 @@ def request_completion(endpoint: str, model: str, prompt: str, max_tokens: int, 
 		return({}, time.perf_counter() - t0, repr(e))
 
 
-def run_one(endpoint: str, model: str, prompts: list[str], concurrency: int, round_index: int, request_index: int, max_tokens: int, timeout_s: float, ignore_eos: bool) -> RequestResult:
+def run_one(endpoint: str, model: str, prompts: list[str], concurrency: int, round_index: int, request_index: int, max_tokens: int, timeout_s: float, ignore_eos: bool, structured_choice: list[str], system_prompt: str) -> RequestResult:
 	prompt = prompt_for(request_index, round_index, prompts)
-	obj, wall, error = request_completion(endpoint, model, prompt, max_tokens, timeout_s, ignore_eos)
+	if system_prompt:
+		prompt = system_prompt.rstrip() + "\n\n" + prompt
+	obj, wall, error = request_completion(endpoint, model, prompt, max_tokens, timeout_s, ignore_eos, structured_choice)
 	usage = obj.get("usage") if isinstance(obj, dict) else None
 	prompt_tokens = int(usage.get("prompt_tokens", 0)) if isinstance(usage, dict) else 0
 	completion_tokens = int(usage.get("completion_tokens", 0)) if isinstance(usage, dict) else 0
 	text = ""
+	finish_reason = ""
 	choices = obj.get("choices") if isinstance(obj, dict) else None
 	if isinstance(choices, list) and len(choices) > 0 and isinstance(choices[0], dict):
 		text = str(choices[0].get("text", ""))
-	return(RequestResult(concurrency, round_index, request_index, len(prompt), prompt_tokens, completion_tokens, wall, error, text.replace("\n", " ")[:160]))
+		finish_reason = str(choices[0].get("finish_reason", ""))
+	return(RequestResult(concurrency, round_index, request_index, len(prompt), prompt_tokens, completion_tokens, wall, error, finish_reason, text.replace("\n", " ")[:160]))
 
 
-def run_round(endpoint: str, model: str, prompts: list[str], concurrency: int, round_index: int, max_tokens: int, timeout_s: float, ignore_eos: bool) -> dict[str, Any]:
+def run_round(endpoint: str, model: str, prompts: list[str], concurrency: int, round_index: int, max_tokens: int, timeout_s: float, ignore_eos: bool, structured_choice: list[str], system_prompt: str) -> dict[str, Any]:
 	started_utc = utc_now()
 	t0 = time.perf_counter()
 	rows: list[RequestResult] = []
 	with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as ex:
 		futures = [
-			ex.submit(run_one, endpoint, model, prompts, concurrency, round_index, i, max_tokens, timeout_s, ignore_eos)
+			ex.submit(run_one, endpoint, model, prompts, concurrency, round_index, i, max_tokens, timeout_s, ignore_eos, structured_choice, system_prompt)
 			for i in range(concurrency)
 		]
 		for fut in concurrent.futures.as_completed(futures):
@@ -177,6 +249,47 @@ def run_round(endpoint: str, model: str, prompts: list[str], concurrency: int, r
 		"completion_tokens": completion_tokens,
 		"prompt_tokens": prompt_tokens,
 		"errors": errors,
+		"finish_counts": dict(Counter(r.finish_reason for r in rows)),
+		"rows": [r.__dict__ for r in rows],
+	})
+
+
+def run_request_cell(endpoint: str, metrics_endpoint: str, model: str, prompts: list[str], concurrency: int, request_count: int, max_tokens: int, timeout_s: float, ignore_eos: bool, structured_choice: list[str], system_prompt: str, mode_label: str) -> dict[str, Any]:
+	started_utc = utc_now()
+	before = read_metrics(metrics_endpoint, timeout_s)
+	t0 = time.perf_counter()
+	rows: list[RequestResult] = []
+	with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as ex:
+		futures = [
+			ex.submit(run_one, endpoint, model, prompts, concurrency, 0, i, max_tokens, timeout_s, ignore_eos, structured_choice, system_prompt)
+			for i in range(request_count)
+		]
+		for fut in concurrent.futures.as_completed(futures):
+			rows.append(fut.result())
+	wall = time.perf_counter() - t0
+	after = read_metrics(metrics_endpoint, timeout_s)
+	rows.sort(key=lambda r: r.request_index)
+	completion_tokens = sum(r.completion_tokens for r in rows)
+	prompt_tokens = sum(r.prompt_tokens for r in rows)
+	errors = sum(1 for r in rows if r.error != "")
+	deltas = selected_metric_deltas(before, after)
+	return({
+		"concurrency": concurrency,
+		"mode": mode_label,
+		"output_length": max_tokens,
+		"request_count": request_count,
+		"started_utc": started_utc,
+		"finished_utc": utc_now(),
+		"wall_s": wall,
+		"aggregate_tps": (completion_tokens / wall) if wall > 0.0 else 0.0,
+		"per_stream_tps": (completion_tokens / wall / concurrency) if wall > 0.0 and concurrency > 0 else 0.0,
+		"requests_per_second": (request_count / wall) if wall > 0.0 else 0.0,
+		"completion_tokens": completion_tokens,
+		"prompt_tokens": prompt_tokens,
+		"errors": errors,
+		"finish_counts": dict(Counter(r.finish_reason for r in rows)),
+		"metrics_delta": deltas,
+		"draft_acceptance_rate": draft_acceptance_rate(deltas),
 		"rows": [r.__dict__ for r in rows],
 	})
 
@@ -194,7 +307,7 @@ def summarize(concurrency: int, output_length: int, rounds: list[dict[str, Any]]
 	aggs = [float(r["aggregate_tps"]) for r in ok]
 	rps = [float(r["requests_per_second"]) for r in ok]
 	total_completion_tokens = sum(int(r.get("completion_tokens", 0)) for r in rounds)
-	successful_requests = sum((int(r.get("concurrency", concurrency)) - int(r.get("errors", 0))) for r in rounds)
+	successful_requests = sum((int(r.get("request_count", r.get("concurrency", concurrency))) - int(r.get("errors", 0))) for r in rounds)
 	return({
 		"concurrency": concurrency,
 		"output_length": output_length,
@@ -208,6 +321,7 @@ def summarize(concurrency: int, output_length: int, rounds: list[dict[str, Any]]
 		"mean_per_stream_tps": (mean(aggs) / concurrency) if concurrency > 0 else 0.0,
 		"mean_requests_per_second": mean(rps),
 		"mean_completion_tokens_per_request": (total_completion_tokens / successful_requests) if successful_requests > 0 else 0.0,
+		"draft_acceptance_rate": next((r.get("draft_acceptance_rate") for r in rounds if r.get("draft_acceptance_rate") is not None), None),
 		"total_completion_tokens": total_completion_tokens,
 		"total_prompt_tokens": sum(int(r.get("prompt_tokens", 0)) for r in rounds),
 	})
@@ -303,31 +417,43 @@ def build_artifact(args: argparse.Namespace) -> dict[str, Any]:
 	levels = parse_ints(args.concurrency)
 	token_lengths = parse_ints(args.max_tokens_list) if args.max_tokens_list else [args.max_tokens]
 	round_overrides = parse_rounds(args.rounds) if args.rounds else {}
+	structured_choice = parse_choices(args.structured_choice)
 	prompts = load_prompts(args.prompt_file)
 	round_records: list[dict[str, Any]] = []
 	summaries: list[dict[str, Any]] = []
 	for output_length in token_lengths:
 		for concurrency in levels:
-			count = round_overrides.get(concurrency, args.default_rounds)
 			current: list[dict[str, Any]] = []
-			for round_index in range(count):
-				rec = run_round(args.endpoint, args.model, prompts, concurrency, round_index, output_length, args.timeout_s, args.ignore_eos)
+			if args.requests_per_cell > 0:
+				rec = run_request_cell(args.endpoint, args.metrics_endpoint, args.model, prompts, concurrency, args.requests_per_cell, output_length, args.timeout_s, args.ignore_eos, structured_choice, args.system_prompt, args.mode_label)
 				current.append(rec)
 				round_records.append(rec)
-				print(json.dumps({k: rec[k] for k in ("concurrency", "output_length", "round_index", "aggregate_tps", "prompt_tokens", "completion_tokens", "errors")}, sort_keys=True), flush=True)
+				print(json.dumps({k: rec[k] for k in ("mode", "concurrency", "output_length", "request_count", "aggregate_tps", "per_stream_tps", "prompt_tokens", "completion_tokens", "errors", "draft_acceptance_rate")}, sort_keys=True), flush=True)
+			else:
+				count = round_overrides.get(concurrency, args.default_rounds)
+				for round_index in range(count):
+					rec = run_round(args.endpoint, args.model, prompts, concurrency, round_index, output_length, args.timeout_s, args.ignore_eos, structured_choice, args.system_prompt)
+					current.append(rec)
+					round_records.append(rec)
+					print(json.dumps({k: rec[k] for k in ("concurrency", "output_length", "round_index", "aggregate_tps", "prompt_tokens", "completion_tokens", "errors")}, sort_keys=True), flush=True)
 			summaries.append(summarize(concurrency, output_length, current))
 	raw = {
 		"format": FORMAT,
 		"created_utc": utc_now(),
 		"endpoint": args.endpoint,
+		"metrics_endpoint": args.metrics_endpoint,
 		"model": args.model,
+		"mode_label": args.mode_label,
 		"prompt_mode": "antirez_dir_steering_eval_prompts" if prompts else "distinct_mixed_length_no_prefix_cache_hit",
 		"prompt_source": args.prompt_source,
 		"prompt_source_sha256": hashlib.sha256("\n".join(prompts).encode("utf-8")).hexdigest() if prompts else "",
 		"max_tokens": args.max_tokens,
 		"output_lengths": token_lengths,
 		"concurrency_levels": levels,
+		"requests_per_cell": args.requests_per_cell,
+		"structured_outputs": {"choice": structured_choice} if structured_choice else {},
 		"ignore_eos": bool(args.ignore_eos),
+		"system_prompt_sha256": hashlib.sha256(args.system_prompt.encode("utf-8")).hexdigest() if args.system_prompt else "",
 		"rounds": round_records,
 		"summaries": summaries,
 		"best_summary": best_summary(summaries),
@@ -342,14 +468,19 @@ def build_artifact(args: argparse.Namespace) -> dict[str, Any]:
 def parse_args() -> argparse.Namespace:
 	p = argparse.ArgumentParser(description=__doc__)
 	p.add_argument("--endpoint", default="http://127.0.0.1:8000/v1/completions")
+	p.add_argument("--metrics-endpoint", default="")
 	p.add_argument("--model", default="deepseek-v4-flash")
 	p.add_argument("--concurrency", default="1 2 4 8 16 32 64 128 256 512")
 	p.add_argument("--rounds", default="")
 	p.add_argument("--default-rounds", type=int, default=1)
+	p.add_argument("--requests-per-cell", type=int, default=0)
 	p.add_argument("--max-tokens", type=int, default=32)
 	p.add_argument("--max-tokens-list", default="")
 	p.add_argument("--prompt-file", default="")
 	p.add_argument("--prompt-source", default="")
+	p.add_argument("--structured-choice", default="")
+	p.add_argument("--system-prompt", default="")
+	p.add_argument("--mode-label", default="full_vocab")
 	p.add_argument("--ignore-eos", action="store_true")
 	p.add_argument("--timeout-s", type=float, default=900.0)
 	p.add_argument("--output", required=True)
