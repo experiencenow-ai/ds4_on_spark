@@ -38,7 +38,7 @@
   "source_refs": [
     "SPARKNETWORK.md",
     "docs/CENTAUR_SPECIFICATION.md",
-    "docs/ds4-vllm-performance-pause-summary.md"
+    "docs/ds4-pipeline.md"
   ],
   "supported_lanes": [
     "hard_reasoning",

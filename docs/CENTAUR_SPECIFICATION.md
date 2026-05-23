@@ -1,5 +1,9 @@
 # Centaur specification
 
+> Supersedes: `docs/CENTAUR_SPECIFICATION.md`
+
+This is a canonical document. Update this file instead of adding overlapping docs.
+
 > Status: **first complete draft, 2026-05-21T17:30Z.** Authored from accumulated conversation context plus the original C-compiler vision the founder articulated. Subject to revision by the founder; modules and acceptance criteria below are proposals, not final.
 >
 > Read this with `docs/CENTAUR_DASHBOARD.md` (live progress per component) and `.github/LANES.md` (work coordination protocol).

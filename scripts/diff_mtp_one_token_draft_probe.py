@@ -6,7 +6,7 @@ acceptance sweeps. It is strict by default: token IDs and intermediate tensor
 fingerprints must match when present.
 
 Probe format reference:
-- docs/mtp-one-token-draft-probe.md (required keys + optional debug keys)
+- docs/mtp.md (required keys + optional debug keys)
 """
 
 from __future__ import annotations

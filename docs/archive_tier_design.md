@@ -1,5 +1,9 @@
 # Centaur Archive Tier Design
 
+> Supersedes: `docs/archive_tier_design.md`
+
+This is a canonical document. Update this file instead of adding overlapping docs.
+
 > Supersession note: this document describes the #1311 fixture archive helper.
 > For Centaur's KV-cache long-term memory subsystem and custom XOR layout, see
 > `docs/centaur_archive_manager_design.md`.

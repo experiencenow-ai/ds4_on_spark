@@ -158,7 +158,7 @@ def profile_from_row(tier: str, row: dict[str, Any], addendum_path: Path = ADDEN
         "benchmark_refs": [str(addendum_path), str(source_path)],
         "source_refs": [
             "docs/model-provider-tiers.md",
-            "docs/spark-model-cache.md",
+            "docs/spark-ring.md",
         ],
         "production_eligible": True,
         "selection_evidence": {

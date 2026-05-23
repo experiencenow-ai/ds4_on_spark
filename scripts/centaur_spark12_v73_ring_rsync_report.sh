@@ -244,7 +244,7 @@ lines.append("")
 lines.append("## Notes")
 lines.append("")
 lines.append("- Review logs for private hostnames/IPs and redact before sharing.")
-lines.append("- For the shared checklist + sanitization rules, see `docs/centaur-bug-report.md`.")
+lines.append("- For the shared checklist + sanitization rules, see `docs/centaur-runbooks.md`.")
 lines.append("")
 
 md="\\n".join(lines)

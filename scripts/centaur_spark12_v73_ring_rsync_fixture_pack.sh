@@ -152,7 +152,7 @@ Contents:
 
 Runbook:
 
-- \`docs/centaur-ring-spark12.md\`
+- \`docs/centaur-runbooks.md\`
 EOF
 
 redact="$root/scripts/centaur_redact_fixture_bundle.sh"

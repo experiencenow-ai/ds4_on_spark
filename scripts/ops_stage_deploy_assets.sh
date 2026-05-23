@@ -253,5 +253,5 @@ cat <<'EOF'
 #   systemctl --user daemon-reload
 #
 # If you are doing a non-root bring-up with a user-space DS4 checkout, see:
-#   docs/deployment-systemd-user.md
+#   docs/deployment.md
 EOF

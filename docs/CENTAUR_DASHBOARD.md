@@ -1,5 +1,9 @@
 # Centaur system dashboard
 
+> Supersedes: `docs/CENTAUR_DASHBOARD.md`
+
+This is a canonical document. Update this file instead of adding overlapping docs.
+
 > **Specification:** [`docs/CENTAUR_SPECIFICATION.md`](CENTAUR_SPECIFICATION.md) — system modules, end-state walkthrough, what "done" looks like. This dashboard reports progress against that spec.
 
 > Last meaningful update: **2026-05-22T13:30Z** (hardware-bound-to-tasks restructure: per-node `hw:spark-N` labels become reservations held by status:in-progress issues; composite labels deprecated; LANES.md decision tree updated; `lane_hardware_free.sh` reports live reservation state; dashboard hardware count corrected to 8/8 nodes available)

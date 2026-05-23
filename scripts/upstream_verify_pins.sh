@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MANIFEST_MD="${ROOT_DIR}/docs/upstream-manifest.md"
+MANIFEST_MD="${ROOT_DIR}/docs/upstream.md"
 LS_REMOTE_TIMEOUT_SEC="${UPSTREAM_LS_REMOTE_TIMEOUT_SEC:-20}"
 
 usage()
@@ -10,7 +10,7 @@ usage()
 	cat <<'EOF'
 Usage: ./scripts/upstream_verify_pins.sh [--quiet] [--summary]
 
-Verifies that the pinned refs/commits in docs/upstream-manifest.md still resolve
+Verifies that the pinned refs/commits in docs/upstream.md still resolve
 upstream (without cloning).
 
 Options:
