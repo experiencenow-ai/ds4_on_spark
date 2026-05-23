@@ -75,6 +75,20 @@ def check_non_empty_string_field(obj: dict[str, Any], field: str, path: Path, er
 	return value.strip()
 
 
+def optional_int_field(obj: dict[str, Any], field: str) -> int | None:
+	value = obj.get(field, None)
+	if isinstance(value, int):
+		return value
+	return None
+
+
+def optional_string_field(obj: dict[str, Any], field: str) -> str | None:
+	value = obj.get(field, None)
+	if isinstance(value, str):
+		return value
+	return None
+
+
 def max_number(values: Any) -> float:
 	if not isinstance(values, list):
 		return 0.0

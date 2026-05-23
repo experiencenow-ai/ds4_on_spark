@@ -6,6 +6,12 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any, Optional
 
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._lib.json_utils import optional_int_field
+from scripts._lib.json_utils import optional_string_field
+
 
 def die_json(errors: list[str], warnings: list[str]) -> int:
 	out = {
@@ -44,22 +50,8 @@ def get_list(doc: dict[str, Any], key: str) -> Optional[list[Any]]:
 	return None
 
 
-def get_int(obj: dict[str, Any], key: str) -> Optional[int]:
-	val = obj.get(key, None)
-	if isinstance(val, int):
-		return val
-	return None
-
-
-def get_str(obj: dict[str, Any], key: str) -> Optional[str]:
-	val = obj.get(key, None)
-	if isinstance(val, str):
-		return val
-	return None
-
-
 def summarize_probe(doc: dict[str, Any]) -> str:
-	arch = get_str(doc, "architecture") or "(missing)"
+	arch = optional_string_field(doc, "architecture") or "(missing)"
 	ok = doc.get("ok", None)
 	return f"ok={ok!r} arch={arch}"
 
@@ -102,16 +94,16 @@ def main() -> int:
 	if llama.get("ok", None) is not True:
 		errors.append(f"llamacpp probe is not ok: {summarize_probe(llama)}")
 
-	arch_contract = get_str(contract, "architecture")
-	arch_llama = get_str(llama, "architecture")
+	arch_contract = optional_string_field(contract, "architecture")
+	arch_llama = optional_string_field(llama, "architecture")
 	if arch_contract is not None and arch_llama is not None and arch_contract != arch_llama:
 		errors.append(f"architecture mismatch: contract={arch_contract!r} llamacpp={arch_llama!r}")
 
 	derived_contract = get_dict(contract, "derived_params") or {}
 	derived_llama = get_dict(llama, "derived_params") or {}
 	for k in DERIVED_OVERLAP_KEYS:
-		a = get_int(derived_contract, k)
-		b = get_int(derived_llama, k)
+		a = optional_int_field(derived_contract, k)
+		b = optional_int_field(derived_llama, k)
 		if a is None or b is None:
 			continue
 		if int(a) != int(b):
@@ -131,7 +123,7 @@ def main() -> int:
 		if not isinstance(t, dict):
 			errors.append(f"contract: tensors[{i}] is not an object")
 			continue
-		name = get_str(t, "name")
+		name = optional_string_field(t, "name")
 		if name is None:
 			errors.append(f"contract: tensors[{i}] missing name")
 			continue
@@ -145,7 +137,7 @@ def main() -> int:
 		if not isinstance(t, dict):
 			errors.append(f"llamacpp: tensors[{i}] is not an object")
 			continue
-		name = get_str(t, "name")
+		name = optional_string_field(t, "name")
 		if name is None:
 			errors.append(f"llamacpp: tensors[{i}] missing name")
 			continue
@@ -170,18 +162,18 @@ def main() -> int:
 		if isinstance(ct_dims, list) and isinstance(lt_dims, list) and ct_dims != lt_dims:
 			errors.append(f"tensor dims mismatch for {name}: contract={ct_dims} llamacpp={lt_dims}")
 
-		ct_type = get_int(ct, "type_code")
-		lt_type = get_int(lt, "type")
+		ct_type = optional_int_field(ct, "type_code")
+		lt_type = optional_int_field(lt, "type")
 		if ct_type is not None and lt_type is not None and int(ct_type) != int(lt_type):
 			errors.append(f"tensor type mismatch for {name}: contract={ct_type} llamacpp={lt_type}")
 
-		ct_nbytes = get_int(ct, "payload_bytes")
-		lt_nbytes = get_int(lt, "nbytes")
+		ct_nbytes = optional_int_field(ct, "payload_bytes")
+		lt_nbytes = optional_int_field(lt, "nbytes")
 		if ct_nbytes is not None and lt_nbytes is not None and int(ct_nbytes) != int(lt_nbytes):
 			errors.append(f"tensor nbytes mismatch for {name}: contract={ct_nbytes} llamacpp={lt_nbytes}")
 
-		ct_offs = get_int(ct, "abs_offset")
-		lt_offs = get_int(lt, "offset")
+		ct_offs = optional_int_field(ct, "abs_offset")
+		lt_offs = optional_int_field(lt, "offset")
 		if ct_offs is not None and lt_offs is not None and int(ct_offs) != int(lt_offs):
 			errors.append(f"tensor offset mismatch for {name}: contract={ct_offs} llamacpp={lt_offs}")
 
@@ -202,4 +194,3 @@ def main() -> int:
 
 if __name__ == "__main__":
 	sys.exit(main())
-

@@ -6,6 +6,12 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any, Optional
 
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._lib.json_utils import optional_int_field
+from scripts._lib.json_utils import optional_string_field
+
 
 def die_json(errors: list[str], warnings: list[str]) -> int:
 	out = {
@@ -28,20 +34,6 @@ def load_json(path: Path, errors: list[str], label: str) -> Optional[dict[str, A
 		errors.append(f"{label}: top-level JSON is not an object")
 		return None
 	return doc
-
-
-def get_str(obj: dict[str, Any], key: str) -> Optional[str]:
-	val = obj.get(key, None)
-	if isinstance(val, str):
-		return val
-	return None
-
-
-def get_int(obj: dict[str, Any], key: str) -> Optional[int]:
-	val = obj.get(key, None)
-	if isinstance(val, int):
-		return val
-	return None
 
 
 def samples_as_map(doc: dict[str, Any], errors: list[str], label: str) -> dict[str, dict[str, Any]]:
@@ -124,8 +116,8 @@ def main() -> int:
 	if ref.get("ok", None) is not True:
 		warnings.append(f"reference ok={ref.get('ok', None)!r} (unexpected: pinned reference should be ok=true)")
 
-	arch_probe = get_str(probe, "architecture")
-	arch_ref = get_str(ref, "architecture")
+	arch_probe = optional_string_field(probe, "architecture")
+	arch_ref = optional_string_field(ref, "architecture")
 	if arch_probe is not None and arch_ref is not None and arch_probe != arch_ref:
 		errors.append(f"architecture mismatch: probe={arch_probe!r} reference={arch_ref!r}")
 
@@ -141,8 +133,8 @@ def main() -> int:
 		print(f"ok: {str(len(errors) == 0).lower()}")
 		return 0 if len(errors) == 0 else 1
 
-	want_sample_bytes = get_int(ref, "payload_sample_bytes")
-	got_sample_bytes = get_int(probe, "payload_sample_bytes")
+	want_sample_bytes = optional_int_field(ref, "payload_sample_bytes")
+	got_sample_bytes = optional_int_field(probe, "payload_sample_bytes")
 	if want_sample_bytes is not None and got_sample_bytes is not None and int(want_sample_bytes) != int(got_sample_bytes):
 		errors.append(f"payload_sample_bytes mismatch: probe={got_sample_bytes} reference={want_sample_bytes}")
 	elif want_sample_bytes is not None and got_sample_bytes is None:
