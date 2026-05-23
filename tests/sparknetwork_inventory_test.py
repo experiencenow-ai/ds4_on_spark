@@ -41,13 +41,14 @@ class SparkNetworkInventoryTest(unittest.TestCase):
         self.assertIn("spark7", topo["rescue_control"]["deployed_nodes"])
         self.assertEqual(topo["rescue_control"]["not_deployed_nodes"], [])
 
-    def test_internet_status_matches_offline_report(self) -> None:
+    def test_internet_status_matches_current_wired_report(self) -> None:
         topo = load_topology()
         status = topo["internet_status"]
-        self.assertEqual(status["working_wifi_internet"], [])
+        self.assertEqual(set(status["working_wired_internet"]), {f"spark{i}" for i in range(8)})
         self.assertEqual(status["pending_nodes"], [])
-        self.assertIn("spark7", status["reachable_but_no_internet_route"])
-        self.assertTrue(any("offline" in note for note in status["notes"]))
+        self.assertEqual(status["reachable_but_no_internet_route"], [])
+        self.assertIn("spark7", status["public_ipv4"])
+        self.assertTrue(any("wired-side internet" in note for note in status["notes"]))
 
 
 if __name__ == "__main__":

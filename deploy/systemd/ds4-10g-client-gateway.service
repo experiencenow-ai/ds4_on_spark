@@ -1,0 +1,12 @@
+[Unit]
+Description=DS4 temporary 10G client gateway route
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ds4-10g-client-gateway-apply
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

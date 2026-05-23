@@ -4,7 +4,7 @@ Load this file first for any Centaur/Spark networking work. The machine-readable
 source of truth is [`sparknetwork.json`](sparknetwork.json); this document is the
 human runbook derived from it.
 
-Last verified: `2026-05-22T08:43Z` UTC.
+Last verified: `2026-05-23T02:02Z` UTC.
 
 ## Rule Zero
 
@@ -32,17 +32,10 @@ Mac Studio en0 -> TP-Link 5-port -> 8-port Spark switch -> spark0-spark7 10G
 Mac Studio en1 Wi-Fi -> TP-Link_D660(_5G) -> spark0-spark7 Wi-Fi
 ```
 
-Mac Studio `en1` is `192.168.1.128/24`. Mac Studio `en0` currently has no IPv4
-address and no active `10.20.0.1/24` alias, so direct Mac-to-Spark TCP/22 on
-`10.20.0.10-10.20.0.17` is not an operator path. Use direct Wi-Fi aliases for
-break-glass access and Wi-Fi plus 200G proxy hops for canonical `ssh sparkN`
-paths.
-
-Mac Studio `ssh spark0` through `ssh spark7` were repaired and verified at
-`2026-05-22T08:43Z`. The current exception is Spark0's direct Wi-Fi alias:
-`ssh spark0-wifi` to `192.168.1.127` timed out during the same check, so the
-canonical `ssh spark0` path enters through `spark1-wifi` and then the
-Spark1-Spark0 200G rail at `10.10.1.1`.
+Mac Studio `en1` is `192.168.1.128/24`. Mac Studio `en0` has an active 10G
+link and `10.20.0.1/24` for direct Spark access. The Mac default route must
+stay on Wi-Fi or another known-good internet path for remote desktop; do not
+route broad internet traffic through Spark3 unless physically present.
 
 The 200G fabric is now a closed routed ring:
 
@@ -57,64 +50,106 @@ substitute for the 200G fabric; it remains the operator/control plane.
 
 | Node | SSH alias | Network hostname | Current primary path from Mac | Direct Wi-Fi backup |
 |------|-----------|------------------|-------------------------------|--------------------|
-| Spark0 | `ssh spark0` | `aitopatom-9ab9.local` | Mac -> Spark1 Wi-Fi -> Spark0 200G `10.10.1.1` | `ssh spark0-wifi`, `192.168.1.127` currently times out |
-| Spark1 | `ssh spark1` | `edgexpert-d623.local` | Direct Wi-Fi, `192.168.1.226` | `ssh spark1-wifi`, `192.168.1.226` |
-| Spark2 | `ssh spark2` | `aitopatom-931a.local` | Direct Wi-Fi, `192.168.1.166` | `ssh spark2-wifi`, `192.168.1.166` |
+| Spark0 | `ssh spark0` | `aitopatom-9ab9.local` | Mac -> Spark3 Wi-Fi -> Spark2 200G -> Spark1 200G -> Spark0 200G | `ssh spark0-wifi`, `192.168.1.127` |
+| Spark1 | `ssh spark1` | `edgexpert-d623.local` | Mac -> Spark3 Wi-Fi -> Spark2 200G -> Spark1 200G | `ssh spark1-wifi`, `192.168.1.226` |
+| Spark2 | `ssh spark2` | `aitopatom-931a.local` | Mac -> Spark3 Wi-Fi -> Spark2 200G | `ssh spark2-wifi`, `192.168.1.166` |
 | Spark3 | `ssh spark3` | `aitopatom-a18f.local` | Direct Wi-Fi, `192.168.1.110` | `ssh spark3-wifi`, `192.168.1.110` |
 | Spark4 | `ssh spark4` | `aitopatom-c342.local` | Direct Wi-Fi, `192.168.1.137` | `ssh spark4-wifi`, `192.168.1.137` |
-| Spark5 | `ssh spark5` | `aitopatom-a36d.local` | Direct Wi-Fi, `192.168.1.245` | `ssh spark5-wifi`, `192.168.1.245` |
+| Spark5 | `ssh spark5` | `aitopatom-a36d.local` | Mac -> Spark4 Wi-Fi -> Spark5 200G | `ssh spark5-wifi`, `192.168.1.245` |
 | Spark6 | `ssh spark6` | `aitopatom-c637.local` | Direct Wi-Fi, `192.168.1.185` | `ssh spark6-wifi`, `192.168.1.185` |
 | Spark7 | `ssh spark7` | `thinkstation-pgx.local` | Direct Wi-Fi, `192.168.1.236` | `ssh spark7`, `192.168.1.236` |
 
-Current verified manual access paths (`2026-05-22T08:43Z`):
+Current verified manual access paths:
 
 ```bash
-ssh spark0 hostname
-ssh spark1 hostname
-ssh spark2 hostname
-ssh spark3 hostname
-ssh spark4 hostname
-ssh spark5 hostname
-ssh spark6 hostname
+ssh spark0-wifi hostname
+ssh spark1-wifi hostname
+ssh spark2-wifi hostname
+ssh spark3@192.168.1.110 hostname
+ssh spark4@192.168.1.137 hostname
+ssh spark5-wifi hostname
+ssh spark6@192.168.1.185 hostname
 ssh spark7 hostname
+ssh -o ProxyCommand='ssh spark3@192.168.1.110 nc 10.10.5.2 22' spark2@10.10.5.2 hostname
+ssh -o ProxyCommand='ssh spark4@192.168.1.137 nc 10.10.9.2 22' spark5@10.10.9.2 hostname
 ```
 
 Spark0 and Spark1 are alive after reboot, and every node from Spark0 through
-Spark7 is reachable from Mac Studio. The Mac Studio `DS4 SPARKNETWORK` SSH
-block was updated at `2026-05-22T08:43Z`; bare `ssh spark0` through
-`ssh spark7` were verified after the update. Direct Wi-Fi aliases
-`spark1-wifi` through `spark6-wifi`, plus `spark7`, were also verified;
-`spark0-wifi` timed out, so use bare `spark0` for Spark0 until its Wi-Fi SSH
-path is repaired.
+Spark7 has a direct Wi-Fi SSH path. The Mac Studio `DS4 SPARKNETWORK` SSH block
+was updated at `2026-05-22T00:00Z`; bare `ssh spark0` through `ssh spark7` and
+`ssh spark0-wifi` through `ssh spark6-wifi` were verified again at
+`2026-05-22T00:26Z`.
 
 ## 10G Control Plane
 
 Mac Studio:
 
 - `en1`: Wi-Fi path, `192.168.1.128/24`.
-- `en0`: no active IPv4 address during the `2026-05-21T23:34Z` probe.
+- `en0`: 10G link active, reserved private alias `10.20.0.1/24`; keep the Mac
+  default route on Wi-Fi or another known-good internet path for remote desktop.
 
 Private 10G assignments:
 
 | Node | Interface | Address | State |
 |------|-----------|---------|-------|
-| Mac Studio | `en0` | no IPv4 | switch/control alias missing |
-| Spark0 | `enP7s7` | `10.20.0.10/24` | 8-port switch control, private-only |
-| Spark1 | `enP7s7` | no IPv4 during latest probe | interface up, 10G switch address missing |
-| Spark2 | `enP7s7` | `10.20.0.12/24` | switch control address present, not reachable from Mac or Spark3 |
-| Spark3 | `enP7s7` | `10.20.0.13/24` | switch control, plus DHCP `125.129.239.57/24` |
+| Mac Studio | `en0` | `10.20.0.1/24` | 10G cluster access only; default route remains on Wi-Fi |
+| Spark0 | `enP7s7` | `10.20.0.10/24` | 10G client; default route via Spark3 NAT |
+| Spark1 | `enP7s7` | `10.20.0.11/24`, DHCP `125.129.239.251/24` | direct KT lease plus private 10G |
+| Spark2 | `enP7s7` | `10.20.0.12/24` | 10G client; default route via Spark3 NAT |
+| Spark3 | `enP7s7` | `10.20.0.13/24`, DHCP `125.129.239.57/24` | temporary 10G NAT gateway |
 | Spark4 | `enP7s7` | `10.20.0.14/24` | switch control, plus DHCP `175.193.138.138/24` |
 | Spark5 | `enP7s7` | `10.20.0.15/24` | switch control, plus DHCP `175.193.138.193/24` |
-| Spark6 | `enP7s7` | `10.20.0.16/24` | 8-port switch control, private-only |
-| Spark7 | `enP7s7` | `10.20.0.17/24` | static profile installed; physical link has no carrier |
+| Spark6 | `enP7s7` | `10.20.0.16/24` | 10G client; default route via Spark3 NAT |
+| Spark7 | `enP7s7` | `10.20.0.17/24` | 10G client; default route via Spark3 NAT |
 
-The latest probe did **not** see a flat private `10.20.0.0/24` control plane.
-From inside the cluster, Spark3 could reach only `10.20.0.13` and
-`10.20.0.14`; Spark4 could reach `10.20.0.10` and itself; Spark5 and Spark6
-could reach only their own `10.20.0.x` addresses. Treat the 10G plane as
-fragmented until repaired.
+The `10.20.0.0/24` control plane is flat again across Spark0 through Spark7.
+Spark3 is the temporary software gateway for nodes without a direct KT lease.
 
-If Mac Studio ever loses the private alias, reinstall it as a `/24`:
+Temporary 10G internet-sharing services:
+
+- Gateway node: Spark3, public source `125.129.239.57`, private gateway
+  `10.20.0.13`.
+- Gateway service: `ds4-10g-nat-gateway.service`, script
+  `/usr/local/sbin/ds4-10g-nat-gateway-apply`.
+- Client service: `ds4-10g-client-gateway.service`, script
+  `/usr/local/sbin/ds4-10g-client-gateway-apply`.
+- Installed clients: Spark0, Spark2, Spark6, and Spark7. Each has default route
+  `10.20.0.13 dev enP7s7 metric 50`, with Wi-Fi default route still present at
+  metric `600` as fallback.
+- Checked-in source scripts:
+  `scripts/ds4_10g_nat_gateway_apply.sh` and
+  `scripts/ds4_10g_client_gateway_apply.sh`.
+
+To give the Mac Studio direct 10G cluster access, run this on the Mac:
+
+```bash
+scripts/ds4_mac_10g_gateway_apply.sh
+```
+
+The script installs `10.20.0.1/24` on `en0` and removes any stale `/1` route
+overrides through Spark3. It does **not** change the Mac's internet default
+route unless `DS4_MAC_10G_DEFAULT_ROUTE=1` is explicitly set. This keeps Jump
+Desktop and other remote-control software on the stable route.
+
+Incident note: the original script behavior did install broad `/1` route
+overrides and broke remote access on `2026-05-23`. Keep
+[`docs/ops-macstudio-spark3-route-incident-2026-05-23.md`](docs/ops-macstudio-spark3-route-incident-2026-05-23.md)
+loaded before changing Mac Studio default routes.
+
+To remove a bad route override:
+
+```bash
+scripts/ds4_mac_10g_gateway_disable.sh
+```
+
+Manual bad-route rollback:
+
+```bash
+sudo route -n delete -net 0.0.0.0/1 10.20.0.13
+sudo route -n delete -net 128.0.0.0/1 10.20.0.13
+```
+
+Manual cluster-access setup:
 
 ```bash
 sudo ifconfig en0 -alias 10.20.0.1
@@ -178,8 +213,6 @@ Verification at `2026-05-22T07:54Z`:
 - Spark0 -> Spark1 dual-rail direct `iperf3` measured `197.3 Gbit/s`
   aggregate: `98.1 Gbit/s` on `10.10.1.0/30` plus `99.2 Gbit/s` on
   `10.10.2.0/30`.
-- Spark7 -> Spark0 and Spark0 -> Spark7 return-edge pings on `10.10.15.0/30`
-  and `10.10.16.0/30` were rechecked at `2026-05-22T08:43Z`.
 
 ## Wi-Fi Fallbacks
 
@@ -187,7 +220,7 @@ Wi-Fi is not the primary operator plane.
 
 | Node | Wi-Fi address | SSID/role |
 |------|---------------|-----------|
-| Spark0 | `192.168.1.127/24` | fallback on `TP-Link_D660_5G`; `ssh spark0-wifi` currently times out |
+| Spark0 | `192.168.1.127/24` | fallback on `TP-Link_D660_5G`; `ssh spark0-wifi` |
 | Spark1 | `192.168.1.226/24` | fallback on `TP-Link_D660_5G`; `ssh spark1-wifi` |
 | Spark2 | `192.168.1.166/24` | fallback on `TP-Link_D660_5G`; `ssh spark2-wifi` |
 | Spark3 | `192.168.1.110/24` | fallback on `TP-Link_D660_5G`; `ssh spark3-wifi` |
@@ -198,14 +231,28 @@ Wi-Fi is not the primary operator plane.
 
 ## Internet Status
 
-Operator report for this rewire: wired/fiber internet is not connected and
-current internet is offline. Mac Studio currently uses Wi-Fi
-`192.168.1.128/24`. Spark0 through Spark7 all default to `192.168.1.1` via
-`wlP9s9`, but internet reachability should not be assumed until reverified.
+As of `2026-05-22T11:15Z`, all eight Sparks have wired-side internet on
+`enP7s7`.
 
-Do not use internet availability as a 200G or 10G health signal. Until the 10G
-plane is flat again, use verified SSH reachability over the Wi-Fi/200G proxy
-paths as the operator health signal.
+| Node | Wired internet path | Verified public IP |
+|------|---------------------|--------------------|
+| Spark0 | Spark3 NAT via `10.20.0.13` | `125.129.239.57` |
+| Spark1 | Direct KT DHCP on `enP7s7` | `125.129.239.251` |
+| Spark2 | Spark3 NAT via `10.20.0.13` | `125.129.239.57` |
+| Spark3 | Direct KT DHCP on `enP7s7` | `125.129.239.57` |
+| Spark4 | Direct KT DHCP on `enP7s7` | `175.193.138.138` |
+| Spark5 | Direct KT DHCP on `enP7s7` | `175.193.138.193` |
+| Spark6 | Spark3 NAT via `10.20.0.13` | `125.129.239.57` |
+| Spark7 | Spark3 NAT via `10.20.0.13` | `125.129.239.57` |
+
+Mac Studio should keep using Wi-Fi `192.168.1.128/24` or another known-good
+internet route for remote desktop. Use `en0`/`10.20.0.1/24` for direct Spark
+cluster access only; do not install broad `/1` default-route overrides through
+Spark3 on a remote-managed Studio.
+
+Do not use internet availability as a 200G health signal. Use the 200G ring
+ping/iperf checks for fabric health and this internet table only for WAN
+reachability.
 
 ## Communication Contract
 
@@ -230,12 +277,17 @@ control plane:
 - Persistence: `loginctl enable-linger` is enabled for `spark0` through
   `spark7`, so the user service can start at boot without an active SSH login.
 - Local self-heal: `ds4-sshd-watchdog.timer` runs every minute as root. If the
-  local SSH banner probe fails, it restarts SSH, then kills allowlisted heavy
-  runtimes if SSH still does not recover.
+  local SSH banner probe fails, it restarts SSH, then escalates to runtime and
+  memory-hog cleanup if SSH still does not recover.
 - Allowlisted heavy-runtime kills: Docker containers named
   `vllm_deepseek_v4_flash`, `vllm_*`, `ds4_vllm_*`, or `centaur_vllm_*`, plus
   process command lines matching `vllm serve` / `VLLM::`. Ray kills are disabled
   unless `DS4_WATCHDOG_KILL_RAY=1` is set in the timer environment.
+- Generic memory-hog fallback: after the allowlisted kills, the watchdog kills
+  GPU compute processes and up to `16` largest RSS processes above `256 MiB`,
+  while protecting only essential OS/network/SSH processes. Tunables:
+  `DS4_WATCHDOG_KILL_TOP_MEM_COUNT`, `DS4_WATCHDOG_MIN_KILL_RSS_KB`, and
+  `DS4_WATCHDOG_KILL_GPU_PROCS`.
 - Reboot escalation is available but disabled by default. Set
   `DS4_WATCHDOG_REBOOT_AFTER=N` to reboot after `N` consecutive failed rescue
   attempts.
@@ -260,7 +312,33 @@ For spark4-style wedges where TCP accepts but SSH and HTTP do not answer, the
 remote client will not help because the agent cannot respond. The local root
 timer is the intended recovery path: it must be deployed before the node wedges.
 The 2026-05-21 heavy-runtime kill escalation is deployed live to `spark0`
-through `spark7`.
+through `spark7`. The 2026-05-23 memory-hog escalation is also deployed live to
+`spark0` through `spark7`; live script hash:
+`bb6e176cbb8506fa84d5ec542ba6f682fabe8737bac5af1dc17eee3c809e2240`.
+
+Chaos verification: Spark7 passed the SSH-port wedge test at
+`2026-05-22T20:24` KST. A synthetic allowlisted
+`VLLM::watchdog-port-wedge` process stopped the SSH banner, the watchdog killed
+the process, and SSH recovered without physical access. Evidence:
+[`docs/ops-watchdog-wedge-test-2026-05-22.md`](docs/ops-watchdog-wedge-test-2026-05-22.md).
+
+Repeat the test on a non-critical node with:
+
+```bash
+DS4_SUDO_PASSWORD=... scripts/ds4_watchdog_wedge_test.sh spark7
+```
+
+Chaos verification: Spark7 passed the generic memory-hog wedge test at
+`2026-05-23T11:02` KST. The synthetic process was deliberately **not** named
+`vllm` or `VLLM::`; the watchdog recovered SSH by killing the top memory-heavy
+processes. Evidence:
+[`docs/ops-watchdog-memory-hog-test-2026-05-23.md`](docs/ops-watchdog-memory-hog-test-2026-05-23.md).
+
+Repeat the generic memory-hog test with:
+
+```bash
+DS4_SUDO_PASSWORD=... DS4_WATCHDOG_TEST_TAG='DS4MEMHOG::watchdog-port-wedge' DS4_WATCHDOG_TEST_MEM_MIB=768 scripts/ds4_watchdog_wedge_test.sh spark7
+```
 
 Deploy or refresh it on reachable nodes with:
 
