@@ -1,0 +1,4 @@
+# Runtime dependencies for scripts/audit_code_rot.py, scripts/audit_code_similarity.py,
+# and the Centaur similarity-engine integration they depend on.
+# Adding to this file requires justification in the PR body.
+bashlex

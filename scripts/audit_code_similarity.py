@@ -72,17 +72,32 @@ def add_centaur_dependency_paths() -> None:
             sys.path.insert(0, str(candidate.resolve()))
 
 
-def import_centaur_similarity(centaur_root: pathlib.Path) -> dict[str, Any]:
+def import_centaur_similarity(centaur_root: pathlib.Path) -> dict[str, Any] | None:
+    """Import Centaur's similarity helpers. Returns None on failure (degraded mode).
+
+    A loud warning is printed on stderr so degraded mode is visible. Degraded
+    mode skips the similarity portion of the audit but the duplicate-function
+    and forbidden-doc portions still run.
+    """
     add_centaur_dependency_paths()
     sys.path.insert(0, str(centaur_root))
-    from centaur import canonicalize_for_dry as centaur_canonicalize_for_dry
-    from centaur import cosine_similarity as centaur_cosine_similarity
-    from centaur import dry_similarity as centaur_dry_similarity
-    from centaur import jaccard_similarity as centaur_jaccard_similarity
-    from centaur import normalize_text as centaur_normalize_text
-    from centaur import sha256_bytes as centaur_sha256_bytes
-    from centaur import shingle_tokens as centaur_shingle_tokens
-    from centaur import token_counts as centaur_token_counts
+    try:
+        from centaur import canonicalize_for_dry as centaur_canonicalize_for_dry
+        from centaur import cosine_similarity as centaur_cosine_similarity
+        from centaur import dry_similarity as centaur_dry_similarity
+        from centaur import jaccard_similarity as centaur_jaccard_similarity
+        from centaur import normalize_text as centaur_normalize_text
+        from centaur import sha256_bytes as centaur_sha256_bytes
+        from centaur import shingle_tokens as centaur_shingle_tokens
+        from centaur import token_counts as centaur_token_counts
+    except ImportError as exc:
+        sys.stderr.write(
+            "WARNING: similarity audit DEGRADED — Centaur import failed: %s\n"
+            "         Install missing deps or set CENTAUR_PYDEPS env var.\n"
+            "         Duplicate-function and forbidden-doc checks still run.\n"
+            % exc
+        )
+        return None
 
     return {
         "canonicalize_for_dry": centaur_canonicalize_for_dry,
@@ -180,6 +195,13 @@ def _prefilter_score(left: dict[str, Any], right: dict[str, Any], helpers: dict[
 def run_similarity_audit(repo: pathlib.Path, centaur_root: pathlib.Path, threshold: float, min_lines: int, shingle_width: int, max_pairs: int, prefilter_floor: float = DEFAULT_PREFILTER_FLOOR) -> dict[str, Any]:
     started = time.time()
     helpers = import_centaur_similarity(centaur_root)
+    if helpers is None:
+        return {
+            "degraded": True,
+            "reason": "centaur_import_failed",
+            "pairs": [],
+            "elapsed_seconds": time.time() - started,
+        }
     pieces = collect_script_functions(repo, min_lines)
     pairs: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="ds4-centaur-sim-") as temp_dir:

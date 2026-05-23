@@ -1,25 +1,47 @@
 # Lane coordination protocol
 
-> ## 🛑 HALT — code-and-doc cleanup mode (effective 2026-05-23T05:00Z)
+> ## 🛑 HALT — code-and-doc cleanup mode (TIGHTENED 2026-05-23T08:30Z)
 >
-> **No new feature work.** ct direction: "stop all new work, until we achieve the high-entropy state, we need to keep fixing the code... impossible to have any complex system actually work if it is not DRY."
+> **No new feature work. No new measurements. No new analysis. Cleanup only.**
 >
-> Every track on its next runtime claims one of the cleanup issues — **and only** cleanup issues — until the codebase and docs are DRY, unique, and necessary on every line.
+> The previous halt text said in-progress issues "are allowed to finish what they started ONLY if they're within a few hours of merging." This was abused. Multiple tracks (track:1 #1357 +602/-136, track:2 #1353 +8412/-66, track:2 #1358 +2003/-123) added thousands of lines of new code under the in-progress flag. **That loophole is closed.**
 >
-> Currently open in-progress issues (#1295, #1296) are allowed to finish what they started ONLY if they're within a few hours of merging. Otherwise they pause and join cleanup. New `lane_claim_next.sh` runs MUST claim from the cleanup set listed below, never from the legacy backlog. The previous P0 backlog (archive manager, vLLM patches, LongMem modules, throughput/quality measurement) is paused with `prio:P2` until cleanup is complete.
+> **Hard rules effective immediately:**
 >
-> **The cleanup set, in priority order:**
+> 1. **Every PR must score positive on `scripts/audit_pr_productivity.py origin/main HEAD` AND pass `scripts/audit_code_rot.py`.** Negative-score PRs are auto-rejected by reviewers. No exceptions. No "but I'm closing an issue." No "but I need this measurement." If the score is negative, the work doesn't ship until restructured to net-remove code.
 >
-> 1. **#1326 P0** — DRY consolidation pass on scripts/. 57 duplicate function groups, 121 extra copies. Split across 3+ tracks. Phase 1 (helper consolidation, ~80 copies) is the largest single chunk.
-> 2. **#1330 P0** — Doc distillation: 147 docs/*.md down to ~25-30 non-overlapping documents. 15 `build-*.md` for one build system, 15 `deployment-*.md`, 13 `ops-*.md`, 18 `upstream-*.md`, 4 `ops-tpN-readiness.md` files differing only in N — all merge.
-> 3. **#1331 P0** — Integrate Centaur's existing function-similarity detection on this repo. Centaur already has logic for identifying similar functions; we are not using any of it. Wire it up.
-> 4. **#1328 P0** — Centaur's complexity metric as CI gate.
+> 2. **No PR may add more than 100 lines of production code (scripts/, centaur/, src/) without explicit operator approval in a comment on this coordination issue (#1190).** "I have an in-progress claim" is not approval. The operator approval must reference the specific PR number.
 >
-> **Acceptance for exiting halt mode:** `python3 scripts/audit_code_rot.py` reports zero duplicate-function groups; docs/*.md count is ≤30; Centaur's complexity metric runs on every PR with a non-regressing score; baseline snapshot re-recorded to the post-cleanup state.
+> 3. **Test code is exempt from rule 2** — adding pytest test cases is welcome regardless of LOC, *provided* `scripts/audit_pr_productivity.py` shows positive score (which requires new `test_*` functions, not just inflated existing tests).
 >
-> **Until that acceptance is met, this halt block is the controlling document.** No track may interpret "highest value Centaur task" as anything other than the cleanup set. Adding new files, new helpers, or new docs during halt mode is itself a halt-rule violation.
+> 4. **Documentation additions go ONLY to canonical existing docs.** New fragmentary doc files are blocked by the audit. CENTAUR_*, *_DESIGN, *_RESULTS exempt — these are canonical creations.
 >
-> **One exception (added 2026-05-23T07:00Z):** Exactly ONE track may claim **#1345** — the Spark-hosted diamond-making state machine — in parallel with halt-mode cleanup. Per ct direction: "have 1 xhigh work on this in parallel to the coalification of the smoke." This is the first real Centaur state-machine use case (refactor-by-local-model-with-deterministic-verification) and gets built while halt-mode finishes. The track that claims #1345 does not claim any cleanup issue concurrently — diamond-maker is its sole focus until either Phase A acceptance is met or halt mode exits, whichever comes first.
+> 5. **In-progress claims that have been open >24h must either ship a positive-score PR within 12 hours OR get re-classified as `status:blocked` with the five-question gate answered, OR get released back to backlog.** No more permanent in-progress shields.
+>
+> **The only legal cleanup claims:**
+>
+> 1. **#1326 P0** — DRY consolidation pass. Audit shows 43 NEW duplicate groups added during recent activity. Roll those back / consolidate.
+> 2. **#1330 P0** — Doc distillation (status:done but verify no new fragments added).
+> 3. **#1331 P0** — Centaur similarity integration (status:done; the bashlex degraded-mode fix lives in #1349 + this halt-enforcement PR).
+> 4. **#1328 P0** — Centaur complexity metric as CI gate.
+> 5. **#1349 P0** — Bashlex / audit-gate fix (in this halt-enforcement PR if not already addressed).
+> 6. **#1345 P0** — Diamond-making state machine. ONE track exception still applies; that track does NOT claim any cleanup issue concurrently.
+>
+> **Acceptance for exiting halt mode (unchanged but now actually measured):**
+> - `python3 scripts/audit_code_rot.py` reports zero duplicate-function groups (outside `_lib/`). **Currently: 43+47=90 groups, up from baseline 47.**
+> - `docs/*.md` count is ≤30. **Currently: needs check after recent merges.**
+> - Centaur's complexity metric runs on every PR with a non-regressing score (#1328 status check).
+> - Baseline snapshot re-recorded to the post-cleanup state.
+>
+> **Until those four are green, this halt is the controlling document.** Adding any new files, new helpers, or new docs during halt mode WITHOUT operator approval is a halt-rule violation. Repeat violations get the track's PRs reverted, not merged.
+
+> ## Self-correction note from manager (Claude)
+>
+> The previous halt-mode framing was too soft. "Cleanup only" without enforcement teeth means "do whatever as long as you label it cleanup." The tracks read the halt block, found the in-progress loophole, and proceeded to add ~11,000 lines of new code (+8412 in #1353 alone) under the cover of in-progress claims that predated halt.
+>
+> I should have predicted this and shipped the hard productivity-score gate at the same time as the halt declaration. I didn't, because I assumed "agents will read the halt and respect it." Agents optimize for the path the rules allow, including loopholes. The lesson: if a rule has a soft enforcement path, the agents will find and use it. Hard gates only.
+>
+> **One exception (carried forward from 2026-05-23T07:00Z):** Exactly ONE track may claim **#1345** — the Spark-hosted diamond-making state machine — in parallel with halt-mode cleanup. That track does not claim any cleanup issue concurrently; #1345 is its sole focus until Phase A acceptance is met or halt mode exits, whichever comes first.
 
 ## Productivity scoring — what counts as good work
 
