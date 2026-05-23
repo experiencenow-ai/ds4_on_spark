@@ -41,20 +41,25 @@
 >
 > I should have predicted this and shipped the hard productivity-score gate at the same time as the halt declaration. I didn't, because I assumed "agents will read the halt and respect it." Agents optimize for the path the rules allow, including loopholes. The lesson: if a rule has a soft enforcement path, the agents will find and use it. Hard gates only.
 >
-> **Halt exceptions for shipping published-baseline work (extended 2026-05-23T10:00Z per ct directive: "shift now, this is a rigorous paper with actual results. our in-flight code is .... ai slop being converted to coal"):**
+> **Halt exceptions (revised 2026-05-23T12:00Z after v2 bootstrap):**
 >
-> Up to **three** tracks may claim ONE of the following each, in parallel with halt-mode cleanup. Each claiming track does not concurrently claim a cleanup issue.
+> v2 of Centaur is bootstrapped on the ShinkaEvolve substrate (PR #144 on `experiencenow-ai/centaur`, merged). v1 tagged `v1-archive-2026-05-23`. ct directive: "minimizing the code we need to write is the best path. I usually do 3 totally rewritten versions to get to diamond quality."
 >
-> 1. **#1345** — Spark-hosted diamond-making state machine (original exception)
-> 2. **#1390** — Adopt sep-CMA-ES as Module 5+9 algorithm (Trinity-derived)
-> 3. **#1391** — Tri-role (Thinker/Worker/Verifier) + verifier ACCEPT termination (Trinity-derived)
+> ONE halt exception remains:
 >
-> A fourth track may claim a fast (~2 hours) experimental task: **install ShinkaEvolve, run its `circle_packing` example end-to-end, and write an assessment of whether to migrate Centaur's evolution loop onto it.** That assessment goes on PR #143 of `experiencenow-ai/centaur` (the literature survey). This is small enough that it doesn't fully consume the track's claim slot — they can pick up cleanup work after.
+> 1. **#1345** — Spark-hosted v2 diamond run. Run `shinka_run` on `v2/diamonds/entropy_norm_bits/` with authenticated Headless agent on a Spark host. Confirm convergence. ~30 minutes if Headless is authenticated.
 >
-> All halt-exception work follows the ct directives:
-> - **ct directive 1**: self-host the SLM coordinator (Qwen3-0.6B on Spark2) wherever applicable. No API fallback unless self-hosting is impossible for some specific reason.
-> - **ct directive 2**: no arbitrary architectural decisions. Termination mode, model_id per node, head architecture, etc. all become *evolvable parameters* via Module 5 Reparameterize. The Trinity-paper defaults are the *baseline*, not the only option. Evolution refines.
-> - **ct directive 3**: shifts NOW. Don't wait for halt-mode exit. These four exceptions can run in parallel with cleanup; tracks pick from the cleanup set OR the halt-exception list, never both concurrently.
+> Previously listed halt exceptions:
+> - **#1390** (sep-CMA-ES adoption) — RELEASED. Demoted to P2 post-v2-validation. Premature optimization to apply before v2 produces first diamond.
+> - **#1391** (tri-role + verifier ACCEPT) — RELEASED. Same reason.
+> - **#1393** (ShinkaEvolve spike) — COMPLETED. Spike validated substrate; PR #144 is the deliverable.
+>
+> The 2 freed halt-exception slots are available for v2 follow-on work, e.g., the second diamond domain (one of the audit's 17 remaining duplicate-function groups).
+>
+> All v2-related work follows the ct directives:
+> - **Minimize code we write.** The substrate exists. Use it.
+> - **3 rewrites to diamond.** v1 is the contaminated first; v2 is the first rewrite. Expect v3 to refine.
+> - **No code from v1 copied into v2.** v2 starts clean. v1 stays in main for retrospective study until v2 is producing diamonds reliably.
 
 ## Productivity scoring — what counts as good work
 
