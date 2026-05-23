@@ -21,6 +21,8 @@ DS4_FLASH_BATCH_KV_GIB_AT_8192_TP2 = 4.0
 DS4_FLASH_SEQUENCE_OVERHEAD_GIB = 0.004
 DS4_FLASH_DEFAULT_MIN_HEADROOM_GIB = 8.0
 DS4_FLASH_REQUIRED_BLOCK_SIZE = 128
+DS4_FLASH_WIFI_PREFIXES = ("wl", "wifi", "wlan")
+DS4_FLASH_WIFI_ADDR_PREFIXES = ("192.168.",)
 
 
 def strip_value(raw: str) -> str:
@@ -103,6 +105,37 @@ def flag_values(tokens: list[str]) -> dict[str, list[str | bool]]:
 			out.setdefault(tok, []).append(True)
 			i += 1
 	return(out)
+
+
+def env_values(tokens: list[str], names: tuple[str, ...]) -> dict[str, list[str]]:
+	out: dict[str, list[str]] = {name: [] for name in names}
+	for tok in tokens:
+		if "=" not in tok or tok.startswith("--"):
+			continue
+		name, value = tok.split("=", 1)
+		if name in out:
+			out[name].append(value)
+	return(out)
+
+
+def string_flag(flags: dict[str, list[str | bool]], name: str) -> str:
+	vals = flags.get(name)
+	if not vals:
+		return("")
+	value = vals[-1]
+	if isinstance(value, bool):
+		return("")
+	return(str(value))
+
+
+def is_wifi_interface(value: str) -> bool:
+	item = strip_value(value).lower()
+	return(any(item.startswith(prefix) for prefix in DS4_FLASH_WIFI_PREFIXES))
+
+
+def is_wifi_address(value: str) -> bool:
+	item = strip_value(value)
+	return(any(item.startswith(prefix) for prefix in DS4_FLASH_WIFI_ADDR_PREFIXES))
 
 
 def int_flag(flags: dict[str, list[str | bool]], name: str, default: int) -> int:
@@ -205,6 +238,8 @@ def validate_command(path: Path, defaults: dict[str, Any], command: str) -> dict
 	nnodes = int_flag(flags, "--nnodes", int(defaults.get("nnodes", 1) or 1))
 	tensor_parallel_size = int_flag(flags, "--tensor-parallel-size", int(defaults.get("tensor_parallel_size", 1) or 1))
 	pipeline_parallel_size = int_flag(flags, "--pipeline-parallel-size", int(defaults.get("pipeline_parallel_size", 1) or 1))
+	master_addr = string_flag(flags, "--master-addr")
+	fabric_env = env_values(tokens, ("GLOO_SOCKET_IFNAME", "NCCL_SOCKET_IFNAME", "TP_SOCKET_IFNAME", "VLLM_HOST_IP", "RAY_NODE_IP_ADDRESS", "RAY_OVERRIDE_NODE_IP_ADDRESS"))
 	issues: list[dict[str, str]] = []
 	warnings: list[dict[str, str]] = []
 	dupes = {k: v for k, v in flags.items() if len(v) > 1}
@@ -229,6 +264,17 @@ def validate_command(path: Path, defaults: dict[str, Any], command: str) -> dict
 			})
 		if nnodes > 1 and tensor_parallel_size > 1 and "GLOO_SOCKET_IFNAME" not in command:
 			add_issue(issues, "missing_gloo_socket_ifname", "cross_node_gloo_loopback", "cross-node TP uses a Gloo CPU process group; without GLOO_SOCKET_IFNAME it can pick 127.0.0.1 and fail before serving", "set GLOO_SOCKET_IFNAME to the Spark fabric interface used for the cross-node TP launch")
+		if nnodes > 1:
+			for name in ("GLOO_SOCKET_IFNAME", "NCCL_SOCKET_IFNAME", "TP_SOCKET_IFNAME"):
+				for value in fabric_env.get(name, []):
+					if is_wifi_interface(value):
+						add_issue(issues, f"wifi_distributed_{name.lower()}", "wifi_distributed_dataplane", f"multi-node DS4 Flash launch pins {name}={value}; Wi-Fi distributed traffic produced a low and noisy PP3 throughput lane", "pin GLOO/NCCL/TP interfaces to the direct 200G device for the chosen adjacent Spark pair, or add validated 200G routes before PP>2")
+			for name in ("VLLM_HOST_IP", "RAY_NODE_IP_ADDRESS", "RAY_OVERRIDE_NODE_IP_ADDRESS"):
+				for value in fabric_env.get(name, []):
+					if is_wifi_address(value):
+						add_issue(issues, f"wifi_distributed_{name.lower()}", "wifi_distributed_dataplane", f"multi-node DS4 Flash launch pins {name}={value}; this selects the Wi-Fi control plane for runtime traffic", "use the 200G endpoint IP for the node participating in the distributed runtime")
+			if is_wifi_address(master_addr):
+				add_issue(issues, "wifi_master_addr", "wifi_distributed_dataplane", f"multi-node DS4 Flash launch uses --master-addr {master_addr}; this routes distributed setup and likely NCCL/Gloo traffic through Wi-Fi", "use a reachable 200G master address for PP=2, or configure validated 200G routes before PP=3+")
 	status = BAD if issues else OK
 	return({
 		"format": FORMAT,
@@ -245,6 +291,8 @@ def validate_command(path: Path, defaults: dict[str, Any], command: str) -> dict
 			"nnodes": nnodes,
 			"tensor_parallel_size": tensor_parallel_size,
 			"pipeline_parallel_size": pipeline_parallel_size,
+			"master_addr": master_addr,
+			"fabric_env": fabric_env,
 		},
 		"memory_estimate": memory,
 		"issues": issues,

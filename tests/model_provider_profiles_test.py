@@ -38,6 +38,43 @@ class ModelProviderProfilesTest(unittest.TestCase):
         errors = validator.validate_profile(obj, path)
         self.assertTrue(any("secret-looking" in item for item in errors))
 
+    def test_production_eligible_requires_measured_output(self) -> None:
+        path = Path("fixture.json")
+        obj = validator.load_profile(validator.default_profile_paths()[0])
+        obj = copy.deepcopy(obj)
+        obj["production_eligible"] = True
+        obj["measured_output_tps"] = None
+        obj["last_probe_artifact"] = "fixtures/probe.json"
+        errors = validator.validate_profile(obj, path)
+        self.assertTrue(any("measured_output_tps" in item for item in errors))
+
+    def test_production_eligible_rejects_blocked_endpoint(self) -> None:
+        path = Path("fixture.json")
+        fixture = [item for item in validator.default_profile_paths() if item.name == "standard_local_small_openai_compatible.example.json"][0]
+        obj = validator.load_profile(fixture)
+        obj = copy.deepcopy(obj)
+        obj["production_eligible"] = True
+        obj["measured_output_tps"] = 1.0
+        obj["last_probe_artifact"] = "fixtures/probe.json"
+        errors = validator.validate_profile(obj, path)
+        self.assertTrue(any("blocked" in item for item in errors))
+
+    def test_rejects_missing_local_source_ref(self) -> None:
+        path = Path("fixture.json")
+        obj = validator.load_profile(validator.default_profile_paths()[0])
+        obj = copy.deepcopy(obj)
+        obj["source_refs"] = ["fixtures/model_providers/not-present.json"]
+        errors = validator.validate_profile(obj, path)
+        self.assertTrue(any("source_refs references missing repo file" in item for item in errors))
+
+    def test_rejects_parent_traversal_probe_ref(self) -> None:
+        path = Path("fixture.json")
+        obj = validator.load_profile(validator.default_profile_paths()[0])
+        obj = copy.deepcopy(obj)
+        obj["last_probe_artifact"] = "../outside.json"
+        errors = validator.validate_profile(obj, path)
+        self.assertTrue(any("repo-relative path" in item for item in errors))
+
 
 if __name__ == "__main__":
     unittest.main()

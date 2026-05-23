@@ -78,10 +78,18 @@ class VllmDs4FlashLaunchGuardTest(unittest.TestCase):
 		self.assertTrue(any(i["blocker_kind"] == "cross_node_gloo_loopback" and "GLOO_SOCKET_IFNAME" in i["recommended_fix"] for i in result["issues"]))
 
 	def test_cross_node_tp_accepts_explicit_gloo_socket_ifname(self) -> None:
-		text = GOOD_RECIPE.replace("vllm serve", "GLOO_SOCKET_IFNAME=enp1s0f1np1 vllm serve --nnodes 2 --tensor-parallel-size 2")
+		text = GOOD_RECIPE.replace("vllm serve", "GLOO_SOCKET_IFNAME=enp1s0f1np1 NCCL_SOCKET_IFNAME=enp1s0f1np1 TP_SOCKET_IFNAME=enp1s0f1np1 VLLM_HOST_IP=10.10.9.2 vllm serve --nnodes 2 --tensor-parallel-size 2 --master-addr 10.10.9.1")
 		path = self.write_tmp(text)
 		result = guard.validate_path(path)
 		self.assertEqual(result["status"], guard.OK, result)
+
+	def test_cross_node_wifi_dataplane_blocks(self) -> None:
+		text = GOOD_RECIPE.replace("vllm serve", "GLOO_SOCKET_IFNAME=wlP9s9 NCCL_SOCKET_IFNAME=wlP9s9 TP_SOCKET_IFNAME=wlP9s9 VLLM_HOST_IP=192.168.1.110 vllm serve --nnodes 3 --pipeline-parallel-size 3 --master-addr 192.168.1.110")
+		path = self.write_tmp(text)
+		result = guard.validate_path(path)
+		self.assertEqual(result["status"], guard.BAD)
+		self.assertTrue(any(i["kind"] == "wifi_master_addr" for i in result["issues"]))
+		self.assertTrue(any(i["blocker_kind"] == "wifi_distributed_dataplane" for i in result["issues"]))
 
 	def test_ds4_flash_rejects_bad_block_size(self) -> None:
 		text = GOOD_RECIPE.replace("--no-enable-prefix-caching", "--block-size 256 --no-enable-prefix-caching")

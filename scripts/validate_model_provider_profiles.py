@@ -36,9 +36,12 @@ REQUIRED_FIELDS = (
 )
 
 
+def repo_root() -> Path:
+	return Path(__file__).resolve().parents[1]
+
+
 def default_profile_paths() -> list[Path]:
-	root = Path(__file__).resolve().parents[1]
-	return sorted((root / "fixtures" / "model_providers").glob("*.json"))
+	return sorted((repo_root() / "fixtures" / "model_providers").glob("*.json"))
 
 
 def err(path: Path, msg: str) -> str:
@@ -90,6 +93,36 @@ def check_string_list(obj: dict[str, Any], field: str, path: Path, errors: list[
 			return
 
 
+def is_external_ref(value: str) -> bool:
+	return value.startswith(("http://", "https://"))
+
+
+def check_repo_ref(value: str, field: str, path: Path, errors: list[str], root: Path) -> None:
+	ref = value.strip()
+	if ref == "" or is_external_ref(ref):
+		return
+	ref_path = Path(ref)
+	if ref_path.is_absolute() or ".." in ref_path.parts:
+		errors.append(err(path, f"{field} must be a repo-relative path or URL"))
+		return
+	if not (root / ref_path).is_file():
+		errors.append(err(path, f"{field} references missing repo file: {ref}"))
+
+
+def check_repo_ref_list(obj: dict[str, Any], field: str, path: Path, errors: list[str], root: Path) -> None:
+	value = obj.get(field)
+	if value is None:
+		return
+	if not isinstance(value, list):
+		errors.append(err(path, f"{field} must be a list when present"))
+		return
+	for item in value:
+		if not isinstance(item, str) or item.strip() == "":
+			errors.append(err(path, f"{field} entries must be non-empty strings"))
+			return
+		check_repo_ref(item, field, path, errors, root)
+
+
 def scan_secret_keys(value: Any, path: Path, errors: list[str], key_path: str = "") -> None:
 	if isinstance(value, dict):
 		for key, child in value.items():
@@ -106,8 +139,9 @@ def scan_secret_keys(value: Any, path: Path, errors: list[str], key_path: str = 
 			errors.append(err(path, "secret-looking value is not allowed"))
 
 
-def validate_profile(obj: dict[str, Any], path: Path) -> list[str]:
+def validate_profile(obj: dict[str, Any], path: Path, root: Path | None = None) -> list[str]:
 	errors: list[str] = []
+	root = repo_root() if root is None else root
 	for field in REQUIRED_FIELDS:
 		if field not in obj:
 			errors.append(err(path, f"missing required field: {field}"))
@@ -144,6 +178,22 @@ def validate_profile(obj: dict[str, Any], path: Path) -> list[str]:
 		errors.append(err(path, "last_probe_artifact must be a string"))
 	elif ((measured_input is not None and measured_input > 0.0) or (measured_output is not None and measured_output > 0.0)) and last_probe.strip() == "":
 		errors.append(err(path, "measured throughput requires last_probe_artifact"))
+	elif isinstance(last_probe, str):
+		check_repo_ref(last_probe, "last_probe_artifact", path, errors, root)
+	check_repo_ref_list(obj, "benchmark_refs", path, errors, root)
+	check_repo_ref_list(obj, "source_refs", path, errors, root)
+	production_eligible = obj.get("production_eligible")
+	if production_eligible is not None and not isinstance(production_eligible, bool):
+		errors.append(err(path, "production_eligible must be a boolean when present"))
+	if production_eligible is True:
+		if measured_output is None or measured_output <= 0.0:
+			errors.append(err(path, "production_eligible requires measured_output_tps > 0"))
+		if not isinstance(last_probe, str) or last_probe.strip() == "":
+			errors.append(err(path, "production_eligible requires last_probe_artifact"))
+		if "blocked_reason" in obj:
+			errors.append(err(path, "production_eligible cannot include blocked_reason"))
+		if isinstance(endpoint, dict) and str(endpoint.get("status", "")).lower() == "blocked":
+			errors.append(err(path, "production_eligible endpoint status cannot be blocked"))
 	quality = obj.get("quality_scores")
 	if not isinstance(quality, dict):
 		errors.append(err(path, "quality_scores must be an object"))
@@ -167,13 +217,14 @@ def load_profile(path: Path) -> dict[str, Any]:
 
 def validate_paths(paths: list[Path]) -> dict[str, Any]:
 	all_errors: list[str] = []
+	root = repo_root()
 	for path in paths:
 		try:
 			obj = load_profile(path)
 		except Exception as e:
 			all_errors.append(f"{path}: {e}")
 			continue
-		all_errors.extend(validate_profile(obj, path))
+		all_errors.extend(validate_profile(obj, path, root))
 	return {
 		"ok": len(all_errors) == 0,
 		"profile_count": len(paths),

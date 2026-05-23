@@ -558,9 +558,7 @@
     ],
     "working_wifi_internet": [],
     "reachable_but_no_internet_route": [],
-    "pending_nodes": [
-      "macstudio-remove-spark3-route-override"
-    ],
+    "pending_nodes": [],
     "public_ipv4": {
       "spark0": "125.129.239.57 via Spark3 NAT",
       "spark1": "125.129.239.251 direct",

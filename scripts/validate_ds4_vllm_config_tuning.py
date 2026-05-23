@@ -108,8 +108,8 @@ def validate(obj: dict[str, Any], path: Path) -> list[str]:
 			continue
 		check_raw_artifact(root, attempt, path, errors)
 		attempt_best = max(attempt_best, attempt_best_tps(attempt))
-	if conclusion.get("improved_vllm_performance") is True and float(best_selected) <= attempt_best:
-		errors.append(err(path, "improved_vllm_performance requires a selected speed above all attempts"))
+	if conclusion.get("improved_vllm_performance") is True and float(best_selected) < attempt_best:
+		errors.append(err(path, "improved_vllm_performance requires selected speed at least matching the best measured attempt"))
 	if conclusion.get("improved_vllm_performance") is False and float(best_selected) < attempt_best:
 		errors.append(err(path, "selected config must not be slower than a rejected attempt"))
 	return(errors)

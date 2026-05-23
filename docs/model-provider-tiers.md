@@ -71,6 +71,10 @@ Required profile fields:
 - `quality_scores`: optional score buckets, using `null` until a local quality
   run or public-prior import has been recorded.
 - `last_probe_artifact`: required whenever measured throughput is non-null.
+  Non-empty local paths must be repo-relative and must exist.
+- `production_eligible`: optional boolean. If true, the profile must have
+  measured output throughput, a probe artifact, no `blocked_reason`, and a
+  non-blocked endpoint status.
 
 ## Fixtures
 
@@ -79,11 +83,14 @@ Example fixtures live under `fixtures/model_providers/`:
 - `qwen_local_provider.example.json`
 - `ling_local_provider.example.json`
 - `dsv4_spark_pipeline_provider.example.json`
+- `vllm_deepseek_v4_flash_pp2_200g_near_frontier_20260522.example.json`
 - `frontier_api_placeholder_provider.example.json`
 
 They intentionally leave measured throughput and quality scores as `null`
-unless a matching artifact exists. This avoids turning source/model-card claims
-into local DS4 performance claims.
+unless a matching artifact exists. The vLLM PP=2 near-frontier fixture is the
+current measured exception: it points at the 2026-05-22 PP=2 direct-200G probe
+artifact and records the selected no-MTP batch lane. This avoids turning
+source/model-card claims into local DS4 performance claims.
 
 ## Validation
 
@@ -99,9 +106,41 @@ Validation rejects:
 - unknown tier/runtime/provider-kind values;
 - missing batching fields;
 - measured throughput without `last_probe_artifact`;
+- missing or non-repo-local local references in `last_probe_artifact`,
+  `benchmark_refs`, or `source_refs`;
+- `production_eligible` profiles without measured output throughput or with
+  blocked endpoint metadata;
 - secret-looking endpoint fields;
 - fixed Spark-count fields such as `spark_count`, `num_sparks`, or
   `world_size`.
+
+## Selection
+
+Centaur-facing dry selection is available without importing any runtime code:
+
+```sh
+python3 scripts/select_model_provider.py --tier near_frontier_local --lane hard_reasoning --batch-tokens 16384
+python3 scripts/select_model_provider.py --tier local_small --lane candidate_prefilter --batch-tokens 1024 --allow-non-production
+python3 scripts/route_model_provider_requests.py fixtures/model_provider_routes/centaur_provider_route_requests_20260522.example.json --allow-blocked
+```
+
+The selector emits `centaur-provider-selection-v1` JSON. It treats `--tier` as
+the minimum required capability tier, rejects lower-tier providers, checks the
+requested lane and batch/wait constraints, and defaults to
+`production_eligible=true` providers only. If nothing matches, it returns a
+structured `no_eligible_provider` blocker rather than silently falling back to
+an unrelated provider.
+
+For a Centaur-shaped batch of LLM node requirements, use
+`scripts/route_model_provider_requests.py`. It accepts
+`centaur-provider-route-requests-v1` JSON and emits
+`centaur-provider-routing-plan-v1` with one route per node, aggregate provider
+load, selected/blocked counts, blocker summaries, and measured-throughput
+capacity estimates when a selected provider has local output t/s evidence. If a
+selected provider lacks measured output throughput, the capacity estimate stays
+`null` and the provider appears in `unknown_capacity_provider_ids`. The example
+fixture intentionally includes one too-tight wait-budget request so consumers
+can test both the selected-provider and structured-blocker paths.
 
 ## Centaur Boundary
 

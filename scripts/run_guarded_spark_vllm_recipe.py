@@ -103,6 +103,23 @@ def print_process_output(result: subprocess.CompletedProcess[str]) -> None:
 		print(result.stderr, end="", file=sys.stderr)
 
 
+def build_readiness_cmd(args: argparse.Namespace) -> list[str]:
+	probe = Path(args.readiness_probe) if args.readiness_probe is not None else REPO_ROOT / "scripts" / "vllm_container_health_check.py"
+	cmd = [sys.executable,str(probe)]
+	cmd.extend(args.readiness_arg or [])
+	return(cmd)
+
+
+def run_readiness_probe(args: argparse.Namespace) -> int:
+	cmd = build_readiness_cmd(args)
+	print(f"post-launch readiness: {shlex.join(cmd)}")
+	result = run_cmd(cmd)
+	print_process_output(result)
+	if result.returncode != 0:
+		print("serving readiness probe failed", file=sys.stderr)
+	return(result.returncode)
+
+
 def parse_args() -> argparse.Namespace:
 	p = argparse.ArgumentParser(description=__doc__)
 	p.add_argument("--runner", required=True, help="Path to spark-vllm-docker run-recipe.sh or run-recipe.py")
@@ -117,6 +134,9 @@ def parse_args() -> argparse.Namespace:
 	p.add_argument("--runtime-free-gib", type=float, help="Runtime free-memory sample for low-memory drain/terminate classification")
 	p.add_argument("--runtime-soft-min-free-gib", type=float, default=10.0)
 	p.add_argument("--runtime-hard-min-free-gib", type=float, default=6.0)
+	p.add_argument("--post-launch-readiness", action="store_true", help="Run vLLM serving-readiness probe after recipe execution succeeds")
+	p.add_argument("--readiness-probe", help="Override readiness probe script path for tests or custom deployments")
+	p.add_argument("--readiness-arg", action="append", default=[], help="Argument passed through to the readiness probe; repeat for multiple args")
 	p.add_argument("recipe_args", nargs=argparse.REMAINDER, help="Arguments passed to the recipe runner")
 	return(p.parse_args())
 
@@ -156,7 +176,11 @@ def main() -> int:
 		return(0)
 	print(f"guard execute: {shlex.join(original_cmd)}")
 	run = subprocess.run(original_cmd)
-	return(run.returncode)
+	if run.returncode != 0:
+		return(run.returncode)
+	if args.post_launch_readiness:
+		return(run_readiness_probe(args))
+	return(0)
 
 
 if __name__ == "__main__":
