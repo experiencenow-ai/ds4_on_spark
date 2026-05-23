@@ -1,5 +1,24 @@
 # Lane coordination protocol
 
+> ## 🛑 HALT — code-and-doc cleanup mode (effective 2026-05-23T05:00Z)
+>
+> **No new feature work.** ct direction: "stop all new work, until we achieve the high-entropy state, we need to keep fixing the code... impossible to have any complex system actually work if it is not DRY."
+>
+> Every track on its next runtime claims one of the cleanup issues — **and only** cleanup issues — until the codebase and docs are DRY, unique, and necessary on every line.
+>
+> Currently open in-progress issues (#1295, #1296) are allowed to finish what they started ONLY if they're within a few hours of merging. Otherwise they pause and join cleanup. New `lane_claim_next.sh` runs MUST claim from the cleanup set listed below, never from the legacy backlog. The previous P0 backlog (archive manager, vLLM patches, LongMem modules, throughput/quality measurement) is paused with `prio:P2` until cleanup is complete.
+>
+> **The cleanup set, in priority order:**
+>
+> 1. **#1326 P0** — DRY consolidation pass on scripts/. 57 duplicate function groups, 121 extra copies. Split across 3+ tracks. Phase 1 (helper consolidation, ~80 copies) is the largest single chunk.
+> 2. **#1330 P0** — Doc distillation: 147 docs/*.md down to ~25-30 non-overlapping documents. 15 `build-*.md` for one build system, 15 `deployment-*.md`, 13 `ops-*.md`, 18 `upstream-*.md`, 4 `ops-tpN-readiness.md` files differing only in N — all merge.
+> 3. **#1331 P0** — Integrate Centaur's existing function-similarity detection on this repo. Centaur already has logic for identifying similar functions; we are not using any of it. Wire it up.
+> 4. **#1328 P0** — Centaur's complexity metric as CI gate.
+>
+> **Acceptance for exiting halt mode:** `python3 scripts/audit_code_rot.py` reports zero duplicate-function groups; docs/*.md count is ≤30; Centaur's complexity metric runs on every PR with a non-regressing score; baseline snapshot re-recorded to the post-cleanup state.
+>
+> **Until that acceptance is met, this halt block is the controlling document.** No track may interpret "highest value Centaur task" as anything other than the cleanup set. Adding new files, new helpers, or new docs during halt mode is itself a halt-rule violation.
+
 This document is the autonomous-loop spec every xhigh track reads on startup. The pinned issue **🚦 Lane coordination state — DO NOT CLOSE** (#1190) is the live source of truth for track ownership and hardware allocation. For where each component of the Centaur system sits in overall progress, see [`docs/CENTAUR_DASHBOARD.md`](../docs/CENTAUR_DASHBOARD.md). For the full system specification — modules, end-state walkthrough, what "done" looks like — see [`docs/CENTAUR_SPECIFICATION.md`](../docs/CENTAUR_SPECIFICATION.md).
 
 ## Scope of work — multi-repo
