@@ -12,6 +12,9 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any, Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts._lib.json_utils import number_or_none
+
 
 FORMAT = "ds4-mtp-k-sweep-v1"
 
@@ -80,17 +83,6 @@ def artifact_sha256(obj: dict[str, Any]) -> str:
 	return "sha256:" + hashlib.sha256(canonical_bytes(tmp)).hexdigest()
 
 
-def _num(raw: Any) -> Optional[float]:
-	if raw is None:
-		return None
-	if isinstance(raw, (int, float)):
-		return float(raw)
-	try:
-		return float(str(raw).strip())
-	except (TypeError, ValueError):
-		return None
-
-
 def _int_list(raw: Any) -> Optional[list[int]]:
 	if not isinstance(raw, list):
 		return None
@@ -121,23 +113,23 @@ def validate_measured(errors: list[str], row: dict[str, Any], prefix: str) -> No
 	for field in MEASURED_ROW:
 		if field not in row:
 			errors.append(f"{prefix} missing measured field: {field}")
-	baseline = _num(row.get("baseline_tps"))
-	mtp = _num(row.get("mtp_tps"))
-	speedup = _num(row.get("speedup_vs_baseline"))
+	baseline = number_or_none(row.get("baseline_tps"))
+	mtp = number_or_none(row.get("mtp_tps"))
+	speedup = number_or_none(row.get("speedup_vs_baseline"))
 	if baseline is not None and mtp is not None and speedup is not None and baseline > 0.0:
 		if not _close(speedup, mtp / baseline):
 			errors.append(f"{prefix} speedup_vs_baseline must equal mtp_tps / baseline_tps")
-	accepted = _num(row.get("accepted_draft_tokens"))
-	attempted = _num(row.get("attempted_draft_tokens"))
-	accept_rate = _num(row.get("accept_rate"))
+	accepted = number_or_none(row.get("accepted_draft_tokens"))
+	attempted = number_or_none(row.get("attempted_draft_tokens"))
+	accept_rate = number_or_none(row.get("accept_rate"))
 	if accepted is not None and attempted is not None and accept_rate is not None:
 		if attempted <= 0.0:
 			errors.append(f"{prefix} accept_rate requires attempted_draft_tokens > 0")
 		elif not _close(accept_rate, accepted / attempted):
 			errors.append(f"{prefix} accept_rate must equal accepted_draft_tokens / attempted_draft_tokens")
-	invocations = _num(row.get("target_verifier_invocation_count"))
-	positions = _num(row.get("target_positions_verified"))
-	per = _num(row.get("target_positions_per_invocation"))
+	invocations = number_or_none(row.get("target_verifier_invocation_count"))
+	positions = number_or_none(row.get("target_positions_verified"))
+	per = number_or_none(row.get("target_positions_per_invocation"))
 	if invocations is not None and positions is not None and per is not None and invocations > 0.0:
 		if not _close(per, positions / invocations):
 			errors.append(f"{prefix} target_positions_per_invocation must equal positions / invocations")
@@ -164,7 +156,7 @@ def validate_row(errors: list[str], row: Any, idle_slots: list[int], supported_k
 		errors.append(f"{prefix} k_power_of_two is wrong")
 	if row.get("runtime_supported") is not (k in supported_k):
 		errors.append(f"{prefix} runtime_supported must match runtime_supported_k")
-	accept_prob = _num(row.get("expected_accept_prob_per_draft_token"))
+	accept_prob = number_or_none(row.get("expected_accept_prob_per_draft_token"))
 	if accept_prob is None or accept_prob < 0.0 or accept_prob > 1.0:
 		errors.append(f"{prefix} expected_accept_prob_per_draft_token must be in [0,1]")
 		return
@@ -175,13 +167,13 @@ def validate_row(errors: list[str], row: Any, idle_slots: list[int], supported_k
 		errors.append(f"{prefix} total_target_verifier_rows_per_group must equal K + 1")
 	if row.get("extra_idle_rows_required_per_promoted_sequence") != k:
 		errors.append(f"{prefix} extra_idle_rows_required_per_promoted_sequence must equal K")
-	target_rows = _num(row.get("expected_target_rows_per_output_token"))
+	target_rows = number_or_none(row.get("expected_target_rows_per_output_token"))
 	if target_rows is not None and not _close(target_rows, (k + 1) / expected):
 		errors.append(f"{prefix} expected_target_rows_per_output_token formula mismatch")
-	draft_calls = _num(row.get("expected_draft_calls_per_output_token"))
+	draft_calls = number_or_none(row.get("expected_draft_calls_per_output_token"))
 	if draft_calls is not None and not _close(draft_calls, k / expected):
 		errors.append(f"{prefix} expected_draft_calls_per_output_token formula mismatch")
-	bonus = _num(row.get("expected_bonus_tokens_per_extra_idle_row"))
+	bonus = number_or_none(row.get("expected_bonus_tokens_per_extra_idle_row"))
 	if bonus is not None and not _close(bonus, (expected - 1.0) / k):
 		errors.append(f"{prefix} expected_bonus_tokens_per_extra_idle_row formula mismatch")
 	fits = row.get("fits_idle_extra_rows")
@@ -226,7 +218,7 @@ def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 		errors.append("k_power_of_two_required must be false")
 	if k_values and all(is_power_of_two(k) for k in k_values):
 		errors.append("sweep must include at least one non-power-of-two K")
-	accept_prob = _num(obj.get("accept_prob_used_for_projection"))
+	accept_prob = number_or_none(obj.get("accept_prob_used_for_projection"))
 	if accept_prob is None or accept_prob < 0.0 or accept_prob > 1.0:
 		errors.append("accept_prob_used_for_projection must be in [0,1]")
 	rows = obj.get("k_results")

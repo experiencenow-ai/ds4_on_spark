@@ -12,7 +12,7 @@
   "profile_direction": "lower_is_better",
   "profile_id": "locality_modularity_state_dry_v5",
   "profile_source": "centaur.centaur_complexity",
-  "root": "/private/tmp/ds4-track2-diamond-cleanup-1345",
+  "root": "/private/tmp/ds4-track1-coord",
   "scan": {
     "architecture_findings": [
       {
@@ -163,7 +163,7 @@
         "max_function_lines": 1755,
         "max_locals": 321,
         "max_parameters": 23,
-        "score": 838065.774
+        "score": 838041.774
       },
       "module": {
         "api_boundary_violation_count": 0,
@@ -174,30 +174,30 @@
         "leaked_public_value_count": 0,
         "max_public_parameter_count": 17,
         "missing_declared_api_count": 0,
-        "public_api_count": 2061,
+        "public_api_count": 2062,
         "public_concurrency_api_count": 8,
-        "public_parameter_count": 2368,
+        "public_parameter_count": 2369,
         "public_value_count": 555,
-        "score": 6823.139
+        "score": 6855.139
       },
       "project": {
         "file_count": 956,
         "repeated_normalized_blocks": 561991,
-        "score": 990568516.661,
-        "total_line_count": 695541
+        "score": 990568518.297,
+        "total_line_count": 695520
       }
     },
     "components": {
-      "branching": 75336.0,
-      "comment_balance": 1533.27,
-      "compressed_load": 5430.117,
+      "branching": 75312.0,
+      "comment_balance": 1532.43,
+      "compressed_load": 5430.143,
       "duplication": 41790582.0,
       "file_architecture": 1874.65,
       "function_size": 618287.274,
       "function_state": 142434.5,
-      "line_shape": 948752495.024,
+      "line_shape": 948752497.474,
       "module_boundary": 261.989,
-      "module_interface": 4686.5,
+      "module_interface": 4718.5,
       "naming_noise": 18476.25,
       "nesting": 2008.0
     },
@@ -813,8 +813,12 @@
         "suggested_action": "extract the repeated command/report/parser pattern into one shared builder"
       }
     ],
-    "excluded_file_count": 291,
+    "excluded_file_count": 295,
     "excluded_path_samples": [
+      {
+        "path": ".git/",
+        "reason": "vcs_dir"
+      },
       {
         "path": "centaur/__pycache__/",
         "reason": "artifact_dir:__pycache__"
@@ -828,6 +832,22 @@
         "reason": "artifact_dir:__pycache__"
       },
       {
+        "path": "scripts/_lib/mtp_builders/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
+        "path": "sim/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
+        "path": "sim/pipeline/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
+        "path": "sim/scheduler/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
         "path": "tests/__pycache__/",
         "reason": "artifact_dir:__pycache__"
       },
@@ -837,10 +857,6 @@
       },
       {
         "path": ".complexity-baseline.json",
-        "reason": "not_explicitly_included"
-      },
-      {
-        "path": ".git",
         "reason": "not_explicitly_included"
       },
       {
@@ -897,22 +913,6 @@
       },
       {
         "path": "cmake/ds4_install_consumer_test.cmake",
-        "reason": "not_explicitly_included"
-      },
-      {
-        "path": "cmake/ds4_sanitizers.cmake",
-        "reason": "not_explicitly_included"
-      },
-      {
-        "path": "cmake/ds4_warnings.cmake",
-        "reason": "not_explicitly_included"
-      },
-      {
-        "path": "deploy/README.md",
-        "reason": "not_explicitly_included"
-      },
-      {
-        "path": "deploy/compose/aeon-qwen36-dflash.spark-xs.yml.example",
         "reason": "not_explicitly_included"
       }
     ],
@@ -1161,19 +1161,19 @@
     "module_max_public_parameter_count": 17,
     "module_missing_declared_api_count": 0,
     "module_mutable_global_count": 9,
-    "module_public_api_count": 2061,
+    "module_public_api_count": 2062,
     "module_public_concurrency_api_count": 8,
-    "module_public_parameter_count": 2368,
+    "module_public_parameter_count": 2369,
     "module_public_side_effect_api_count": 329,
     "module_public_value_count": 555,
     "module_side_effect_domain_count": 14,
     "module_visible_value_count": 555,
-    "path": "/private/tmp/ds4-track2-diamond-cleanup-1345",
+    "path": "/private/tmp/ds4-track1-coord",
     "product_scope_mode": "ignore_aware",
     "profile_id": "locality_modularity_state_dry_v5",
     "project_module_complexity_score": 986.6,
     "repeated_normalized_blocks": 561991,
-    "score": 991413405.574,
+    "score": 991413415.21,
     "side_effect_function_count": 590,
     "status": "success",
     "top_files": [
@@ -1339,7 +1339,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/pipeline_quality/lane-d-pp1-redo-20260521T0412Z.jsonl",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/pipeline_quality/lane-d-pp1-redo-20260521T0412Z.jsonl",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 2089863,
@@ -1517,7 +1517,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/pipeline_quality/vllm-mxfp4-tp2-ds4-eval-20260523T0315Z.jsonl",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/pipeline_quality/vllm-mxfp4-tp2-ds4-eval-20260523T0315Z.jsonl",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 1735352,
@@ -1606,7 +1606,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/variable_max_output_tokens_result.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/variable_max_output_tokens_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 165323,
@@ -1695,7 +1695,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/live_smoke_multi_prefix_constrained_request.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_multi_prefix_constrained_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 154048,
@@ -1784,7 +1784,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/live_smoke_b512_constrained_1tok_request.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_b512_constrained_1tok_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 153021,
@@ -1873,7 +1873,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/live_smoke_b512_constrained_4tok_request.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_b512_constrained_4tok_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 153021,
@@ -1962,7 +1962,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/b512_full_vocab_result.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/b512_full_vocab_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 150574,
@@ -2051,7 +2051,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/mixed_output_modes_result.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/mixed_output_modes_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 150476,
@@ -2140,7 +2140,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/b512_constrained_numeric_result.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/b512_constrained_numeric_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 149575,
@@ -2229,7 +2229,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/live_smoke_mixed_output_modes_request.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_mixed_output_modes_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 144698,
@@ -2318,7 +2318,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/variable_max_output_tokens_request.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/variable_max_output_tokens_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 141322,
@@ -2407,7 +2407,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/b512_constrained_numeric_request.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/b512_constrained_numeric_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 141192,
@@ -2496,7 +2496,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/mixed_output_modes_request.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/mixed_output_modes_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 135682,
@@ -2585,7 +2585,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/live_smoke_b512_full_vocab_1tok_request.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_b512_full_vocab_1tok_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 119740,
@@ -2674,7 +2674,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/b512_full_vocab_request.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/b512_full_vocab_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 107903,
@@ -2763,7 +2763,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/live_smoke_mixed_output_modes_result.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_mixed_output_modes_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 90648,
@@ -2852,7 +2852,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/live_smoke_multi_prefix_constrained_result.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_multi_prefix_constrained_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 90531,
@@ -2941,7 +2941,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/live_smoke_b512_constrained_1tok_result.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_b512_constrained_1tok_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 90461,
@@ -3030,7 +3030,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/live_smoke_b512_constrained_4tok_result.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_b512_constrained_4tok_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 90461,
@@ -3119,7 +3119,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/batch_generate/live_smoke_b512_full_vocab_1tok_result.example.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_b512_full_vocab_1tok_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 90431,
@@ -3297,7 +3297,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/model_contract/deepseek_v4_flash/tokenizer.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/model_contract/deepseek_v4_flash/tokenizer.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 6367146,
@@ -3475,7 +3475,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/model_contract/deepseek_v4_flash/checkpoint_keys.txt",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/model_contract/deepseek_v4_flash/checkpoint_keys.txt",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 2396264,
@@ -3653,7 +3653,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/pipeline_quality/vllm-mxfp4-tp2-ds4-eval-20260523T0315Z.trace.txt",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/pipeline_quality/vllm-mxfp4-tp2-ds4-eval-20260523T0315Z.trace.txt",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 1614799,
@@ -3754,7 +3754,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/model_contract/deepseek_v4_flash/model.safetensors.index.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/model_contract/deepseek_v4_flash/model.safetensors.index.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 5371381,
@@ -3932,7 +3932,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track2-diamond-cleanup-1345/fixtures/vllm_config_tuning/ds4_vllm_spark45_safe_c256_piecewise_no_mtp_long_outputs_20260521.raw.json",
+        "path": "/private/tmp/ds4-track1-coord/fixtures/vllm_config_tuning/ds4_vllm_spark45_safe_c256_piecewise_no_mtp_long_outputs_20260521.raw.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 437796,
@@ -3949,7 +3949,7 @@
         "vague_identifier_count": 0
       }
     ],
-    "total_line_count": 695541,
+    "total_line_count": 695520,
     "version": 1
   },
   "status": "success"

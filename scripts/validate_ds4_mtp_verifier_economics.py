@@ -9,6 +9,9 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any, Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts._lib.json_utils import number_or_none
+
 
 FORMAT = "ds4-mtp-verifier-economics-v1"
 
@@ -54,19 +57,8 @@ TARGET_SUFFIX_BLOCKER_FIELDS = (
 )
 
 
-def _num(raw: Any) -> Optional[float]:
-	if raw is None:
-		return None
-	if isinstance(raw, (int, float)):
-		return float(raw)
-	try:
-		return float(str(raw).strip())
-	except (TypeError, ValueError):
-		return None
-
-
 def _require_nonnegative(errors: list[str], obj: dict[str, Any], field: str) -> None:
-	val = _num(obj.get(field))
+	val = number_or_none(obj.get(field))
 	if val is None or val < 0.0:
 		errors.append(f"{field} must be a non-negative number")
 
@@ -83,24 +75,24 @@ def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 			continue
 		if field in obj:
 			_require_nonnegative(errors, obj, field)
-	baseline = _num(obj.get("baseline_tps"))
-	mtp = _num(obj.get("mtp_tps"))
-	speedup = _num(obj.get("speedup_vs_baseline"))
-	accepted = _num(obj.get("accepted_draft_tokens"))
-	attempted = _num(obj.get("attempted_draft_tokens"))
-	accept_rate = _num(obj.get("accept_rate"))
-	invocations = _num(obj.get("target_verifier_invocation_count"))
-	positions = _num(obj.get("target_positions_verified"))
-	target_ms = _num(obj.get("target_eval_ms"))
-	output_head_invocations = _num(obj.get("output_head_invocation_count"))
-	output_head_rows = _num(obj.get("output_head_rows"))
-	full_rows = _num(obj.get("full_vocab_logits_rows"))
-	top1_rows = _num(obj.get("top1_only_rows"))
-	emitted_tokens = _num(obj.get("emitted_tokens"))
-	generation_wall_ms = _num(obj.get("generation_wall_ms_est"))
-	accounted_ms = _num(obj.get("accounted_timing_ms"))
-	unaccounted_ms = _num(obj.get("unaccounted_generation_wall_ms"))
-	coverage = _num(obj.get("timing_coverage_rate"))
+	baseline = number_or_none(obj.get("baseline_tps"))
+	mtp = number_or_none(obj.get("mtp_tps"))
+	speedup = number_or_none(obj.get("speedup_vs_baseline"))
+	accepted = number_or_none(obj.get("accepted_draft_tokens"))
+	attempted = number_or_none(obj.get("attempted_draft_tokens"))
+	accept_rate = number_or_none(obj.get("accept_rate"))
+	invocations = number_or_none(obj.get("target_verifier_invocation_count"))
+	positions = number_or_none(obj.get("target_positions_verified"))
+	target_ms = number_or_none(obj.get("target_eval_ms"))
+	output_head_invocations = number_or_none(obj.get("output_head_invocation_count"))
+	output_head_rows = number_or_none(obj.get("output_head_rows"))
+	full_rows = number_or_none(obj.get("full_vocab_logits_rows"))
+	top1_rows = number_or_none(obj.get("top1_only_rows"))
+	emitted_tokens = number_or_none(obj.get("emitted_tokens"))
+	generation_wall_ms = number_or_none(obj.get("generation_wall_ms_est"))
+	accounted_ms = number_or_none(obj.get("accounted_timing_ms"))
+	unaccounted_ms = number_or_none(obj.get("unaccounted_generation_wall_ms"))
+	coverage = number_or_none(obj.get("timing_coverage_rate"))
 	if baseline is not None and mtp is not None and speedup is not None and baseline > 0.0:
 		if abs(speedup - (mtp / baseline)) > 0.000001:
 			errors.append("speedup_vs_baseline must equal mtp_tps / baseline_tps")
@@ -121,17 +113,17 @@ def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 		elif abs(accept_rate - (accepted / attempted)) > 0.000001:
 			errors.append("accept_rate must equal accepted_draft_tokens / attempted_draft_tokens")
 	if invocations is not None and positions is not None:
-		per = _num(obj.get("target_positions_per_invocation"))
+		per = number_or_none(obj.get("target_positions_per_invocation"))
 		if invocations <= 0.0:
 			errors.append("target_verifier_invocation_count must be > 0")
 		elif per is not None and abs(per - (positions / invocations)) > 0.000001:
 			errors.append("target_positions_per_invocation must equal positions / invocations")
 	if invocations is not None and target_ms is not None and invocations > 0.0:
-		per = _num(obj.get("target_eval_ms_per_invocation"))
+		per = number_or_none(obj.get("target_eval_ms_per_invocation"))
 		if per is not None and abs(per - (target_ms / invocations)) > 0.000001:
 			errors.append("target_eval_ms_per_invocation must equal target_eval_ms / invocations")
 	if positions is not None and target_ms is not None and positions > 0.0:
-		per = _num(obj.get("target_eval_ms_per_verified_position"))
+		per = number_or_none(obj.get("target_eval_ms_per_verified_position"))
 		if per is not None and abs(per - (target_ms / positions)) > 0.000001:
 			errors.append("target_eval_ms_per_verified_position must equal target_eval_ms / target_positions_verified")
 	if output_head_invocations is not None and output_head_rows is not None and output_head_rows < output_head_invocations:
