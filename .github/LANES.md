@@ -50,25 +50,30 @@ On every runtime, run these steps in order. Stop at the first one that produces 
      Post a "starting" comment. Work.
 
 3. Claim from backlog
-   gh issue list --label "track:backlog" --label "status:queued" --state open \
-     --json number,labels,title,body --jq '.[]' \
-   → filter to issues whose `hw:*` label matches currently free hardware
-     (read the coordination issue's hardware table).
-   → sort by prio (P0 > P1 > P2). Pick top.
-   → claim atomically:
-       gh issue edit <N> \
-         --remove-label "track:backlog" --add-label "track:<your-N>" \
-         --remove-label "status:queued" --add-label "status:claimed"
-   → re-fetch to verify the edit succeeded and the labels are now yours
-     (another track may have claimed in parallel; if so, retry with next).
-   → post a "claiming" comment with your name and an ETA.
+   Run `scripts/lane_claim_next.sh <your-N>`.
+   The script:
+     - Reads which Sparks are currently reserved (by open status:in-progress
+       issues carrying hw:spark-N labels)
+     - Walks the backlog P0 -> P1 -> P2
+     - Picks the first issue whose required Sparks are ALL free AND whose
+       declared dependencies are all closed
+     - Atomically transitions labels (track:backlog -> track:<N>,
+       status:queued -> status:claimed)
+     - Posts a /claim comment naming the hardware reservation
+
+   You no longer pass "free-hw-labels" as an argument. The script reads
+   the actual reservation state from GitHub. You also no longer need to
+   consult a coordination-issue hardware table; the labels themselves
+   are the reservation.
+
+   If the script returns "none", every backlog item is either hardware-
+   reserved by an in-progress issue or dependency-blocked. Go to step 4.
 
 4. Idle exit (gated)
    You may exit idle ONLY if all three are true:
      a. You posted the five-question comment from the Anti-stall protocol
         on whatever you were just doing (if you were working).
-     b. lane_claim_next.sh <your-N> with EVERY free hw label you can use,
-        including hw:none, returned "none".
+     b. lane_claim_next.sh <your-N> returned "none". (One call, no args.)
      c. Your idle comment on #1190 names at least one specific backlog gap
         (an issue that would let you work if it existed). Do not just say
         "no compatible work."
@@ -104,22 +109,51 @@ GitHub's label edits are not transactional. The protocol is:
 
 This is a soft contention model. With four tracks claiming from a backlog of ~10, collisions are rare.
 
-## Hardware reservation
+## Hardware reservation (task-bound, not agent-bound)
 
-Hardware contention is enforced by two mechanisms working together:
+Hardware is reserved by *issues*, not by *agents*. There are 8 Sparks (`spark-0` through `spark-7`); each has a label `hw:spark-N`. A Spark is **reserved** if any open issue with `status:in-progress` carries its label. Otherwise **free**.
 
-**1. The `hw:*` label on each work issue.** Valid values:
-- `hw:none` — no hardware needed, pure code work
-- `hw:any-1` — needs exactly one Spark, any will do
-- `hw:any-3` — needs exactly three Sparks, any group will do
-- `hw:spark-2-3-4`, `hw:spark-3-4-5` — specific PP=3 layouts
-- `hw:spark-6` — isolated Spark6 only (for ds4-eval baselines)
+### Label rules
 
-**2. The hardware table in the coordination issue.** Before claiming an issue with a non-`hw:none` label, read the table. If the required Sparks are owned by another track, do not claim. Pick a different issue.
+Each work issue carries one of these hardware shapes:
 
-On claim, edit the coordination table via a new comment with the full updated table. **Latest comment is authoritative.** On PR merge or task completion, comment again releasing the hardware.
+- `hw:none` — no Spark required; always claimable
+- `hw:spark-N` (one or more) — those specific Sparks must all be free. An issue needing Spark-3, Spark-4, and Spark-5 carries three labels: `hw:spark-3` + `hw:spark-4` + `hw:spark-5`
+- `hw:any-1` — needs one free Spark, any of the 8
+- `hw:any-3` — needs three free Sparks, any combination
 
-Never `--add-label` directly to the coordination issue's hw rows. The table-in-comment pattern is the protocol.
+**Deprecated:** composite labels like `hw:spark-3-4-5`. Decompose to per-node labels.
+
+### The source of truth is the issue labels, not a coordination table
+
+There is no "ownership table" to keep in sync. The reservation state is computed live from the labels on open `status:in-progress` issues:
+
+```
+$ scripts/lane_hardware_free.sh
+  spark-0: free
+  spark-1: free
+  spark-2: free
+  spark-3: RESERVED by #1208 (Investigate vLLM throughput regression)
+  spark-4: RESERVED by #1208
+  spark-5: RESERVED by #1208
+  spark-6: free
+  spark-7: free
+
+  any-N capacity: 5 free Sparks of 8
+```
+
+If a Spark is reserved, no other in-progress issue can hold its label. The script `scripts/lane_claim_next.sh <track>` walks the backlog and atomically claims the first issue whose hardware is fully free.
+
+### How an agent uses this
+
+- Before claiming, `lane_claim_next.sh` checks hardware availability for you. You do not need to read a table.
+- After claiming an issue with hw labels, when you flip to `status:in-progress`, those Sparks are reserved.
+- When you finish (PR merged) or release (status flipped back to queued / blocked), the Sparks are immediately free for the next claimant.
+- The script never picks an issue whose hardware is already in use by another `status:in-progress` issue.
+
+### Track:N is no longer hardware-related
+
+Track labels are agent slot handles only. They do not carry hardware affinity. The autonomous loop chooses work by **what's free right now**, not by what a particular track has done in the past. If track:2 happens to claim an issue requiring Spark-4, that does not "give track:2 Spark-4" — it gives the *issue* Spark-4 until the issue closes.
 
 ## Anti-stall protocol (read this twice)
 
