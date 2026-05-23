@@ -6,12 +6,16 @@ on:
       - 'scripts/**'
       - 'docs/**'
       - 'tests/**'
+      - 'requirements.txt'
+      - '.audit-baseline.json'
   push:
     branches: [main]
     paths:
       - 'scripts/**'
       - 'docs/**'
       - 'tests/**'
+      - 'requirements.txt'
+      - '.audit-baseline.json'
 
 jobs:
   audit:
@@ -21,8 +25,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install audit dependencies
-        run: python3 -m pip install bashlex pytest
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt pytest
       - name: Run code-rot audit
         run: python3 scripts/audit_code_rot.py
       - name: Run Centaur complexity gate
