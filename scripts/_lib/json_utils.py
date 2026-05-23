@@ -59,6 +59,22 @@ def number_or_none(raw: Any) -> float | None:
 		return None
 
 
+def check_bool_field(obj: dict[str, Any], field: str, path: Path, errors: list[str]) -> bool:
+	value = obj.get(field)
+	if not isinstance(value, bool):
+		errors.append(f"{path}: {field} must be a boolean")
+		return False
+	return bool(value)
+
+
+def check_non_empty_string_field(obj: dict[str, Any], field: str, path: Path, errors: list[str]) -> str:
+	value = obj.get(field)
+	if not isinstance(value, str) or value.strip() == "":
+		errors.append(f"{path}: {field} must be a non-empty string")
+		return ""
+	return value.strip()
+
+
 def max_number(values: Any) -> float:
 	if not isinstance(values, list):
 		return 0.0

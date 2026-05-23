@@ -50,12 +50,12 @@
         "flags": [
           "large_file_over_1000_lines"
         ],
-        "function_count": 53,
+        "function_count": 52,
         "kind": "file_architecture",
-        "line_count": 2181,
+        "line_count": 2179,
         "line_share": 0.0031,
         "relative_path": "scripts/model_contract_build_deepseek_v4_flash_contract.py",
-        "score": 118.1,
+        "score": 117.9,
         "severity": "warning",
         "suggested_action": "split stable command families, report shaping, parser construction, and ledger helpers into separate modules"
       },
@@ -76,12 +76,12 @@
         "flags": [
           "large_file_over_1000_lines"
         ],
-        "function_count": 17,
+        "function_count": 16,
         "kind": "file_architecture",
-        "line_count": 1925,
+        "line_count": 1923,
         "line_share": 0.0028,
         "relative_path": "scripts/model_contract_verify_deepseek_v4_flash.py",
-        "score": 92.5,
+        "score": 92.3,
         "severity": "warning",
         "suggested_action": "split stable command families, report shaping, parser construction, and ledger helpers into separate modules"
       },
@@ -163,7 +163,7 @@
         "max_function_lines": 1755,
         "max_locals": 321,
         "max_parameters": 23,
-        "score": 838041.774
+        "score": 837860.493
       },
       "module": {
         "api_boundary_violation_count": 0,
@@ -174,36 +174,36 @@
         "leaked_public_value_count": 0,
         "max_public_parameter_count": 17,
         "missing_declared_api_count": 0,
-        "public_api_count": 2062,
+        "public_api_count": 2039,
         "public_concurrency_api_count": 8,
-        "public_parameter_count": 2369,
+        "public_parameter_count": 2350,
         "public_value_count": 555,
-        "score": 6855.139
+        "score": 6733.239
       },
       "project": {
         "file_count": 956,
         "repeated_normalized_blocks": 561991,
-        "score": 990568518.297,
-        "total_line_count": 695520
+        "score": 990568408.415,
+        "total_line_count": 695383
       }
     },
     "components": {
-      "branching": 75312.0,
-      "comment_balance": 1532.43,
-      "compressed_load": 5430.143,
+      "branching": 75170.0,
+      "comment_balance": 1529.04,
+      "compressed_load": 5429.201,
       "duplication": 41790582.0,
-      "file_architecture": 1874.65,
-      "function_size": 618287.274,
-      "function_state": 142434.5,
-      "line_shape": 948752497.474,
+      "file_architecture": 1874.25,
+      "function_size": 618272.493,
+      "function_state": 142410.0,
+      "line_shape": 948752499.674,
       "module_boundary": 261.989,
-      "module_interface": 4718.5,
-      "naming_noise": 18476.25,
+      "module_interface": 4597.0,
+      "naming_noise": 18368.5,
       "nesting": 2008.0
     },
     "concurrency_module_count": 3,
     "concurrency_touchpoint_count": 11,
-    "cross_module_call_count": 301,
+    "cross_module_call_count": 280,
     "direction": "lower_is_better",
     "duplication_findings": [
       {
@@ -926,7 +926,7 @@
     "functions_over_100": 69,
     "functions_over_50": 240,
     "included_file_count": 956,
-    "largest_file_line_share": 0.3844,
+    "largest_file_line_share": 0.3845,
     "limit": 25,
     "max_exit_point_count": 26,
     "max_file_function_count": 183,
@@ -1038,11 +1038,11 @@
         "leaked_public_name_count": 0,
         "missing_declared_api_count": 0,
         "mutable_global_count": 0,
-        "public_api_count": 47,
+        "public_api_count": 46,
         "public_concurrency_api_count": 0,
-        "public_side_effect_api_count": 6,
-        "relative_path": "scripts/model_contract_build_deepseek_v4_flash_contract.py",
-        "score": 118.0,
+        "public_side_effect_api_count": 4,
+        "relative_path": "scripts/pipeline_session.py",
+        "score": 106.75,
         "severity": "warning",
         "suggested_action": "reduce the preserved API, isolate side effects, and keep concurrency behind one narrow boundary",
         "uses_declared_public_api": false
@@ -1058,9 +1058,9 @@
         "mutable_global_count": 0,
         "public_api_count": 46,
         "public_concurrency_api_count": 0,
-        "public_side_effect_api_count": 4,
-        "relative_path": "scripts/pipeline_session.py",
-        "score": 106.75,
+        "public_side_effect_api_count": 5,
+        "relative_path": "scripts/model_contract_build_deepseek_v4_flash_contract.py",
+        "score": 106.0,
         "severity": "warning",
         "suggested_action": "reduce the preserved API, isolate side effects, and keep concurrency behind one narrow boundary",
         "uses_declared_public_api": false
@@ -1161,20 +1161,20 @@
     "module_max_public_parameter_count": 17,
     "module_missing_declared_api_count": 0,
     "module_mutable_global_count": 9,
-    "module_public_api_count": 2062,
+    "module_public_api_count": 2039,
     "module_public_concurrency_api_count": 8,
-    "module_public_parameter_count": 2369,
-    "module_public_side_effect_api_count": 329,
+    "module_public_parameter_count": 2350,
+    "module_public_side_effect_api_count": 319,
     "module_public_value_count": 555,
     "module_side_effect_domain_count": 14,
     "module_visible_value_count": 555,
     "path": "/private/tmp/ds4-track1-coord",
     "product_scope_mode": "ignore_aware",
     "profile_id": "locality_modularity_state_dry_v5",
-    "project_module_complexity_score": 986.6,
+    "project_module_complexity_score": 943.517,
     "repeated_normalized_blocks": 561991,
-    "score": 991413415.21,
-    "side_effect_function_count": 590,
+    "score": 991413002.147,
+    "side_effect_function_count": 580,
     "status": "success",
     "top_files": [
       {
@@ -3949,7 +3949,7 @@
         "vague_identifier_count": 0
       }
     ],
-    "total_line_count": 695520,
+    "total_line_count": 695383,
     "version": 1
   },
   "status": "success"

@@ -12,8 +12,10 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from scripts._lib.json_utils import check_bool_field
     from scripts._lib.json_utils import load_json as _load_json
 except ImportError:
+    from _lib.json_utils import check_bool_field
     from _lib.json_utils import load_json as _load_json
 
 
@@ -97,11 +99,7 @@ def as_str(obj: dict[str, Any], field: str, path: Path, errors: list[str], allow
 
 
 def check_bool(obj: dict[str, Any], field: str, path: Path, errors: list[str]) -> bool:
-    value = obj.get(field)
-    if not isinstance(value, bool):
-        errors.append(err(path, f"{field} must be a boolean"))
-        return False
-    return bool(value)
+    return check_bool_field(obj, field, path, errors)
 
 
 def check_int(obj: dict[str, Any], field: str, path: Path, errors: list[str]) -> int:

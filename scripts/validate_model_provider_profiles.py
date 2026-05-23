@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from scripts._lib.json_utils import check_non_empty_string_field
     from scripts._lib.json_utils import load_json as _load_json
 except ImportError:
+    from _lib.json_utils import check_non_empty_string_field
     from _lib.json_utils import load_json as _load_json
 
 
@@ -54,11 +56,7 @@ def err(path: Path, msg: str) -> str:
 
 
 def as_str(obj: dict[str, Any], field: str, path: Path, errors: list[str]) -> str:
-	value = obj.get(field)
-	if not isinstance(value, str) or value.strip() == "":
-		errors.append(err(path, f"{field} must be a non-empty string"))
-		return ""
-	return value.strip()
+	return check_non_empty_string_field(obj, field, path, errors)
 
 
 def check_number_or_null(obj: dict[str, Any], field: str, path: Path, errors: list[str]) -> float | None:
