@@ -26,9 +26,75 @@ This is the canonical document for this topic. Update this file instead of addin
 - `ops-firewall-allowlist.md`: Ops: Firewall Allowlist Examples (Human-run) (84 lines).
 - `ops-ssh-network-runbook.md`: Ops: SSH + Network Runbook (Ordered Spark Inventory) (226 lines).
 
+## Lazy vLLM/Sparkrun Model Front Door
+
+Use `scripts/ds4_vllm_lazy_proxy.py` when a Spark should advertise every copied local model without pinning one model's weights and KV cache in VRAM all day. Plain `vllm serve` loads one base model at process start; vLLM sleep mode only helps after that model already exists. The lazy proxy stays lightweight, lists local model directories through `/v1/models`, starts the requested vLLM backend on the first OpenAI request containing `"model": "<id>"`, and releases the backend on explicit release or idle timeout.
+
+As of the 2026-05-23 rollout, Spark0, Spark1, Spark2, Spark3, Spark6, and Spark7 run the lazy proxy on `127.0.0.1:8000` with managed backend port `18000`. Spark4 and Spark5 keep the existing two-node DeepSeek V4 Flash service on `:8000`, so their lazy proxies run on `127.0.0.1:8010` with backend port `18100`. Spark2 was not in the first pass only because the work request scoped the rollout to "non-spark2 sparks"; it has the same lazy setup now.
+
+| Node | Lazy endpoint | Backend | Notes |
+|---|---|---|---|
+| spark0 | `http://127.0.0.1:8000/v1` | `127.0.0.1:18000` | 27 model entries, idle when `active=false` |
+| spark1 | `http://127.0.0.1:8000/v1` | `127.0.0.1:18000` | 27 model entries, idle when `active=false` |
+| spark2 | `http://127.0.0.1:8000/v1` | `127.0.0.1:18000` | 27 model entries, idle when `active=false` |
+| spark3 | `http://127.0.0.1:8000/v1` | `127.0.0.1:18000` | 27 model entries, idle when `active=false` |
+| spark4 | `http://127.0.0.1:8010/v1` | `127.0.0.1:18100` | `:8000` remains the two-node DeepSeek service |
+| spark5 | `http://127.0.0.1:8010/v1` | `127.0.0.1:18100` | `:8000` remains the two-node DeepSeek headless rank |
+| spark6 | `http://127.0.0.1:8000/v1` | `127.0.0.1:18000` | 27 model entries, idle when `active=false` |
+| spark7 | `http://127.0.0.1:8000/v1` | `127.0.0.1:18000` | 27 model entries, idle when `active=false` |
+
+The scanner treats Hugging Face layout models as runnable when they have `config.json`, `tokenizer_config.json`, and weights under `~/models/hf`. It also includes Mistral-native layout models with `params.json`, `tokenizer_config.json`, and consolidated safetensors by launching vLLM with `--config-format mistral --tokenizer-mode mistral --load-format mistral`. This is why `mistralai/Mistral-Small-4-119B-2603-NVFP4` appears even though it does not have an HF `config.json`.
+
+Install or refresh the proxy scripts on a Spark:
+
+```sh
+rsync -a scripts/ds4_vllm_lazy_proxy.py scripts/ds4_vllm_lazy_proxy.sh scripts/ds4_vllm_lazy_release.sh sparkN:bin/
+ssh sparkN 'chmod +x ~/bin/ds4_vllm_lazy_proxy.py ~/bin/ds4_vllm_lazy_proxy.sh ~/bin/ds4_vllm_lazy_release.sh'
+```
+
+Start the standard single-node lazy endpoint:
+
+```sh
+ssh sparkN 'IDLE_TIMEOUT=1800 FRONT_PORT=8000 BACKEND_PORT=18000 WAIT=1 ~/bin/ds4_vllm_lazy_proxy.sh'
+```
+
+Start the side-port lazy endpoint on Spark4/Spark5 while preserving DeepSeek on `:8000`:
+
+```sh
+ssh spark4 'IDLE_TIMEOUT=1800 FRONT_PORT=8010 BACKEND_PORT=18100 WAIT=1 ~/bin/ds4_vllm_lazy_proxy.sh'
+ssh spark5 'IDLE_TIMEOUT=1800 FRONT_PORT=8010 BACKEND_PORT=18100 WAIT=1 ~/bin/ds4_vllm_lazy_proxy.sh'
+```
+
+Check model inventory and active VRAM state:
+
+```sh
+ssh sparkN 'curl -fsS http://127.0.0.1:8000/v1/models | python3 -c "import sys,json; print(len(json.load(sys.stdin)[\"data\"]))"'
+ssh sparkN 'curl -fsS http://127.0.0.1:8000/ds4/status | python3 -m json.tool'
+```
+
+Release a loaded model and return the Spark to proxy-only VRAM usage:
+
+```sh
+ssh sparkN 'PORT=8000 ~/bin/ds4_vllm_lazy_release.sh'
+ssh spark4 'PORT=8010 ~/bin/ds4_vllm_lazy_release.sh'
+```
+
+Sparkrun/Shinka can select any advertised model by name. The first LLM request cold-starts that backend, so the first request pays vLLM weight load and profiling time:
+
+```sh
+ssh spark0 'MODEL_NAME=Qwen/Qwen3.5-0.8B ENDPOINT=http://127.0.0.1:8000/v1 NUM_GENERATIONS=2 MAX_TOKENS=64 ~/bin/ds4_shinka_longmem_smoke.sh'
+```
+
+Bulk runtime/model transfers should use the Spark 200G ring addresses. The lazy proxy scripts are small, but refreshing the full vLLM runtime or model trees should stay on the `10.10.x.x` fabric.
+
+Important caveat: lazy launch makes all copied models addressable, but it does not make a too-large model fit on one GPU. Very large checkpoints may still require tensor/pipeline parallel launch policy or the existing DeepSeek-style multi-node service.
+
 ## Command Inventory
 
 - `ops-spark012-network-ports.md`: `curl -fsS "http://127.0.0.1:${DS4_METRICS_PORT}/metrics" | head`
+- `vllm-sparkrun-lazy`: `ssh sparkN 'curl -fsS http://127.0.0.1:8000/ds4/status | python3 -m json.tool'`
+- `vllm-sparkrun-lazy`: `ssh sparkN 'PORT=8000 ~/bin/ds4_vllm_lazy_release.sh'`
+- `vllm-sparkrun-lazy`: `ssh spark0 'MODEL_NAME=Qwen/Qwen3.5-0.8B ENDPOINT=http://127.0.0.1:8000/v1 NUM_GENERATIONS=2 MAX_TOKENS=64 ~/bin/ds4_shinka_longmem_smoke.sh'`
 - `ops-run-notes.md`: `./scripts/ops_spark_ring_ops_check.sh --out "$RUN_DIR/ops_check_pre.txt" \`
 - `ops-run-notes.md`: `./scripts/ops_spark_ring_ops_check.sh --out "$RUN_DIR/ops_check_staged_ready.txt" \`
 - `ops-spark-ring-network-ports.md`: `curl -fsS "http://127.0.0.1:${DS4_METRICS_PORT}/metrics" | head`
