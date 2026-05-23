@@ -126,7 +126,41 @@ The diamond-refinement domain is the canonical instance of mechanical refinement
 2. **The test set is real code we already own.** No domain authoring required for the first batch — the codebase is the domain.
 3. **The diamond standard from §1.5 is the fitness function.** The same standard the factory is supposed to enforce on its own output. Self-application: the first job of the diamond-making machine is to make the diamond-making machine itself diamond.
 
-**Issue #1345** captures the implementation. Phase A is a single track's claim in parallel with halt-mode cleanup.
+**The diamond-making process is itself two state machines, run in sequence (ct direction 2026-05-23):**
+
+### 2.5.1. The mechanical refinement loop (#1345 — Sparks, local models, zero API cost)
+
+Within-function transformations. Reduce LOC, inline single-caller helpers, eliminate exact duplicates, decompose long functions. Each transformation is small enough that small-models on Sparks handle it competently. Verification is byte-identical test output + audit-score improvement.
+
+**Output of this loop:** diesel smoke → coal. The codebase becomes one where each remaining function does roughly one thing, with no obvious sprawl.
+
+### 2.5.2. The frontier-intelligence clustering loop (#1348 — frontier models, after coal is visible)
+
+Cross-function transformations. ct framing:
+> "there is still need for frontier intelligence in identifying non-identical but similar enough pieces of coal that can be combined. The combining two pieces of coal into one denser piece (without making it more complex!) that can only happen after the smoke clears and we see all the lumps of coal and can properly categorize them to see which ones are neighbors."
+
+The loop:
+1. Compute the similarity matrix across all functions using Centaur's `dry_similarity` (returns `llm_judgement_required: True` for non-byte-identical pairs — exactly the cases needing frontier reasoning).
+2. Cluster by similarity threshold. Each cluster = `{f1, f2, ..., fN}` of combinable functions.
+3. Frontier model proposes a unified replacement that covers all N use cases, reduces total LOC, and preserves byte-identical behavior at every original call site.
+4. Verify byte-identically. Verify audit-score improves.
+5. Commit as one PR removing N originals, adding 1 unified function.
+
+**Output of this loop:** coal → diamond. The remaining functions are not just non-duplicate; they are *unique and necessary*.
+
+### 2.5.3. Model evolvability (the meta-loop point)
+
+ct: "the whole point is we can test a variety of models and evolve the most efficient diamond making one."
+
+In both loops, the model choice is a *parameter* of the state machine, not a hardcoded selection. Module 5 (Mutator) varies model_id, prompt template, threshold, retry policy. Module 9 (Promoter) keeps configurations that produce the highest `(diamond_delta × verification_success_rate) / cost_per_attempt` ratio.
+
+Over generations, the diamond-maker evolves toward the most cost-efficient model for each loop:
+- For mechanical refinement: probably a small 3-7B model is enough (small structural transformations). The evolution loop finds the cheapest model that maintains an acceptable success rate.
+- For clustering: probably needs a stronger model (the synthesis step is hard). But "stronger" might mean Sonnet, not Opus — same Centaur strength-reduction principle says use the cheapest sufficient.
+
+This is not theoretical. DeepSeek-V4-Flash at 30 tok/s on the Spark stack is fast enough to be tested in either loop. Once the evolution loop runs, the system *empirically* determines which model class wins for each kind of diamond work.
+
+**Issues #1345 (mechanical) and #1348 (clustering) capture the implementation.** #1345 ships first; #1348 runs after #1345 has substantially completed (clustering noisy code produces noise).
 
 ---
 
@@ -329,7 +363,7 @@ The split is deliberate: `domain.yaml` is the *contract* the factory reads to kn
 - **Swap-node**: replace one node with another from the library that has the same type signature.
 - **Insert-node**: at an edge `A → B`, insert a node `N` such that `A → N → B` is type-correct.
 - **Delete-node**: remove a node whose input and output types are compatible (effectively short-circuiting).
-- **Reparameterize**: change one node's config (prompt template, temperature, model tier requirement, etc.) without changing structure.
+- **Reparameterize**: change one node's config (prompt template, temperature, **model_id (which specific model — frontier, mid-tier, local)**, model tier requirement, retry policy, etc.) without changing structure. **The model choice is a first-class evolvable parameter, not a hardcoded selection.** Per ct direction 2026-05-23: "we can test a variety of models and evolve the most efficient diamond making one." This is how Centaur empirically discovers which model class is cheapest-sufficient for which kind of node.
 - **Splice**: take a sub-path from another candidate (especially a recent winner from a sibling domain) and graft into this one.
 - **Promote-validator**: take a node currently running as a validator and elevate it to a generator (or vice versa).
 - **Strength-reduce**: replace an LLM node with a deterministic-op subgraph that approximates its behavior (when one exists in the library).
@@ -915,9 +949,9 @@ Resolved decisions are recorded here as part of the spec's truth. Deferred items
 
 This is the *specification*. It is not the project plan. The dashboard tracks progress against this spec. The issue backlog drives the next concrete work. The protocol coordinates the agents doing the work.
 
-This document is expected to be revised. Every revision must be a PR with a `Closes #N` reference where N is a "spec amendment" issue summarizing the change. The current revision is **v1.4, 2026-05-23T07:00Z** (added §2.5 — the diamond refinement domain as the first real Centaur state-machine use case. Captures the creative-prototyping vs mechanical-refinement methodology split, names the diamond-making loop as the canonical instance of mechanical refinement, anchors implementation in issue #1345. Sparks host the workload at zero frontier-API cost).
+This document is expected to be revised. Every revision must be a PR with a `Closes #N` reference where N is a "spec amendment" issue summarizing the change. The current revision is **v1.5, 2026-05-23T07:30Z** (§2.5 extended with the two-loop architecture: §2.5.1 mechanical refinement on Sparks (#1345) for within-function transformations, §2.5.2 frontier-intelligence clustering (#1348) for cross-function N-to-1 combinations after the codebase reaches coal level, §2.5.3 model evolvability — the model choice in both loops is a first-class evolvable parameter, not hardcoded. Module 5 mutator Reparameterize operator extended to call out model_id explicitly).
 
-Earlier revisions: **v1.3, 2026-05-23T06:30Z** (§1.5 diamond-quality standard; Module 8 artifact_quality scoring). **v1.2, 2026-05-23T03:30Z** (Module 11 KV-cache archive subsystem; Module 7 batched-throughput + real quality). **v1.1, 2026-05-21T17:30Z** (founder Q1/Q2/Q3 resolved; LongMem zeroth-domain added).
+Earlier revisions: **v1.4, 2026-05-23T07:00Z** (§2.5 added — diamond refinement domain as first real Centaur use case). **v1.3, 2026-05-23T06:30Z** (§1.5 diamond-quality standard; Module 8 artifact_quality scoring). **v1.2, 2026-05-23T03:30Z** (Module 11 KV-cache archive; Module 7 batched-throughput + real quality). **v1.1, 2026-05-21T17:30Z** (founder Q1/Q2/Q3 resolved; LongMem zeroth-domain added).
 
 Earlier revisions: **v1.2, 2026-05-23T03:30Z** (Module 11 expanded to cover the DAS-backed KV-cache archive subsystem; Module 7 extended to require batched-throughput economics and real quality measurement). **v1.1, 2026-05-21T17:30Z** (founder review applied — Q1, Q2, Q3 resolved; LongMem zeroth-domain added).
 
