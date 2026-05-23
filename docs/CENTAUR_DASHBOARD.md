@@ -6,7 +6,7 @@ This is a canonical document. Update this file instead of adding overlapping doc
 
 > **Specification:** [`docs/CENTAUR_SPECIFICATION.md`](CENTAUR_SPECIFICATION.md) — system modules, end-state walkthrough, what "done" looks like. This dashboard reports progress against that spec.
 
-> Last meaningful update: **2026-05-22T13:30Z** (hardware-bound-to-tasks restructure: per-node `hw:spark-N` labels become reservations held by status:in-progress issues; composite labels deprecated; LANES.md decision tree updated; `lane_hardware_free.sh` reports live reservation state; dashboard hardware count corrected to 8/8 nodes available)
+> Last meaningful update: **2026-05-23T04:15Z** (halt-mode cleanup: docs distilled to 25 canonical files; Centaur complexity metric wired into ds4_on_spark as a PR gate with baseline recorded in `.complexity-baseline.json` and profile `locality_modularity_state_dry_v5`)
 
 > **Naming note.** The Centaur vision document names four *workstream components* (factory core, memory domain, providers, product/UI). The coordination system uses agent *track slots* (`track:1`, `track:2`, `track:3`, `track:4`). These are not the same thing despite the unfortunate number overlap. **Any track slot may work on any workstream component.** A track is an agent handle with accumulated PR history; it is not a job description. This dashboard reports component progress; the stall ledger reports per-track-slot behavior.
 
@@ -100,7 +100,7 @@ Largest lead: truncation is 13/19 failures, so the 79.3% baseline should be trea
 |---|---:|---|
 | Centaur API server | 50 | `CENTAUR_API_SERVER.md` documents the surface; some endpoints implemented; not exposed externally |
 | Run inspection / replay | 40 | Replayable bundle concept exists, used by `dogfood-*` subcommands; UI surfacing unclear |
-| Debug / complexity gates | 65 | 8 `complexity-*` subcommands, scan/drilldown/gate/calibrate/trend implemented; used in CI for centaur itself |
+| Debug / complexity gates | 75 | Centaur `centaur_complexity` profile `locality_modularity_state_dry_v5` now gates this repo via `scripts/score_repo_complexity.py gate`; baseline is tracked in `.complexity-baseline.json` across 942 scanned files |
 | Procedure registry / fingerprints | 70 | 35 `procedure-*` subcommands; fingerprint-based repeated-failure detection works |
 | Release gating | 20 | No formal release-cut tooling; merges are the de-facto release events |
 | Dashboard (this file) | NEW | Living progress view; updated alongside real progress |
