@@ -302,6 +302,18 @@ def answer_matches(case: EvalCase, observed: str, generated: str) -> bool:
 	return observed == _normalize_integer(case.answer)
 
 
+def answer_marker_present(generated: str) -> bool:
+	return re.search(r"(?im)\banswer\s*[:：]", _visible_answer_text(generated)) is not None
+
+
+def result_quality_metadata(generated: str, generated_tokens: int, max_tokens: int) -> dict[str, Any]:
+	return {
+		"max_tokens": max_tokens,
+		"length_capped": generated_tokens >= max_tokens,
+		"answer_marker_present": answer_marker_present(generated),
+	}
+
+
 def _last_json_object(stdout: str) -> dict[str, Any] | None:
 	for text in (stdout.strip(), *reversed([line.strip() for line in stdout.splitlines() if line.strip()])):
 		try:
@@ -594,6 +606,7 @@ def load_ds4_eval_trace(path: Path, args: argparse.Namespace) -> tuple[list[dict
 	trace_artifact = args.ds4_eval_trace_artifact or str(path)
 	rc_artifact = args.ds4_eval_rc_artifact or args.ds4_eval_rc
 	returncode = _optional_rc(args.ds4_eval_rc)
+	max_tokens = _int_field(header_fields, "max_tokens")
 	records: list[dict[str, Any]] = []
 	baseline = load_baseline(Path(args.baseline) if args.baseline else None)
 	total_tokens = 0
@@ -650,6 +663,7 @@ def load_ds4_eval_trace(path: Path, args: argparse.Namespace) -> tuple[list[dict
 			"output_sha256": sha256_text(generated),
 			"generated_text": generated,
 			"token_ids": [],
+			**(result_quality_metadata(generated, generated_tokens, max_tokens) if max_tokens > 0 else {"max_tokens": 0, "length_capped": False, "answer_marker_present": answer_marker_present(generated)}),
 			"prompt_tokens": prompt_tokens,
 			"generated_tokens": generated_tokens,
 			"elapsed_sec": elapsed_sec,
@@ -740,6 +754,7 @@ def run_case_record(args: argparse.Namespace, index: int, case_count: int, case:
 		"output_sha256": sha256_text(result.text),
 		"generated_text": result.text,
 		"token_ids": result.token_ids,
+		**result_quality_metadata(result.text, generated_tokens, args.max_tokens),
 		"generated_tokens": generated_tokens,
 		"elapsed_sec": result.elapsed_sec,
 		"output_tokens_per_s": generated_tokens / result.elapsed_sec if result.elapsed_sec > 0 else 0.0,

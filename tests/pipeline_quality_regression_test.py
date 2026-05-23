@@ -184,6 +184,8 @@ class PipelineQualityRegressionTest(unittest.TestCase):
 			question_rows = [row for row in rows if row["record_type"] == "question"]
 			self.assertEqual(len(question_rows), 4)
 			self.assertTrue(all(row["passed"] for row in question_rows))
+			self.assertTrue(all(row["answer_marker_present"] for row in question_rows))
+			self.assertTrue(all(row["length_capped"] is False for row in question_rows))
 			self.assertEqual(rows[-1]["passed"], 4)
 			self.assertEqual(
 				[(item["source"], item["domain"], item["passed"], item["question_count"]) for item in rows[-1]["domain_breakdown"]],
@@ -308,6 +310,8 @@ class PipelineQualityRegressionTest(unittest.TestCase):
 			self.assertEqual(rows[0]["question_kind"], "multiple_choice")
 			self.assertEqual(rows[1]["question_kind"], "compsec")
 			self.assertEqual(rows[0]["generated_text"], "Answer: B")
+			self.assertTrue(rows[0]["answer_marker_present"])
+			self.assertEqual(rows[0]["max_tokens"], 32)
 
 	def test_compares_quality_runs_with_mcnemar_verdict(self) -> None:
 		with tempfile.TemporaryDirectory() as d:
@@ -317,13 +321,13 @@ class PipelineQualityRegressionTest(unittest.TestCase):
 			out = root / "comparison.json"
 			md = root / "comparison.md"
 			base_rows = [
-				{"record_type": "question", "case_id": "a", "source": "S", "domain": "D", "passed": True},
-				{"record_type": "question", "case_id": "b", "source": "S", "domain": "D", "passed": True},
+				{"record_type": "question", "case_id": "a", "case_index": 1, "source": "S", "domain": "D", "passed": True, "observed_answer": "A", "expected_answer": "A", "generated_tokens": 3, "generated_text": "Answer: A"},
+				{"record_type": "question", "case_id": "b", "case_index": 2, "source": "S", "domain": "D", "passed": True, "observed_answer": "B", "expected_answer": "B", "generated_tokens": 3, "generated_text": "Answer: B"},
 				{"record_type": "summary", "run_id": "base"},
 			]
 			cand_rows = [
-				{"record_type": "question", "case_id": "a", "source": "S", "domain": "D", "passed": True},
-				{"record_type": "question", "case_id": "b", "source": "S", "domain": "D", "passed": False},
+				{"record_type": "question", "case_id": "a", "case_index": 1, "source": "S", "domain": "D", "passed": True, "observed_answer": "A", "expected_answer": "A", "generated_tokens": 3, "generated_text": "Answer: A"},
+				{"record_type": "question", "case_id": "b", "case_index": 2, "source": "S", "domain": "D", "passed": False, "observed_answer": "C", "expected_answer": "B", "generated_tokens": 16000, "generated_text": "thinking without final marker"},
 				{"record_type": "summary", "run_id": "cand"},
 			]
 			baseline.write_text("".join(json.dumps(row) + "\n" for row in base_rows), encoding="utf-8")
@@ -334,6 +338,10 @@ class PipelineQualityRegressionTest(unittest.TestCase):
 			result = json.loads(out.read_text(encoding="utf-8"))
 			self.assertEqual(result["baseline_only_pass"], 1)
 			self.assertEqual(result["candidate_only_pass"], 0)
+			self.assertEqual(result["discordant_cases"][0]["case_id"], "b")
+			self.assertEqual(result["length_cap_summary"]["length_capped_count"], 1)
+			self.assertEqual(result["length_cap_summary"]["length_capped_without_answer_marker"], 1)
+			self.assertTrue(result["length_cap_summary"]["cap_altered_comparison_delta"])
 			self.assertEqual(result["verdict"], "worse")
 			self.assertIn("vLLM MXFP4 TP=2 ds4-eval Comparison", md.read_text(encoding="utf-8"))
 
