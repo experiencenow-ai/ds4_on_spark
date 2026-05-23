@@ -21,11 +21,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install audit dependencies
+        run: python3 -m pip install bashlex pytest
       - name: Run code-rot audit
         run: python3 scripts/audit_code_rot.py
       - name: Run Centaur complexity gate
         run: python3 scripts/score_repo_complexity.py gate
       - name: Run pytest gate
-        run: |
-          pip install pytest
-          pytest tests/test_no_code_rot.py tests/repo_complexity_gate_test.py -v
+        run: pytest tests/test_no_code_rot.py tests/repo_complexity_gate_test.py -v
