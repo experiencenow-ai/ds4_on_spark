@@ -310,13 +310,24 @@ The split is deliberate: `domain.yaml` is the *contract* the factory reads to kn
 | `near_frontier_local` | DSv4-Flash class | vLLM TP=2 on Spark4/5 (live) |
 | `frontier_api` | Sonnet, GPT-class | Anthropic / OpenAI |
 
-**Routing decision.** Inputs: required tier (`>= local_small`), required capability tags (`{coding, control-flow}`), latency budget, cost budget, current load on each tier. Output: a specific provider endpoint to call. The router records why it chose what it chose (for replay and audit).
+**Routing decision.** Inputs: required tier (`>= local_small`), required capability tags (`{coding, control-flow}`), latency budget, cost budget, current load on each tier, *and* required concurrency shape (single-stream vs batched). Output: a specific provider endpoint to call with a specific batching configuration. The router records why it chose what it chose (for replay and audit).
 
 **Strength reduction.** When a node has been observed to succeed at `local_small` for N consecutive evaluations, the router *can* lock the choice to that tier for future calls of the same node-config — captured as memory (Module 11) and used as a hint for mutators (Module 5).
 
-**Acceptance.** Router has live qualification records for every tier; routing decisions are logged and replayable; routing failure (no compatible provider available) returns a structured error with a specific blocker (not silently degrading to a different tier).
+**Batched-throughput economics.** Per founder direction (2026-05-23), the big throughput gains for small models come from batched serving, not single-stream. The router must understand that the same model has different `(tok/s, latency)` characteristics at c=1 vs c=8 vs c=32 vs c=128. A tier's qualification record must include:
 
-**Status today.** Skeleton in centaur. `near_frontier_local` is the only fully-qualified tier (centaur PR #100). `local_small`/`local_coder` qualification corpus exists on Spark2 (#1213/#1214 chain); router wire-up pending (#1215). `frontier_api` exists for escalation but unqualified.
+- Single-stream tok/s (latency-optimized; what one user-facing request sees)
+- Aggregate tok/s at multiple concurrency points (throughput-optimized; what evolution loops in parallel can sustain)
+- Per-request p50 and p95 latency at each concurrency
+- Peak VRAM at each concurrency
+
+For Centaur evolution loops, multiple candidates evaluating against the same dataset in parallel hit the *aggregate* curve, not the single-stream curve. A 24 tok/s c=1 model that delivers 200+ tok/s aggregate at c=32 is a different economic offering than the c=1 number alone implies. Router decisions must use the right curve for the workload shape.
+
+**Quality requirement.** Every qualified provider must have a real quality measurement on a benchmark appropriate to its intended task class — LongMemEval for memory-reading tiers, ds4-eval for reasoning, humaneval-class for coder tiers. Liveness checks (4-prompt string-match tests) are NOT quality measurements and cannot be the basis for routing decisions.
+
+**Acceptance.** Router has live qualification records for every tier with (single-stream tok/s, aggregate tok/s curve, p50/p95 latency curve, peak VRAM curve, real quality score). Routing decisions are logged and replayable. Routing failure (no compatible provider available) returns a structured error with a specific blocker (not silently degrading to a different tier).
+
+**Status today (2026-05-23).** Skeleton in centaur. `near_frontier_local` is the only fully-qualified tier (centaur PR #100; quality vs antirez IQ2XXS not yet measured per #1296). `local_small`/`local_coder` qualification corpus exists on Spark2 with single-stream throughput numbers per PR #1308, but: (a) no batched/aggregate throughput data exists (#1319 filed), (b) "pass_rate" is on 4 trivial liveness prompts, not a real quality measurement (#1320 filed). Router wire-up pending (#1272). `frontier_api` exists for escalation but unqualified.
 
 ---
 
@@ -398,9 +409,13 @@ bundles/<domain>/<sm-id>.bundle/
 
 ---
 
-### Module 11 — Memory subsystem (Trimind integration)
+### Module 11 — Memory subsystem (Trimind integration + DAS-backed archive)
 
-**Purpose.** Knowledge that persists across runs, across domains, and improves future candidates.
+**Purpose.** Knowledge that persists across runs, across domains, and improves future candidates. **And** the long-term storage of KV cache pages that let Centaur reuse long contexts across candidate evaluations without paying repeated prefill cost.
+
+Per founder direction (2026-05-23), **KV cache is the memory model**. Embedded memory facts (the Trimind/IVF-PQ layer below) are one part of Module 11; KV cache pages stored on the DAS-backed archive are the other. Both must work together.
+
+#### 11.1 The semantic layer (Trimind binding)
 
 **What gets remembered.**
 
@@ -424,9 +439,69 @@ brain.retrieve(
 → list of (machine_id, score, similarity, abstract_summary)
 ```
 
-**Acceptance.** Across two sequential domains where domain B is a strict extension of domain A, candidates seeded with retrieved A-winners reach convergence in measurably fewer generations than candidates without retrieval. This is the "factory learns" empirical demonstration.
+#### 11.2 The KV-cache archive layer (DAS-backed)
 
-**Status today.** Trimind primitives exist and are good. Centaur ⇄ Trimind binding does not exist. **The single largest gap between today and the end state.**
+**Why this exists.** VRAM is the scarcest resource on the GB10s. A long context (1M tokens, 256k KV entries) costs gigabytes of VRAM that could otherwise hold MoE expert weights or larger models. For Centaur evolution loops — where the same system prompt + retrieved memories are reused across many candidate evaluations of the same question — re-prefilling that context every time is pure waste. Storing the KV cache to long-term archive and staging it back into VRAM on demand reclaims that VRAM.
+
+The DAS is the physical substrate.
+
+**Physical layout (2026-05-23 baseline; parameters subject to growth):**
+
+- 6-bay DAS enclosure hung off the Mac Studio
+- **5 × 16TB drives = data tier** with XOR parity striped across the 5 drives such that any one drive can fail and be rebuilt from the others. NOT a dedicated parity drive — XOR is rolled into the data drives to preserve the parallel-fetch property
+- **1 × 22TB drive = staging tier**, NOT part of the parity set. 6TB of its capacity exceeds the data-tier drive size; that excess is allocated as scratch for high-write-rate work (frequent overwrites, log writes, work-in-progress staging) where the slower archive drives would burn lifetime
+- Sparks reach the DAS at 10 Gbps over the LAN; Centaur orchestration runs on the Mac
+
+**System parameters (must be configurable; not hardcoded literals):**
+
+```
+ARCHIVE_DATA_DRIVE_COUNT     = 5    # currently
+ARCHIVE_STAGING_DRIVE_COUNT  = 1
+ARCHIVE_DATA_DRIVE_TIB       = 16
+ARCHIVE_STAGING_DRIVE_TIB    = 22
+ARCHIVE_STAGING_USABLE_TIB   = 6    # the part of the staging drive that exceeds the data-tier size
+ARCHIVE_PARITY_TOLERANCE     = 1    # number of data drives that can fail without data loss
+```
+
+Adding drives later changes these constants; no code rewrite.
+
+**Storage invariants:**
+
+- **Append-mostly, not strictly append-only.** Manifest rewrites, garbage collection of orphaned blobs, version pruning of obsolete bundles — all permitted, all bounded. Hot path is append.
+- **Related-data co-located.** A single Centaur node call typically fetches several related KV blobs (system prompt + 5 retrieved memories + per-question prefix). The layout must group related blobs such that one parallel-5 fetch retrieves the related set. For Centaur this means: same domain, same generation, same candidate lineage cluster onto the same drive (or stripe per-blob so all 5 drives contribute in parallel).
+- **XOR parity** across the 5 data drives. Tolerates 1 drive failure. Monthly XOR re-check; alarm on drive failure; rebuild from parity.
+
+**API (provided by the archive manager subsystem):**
+
+```
+archive.put_kv_blob(key, blob_bytes, related_group, ttl?) -> blob_id
+archive.get_kv_blob(blob_id) -> bytes              # may issue parallel-fetch across drives
+archive.get_kv_blob_group(group_id) -> [bytes,...] # parallel-fetch the whole related set
+archive.stage_for_vram(blob_ids) -> staged_path    # decompress + format for the serving stack
+archive.put_bundle(bundle_dir) -> bundle_id
+archive.get_bundle(bundle_id) -> path
+archive.gc(older_than)
+archive.parity_check()
+archive.parity_rebuild(failed_drive_index)
+archive.tier_metrics() -> usage_per_drive, staging_writes_per_min, parity_age
+```
+
+**Critical architectural point:** Centaur is the orchestrator. The serving stacks (vLLM, llama.cpp) do NOT fetch from SATA. They have no business knowing about long-term storage. Centaur decides which KV blobs need to be staged into VRAM before a node call, invokes `stage_for_vram`, and hands the resulting memory-mapped path to the serving stack via a stack-specific load-prefix-KV-from-blob API (vLLM patch + llama.cpp patch are downstream issues).
+
+**Typical flow for one LongMem candidate evaluation:**
+
+1. Centaur picks the candidate to evaluate against question Q.
+2. Candidate's state machine declares: "I need the system prompt KV + memories M1..M5 KV in VRAM before my first node."
+3. Centaur archive manager: `archive.stage_for_vram([sysprompt_kv_id, m1_kv_id, ..., m5_kv_id])`. This issues parallel reads across the 5 data drives; the related-data layout ensures these come up in one parallel batch.
+4. The serving stack (vLLM on Spark4/5 or llama.cpp on Spark2) loads from the staged memory-mapped path. The prefix-cache is populated without prefill.
+5. The candidate's nodes execute against the warm KV cache.
+6. KV cache pages generated during execution that should be remembered get `put_kv_blob`'d back to the archive.
+
+**Acceptance for Module 11.**
+
+Across two sequential domains where domain B is a strict extension of domain A, candidates seeded with retrieved A-winners (from the semantic layer) AND fed pre-staged KV from the archive layer reach convergence in measurably fewer generations than candidates without either. End-to-end: the same question evaluated 50 times across 50 candidate variations does NOT pay 50 prefill costs.
+
+**Status today (2026-05-23).** Trimind primitives exist and are good (~75% of the semantic layer). Centaur ⇄ Trimind binding does not exist (~15%). Archive manager + serving-stack patches are filed as issues #1315/#1316/#1317 but not yet built. **The combined memory subsystem remains the single largest gap between today and the end state.**
 
 ---
 
@@ -771,4 +846,6 @@ Resolved decisions are recorded here as part of the spec's truth. Deferred items
 
 This is the *specification*. It is not the project plan. The dashboard tracks progress against this spec. The issue backlog drives the next concrete work. The protocol coordinates the agents doing the work.
 
-This document is expected to be revised. Every revision must be a PR with a `Closes #N` reference where N is a "spec amendment" issue summarizing the change. The current revision is **v1.1, 2026-05-21T17:30Z** (founder review applied — Q1, Q2, Q3 resolved; Q4/Q5/Q6 deferred; LongMem zeroth-domain added per founder direction; Module 12 rewritten for concurrent multi-level + backward injection; §10 critical path now LongMem-first then Crenshaw).
+This document is expected to be revised. Every revision must be a PR with a `Closes #N` reference where N is a "spec amendment" issue summarizing the change. The current revision is **v1.2, 2026-05-23T03:30Z** (Module 11 expanded to cover the DAS-backed KV-cache archive subsystem with XOR parity / parallel-5 reads / parametric drive layout / append-mostly invariants / related-data co-location; Module 7 extended to require batched-throughput economics and real quality measurement, replacing the single-stream-only + liveness-pass-rate framing; new backlog issues #1315/#1316/#1317/#1319/#1320 capture the implementation work).
+
+Earlier revisions: **v1.1, 2026-05-21T17:30Z** (founder review applied — Q1, Q2, Q3 resolved; LongMem zeroth-domain added per founder direction; Module 12 rewritten for concurrent multi-level + backward injection; §10 critical path now LongMem-first then Crenshaw).
