@@ -1,5 +1,9 @@
 # Centaur Archive Tier Design
 
+> Supersession note: this document describes the #1311 fixture archive helper.
+> For Centaur's KV-cache long-term memory subsystem and custom XOR layout, see
+> `docs/centaur_archive_manager_design.md`.
+
 ## Decision
 
 Centaur archive storage is a Mac-owned DAS volume mounted at `/Volumes/CentaurArchive`. The operator-ordered enclosure is configured as Linux `mdadm` RAID-5 over six drives, 5x16TB plus 1x22TB. RAID-5 is the chosen XOR-parity layout because the operator explicitly requested XOR parity and the workload is mostly large append/read artifact bundles, not low-latency random writes.
