@@ -1,0 +1,26 @@
+{
+  "entries": [
+    {
+      "archive_path": "/Volumes/CentaurArchive/fixtures/pipeline_quality/example_run",
+      "archived_at": "2026-05-23T00:00:00Z",
+      "file_count": 2,
+      "files": [
+        {
+          "path": "summary.json",
+          "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+          "size_bytes": 1234
+        },
+        {
+          "path": "raw/events.jsonl",
+          "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+          "size_bytes": 5678
+        }
+      ],
+      "kind": "directory",
+      "path": "fixtures/pipeline_quality/example_run",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "size_bytes": 6912
+    }
+  ],
+  "format": "centaur-fixtures-manifest-v1"
+}
