@@ -12,6 +12,29 @@ This is a canonical document. Update this file instead of adding overlapping doc
 
 Centaur is a **general state-machine factory**. Given any problem domain that admits an objective metric function, Centaur evolves a population of candidate state machines (hybrid workflows of deterministic operations and LLM calls) and promotes the most cost-efficient candidate that meets the domain's quality bar. The end product is not "an AI that solves your problem" but "a *machine* that builds machines that solve problems." Once a winning state machine for a domain is promoted, it is a deterministic, replayable, debuggable artifact — not a language model output — and it costs orders of magnitude less to run than a frontier LLM call because its internal nodes were strength-reduced during evolution to the cheapest sufficient provider per step.
 
+## 1.5. The diamond-quality standard
+
+ct framing 2026-05-23:
+> code quality analogy using carbon atom: when every atom has a reason for existing in its exact place and is in perfect coordination with all the other carbon atoms, you get a diamond. just a small distance away is a lump of coal. but the AI slop is like a cloud of diesel smoke. Clearly, AI can code and actually solve problems, but can AI write code at diamond quality level?
+
+This document's commitment: **the state machines Centaur evolves and promotes must meet a diamond-quality bar — every node, every transition, every line of generated configuration must have a measurable reason to exist in its exact place.**
+
+The three states:
+
+- **Diesel smoke** (current AI-generated code): high entropy, no structure, every solution drags along unjustified helpers, every line could be deleted without measurable harm.
+- **Coal**: DRY, no obvious duplication, but abstractions exist without justification and near-duplicates pass byte-equality checks.
+- **Diamond**: every line answers "would removal change correctness, completeness, or clarity in a non-trivial way?" Yes for every line. Every abstraction has > 1 caller AND hides complexity that callers measurably benefit from not seeing. Every function does one thing that another function does not already do.
+
+Centaur reaches diamond when both of the following are true:
+
+1. **The factory's output is diamond.** Each promoted state machine, when serialized, passes a diamond-quality audit (issue #1340): no single-caller abstractions in the machine, no near-duplicate nodes, no documentation lines that another line already covers.
+
+2. **The factory itself is diamond.** This codebase (`experiencenow-ai/ds4_on_spark` + `experiencenow-ai/centaur` + `experiencenow-ai/trimind-brain`) passes the same diamond-quality audit. A coal-quality factory cannot reliably produce diamond-quality machines; it will inject its own structural slop into every candidate it builds.
+
+This is why halt-mode cleanup (#1326, #1330, #1331, #1328) is a precondition for serious factory output. Until the factory itself is at least at coal level (DRY, distilled docs, complexity-gated), the diamond standard cannot be enforced on its outputs. Halt-mode exit moves us to coal; issue #1340 defines the diamond audit; the factory eventually self-improves to diamond on both itself and its outputs.
+
+Centaur Module 8 (Evaluator) MUST include the diamond audit as one of its scoring signals once the audit is built. A candidate state machine that solves the problem but is itself diesel smoke is not promotable — quality of the artifact matters as much as quality of the answer.
+
 ## 2. The LongMemEval zeroth domain — fast-path proof the factory works
 
 Before the Crenshaw curriculum (§3) drives the factory to compiler-class capability, the **first real domain** Centaur attempts is `trimind-brain`'s existing `tests/longmemeval/bench.py`. This is the fast-path. The proof-test for "the factory exists and works" comes from this domain, not from Crenshaw.
@@ -346,17 +369,20 @@ correctness ∈ [0, 1]   = passed_tests / total_tests
 quality ∈ [0, 1]       = normalized domain-specific quality (e.g., 1 - asm_bytes/max_asm_bytes)
 cost ∈ [0, 1]          = 1 - clamp(total_dollars / domain_budget_per_eval, 0, 1)
 latency ∈ [0, 1]       = 1 - clamp(p95_compile_ms / domain_latency_budget, 0, 1)
+artifact_quality ∈ [0,1] = 1 - clamp(diamond_audit_violations / max_violations, 0, 1)
 
-composite = w_c * correctness + w_q * quality + w_$ * cost + w_l * latency
+composite = w_c * correctness + w_q * quality + w_$ * cost + w_l * latency + w_a * artifact_quality
 ```
 
-Domain authors specify the weights. Default for most domains is correctness ≥ a hard threshold (e.g., 1.0) and *then* lexicographic on (cost, quality, latency).
+Domain authors specify the weights. Default for most domains is correctness ≥ a hard threshold (e.g., 1.0) and *then* lexicographic on (artifact_quality, cost, quality, latency).
+
+**Artifact-quality component (the diamond audit) — see §1.5.** When the diamond audit (issue #1340) is built, every candidate's *serialized state machine* is run through it. Single-caller abstractions in the machine, near-duplicate nodes, and documentation overlap each register as violations. A machine that solves the domain perfectly but is itself diesel-smoke quality scores low on `artifact_quality` and may lose to a slightly-worse-correctness but higher-quality competitor when weights make it. This is how Centaur is taught to produce diamond, not just to produce *answers*.
 
 **Reproducibility check.** Every candidate is re-scored on a held-out test subset after promotion to confirm the score didn't come from overfitting to the visible test set.
 
-**Acceptance.** Scorer takes a trace bundle + a domain definition and returns a structured score record with per-component breakdowns. Re-running the scorer on the same inputs produces byte-identical scores.
+**Acceptance.** Scorer takes a trace bundle + a domain definition and returns a structured score record with per-component breakdowns including `artifact_quality`. Re-running the scorer on the same inputs produces byte-identical scores.
 
-**Status today.** Not built. `complexity-*` and `procedure-*` CLI commands have score-card primitives but no evolution-loop integration.
+**Status today.** Not built. `complexity-*` and `procedure-*` CLI commands have score-card primitives but no evolution-loop integration. Diamond audit (#1340) not yet built — but once available, it slots in as the `artifact_quality` component without changing the scoring framework.
 
 ---
 
@@ -850,6 +876,8 @@ Resolved decisions are recorded here as part of the spec's truth. Deferred items
 
 This is the *specification*. It is not the project plan. The dashboard tracks progress against this spec. The issue backlog drives the next concrete work. The protocol coordinates the agents doing the work.
 
-This document is expected to be revised. Every revision must be a PR with a `Closes #N` reference where N is a "spec amendment" issue summarizing the change. The current revision is **v1.2, 2026-05-23T03:30Z** (Module 11 expanded to cover the DAS-backed KV-cache archive subsystem with XOR parity / parallel-5 reads / parametric drive layout / append-mostly invariants / related-data co-location; Module 7 extended to require batched-throughput economics and real quality measurement, replacing the single-stream-only + liveness-pass-rate framing; new backlog issues #1315/#1316/#1317/#1319/#1320 capture the implementation work).
+This document is expected to be revised. Every revision must be a PR with a `Closes #N` reference where N is a "spec amendment" issue summarizing the change. The current revision is **v1.3, 2026-05-23T06:30Z** (added §1.5 diamond-quality standard — the explicit goal that Centaur produces diamond, not coal, not diesel smoke; Module 8 evaluator extended with `artifact_quality` scoring component that uses the diamond audit (issue #1340) to score not just whether a candidate solves the problem but whether the candidate machine itself is diamond-quality. The factory's own codebase must also reach diamond — coal-quality factories cannot reliably produce diamond-quality machines).
+
+Earlier revisions: **v1.2, 2026-05-23T03:30Z** (Module 11 expanded to cover the DAS-backed KV-cache archive subsystem; Module 7 extended to require batched-throughput economics and real quality measurement). **v1.1, 2026-05-21T17:30Z** (founder review applied — Q1, Q2, Q3 resolved; LongMem zeroth-domain added).
 
 Earlier revisions: **v1.1, 2026-05-21T17:30Z** (founder review applied — Q1, Q2, Q3 resolved; LongMem zeroth-domain added per founder direction; Module 12 rewritten for concurrent multi-level + backward injection; §10 critical path now LongMem-first then Crenshaw).
