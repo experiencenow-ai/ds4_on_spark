@@ -19,6 +19,29 @@
 >
 > **Until that acceptance is met, this halt block is the controlling document.** No track may interpret "highest value Centaur task" as anything other than the cleanup set. Adding new files, new helpers, or new docs during halt mode is itself a halt-rule violation.
 
+## Productivity scoring — what counts as good work
+
+ct direction 2026-05-23: "the only time there is credit for new code is if it is indeed NEW and NECESSARY. The best way to solve a problem is without code, or even better to reduce the amount of code while increasing functionality and reducing complexity. test code does not fall under this, for test code the number of test cases, path coverage, that is what is important. the lines of code is irrelevant."
+
+Every merged PR gets a productivity score via `scripts/audit_pr_productivity.py base head`. Score components:
+
+| Component | Direction |
+|---|---|
+| Production code LOC (scripts/, centaur/, src/, excluding `_lib/`) | **Removing = positive; adding = negative.** New production code is suspect unless it implements new functionality not expressible by deleting code. |
+| `_lib/` shared library LOC | Half-weight penalty. Adding to `_lib/` is the cost of paying down duplication — real cost, but worth it if it replaces many duplicates. |
+| Test code LOC (tests/) | **Irrelevant.** Test code scored by new test cases (`test_*` functions) at +2 each. Branch coverage will be added when wired up. |
+| Duplicate function groups | **Eliminating = +5 per group; introducing = -5 per group.** |
+| Functions over 50 LOC | **Decomposing = +2 per function; adding new ones = -2 per function.** |
+| Documentation | **Removing fragments = positive (consolidation). Adding NEW non-canonical doc files = negative (fragmentation). Adding to canonical files (CENTAUR_*, *_DESIGN, *_RESULTS) = neutral.** |
+| Forbidden probe docs | **-10 per new file** matching the LANES.md anti-pattern. |
+| Closes-issue bonus | **+10 per `Closes #N`** line. |
+
+A negative score = the PR made the codebase worse. The track gets no credit for shipping it. Score <5 = marginal, justify why this PR was necessary.
+
+Standing leaderboard runs via `scripts/productivity_leaderboard.py`, attributing each PR's score to the track that landed it. Tracks compete on *cumulative score*, NOT on PR count or LOC written.
+
+**Branch naming for proper attribution:** every track branch MUST include `track<N>` in its name (e.g. `codex/track1-foo`, `codex/track5-doc-distillation-build-cluster`). Branches without a track marker score as `track:?` and don't accrue to any leaderboard slot.
+
 This document is the autonomous-loop spec every xhigh track reads on startup. The pinned issue **🚦 Lane coordination state — DO NOT CLOSE** (#1190) is the live source of truth for track ownership and hardware allocation. For where each component of the Centaur system sits in overall progress, see [`docs/CENTAUR_DASHBOARD.md`](../docs/CENTAUR_DASHBOARD.md). For the full system specification — modules, end-state walkthrough, what "done" looks like — see [`docs/CENTAUR_SPECIFICATION.md`](../docs/CENTAUR_SPECIFICATION.md).
 
 ## Scope of work — multi-repo
