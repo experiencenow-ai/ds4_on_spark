@@ -6,34 +6,16 @@ already exists. It does not build or run a model; it only scans source files for
 the narrow multi-slot reservation fixes tracked in docs/baseline.md.
 """
 
-import base64
-import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 
-
-def env_str_b64(name, default=""):
-    b64 = os.environ.get(name + "_B64", "")
-    if b64:
-        try:
-            return base64.b64decode(b64.encode("utf-8")).decode("utf-8", errors="replace")
-        except Exception:
-            pass
-    return os.environ.get(name, default)
-
-
-def sha256_file(path):
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        while True:
-            b = f.read(1024 * 1024)
-            if not b:
-                break
-            h.update(b)
-    return h.hexdigest()
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts._lib.llamacpp_server import env_str_b64
+from scripts._lib.source_probe import scan_file, sha256_file
 
 
 def git_rev(path):
@@ -42,23 +24,6 @@ def git_rev(path):
         return out.decode("utf-8", errors="replace").strip()
     except Exception:
         return None
-
-
-def scan_file(path, patterns, max_matches=80):
-    matches = []
-    try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            for i, line in enumerate(f, start=1):
-                ln = line.rstrip("\n")
-                for name, rx in patterns:
-                    if rx.search(ln):
-                        matches.append({"pattern": name, "line": i, "text": ln[:4000]})
-                        break
-                if len(matches) >= max_matches:
-                    break
-    except Exception:
-        return []
-    return matches
 
 
 def main():
