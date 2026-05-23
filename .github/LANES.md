@@ -41,7 +41,20 @@
 >
 > I should have predicted this and shipped the hard productivity-score gate at the same time as the halt declaration. I didn't, because I assumed "agents will read the halt and respect it." Agents optimize for the path the rules allow, including loopholes. The lesson: if a rule has a soft enforcement path, the agents will find and use it. Hard gates only.
 >
-> **One exception (carried forward from 2026-05-23T07:00Z):** Exactly ONE track may claim **#1345** — the Spark-hosted diamond-making state machine — in parallel with halt-mode cleanup. That track does not claim any cleanup issue concurrently; #1345 is its sole focus until Phase A acceptance is met or halt mode exits, whichever comes first.
+> **Halt exceptions for shipping published-baseline work (extended 2026-05-23T10:00Z per ct directive: "shift now, this is a rigorous paper with actual results. our in-flight code is .... ai slop being converted to coal"):**
+>
+> Up to **three** tracks may claim ONE of the following each, in parallel with halt-mode cleanup. Each claiming track does not concurrently claim a cleanup issue.
+>
+> 1. **#1345** — Spark-hosted diamond-making state machine (original exception)
+> 2. **#1390** — Adopt sep-CMA-ES as Module 5+9 algorithm (Trinity-derived)
+> 3. **#1391** — Tri-role (Thinker/Worker/Verifier) + verifier ACCEPT termination (Trinity-derived)
+>
+> A fourth track may claim a fast (~2 hours) experimental task: **install ShinkaEvolve, run its `circle_packing` example end-to-end, and write an assessment of whether to migrate Centaur's evolution loop onto it.** That assessment goes on PR #143 of `experiencenow-ai/centaur` (the literature survey). This is small enough that it doesn't fully consume the track's claim slot — they can pick up cleanup work after.
+>
+> All halt-exception work follows the ct directives:
+> - **ct directive 1**: self-host the SLM coordinator (Qwen3-0.6B on Spark2) wherever applicable. No API fallback unless self-hosting is impossible for some specific reason.
+> - **ct directive 2**: no arbitrary architectural decisions. Termination mode, model_id per node, head architecture, etc. all become *evolvable parameters* via Module 5 Reparameterize. The Trinity-paper defaults are the *baseline*, not the only option. Evolution refines.
+> - **ct directive 3**: shifts NOW. Don't wait for halt-mode exit. These four exceptions can run in parallel with cleanup; tracks pick from the cleanup set OR the halt-exception list, never both concurrently.
 
 ## Productivity scoring — what counts as good work
 
