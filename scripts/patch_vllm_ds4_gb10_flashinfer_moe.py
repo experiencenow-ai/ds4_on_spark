@@ -7,12 +7,22 @@ import argparse
 import hashlib
 import json
 import shutil
+import sys
+from functools import partial
 from pathlib import Path
 from typing import Any
+
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._lib.vllm_patch_utils import replace_once
 
 
 class PatchError(RuntimeError):
 	pass
+
+
+_replace = partial(replace_once, error_type=PatchError)
 
 
 UNSAFE_WRITE_FLAG = "--unsafe-allow-gb10-flashinfer-runtime-failure"
@@ -25,14 +35,6 @@ UNSAFE_WRITE_DETAIL = (
 
 def sha256_text(text: str) -> str:
 	return(hashlib.sha256(text.encode("utf-8")).hexdigest())
-
-
-def _replace(text: str, old: str, new: str, label: str) -> tuple[str, bool]:
-	if new in text:
-		return(text, False)
-	if old not in text:
-		raise PatchError(f"missing expected block: {label}")
-	return(text.replace(old, new, 1), True)
 
 
 def patch_trtllm_mxfp4_moe(text: str) -> str:
