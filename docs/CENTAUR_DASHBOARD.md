@@ -2,7 +2,7 @@
 
 > **Specification:** [`docs/CENTAUR_SPECIFICATION.md`](CENTAUR_SPECIFICATION.md) — system modules, end-state walkthrough, what "done" looks like. This dashboard reports progress against that spec.
 
-> Last meaningful update: **2026-05-22T12:30Z** (manager self-audit applied — small-model qualification % rebalanced from 55 to 40 because corpus has correctness but no measured throughput; four new P0 issues filed for parallel-track wins #1294/#1295/#1296/#1297; #1209 MoE batched queue repromoted to active P0 parallel-track)
+> Last meaningful update: **2026-05-22T13:30Z** (hardware-bound-to-tasks restructure: per-node `hw:spark-N` labels become reservations held by status:in-progress issues; composite labels deprecated; LANES.md decision tree updated; `lane_hardware_free.sh` reports live reservation state; dashboard hardware count corrected to 8/8 nodes available)
 
 > **Naming note.** The Centaur vision document names four *workstream components* (factory core, memory domain, providers, product/UI). The coordination system uses agent *track slots* (`track:1`, `track:2`, `track:3`, `track:4`). These are not the same thing despite the unfortunate number overlap. **Any track slot may work on any workstream component.** A track is an agent handle with accumulated PR history; it is not a job description. This dashboard reports component progress; the stall ledger reports per-track-slot behavior.
 
@@ -105,19 +105,24 @@ Largest lead: truncation is 13/19 failures, so the 79.3% baseline should be trea
 
 ---
 
-## Hardware capacity (overall **85%**)
+## Hardware capacity (overall **90%**)
 
-| Spark | State | Owner | Role | Notes |
+There are **8 Sparks**, all on the 200G ring, all up. Reservations are owned by *issues*, not agents. A Spark is reserved when an open `status:in-progress` issue carries its `hw:spark-N` label; otherwise it's free.
+
+| Spark | Hardware | Reservation state | Role / capability | Notes |
 |---|---|---|---|---|
-| spark-0 | DOWN | — | — | SSH banner timeout since ~2026-05-20 late |
-| spark-1 | DOWN | — | — | Same |
-| spark-2 | UP | dedicated (qualification done) | Small-model qualification corpus committed; can now host live `local_small`/`local_coder` providers if wired | |
-| spark-3 | UP | track:1 | vLLM TP=2 spare / sweep launcher | |
-| spark-4 | UP | track:1 | vLLM TP=2 node A | Restored 17:00Z; verify with `ssh spark4 hostname` and `curl /v1/models` before claiming |
-| spark-5 | UP | track:1 | vLLM TP=2 node B | |
-| spark-6 | UP | track:4 | Isolated ds4-eval baseline | Corrected baseline done (73/92 at 13.9 tok/s); slot free for next claim |
+| spark-0 | Gigabyte GB10 | free | PP=3-A layout member | Restored from 5/20-5/21 outage; canonical SSH path via 200G proxy |
+| spark-1 | MSI mini-PC GB10 | free | PP=3-A layout member | Distinct hardware family from the Gigabytes — useful for cross-family variance testing |
+| spark-2 | Gigabyte GB10 | free | Small-model host | ~32 distinct models preloaded; correctness qualified, throughput pending (#1294) |
+| spark-3 | Gigabyte GB10 | free | vLLM TP=2 / PP=N member | Also serves as sweep launcher when paired with 4/5 |
+| spark-4 | Gigabyte GB10 | free | vLLM TP=2 / PP=N member | Restored 17:00Z 2026-05-21; verify with `ssh spark4 hostname` before claiming |
+| spark-5 | Gigabyte GB10 | free | vLLM TP=2 / PP=N member | |
+| spark-6 | Gigabyte GB10 | free | ds4-eval baseline host | Lane D 73/92 baseline done; available for next ds4-eval-shaped work (#1296) |
+| spark-7 | Lenovo ThinkStation PGX-1449 | free (Codex auth pending) | LongMem evaluator candidate | SSH from Mac works; Codex direct-SSH key auth still to deploy. Mac-driven workloads can use it now. |
 
-6/7 Sparks online and useful. Spark0/1 remain down; everything else is claimable. The vLLM throughput investigation lane is unblocked.
+**All 8 Sparks are physically deployed and reachable.** Run `scripts/lane_hardware_free.sh` to get the live reservation state.
+
+The Codex-auth-pending note on Spark7 means: agents running on the Mac can reach Spark7 via existing SSH paths; if a workflow specifically requires a Codex container ON a Spark to ssh into Spark7, that direct path still needs the auth deployment. Most Centaur workloads do not need that — the Mac orchestrates and the Spark just executes.
 
 ---
 
