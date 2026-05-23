@@ -25,6 +25,14 @@ def artifact_sha256(obj: dict[str, Any], drop: tuple[str, ...] = ("artifact_sha2
 	return sha256_obj(tmp)
 
 
+def is_sha256_text(value: Any, allow_empty: bool = False) -> bool:
+	if allow_empty and value == "":
+		return True
+	if not isinstance(value, str):
+		return False
+	return value.startswith("sha256:") and len(value) == 71
+
+
 def canonical_hash(obj: dict[str, Any], drop: tuple[str, ...] = ("artifact_sha256",)) -> str:
 	payload = copy.deepcopy(obj)
 	for key in drop:

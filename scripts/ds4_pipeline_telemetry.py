@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import hashlib
 import json
 from pathlib import Path
@@ -12,10 +11,16 @@ from typing import Any
 
 try:
 	from scripts import validate_ds4_pipeline_parity as parity_validator
+	from scripts._lib.json_utils import artifact_sha256
+	from scripts._lib.json_utils import is_sha256_text
 	from scripts._lib.json_utils import load_json
+	from scripts._lib.json_utils import sha256_obj
 except ImportError:
 	import validate_ds4_pipeline_parity as parity_validator
+	from _lib.json_utils import artifact_sha256
+	from _lib.json_utils import is_sha256_text
 	from _lib.json_utils import load_json
+	from _lib.json_utils import sha256_obj
 
 
 FORMAT = "spark-layer-pipeline-run-v1"
@@ -58,14 +63,6 @@ REQUIRED = (
 )
 
 
-def canonical_bytes(obj: Any) -> bytes:
-	return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-
-
-def sha256_obj(obj: Any) -> str:
-	return "sha256:" + hashlib.sha256(canonical_bytes(obj)).hexdigest()
-
-
 def sha256_zero_bytes(size: int) -> str:
 	h = hashlib.sha256()
 	chunk = b"\x00" * 65536
@@ -75,12 +72,6 @@ def sha256_zero_bytes(size: int) -> str:
 		h.update(chunk[:n])
 		remaining -= n
 	return "sha256:" + h.hexdigest()
-
-
-def artifact_sha256(obj: dict[str, Any]) -> str:
-	tmp = copy.deepcopy(obj)
-	tmp.pop("artifact_sha256", None)
-	return sha256_obj(tmp)
 
 
 def as_float(obj: dict[str, Any], key: str, default: float = 0.0) -> float:
@@ -95,14 +86,6 @@ def as_int(obj: dict[str, Any], key: str, default: int = 0) -> int:
 	if value is None:
 		return default
 	return int(value)
-
-
-def is_sha256_text(value: Any, allow_empty: bool = False) -> bool:
-	if allow_empty and value == "":
-		return True
-	if not isinstance(value, str):
-		return False
-	return value.startswith("sha256:") and len(value) == 71
 
 
 def load_parity_artifact(path_text: str, base_dir: Path | None, errors: list[str]) -> dict[str, Any] | None:

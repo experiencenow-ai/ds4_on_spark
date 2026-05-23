@@ -4,14 +4,17 @@
 from __future__ import annotations
 
 import argparse
-import copy
-import hashlib
 import json
 import math
 import re
 import sys
 from pathlib import Path
 from typing import Any
+
+try:
+	from scripts._lib.json_utils import artifact_sha256
+except ImportError:
+	from _lib.json_utils import artifact_sha256
 
 
 RECORD_FORMAT = "ds4-perf-iceberg-record-v1"
@@ -88,20 +91,6 @@ SUMMARY_REQUIRED = (
 
 class Ds4PerfIcebergError(ValueError):
 	pass
-
-
-def canonical_bytes(obj: Any) -> bytes:
-	return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-
-
-def sha256_obj(obj: Any) -> str:
-	return "sha256:" + hashlib.sha256(canonical_bytes(obj)).hexdigest()
-
-
-def artifact_sha256(obj: dict[str, Any]) -> str:
-	tmp = copy.deepcopy(obj)
-	tmp.pop("artifact_sha256", None)
-	return sha256_obj(tmp)
 
 
 def load_json(path: Path) -> dict[str, Any]:
