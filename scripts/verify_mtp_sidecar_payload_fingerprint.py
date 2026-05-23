@@ -9,31 +9,10 @@ from typing import Any, Optional
 if __package__ in (None, ""):
 	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from scripts._lib.json_utils import emit_json_result
+from scripts._lib.json_utils import load_json_object
 from scripts._lib.json_utils import optional_int_field
 from scripts._lib.json_utils import optional_string_field
-
-
-def die_json(errors: list[str], warnings: list[str]) -> int:
-	out = {
-		"ok": (len(errors) == 0),
-		"errors": errors,
-		"warnings": warnings,
-	}
-	print(json.dumps(out, indent=2, sort_keys=True))
-	return 0 if out["ok"] else 1
-
-
-def load_json(path: Path, errors: list[str], label: str) -> Optional[dict[str, Any]]:
-	try:
-		with path.open("r", encoding="utf-8") as f:
-			doc = json.load(f)
-	except Exception as e:
-		errors.append(f"{label}: failed to load JSON: {e}")
-		return None
-	if not isinstance(doc, dict):
-		errors.append(f"{label}: top-level JSON is not an object")
-		return None
-	return doc
 
 
 def samples_as_map(doc: dict[str, Any], errors: list[str], label: str) -> dict[str, dict[str, Any]]:
@@ -102,11 +81,11 @@ def main() -> int:
 	probe_path = Path(args.probe_json)
 	ref_path = Path(args.reference_json)
 
-	probe = load_json(probe_path, errors, "probe")
-	ref = load_json(ref_path, errors, "reference")
+	probe = load_json_object(probe_path, errors, "probe")
+	ref = load_json_object(ref_path, errors, "reference")
 	if probe is None or ref is None:
 		if args.json:
-			return die_json(errors, warnings)
+			return emit_json_result(errors, warnings)
 		for e in errors:
 			print(f"error: {e}")
 		return 1
@@ -125,7 +104,7 @@ def main() -> int:
 	s_ref = samples_as_map(ref, errors, "reference")
 	if not s_probe or not s_ref:
 		if args.json:
-			return die_json(errors, warnings)
+			return emit_json_result(errors, warnings)
 		for w in warnings[:64]:
 			print(f"warning: {w}")
 		for e in errors[:64]:

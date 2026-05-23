@@ -48,6 +48,28 @@ def load_json(path: Path, root_label: str = "root") -> dict[str, Any]:
 	return obj
 
 
+def emit_json_result(errors: list[str], warnings: list[str]) -> int:
+	out = {
+		"ok": (len(errors) == 0),
+		"errors": errors,
+		"warnings": warnings,
+	}
+	print(json.dumps(out, indent=2, sort_keys=True))
+	return 0 if out["ok"] else 1
+
+
+def load_json_object(path: Path, errors: list[str], label: str) -> dict[str, Any] | None:
+	try:
+		doc = json.loads(path.read_text(encoding="utf-8"))
+	except Exception as e:
+		errors.append(f"{label}: failed to load JSON: {e}")
+		return None
+	if not isinstance(doc, dict):
+		errors.append(f"{label}: top-level JSON is not an object")
+		return None
+	return doc
+
+
 def number_or_none(raw: Any) -> float | None:
 	if raw is None:
 		return None
