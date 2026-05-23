@@ -40,6 +40,17 @@ def load_json(path: Path, root_label: str = "root") -> dict[str, Any]:
 	return obj
 
 
+def number_or_none(raw: Any) -> float | None:
+	if raw is None:
+		return None
+	if isinstance(raw, (int, float)):
+		return float(raw)
+	try:
+		return float(str(raw).strip())
+	except (TypeError, ValueError):
+		return None
+
+
 def validate_json_paths(paths: list[Path], validate_func: Callable[[dict[str, Any], Path], list[str]], load_func: Callable[[Path], dict[str, Any]] = load_json) -> dict[str, Any]:
 	all_errors: list[str] = []
 	for path in paths:

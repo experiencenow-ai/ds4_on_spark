@@ -9,6 +9,9 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any, Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts._lib.json_utils import number_or_none
+
 
 REQUIRED_FIELDS = (
 	"run_id",
@@ -69,17 +72,6 @@ COMPONENT_FIELDS = (
 )
 
 
-def _num_or_none(raw: Any) -> Optional[float]:
-	if raw is None:
-		return None
-	if isinstance(raw, (int, float)):
-		return float(raw)
-	try:
-		return float(str(raw).strip())
-	except (TypeError, ValueError):
-		return None
-
-
 def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 	errors: list[str] = []
 	if obj.get("format") != "ds4-mtp-slowpath-v1":
@@ -95,20 +87,20 @@ def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 		if field not in per_component:
 			errors.append(f"per_component_ms missing component: {field}")
 		if field in obj and field in per_component:
-			top = _num_or_none(obj.get(field))
-			nested = _num_or_none(per_component.get(field))
+			top = number_or_none(obj.get(field))
+			nested = number_or_none(per_component.get(field))
 			if top is not None and nested is not None and abs(top - nested) > 0.000001:
 				errors.append(f"{field} must match per_component_ms.{field}")
-	baseline = _num_or_none(obj.get("baseline_generation_tps"))
-	mtp = _num_or_none(obj.get("mtp_generation_tps"))
-	speedup = _num_or_none(obj.get("speedup_vs_baseline"))
-	accept_rate = _num_or_none(obj.get("accept_rate"))
-	accepted = _num_or_none(obj.get("accepted_tokens"))
-	attempted = _num_or_none(obj.get("attempted_draft_tokens"))
-	draft_accepted = _num_or_none(obj.get("draft_tokens_accepted"))
-	draft_attempted = _num_or_none(obj.get("draft_tokens_attempted"))
-	mismatch_count = _num_or_none(obj.get("target_next_mismatch_count"))
-	mismatch_events = _num_or_none(obj.get("target_next_mismatch_events"))
+	baseline = number_or_none(obj.get("baseline_generation_tps"))
+	mtp = number_or_none(obj.get("mtp_generation_tps"))
+	speedup = number_or_none(obj.get("speedup_vs_baseline"))
+	accept_rate = number_or_none(obj.get("accept_rate"))
+	accepted = number_or_none(obj.get("accepted_tokens"))
+	attempted = number_or_none(obj.get("attempted_draft_tokens"))
+	draft_accepted = number_or_none(obj.get("draft_tokens_accepted"))
+	draft_attempted = number_or_none(obj.get("draft_tokens_attempted"))
+	mismatch_count = number_or_none(obj.get("target_next_mismatch_count"))
+	mismatch_events = number_or_none(obj.get("target_next_mismatch_events"))
 	if speedup is not None and baseline is None:
 		errors.append("speedup claim requires baseline_generation_tps")
 	if accept_rate is not None:
@@ -128,9 +120,9 @@ def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 		errors.append("draft_tokens_attempted must match attempted_draft_tokens")
 	if mismatch_count is not None and mismatch_events is not None and abs(mismatch_count - mismatch_events) > 0.000001:
 		errors.append("target_next_mismatch_events must match target_next_mismatch_count")
-	logging_capture = _num_or_none(obj.get("logging_capture_ms"))
-	logging_ms = _num_or_none(obj.get("logging_ms"))
-	capture_ms = _num_or_none(obj.get("capture_ms"))
+	logging_capture = number_or_none(obj.get("logging_capture_ms"))
+	logging_ms = number_or_none(obj.get("logging_ms"))
+	capture_ms = number_or_none(obj.get("capture_ms"))
 	if logging_capture is not None and logging_ms is not None and capture_ms is not None:
 		if abs(logging_capture - (logging_ms + capture_ms)) > 0.000001:
 			errors.append("logging_capture_ms must equal logging_ms + capture_ms")
@@ -138,10 +130,10 @@ def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 		blocker = str(obj.get("blocker_kind", "") or "").strip()
 		if blocker == "" or blocker == "none":
 			errors.append("MTP slower than baseline requires blocker_kind")
-	emitted = _num_or_none(obj.get("emitted_tokens"))
-	target_eval = _num_or_none(obj.get("target_eval_ms"))
-	target_per_emitted = _num_or_none(obj.get("target_eval_ms_per_emitted_token"))
-	target_per_accepted = _num_or_none(obj.get("target_eval_ms_per_accepted_draft_token"))
+	emitted = number_or_none(obj.get("emitted_tokens"))
+	target_eval = number_or_none(obj.get("target_eval_ms"))
+	target_per_emitted = number_or_none(obj.get("target_eval_ms_per_emitted_token"))
+	target_per_accepted = number_or_none(obj.get("target_eval_ms_per_accepted_draft_token"))
 	if emitted is not None and emitted > 0.0 and target_eval is not None and target_per_emitted is not None:
 		if abs(target_per_emitted - (target_eval / emitted)) > 0.000001:
 			errors.append("target_eval_ms_per_emitted_token must equal target_eval_ms / emitted_tokens")

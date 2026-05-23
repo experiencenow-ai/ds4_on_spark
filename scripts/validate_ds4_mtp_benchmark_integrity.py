@@ -9,6 +9,9 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any, Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts._lib.json_utils import number_or_none
+
 
 FORMAT = "ds4-mtp-benchmark-integrity-v1"
 
@@ -30,17 +33,6 @@ REQUIRED_FIELDS = (
 )
 
 
-def _num(raw: Any) -> Optional[float]:
-	if raw is None:
-		return None
-	if isinstance(raw, (int, float)):
-		return float(raw)
-	try:
-		return float(str(raw).strip())
-	except (TypeError, ValueError):
-		return None
-
-
 def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 	errors: list[str] = []
 	if obj.get("format") != FORMAT:
@@ -56,12 +48,12 @@ def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 		"mtp_external_process_wall_s",
 	):
 		if field in obj:
-			val = _num(obj.get(field))
+			val = number_or_none(obj.get(field))
 			if val is None or val < 0.0:
 				errors.append(f"{field} must be a non-negative number")
-	base = _num(obj.get("baseline_reported_generation_tps"))
-	mtp = _num(obj.get("mtp_reported_generation_tps"))
-	speedup = _num(obj.get("speedup_vs_session_baseline"))
+	base = number_or_none(obj.get("baseline_reported_generation_tps"))
+	mtp = number_or_none(obj.get("mtp_reported_generation_tps"))
+	speedup = number_or_none(obj.get("speedup_vs_session_baseline"))
 	if base is not None and mtp is not None and speedup is not None and base > 0.0:
 		if abs(speedup - (mtp / base)) > 0.000001:
 			errors.append("speedup_vs_session_baseline must equal mtp_reported_generation_tps / baseline_reported_generation_tps")
@@ -77,13 +69,13 @@ def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 			errors.append("comparable benchmark requires baseline_spec_disabled=true")
 		if obj.get("mtp_spec_enabled") is not True:
 			errors.append("comparable benchmark requires mtp_spec_enabled=true")
-		if _num(obj.get("baseline_exit_code")) != 0.0 or _num(obj.get("mtp_exit_code")) != 0.0:
+		if number_or_none(obj.get("baseline_exit_code")) != 0.0 or number_or_none(obj.get("mtp_exit_code")) != 0.0:
 			errors.append("comparable benchmark requires zero exit codes")
 	else:
 		if str(obj.get("blocker_detail", "") or "").strip() == "":
 			errors.append("blocked benchmark requires blocker_detail")
-	prior = _num(obj.get("prior_argmax_baseline_tps"))
-	prior_speedup = _num(obj.get("speedup_vs_prior_argmax_baseline"))
+	prior = number_or_none(obj.get("prior_argmax_baseline_tps"))
+	prior_speedup = number_or_none(obj.get("speedup_vs_prior_argmax_baseline"))
 	if prior is not None and prior_speedup is not None and mtp is not None and prior > 0.0:
 		if abs(prior_speedup - (mtp / prior)) > 0.000001:
 			errors.append("speedup_vs_prior_argmax_baseline must equal mtp_reported_generation_tps / prior_argmax_baseline_tps")
