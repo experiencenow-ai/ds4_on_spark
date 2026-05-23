@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import sys
@@ -14,9 +13,11 @@ from typing import Any
 try:
 	from scripts._lib.json_utils import artifact_sha256
 	from scripts._lib.json_utils import load_json
+	from scripts._lib.json_utils import max_number
 except ImportError:
 	from _lib.json_utils import artifact_sha256
 	from _lib.json_utils import load_json
+	from _lib.json_utils import max_number
 
 
 FORMAT = "ds4-b512-end-to-end-decode-v1"
@@ -24,14 +25,6 @@ PROMPT_PATTERNS = {"shared_prefix_compact_suffix", "unique_prefix", "decode_only
 PREFIX_MODES = {"miss_prepare", "hit_fork", "no_prefix"}
 OUTPUT_TARGETS = {1, 4, 8, 16}
 KV_UPDATE_MODES = {"none", "present", "blocked"}
-
-
-def canonical_bytes(obj: Any) -> bytes:
-	return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-
-
-def sha256_obj(obj: Any) -> str:
-	return "sha256:" + hashlib.sha256(canonical_bytes(obj)).hexdigest()
 
 
 def write_json(path: Path, obj: dict[str, Any]) -> None:
@@ -49,13 +42,6 @@ def nested_last_ms(stage: dict[str, Any]) -> float:
 	if achieved > 0.0 and batch > 0 and mb > 0:
 		return (batch * mb * 1000.0 / achieved)
 	return 0.0
-
-
-def max_number(values: Any) -> float:
-	if not isinstance(values, list):
-		return 0.0
-	nums = [float(v) for v in values if isinstance(v, (int, float))]
-	return max(nums) if nums else 0.0
 
 
 def build_from_stage(args: argparse.Namespace) -> dict[str, Any]:
