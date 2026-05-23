@@ -10,6 +10,11 @@ from centaur.centaur_archive_manager import (
 
 
 class CentaurArchiveManagerTest(unittest.TestCase):
+    def test_archive_manager_stays_compact(self) -> None:
+        source = Path(__file__).resolve().parents[1] / "centaur" / "centaur_archive_manager.py"
+        code_lines = [line for line in source.read_text(encoding="utf-8").splitlines() if line.strip()]
+        self.assertLessEqual(len(code_lines), 260)
+
     def test_kv_blob_round_trip_and_stage_for_vram(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             manager = CentaurArchiveManager(Path(tmp), ArchiveLayout(chunk_size=11))
