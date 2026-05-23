@@ -4,6 +4,7 @@ from pathlib import Path
 
 from scripts import route_model_provider_requests as router
 from scripts import select_model_provider
+from scripts import validate_model_provider_profiles as profile_validator
 
 
 FIXTURE = Path("fixtures/model_provider_routes/centaur_provider_route_requests_20260522.example.json")
@@ -45,8 +46,10 @@ class RouteModelProviderRequestsTest(unittest.TestCase):
     def test_capacity_summary_tracks_unknown_capacity_provider(self) -> None:
         plan, errors = router.load_request_plan(FIXTURE)
         self.assertEqual(errors, [])
-        profiles, profile_errors = select_model_provider.load_profile_records([])
-        self.assertEqual(profile_errors, [])
+        profiles = [
+            profile_validator.load_profile(Path("fixtures/model_providers/vllm_deepseek_v4_flash_pp2_200g_near_frontier_20260522.example.json")),
+            profile_validator.load_profile(Path("fixtures/model_providers/standard_local_small_openai_compatible.example.json")),
+        ]
         result = router.route_request_plan(plan, profiles)
         self.assertIn("standard-local-small-openai-compatible", result["capacity_summary"]["unknown_capacity_provider_ids"])
         self.assertFalse(result["capacity_summary"]["all_selected_capacity_estimated"])
@@ -110,13 +113,32 @@ class RouteModelProviderRequestsTest(unittest.TestCase):
             "allow_unknown_capacity": False,
             "allow_blocked_requests": False,
         }
-        profiles, profile_errors = select_model_provider.load_profile_records([])
-        self.assertEqual(profile_errors, [])
+        profiles = [
+            profile_validator.load_profile(Path("fixtures/model_providers/vllm_deepseek_v4_flash_pp2_200g_near_frontier_20260522.example.json")),
+            profile_validator.load_profile(Path("fixtures/model_providers/standard_local_small_openai_compatible.example.json")),
+        ]
         result = router.route_request_plan(strict, profiles)
         kinds = {item["kind"] for item in result["budget_evaluation"]["violations"]}
         self.assertIn("unknown_capacity_provider_ids", kinds)
         self.assertIn("blocked_requests_present", kinds)
         self.assertFalse(result["all_budget_gates_passed"])
+
+    def test_small_model_fixture_routes_with_measured_capacity(self) -> None:
+        plan, errors = router.load_request_plan(Path("fixtures/model_provider_routes/centaur_provider_route_small_models_20260523.example.json"))
+        self.assertEqual(errors, [])
+        profiles, profile_errors = select_model_provider.load_profile_records([])
+        self.assertEqual(profile_errors, [])
+        result = router.route_request_plan(plan, profiles)
+        self.assertTrue(result["all_requests_routed"], result)
+        self.assertTrue(result["all_budget_gates_passed"], result["budget_evaluation"])
+        self.assertEqual(result["capacity_summary"]["unknown_capacity_provider_ids"], [])
+        self.assertEqual(
+            sorted(result["provider_load"].keys()),
+            [
+                "spark2-hf-qwen-qwen3-5-2b-local_coder-measured",
+                "spark2-hf-qwen-qwen3-5-2b-local_small-measured",
+            ],
+        )
 
     def test_rejects_duplicate_node_ids(self) -> None:
         plan, errors = router.load_request_plan(FIXTURE)

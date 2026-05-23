@@ -12,7 +12,7 @@ from typing import Any
 
 FORMATS = {"ds4-model-provider-profile-v1", "centaur-model-provider-profile-v1"}
 TIERS = {"deterministic", "local_small", "local_coder", "near_frontier_local", "frontier_api"}
-RUNTIMES = {"deterministic", "vllm", "sglang", "llama_cpp", "local_openai_compatible", "ds4_custom_runtime", "ds4_layer_pipeline", "simulator", "frontier_api"}
+RUNTIMES = {"deterministic", "vllm", "sglang", "llama_cpp", "transformers_cli", "local_openai_compatible", "ds4_custom_runtime", "ds4_layer_pipeline", "simulator", "frontier_api"}
 PROVIDER_KINDS = {"deterministic_tool", "independent_lane", "layer_pipeline", "openai_compatible_endpoint", "simulator", "external_placeholder"}
 SECRET_KEY_RE = re.compile(r"(^|[_\-.])(api[_\-.]?key|apikey|password|secret|access[_\-.]?token|auth[_\-.]?token|bearer)($|[_\-.])")
 FIXED_SPARK_COUNT_FIELDS = {"spark_count", "num_sparks", "world_size"}

@@ -1,0 +1,56 @@
+{
+  "benchmark_refs": [
+    "fixtures/small_model_qualification/throughput_addendum_20260523.json",
+    "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/003_hf-Qwen-Qwen3.5-2B.json"
+  ],
+  "endpoint": {
+    "host": "spark2",
+    "kind": "ssh_cli",
+    "model_path": "/home/spark2/models/hf/Qwen/Qwen3.5-2B",
+    "serve_backend": "transformers",
+    "status": "measured_cli_available"
+  },
+  "format": "centaur-model-provider-profile-v1",
+  "last_probe_artifact": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/003_hf-Qwen-Qwen3.5-2B.json",
+  "maximum_wait_ms": 129,
+  "measured_input_tps": null,
+  "measured_output_tps": 24.793756596290248,
+  "minimum_batch_tokens": 1,
+  "model_id": "hf-Qwen-Qwen3.5-2B",
+  "node_ids": [
+    "spark2"
+  ],
+  "notes": "Generated from executed Spark2 small-model qualification evidence; no live provider call is made by this profile generator.",
+  "preferred_batch_tokens": 32,
+  "production_eligible": true,
+  "provider_id": "spark2-hf-qwen-qwen3-5-2b-local_coder-measured",
+  "provider_kind": "independent_lane",
+  "quality_scores": {
+    "coding": 100.0,
+    "routine_code_patch": 100.0,
+    "schema_repair": 100.0,
+    "test_interpretation": 100.0
+  },
+  "runtime": "transformers_cli",
+  "selection_evidence": {
+    "addendum": "fixtures/small_model_qualification/throughput_addendum_20260523.json",
+    "cost_proxy": 2.0,
+    "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
+    "mean_tok_s": 24.793756596290248,
+    "median_tok_s": 31.147455626143007,
+    "min_pass_rate": 1.0,
+    "pass_rate": 1.0
+  },
+  "source_refs": [
+    "docs/model-provider-tiers.md",
+    "docs/spark-model-cache.md"
+  ],
+  "supported_lanes": [
+    "routine_code_patch",
+    "test_interpretation",
+    "schema_repair",
+    "routine_code_explanation",
+    "small_code_patch_plan"
+  ],
+  "tier": "local_coder"
+}
