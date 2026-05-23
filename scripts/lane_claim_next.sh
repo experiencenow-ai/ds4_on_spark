@@ -30,6 +30,8 @@
 set -euo pipefail
 
 REPO="${REPO:-experiencenow-ai/ds4_on_spark}"
+GH_BIN="${GH_BIN:-gh}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 if [ "$#" -lt 1 ]; then
     echo "usage: $0 <track-number>" >&2
@@ -38,20 +40,22 @@ fi
 
 TRACK="$1"
 
-in_progress_json=$(gh api -X GET "repos/$REPO/issues" \
-    -f state=open -f labels=status:in-progress -f per_page=100 \
-    --jq '[.[] | select(.pull_request == null) | {number, labels: [.labels[].name]}]')
+in_progress_json=$("$GH_BIN" issue list --repo "$REPO" \
+    --label "status:in-progress" --state open --limit 200 \
+    --json number,title,labels)
 
-reserved_sparks=$(echo "$in_progress_json" | python3 -c "
+reserved_sparks=$(echo "$in_progress_json" | "$PYTHON_BIN" -c "
 import json, sys
 data = json.load(sys.stdin)
 reserved = set()
 for d in data:
-    for label in d['labels']:
-        if label.startswith('hw:spark-') and label.count('-') == 2:
+    for item in d.get('labels', []):
+        label = item.get('name', item) if isinstance(item, dict) else item
+        if label.startswith('hw:spark-'):
             try:
                 n = int(label.split('-')[-1])
-                reserved.add(n)
+                if 0 <= n <= 7:
+                    reserved.add(n)
             except ValueError:
                 pass
 print(' '.join(str(n) for n in sorted(reserved)))
@@ -71,13 +75,13 @@ is_spark_free() {
 deps_open() {
     local issue_num="$1"
     local body
-    body=$(gh issue view "$issue_num" --repo "$REPO" --json body --jq '.body' 2>/dev/null || echo "")
+    body=$("$GH_BIN" issue view "$issue_num" --repo "$REPO" --json body --jq '.body' 2>/dev/null || echo "")
     local deps
     deps=$(printf '%s\n' "$body" | grep -iE "^\*\*Depends on:\*\*|^Depends on:" -A 5 \
         | grep -oE '#[0-9]+' | tr -d '#' || true)
     for dep in $deps; do
         local state
-        state=$(gh issue view "$dep" --repo "$REPO" --json state --jq '.state' 2>/dev/null || echo "OPEN")
+        state=$("$GH_BIN" issue view "$dep" --repo "$REPO" --json state --jq '.state' 2>/dev/null || echo "OPEN")
         if [ "$state" != "CLOSED" ]; then
             return 0
         fi
@@ -117,18 +121,18 @@ hw_available() {
 attempt_claim() {
     local issue_num="$1"
     local hw_csv="$2"
-    if ! gh issue edit "$issue_num" --repo "$REPO" \
+    if ! "$GH_BIN" issue edit "$issue_num" --repo "$REPO" \
             --remove-label "track:backlog" --add-label "track:${TRACK}" \
             --remove-label "status:queued" --add-label "status:claimed" \
             >/dev/null 2>&1; then
         return 1
     fi
     local labels
-    labels=$(gh issue view "$issue_num" --repo "$REPO" --json labels --jq '.labels | map(.name) | join(",")')
+    labels=$("$GH_BIN" issue view "$issue_num" --repo "$REPO" --json labels --jq '.labels | map(.name) | join(",")')
     local track_count
     track_count=$(echo "$labels" | tr ',' '\n' | grep -c "^track:" || true)
     if [ "$track_count" -ne 1 ] || ! echo "$labels" | tr ',' '\n' | grep -qx "track:${TRACK}"; then
-        gh issue edit "$issue_num" --repo "$REPO" \
+        "$GH_BIN" issue edit "$issue_num" --repo "$REPO" \
             --remove-label "track:${TRACK}" --add-label "track:backlog" \
             --remove-label "status:claimed" --add-label "status:queued" \
             >/dev/null 2>&1 || true
@@ -140,26 +144,33 @@ attempt_claim() {
 echo "Reserved Sparks right now: [${reserved_sparks:-none}]; free: $free_count of 8"
 
 for prio in P0 P1 P2; do
-    candidates=$(gh issue list --repo "$REPO" \
+    candidates=$("$GH_BIN" issue list --repo "$REPO" \
         --label "track:backlog" --label "status:queued" --label "prio:${prio}" \
-        --state open --json number,labels \
-        --jq '.[] | {n: .number, hw_csv: (.labels | map(.name) | map(select(startswith("hw:"))) | join(","))}' \
+        --state open --limit 200 --json number,title,labels \
         2>/dev/null || true)
     if [ -z "$candidates" ]; then continue; fi
-    echo "$candidates" | while read -r row; do
-        n=$(echo "$row" | python3 -c "import json,sys; print(json.loads(sys.stdin.read())['n'])")
-        hw_csv=$(echo "$row" | python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('hw_csv') or 'hw:none')")
+    candidate_rows=$(echo "$candidates" | "$PYTHON_BIN" -c "
+import json, sys
+data = json.load(sys.stdin)
+for d in data:
+    labels = []
+    for item in d.get('labels', []):
+        labels.append(item.get('name', item) if isinstance(item, dict) else item)
+    hw = ','.join([label for label in labels if label.startswith('hw:')]) or 'hw:none'
+    print(f\"{d['number']}\t{d.get('title', '')}\t{hw}\")
+")
+    if [ -z "$candidate_rows" ]; then continue; fi
+    while IFS="$(printf '\t')" read -r n title hw_csv; do
         if ! hw_available "$hw_csv"; then continue; fi
         if deps_open "$n"; then continue; fi
         if attempt_claim "$n" "$hw_csv"; then
-            title=$(gh issue view "$n" --repo "$REPO" --json title --jq '.title')
             echo "CLAIMED #$n $title  [hw=$hw_csv prio=$prio]"
-            gh issue comment "$n" --repo "$REPO" \
+            "$GH_BIN" issue comment "$n" --repo "$REPO" \
                 --body "/claim track:${TRACK}. Acceptance gates acknowledged. Hardware reservation: \`${hw_csv}\` — these Sparks will be reserved the moment this issue flips to status:in-progress. First evidence within 30 min of starting." \
                 >/dev/null
             exit 0
         fi
-    done
+    done <<< "$candidate_rows"
 done
 
 echo "none"

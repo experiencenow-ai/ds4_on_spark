@@ -53,10 +53,11 @@ data = json.load(sys.stdin)
 reserved = set()
 for d in data:
     for label in d['labels']:
-        if label.startswith('hw:spark-') and label.count('-') == 2:
+        if label.startswith('hw:spark-'):
             try:
                 n = int(label.split('-')[-1])
-                reserved.add(n)
+                if 0 <= n <= 7:
+                    reserved.add(n)
             except ValueError:
                 pass
 print(8 - len(reserved))
