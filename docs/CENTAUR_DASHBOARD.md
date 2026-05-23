@@ -2,7 +2,7 @@
 
 > **Specification:** [`docs/CENTAUR_SPECIFICATION.md`](CENTAUR_SPECIFICATION.md) — system modules, end-state walkthrough, what "done" looks like. This dashboard reports progress against that spec.
 
-> Last meaningful update: **2026-05-22T09:30Z** (6 of 11 LongMem critical-path modules merged in centaur within 90 minutes; full eight-node ring deployed; track:2 revived and is the productivity star of this cycle with 4 of 6 module merges; PP=4 ring measured at 171 tok/s c=256, same as PP=2 — PP=2 stays the production lane; 200G fabric pinned for distributed providers)
+> Last meaningful update: **2026-05-22T12:30Z** (manager self-audit applied — small-model qualification % rebalanced from 55 to 40 because corpus has correctness but no measured throughput; four new P0 issues filed for parallel-track wins #1294/#1295/#1296/#1297; #1209 MoE batched queue repromoted to active P0 parallel-track)
 
 > **Naming note.** The Centaur vision document names four *workstream components* (factory core, memory domain, providers, product/UI). The coordination system uses agent *track slots* (`track:1`, `track:2`, `track:3`, `track:4`). These are not the same thing despite the unfortunate number overlap. **Any track slot may work on any workstream component.** A track is an agent handle with accumulated PR history; it is not a job description. This dashboard reports component progress; the stall ledger reports per-track-slot behavior.
 
@@ -61,13 +61,13 @@ The product target is `a machine that creates machines that solves domains effic
 
 ---
 
-## Component 3 — Provider + model portfolio (overall **65%**)
+## Component 3 — Provider + model portfolio (overall **60%**)
 
 | Tier | % | Provider(s) live | Notes |
 |---|---:|---|---|
 | `deterministic` | 60 | Internal deterministic tools | Existing test fixtures pass; not formally qualified |
-| `local_small` | 55 | **Qualification corpus exists on Spark2** (#1213/#1214 chain merged) — harness + batch + transformers backend (#1239). Router wiring (#1215) pending. |
-| `local_coder` | 55 | Same qualification corpus; coding-specialized models present. Router wiring pending. |
+| `local_small` | 40 | Corpus exists on Spark2 (#1213/#1214/#1239) — ~32 distinct models, 53 of 91 records passed correctness. **`tok/s` not measured per record** — Module 7 cannot make cost-aware decisions yet (#1294 filed). Router wiring also pending. |
+| `local_coder` | 40 | Same corpus; coding-specialized models present. Same throughput-measurement gap (#1294). Router wiring pending. |
 | `near_frontier_local` | 60 | **vLLM PP=2 TP=2 on Spark4/5 LIVE** (centaur PR #100, merged 10:54Z). Spark4 currently DOWN since ~11:30Z. Live measured at 106 tok/s c=64. Sweep claimed 310 tok/s — under investigation #1208. |
 | `frontier_api` | 50 | Anthropic / OpenAI integration exists | Used by qualification escalation; not load-tested |
 | ds4 PP=3 (parity provider) | 35 | Spark0/1/2 layouts; currently Spark2/3/4 due to outage | Logits parity proven (May 16); **economic throughput proven nonviable** (PR #1203 K=618 projection) — **demote to parity-verification only** |
