@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import ast
-import copy
+import difflib
 import hashlib
 import json
 import shutil
@@ -13,7 +13,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 
 FORMAT = "ds4-diamond-refinement-run-v1"
@@ -27,7 +27,7 @@ def answer(value):
 
 
 @dataclass(frozen=True)
-class Audit:
+class _Audit:
     loc: int
     function_count: int
     single_caller_helpers: list[str]
@@ -41,18 +41,14 @@ class Audit:
         }
 
 
-class _NameReplace(ast.NodeTransformer):
-    def __init__(self, old: str, new: ast.AST):
-        self.old = old
-        self.new = new
+class _DiamondProposalClient(Protocol):
+    provider_id: str
 
-    def visit_Name(self, node: ast.Name) -> ast.AST:
-        if node.id == self.old and isinstance(node.ctx, ast.Load):
-            return ast.copy_location(copy.deepcopy(self.new), node)
-        return node
+    def propose_refactor(self, source: str, candidate_kind: str) -> dict[str, Any]:
+        ...
 
 
-def sha256_text(text: str) -> str:
+def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
@@ -63,7 +59,7 @@ def _logic_loc(text: str) -> int:
     )
 
 
-def audit_source(text: str) -> Audit:
+def _audit_source(text: str) -> _Audit:
     tree = ast.parse(text)
     defs = [node for node in tree.body if isinstance(node, ast.FunctionDef)]
     names = {node.name for node in defs if node.name.startswith("_")}
@@ -72,7 +68,14 @@ def audit_source(text: str) -> Audit:
         if _is_tracked_call(node, calls):
             calls[node.func.id] += 1
     helpers = sorted(name for name, count in calls.items() if count == 1)
-    return Audit(_logic_loc(text), len(defs), helpers)
+    return _Audit(_logic_loc(text), len(defs), helpers)
+
+
+def _safe_audit_source(text: str) -> _Audit:
+    try:
+        return _audit_source(text)
+    except SyntaxError:
+        return _Audit(_logic_loc(text), 0, [])
 
 
 def _is_tracked_call(node: ast.AST, calls: dict[str, int]) -> bool:
@@ -83,56 +86,12 @@ def _is_tracked_call(node: ast.AST, calls: dict[str, int]) -> bool:
     )
 
 
-def _single_return(node: ast.FunctionDef) -> ast.Return | None:
-    if len(node.body) != 1 or not isinstance(node.body[0], ast.Return):
-        return None
-    return node.body[0]
-
-
-def _inline_metadata(helper_name: str, node: ast.FunctionDef, ret: ast.Return) -> dict[str, Any] | None:
-    if not isinstance(ret.value, ast.Call):
-        return None
-    call = ret.value
-    if not isinstance(call.func, ast.Name):
-        return None
-    if call.func.id != helper_name or len(call.args) != 1 or call.keywords:
-        return None
-    return {"caller": node.name, "call_arg": call.args[0]}
-
-
-def _replace_one_arg(expr: ast.AST, old: str, new: ast.AST) -> ast.AST:
-    replaced = _NameReplace(old, new).visit(ast.fix_missing_locations(expr))
-    return ast.fix_missing_locations(replaced)
-
-
-def propose_inline_refactor(text: str) -> tuple[str | None, dict[str, Any]]:
-    tree = ast.parse(text)
-    defs = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
-    for helper_name in audit_source(text).single_caller_helpers:
-        helper = defs.get(helper_name)
-        if helper is None or len(helper.args.args) != 1 or len(helper.body) != 1:
-            continue
-        helper_return = _single_return(helper)
-        if helper_return is None or helper_return.value is None:
-            continue
-        arg_name = helper.args.args[0].arg
-        for node in list(tree.body):
-            if not isinstance(node, ast.FunctionDef) or node.name == helper_name or len(node.body) != 1:
-                continue
-            ret = _single_return(node)
-            if ret is None:
-                continue
-            metadata = _inline_metadata(helper_name, node, ret)
-            if metadata is None:
-                continue
-            ret.value = _replace_one_arg(helper_return.value, arg_name, metadata["call_arg"])
-            tree.body = [item for item in tree.body if item is not helper]
-            ast.fix_missing_locations(tree)
-            return ast.unparse(tree) + "\n", {
-                "inlined_helper": helper_name,
-                "caller": metadata["caller"],
-            }
-    return None, {"reason": "no_single_caller_inline_candidate"}
+def _validate_python_source(text: str) -> dict[str, Any]:
+    try:
+        ast.parse(text)
+    except SyntaxError as exc:
+        return {"valid": False, "error": str(exc)}
+    return {"valid": True, "error": ""}
 
 
 def _run_check(root: Path) -> dict[str, Any]:
@@ -151,7 +110,7 @@ def _write_json(path: Path, record: dict[str, Any]) -> None:
     path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _score(before: Audit, after: Audit) -> int:
+def _score(before: _Audit, after: _Audit) -> int:
     loc_delta = before.loc - after.loc
     helper_delta = len(before.single_caller_helpers) - len(after.single_caller_helpers)
     return loc_delta + (3 * helper_delta)
@@ -172,11 +131,11 @@ def _prepare_sandbox(root: Path) -> tuple[Path, Path, Path]:
     return before_dir, after_dir, before_path
 
 
-def _proposal_nodes(before_audit: Audit, candidate: str | None, proposal: dict[str, Any]) -> list[dict[str, Any]]:
+def _proposal_nodes(before_audit: _Audit, candidate: str | None, proposal: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         _node("parse_targets", "deterministic", "passed", function_count=before_audit.function_count),
         _node("identify_inline_candidates", "deterministic", "passed", candidates=before_audit.single_caller_helpers),
-        _node("propose_inline_refactor", "deterministic_template", "passed" if candidate else "no_op", **proposal),
+        _node("propose_inline_refactor", "local_small", "passed" if candidate else "no_op", **proposal),
     ]
 
 
@@ -191,12 +150,13 @@ def _verifier_nodes(root: Path, behavior_same: bool, delta: int) -> list[dict[st
 
 def _record(
     before_path: Path,
-    before_audit: Audit,
+    before_audit: _Audit,
     after_text: str,
-    after_audit: Audit,
+    after_audit: _Audit,
     behavior: dict[str, Any],
     delta: int,
     nodes: list[dict[str, Any]],
+    proposal: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "format": FORMAT,
@@ -204,38 +164,73 @@ def _record(
         "phase": "A_synthetic_inline_path",
         "status": "passed" if behavior["byte_identical_output"] and delta > 0 else "failed",
         "frontier_call_count": 0,
-        "local_model_call_count": 0,
+        "local_model_call_count": 1,
         "sandbox_isolation": True,
         "source": {
             "path": str(before_path),
-            "sha256": sha256_text(SYNTHETIC_SOURCE),
+            "sha256": _sha256_text(SYNTHETIC_SOURCE),
             "audit": before_audit.as_dict(),
         },
-        "candidate": {"sha256": sha256_text(after_text), "audit": after_audit.as_dict()},
+        "candidate": {
+            "sha256": _sha256_text(after_text),
+            "audit": after_audit.as_dict(),
+            "diff": _diff(SYNTHETIC_SOURCE, after_text),
+            "syntax": _validate_python_source(after_text),
+        },
+        "proposal": proposal,
         "behavior": behavior,
         "diamond_delta": delta,
         "nodes": nodes,
     }
 
 
-def run_synthetic(output: Path | None = None) -> dict[str, Any]:
+def _diff(before: str, after: str) -> str:
+    return "".join(
+        difflib.unified_diff(
+            before.splitlines(keepends=True),
+            after.splitlines(keepends=True),
+            fromfile="before/coal_example.py",
+            tofile="after/coal_example.py",
+        )
+    )
+
+
+def _model_proposal(model_client: _DiamondProposalClient, source: str) -> tuple[str | None, dict[str, Any]]:
+    response = model_client.propose_refactor(source, "single_caller_inline")
+    candidate = response.get("candidate_source")
+    if not isinstance(candidate, str) or not candidate.strip():
+        return None, {"reason": "local_model_returned_empty_candidate", "provider_id": model_client.provider_id}
+    proposal = {
+        "provider_id": response.get("provider_id") or model_client.provider_id,
+        "api_style": response.get("api_style") or "unknown",
+        "candidate_kind": response.get("candidate_kind") or "single_caller_inline",
+        "candidate_sha256": _sha256_text(candidate),
+    }
+    if "generated_token_count" in response:
+        proposal["generated_token_count"] = response["generated_token_count"]
+    if "elapsed_seconds" in response:
+        proposal["model_elapsed_seconds"] = response["elapsed_seconds"]
+    return candidate, proposal
+
+
+def run_synthetic(model_client: _DiamondProposalClient, output: Path | None = None) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="ds4-diamond-refine-") as temp:
         root = Path(temp)
         before_dir, after_dir, before_path = _prepare_sandbox(root)
-        before_audit = audit_source(SYNTHETIC_SOURCE)
-        candidate, proposal = propose_inline_refactor(SYNTHETIC_SOURCE)
+        before_audit = _audit_source(SYNTHETIC_SOURCE)
+        candidate, proposal = _model_proposal(model_client, SYNTHETIC_SOURCE)
         if candidate is not None:
             (after_dir / before_path.name).write_text(candidate, encoding="utf-8")
         after_text = (after_dir / before_path.name).read_text(encoding="utf-8")
         before_check = _run_check(before_dir)
         after_check = _run_check(after_dir)
-        after_audit = audit_source(after_text)
+        after_audit = _safe_audit_source(after_text)
         behavior_same = before_check == after_check and before_check["returncode"] == 0
         delta = _score(before_audit, after_audit)
         nodes = _proposal_nodes(before_audit, candidate, proposal)
         nodes.extend(_verifier_nodes(root, behavior_same, delta))
         behavior = {"before": before_check, "after": after_check, "byte_identical_output": behavior_same}
-        record = _record(before_path, before_audit, after_text, after_audit, behavior, delta, nodes)
+        record = _record(before_path, before_audit, after_text, after_audit, behavior, delta, nodes, proposal)
     if output is not None:
         record["artifact_path"] = str(output)
         _write_json(output, record)
