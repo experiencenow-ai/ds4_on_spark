@@ -12,8 +12,12 @@ from typing import Any, Optional
 
 try:
 	from scripts import validate_ds4_pipeline_parity as parity
+	from scripts._lib.json_utils import artifact_sha256
+	from scripts._lib.json_utils import load_json
 except ImportError:
 	import validate_ds4_pipeline_parity as parity
+	from _lib.json_utils import artifact_sha256
+	from _lib.json_utils import load_json
 
 
 EXPORT_FORMAT = "ds4-final-output-export-v1"
@@ -40,20 +44,6 @@ def sha256_file(path: Path) -> str:
 		for chunk in iter(lambda: f.read(1048576), b""):
 			h.update(chunk)
 	return "sha256:" + h.hexdigest()
-
-
-def artifact_sha256(obj: dict[str, Any]) -> str:
-	tmp = copy.deepcopy(obj)
-	tmp.pop("artifact_sha256", None)
-	tmp.pop("artifact_hash", None)
-	return sha256_obj(tmp)
-
-
-def load_json(path: Path) -> dict[str, Any]:
-	obj = json.loads(path.read_text(encoding="utf-8"))
-	if not isinstance(obj, dict):
-		raise ValueError(f"{path}: root must be an object")
-	return obj
 
 
 def write_json(path: Path, obj: dict[str, Any]) -> None:

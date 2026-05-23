@@ -4,11 +4,16 @@
 from __future__ import annotations
 
 import argparse
-import copy
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
+
+try:
+	from scripts._lib.json_utils import artifact_sha256
+	from scripts._lib.json_utils import load_json
+except ImportError:
+	from _lib.json_utils import artifact_sha256
+	from _lib.json_utils import load_json
 
 
 FORMAT = "ds4-token-commit-profile-v1"
@@ -32,28 +37,6 @@ BOTTLENECKS = {
 	"result_collection",
 	"other",
 }
-
-
-def canonical_bytes(obj: Any) -> bytes:
-	return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-
-
-def sha256_obj(obj: Any) -> str:
-	return "sha256:" + hashlib.sha256(canonical_bytes(obj)).hexdigest()
-
-
-def artifact_sha256(obj: dict[str, Any]) -> str:
-	tmp = copy.deepcopy(obj)
-	tmp.pop("artifact_sha256", None)
-	tmp.pop("artifact_hash", None)
-	return sha256_obj(tmp)
-
-
-def load_json(path: Path) -> dict[str, Any]:
-	obj = json.loads(path.read_text(encoding="utf-8"))
-	if not isinstance(obj, dict):
-		raise ValueError(f"{path}: expected object")
-	return obj
 
 
 def write_json(path: Path, obj: dict[str, Any]) -> None:

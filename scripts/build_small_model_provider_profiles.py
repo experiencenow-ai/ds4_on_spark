@@ -9,6 +9,11 @@ import re
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts._lib.json_utils import load_json
+except ImportError:
+    from _lib.json_utils import load_json
+
 
 ADDENDUM = Path("fixtures/small_model_qualification/throughput_addendum_20260523.json")
 OUTPUT_DIR = Path("fixtures/model_providers")
@@ -33,14 +38,6 @@ LANES_BY_TIER = {
         "small_code_patch_plan",
     ],
 }
-
-
-def load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as f:
-        obj = json.load(f)
-    if not isinstance(obj, dict):
-        raise ValueError(f"{path}: root JSON must be an object")
-    return obj
 
 
 def slug(value: str) -> str:

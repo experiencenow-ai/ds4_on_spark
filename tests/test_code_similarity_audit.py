@@ -7,6 +7,13 @@ from scripts import audit_code_similarity as sim
 
 
 class CodeSimilarityAuditTest(unittest.TestCase):
+    def test_pair_keys_ignore_line_number_drift(self) -> None:
+        pairs = [{"left": "scripts/one.py::main@10", "right": "scripts/two.py::main@50"}]
+        self.assertEqual(
+            sim.pair_keys(pairs),
+            {"scripts/one.py::main@* <=> scripts/two.py::main@*"},
+        )
+
     def test_synthetic_near_duplicate_uses_centaur_similarity(self) -> None:
         centaur_root = sim.resolve_centaur_root(Path.cwd(), None)
         with TemporaryDirectory() as temp_dir:

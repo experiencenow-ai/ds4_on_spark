@@ -9,6 +9,11 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any
 
+try:
+	from scripts._lib.json_utils import load_json
+except ImportError:
+	from _lib.json_utils import load_json
+
 
 PREFIX_MANIFEST_FORMAT = "ds4-prefix-manifest-v1"
 PREFIX_CACHE_STATUS_FORMAT = "ds4-prefix-cache-status-v1"
@@ -36,13 +41,6 @@ IDENTITY_FIELDS = (
 	"rope_config_sha256",
 	"kv_format_id",
 )
-
-
-def load_json(path: Path) -> dict[str, Any]:
-	obj = json.loads(path.read_text(encoding="utf-8"))
-	if not isinstance(obj, dict):
-		raise ValueError(f"{path}: root must be an object")
-	return obj
 
 
 def _expect_string(errors: list[str], obj: dict[str, Any], key: str) -> None:

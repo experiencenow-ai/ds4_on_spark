@@ -10,6 +10,11 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any
 
+try:
+	from scripts._lib.json_utils import load_json
+except ImportError:
+	from _lib.json_utils import load_json
+
 
 FORMAT = "ds4-mtp-k2-production-benchmark-v1"
 TAIL_STATUSES = {"passed", "failed", "blocked", "not_run"}
@@ -48,13 +53,6 @@ REQUIRED_INTS = (
 	"full_vocab_logits_rows",
 	"top1_only_rows",
 )
-
-
-def load_json(path: Path) -> dict[str, Any]:
-	obj = json.loads(path.read_text(encoding="utf-8"))
-	if not isinstance(obj, dict):
-		raise ValueError(f"{path}: root must be an object")
-	return obj
 
 
 def validate_artifact(obj: dict[str, Any]) -> list[str]:
