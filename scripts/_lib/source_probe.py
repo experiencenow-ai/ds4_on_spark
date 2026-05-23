@@ -16,6 +16,21 @@ def sha256_file(path: str | Path) -> str:
 	return h.hexdigest()
 
 
+def sha256_lines(lines: list[str]) -> str:
+	h = hashlib.sha256()
+	for line in lines:
+		h.update(line.encode("utf-8"))
+		h.update(b"\n")
+	return h.hexdigest()
+
+
+def tail_text(text: str, limit: int = 4000) -> str:
+	text = text.strip()
+	if len(text) <= limit:
+		return text
+	return text[-limit:]
+
+
 def scan_file(path: str | Path, patterns: list[tuple[str, Pattern[str]]], max_matches: int = 50) -> list[dict[str, object]]:
 	matches = []
 	try:
