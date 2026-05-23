@@ -18,6 +18,8 @@
 > **Acceptance for exiting halt mode:** `python3 scripts/audit_code_rot.py` reports zero duplicate-function groups; docs/*.md count is ≤30; Centaur's complexity metric runs on every PR with a non-regressing score; baseline snapshot re-recorded to the post-cleanup state.
 >
 > **Until that acceptance is met, this halt block is the controlling document.** No track may interpret "highest value Centaur task" as anything other than the cleanup set. Adding new files, new helpers, or new docs during halt mode is itself a halt-rule violation.
+>
+> **One exception (added 2026-05-23T07:00Z):** Exactly ONE track may claim **#1345** — the Spark-hosted diamond-making state machine — in parallel with halt-mode cleanup. Per ct direction: "have 1 xhigh work on this in parallel to the coalification of the smoke." This is the first real Centaur state-machine use case (refactor-by-local-model-with-deterministic-verification) and gets built while halt-mode finishes. The track that claims #1345 does not claim any cleanup issue concurrently — diamond-maker is its sole focus until either Phase A acceptance is met or halt mode exits, whichever comes first.
 
 ## Productivity scoring — what counts as good work
 

@@ -91,6 +91,45 @@ That step-function on correctness ensures Centaur cannot "win" by being cheap-an
 
 ---
 
+## 2.5. The diamond refinement domain — first real Centaur use case for self-improvement
+
+Per ct direction 2026-05-23, the **first real Centaur state-machine use case** is the diamond-refinement loop: take working but coal-quality Python code and mechanically refine it into functionally-equivalent diamond-quality code via local-model proposal + deterministic verification.
+
+This is the architectural prototype for how Centaur produces diamond output across all future domains (§1.5).
+
+**Why this is a real domain:**
+
+| Module | Role in the diamond-refinement domain |
+|---|---|
+| 1 (Domain def) | `python_diamond_refinement` — metric is `(tests_pass × audit_score_delta)`. Test set is every Python file in `scripts/` and `centaur/` with passing tests. |
+| 4 (Candidate gen) | Local small models on Spark2 (qualified corpus per #1308). Candidates are refactor proposals. |
+| 5 (Mutator) | Mutates the refactor prompt, model choice, retry count, target-selection heuristic. |
+| 6 (Executor) | Runs proposed refactor in sandbox; runs tests; runs audit. Deterministic. |
+| 7 (Router) | Picks the local model. Spark2's `local_small`/`local_coder` tiers. Zero frontier API. |
+| 8 (Evaluator) | Scores `correctness × artifact_quality_delta`. Correctness is "tests still pass byte-identically." Artifact quality is the audit. |
+| 9 (Promoter) | Keeps refactor pipelines that consistently produce positive deltas. Retires the ones that regress or no-op. |
+
+**The methodology distinction (per ct):**
+
+> "code prototyping where you just want anything that works as quickly as possible without any code quality constraints — then that process converts an ambiguous and fuzzy english language specification into a verifiable (compilable) specification. Given that it becomes a lot more mechanical and does not require genius level thinking, just excellent craftsmanship. And we both know AI can do this."
+
+Two distinct methodologies:
+
+- **Creative prototyping** (ambiguous English → working code): requires genius-level reasoning. Done by xhigh agents on frontier APIs.
+- **Mechanical refinement** (working code → diamond code): requires craftsmanship, not invention. Done by Sparks on local models.
+
+The diamond-refinement domain is the canonical instance of mechanical refinement. Once it works on this codebase, the same Centaur harness handles "refine X for diamond" for any future X — generated assembly from a Crenshaw compiler candidate, a state machine emitted by a higher-level Centaur run, etc.
+
+**Why this comes before Crenshaw in practice.** The diamond-refinement domain has all the properties of a real Centaur domain (deterministic metric, bounded test set, local-model-amenable workload) but with three killer features for getting started:
+
+1. **No API cost.** Frontier calls are not in the loop.
+2. **The test set is real code we already own.** No domain authoring required for the first batch — the codebase is the domain.
+3. **The diamond standard from §1.5 is the fitness function.** The same standard the factory is supposed to enforce on its own output. Self-application: the first job of the diamond-making machine is to make the diamond-making machine itself diamond.
+
+**Issue #1345** captures the implementation. Phase A is a single track's claim in parallel with halt-mode cleanup.
+
+---
+
 ## 3. The Crenshaw forcing function (multi-target generality test)
 
 The general-purpose proof-test is **Jack Crenshaw's *Let's Build a Compiler* curriculum**. Per founder direction (2026-05-21), we **extract as many useful problems as possible** from Crenshaw rather than treating each lesson as a single domain. The 16 lessons contain dozens of separable sub-problems with distinct metrics — lexing, parsing, expression evaluation, control-flow lowering, type checking, register allocation, peephole optimization, error recovery, etc. Each becomes a domain in its own right, with its own gold test set and metric functions.
@@ -876,7 +915,9 @@ Resolved decisions are recorded here as part of the spec's truth. Deferred items
 
 This is the *specification*. It is not the project plan. The dashboard tracks progress against this spec. The issue backlog drives the next concrete work. The protocol coordinates the agents doing the work.
 
-This document is expected to be revised. Every revision must be a PR with a `Closes #N` reference where N is a "spec amendment" issue summarizing the change. The current revision is **v1.3, 2026-05-23T06:30Z** (added §1.5 diamond-quality standard — the explicit goal that Centaur produces diamond, not coal, not diesel smoke; Module 8 evaluator extended with `artifact_quality` scoring component that uses the diamond audit (issue #1340) to score not just whether a candidate solves the problem but whether the candidate machine itself is diamond-quality. The factory's own codebase must also reach diamond — coal-quality factories cannot reliably produce diamond-quality machines).
+This document is expected to be revised. Every revision must be a PR with a `Closes #N` reference where N is a "spec amendment" issue summarizing the change. The current revision is **v1.4, 2026-05-23T07:00Z** (added §2.5 — the diamond refinement domain as the first real Centaur state-machine use case. Captures the creative-prototyping vs mechanical-refinement methodology split, names the diamond-making loop as the canonical instance of mechanical refinement, anchors implementation in issue #1345. Sparks host the workload at zero frontier-API cost).
+
+Earlier revisions: **v1.3, 2026-05-23T06:30Z** (§1.5 diamond-quality standard; Module 8 artifact_quality scoring). **v1.2, 2026-05-23T03:30Z** (Module 11 KV-cache archive subsystem; Module 7 batched-throughput + real quality). **v1.1, 2026-05-21T17:30Z** (founder Q1/Q2/Q3 resolved; LongMem zeroth-domain added).
 
 Earlier revisions: **v1.2, 2026-05-23T03:30Z** (Module 11 expanded to cover the DAS-backed KV-cache archive subsystem; Module 7 extended to require batched-throughput economics and real quality measurement). **v1.1, 2026-05-21T17:30Z** (founder review applied — Q1, Q2, Q3 resolved; LongMem zeroth-domain added).
 
