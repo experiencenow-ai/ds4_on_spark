@@ -143,6 +143,32 @@ selected provider lacks measured output throughput, the capacity estimate stays
 fixture intentionally includes one too-tight wait-budget request so consumers
 can test both the selected-provider and structured-blocker paths.
 
+Route request plans may also include a `budget_policy` object. This turns the
+router into a pre-launch admission gate for live Centaur evolution: it can reject
+a plan before any model call runs when blocked requests are present, selected
+providers lack measured capacity, total batch tokens exceed a cap, or projected
+parallel service time exceeds the allowed wall-time envelope. Example:
+
+```json
+{
+  "budget_policy": {
+    "max_total_batch_tokens": 32768,
+    "max_parallel_service_ms_at_measured_output_tps": 200000.0,
+    "allow_unknown_capacity": false,
+    "allow_blocked_requests": false
+  }
+}
+```
+
+Run the measured budget-policy fixture with:
+
+```sh
+python3 scripts/route_model_provider_requests.py fixtures/model_provider_routes/centaur_provider_route_budget_policy_20260523.example.json
+```
+
+Use `--allow-budget-violations` only for dry inspection; a live evolution runner
+should treat `all_budget_gates_passed=false` as a hard stop.
+
 Use `scripts/validate_model_provider_routing.py` for checked-in request or plan
 artifacts. It validates route-request shape, and for routing plans it recomputes
 provider load, blocker summary, and capacity summary from the routes so stale or

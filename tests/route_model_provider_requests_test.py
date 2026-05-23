@@ -65,6 +65,59 @@ class RouteModelProviderRequestsTest(unittest.TestCase):
         self.assertEqual(result["capacity_summary"]["unknown_capacity_provider_ids"], [])
         self.assertGreater(result["capacity_summary"]["estimated_parallel_service_ms_at_measured_output_tps"], 100000.0)
 
+    def test_budget_policy_accepts_measured_plan_under_limits(self) -> None:
+        plan, errors = router.load_request_plan(FIXTURE)
+        self.assertEqual(errors, [])
+        measured_only = copy.deepcopy(plan)
+        measured_only["requests"] = measured_only["requests"][:2]
+        measured_only["budget_policy"] = {
+            "max_total_batch_tokens": 32768,
+            "max_parallel_service_ms_at_measured_output_tps": 200000.0,
+            "allow_unknown_capacity": False,
+            "allow_blocked_requests": False,
+        }
+        profiles, profile_errors = select_model_provider.load_profile_records([])
+        self.assertEqual(profile_errors, [])
+        result = router.route_request_plan(measured_only, profiles)
+        self.assertTrue(result["all_requests_routed"])
+        self.assertTrue(result["all_budget_gates_passed"], result["budget_evaluation"])
+        self.assertTrue(result["budget_evaluation"]["accepted"])
+        self.assertEqual(result["budget_evaluation"]["violations"], [])
+
+    def test_budget_policy_rejects_service_time_over_limit(self) -> None:
+        plan, errors = router.load_request_plan(FIXTURE)
+        self.assertEqual(errors, [])
+        measured_only = copy.deepcopy(plan)
+        measured_only["requests"] = measured_only["requests"][:2]
+        measured_only["budget_policy"] = {
+            "max_total_batch_tokens": 32768,
+            "max_parallel_service_ms_at_measured_output_tps": 1000.0,
+            "allow_unknown_capacity": False,
+            "allow_blocked_requests": False,
+        }
+        profiles, profile_errors = select_model_provider.load_profile_records([])
+        self.assertEqual(profile_errors, [])
+        result = router.route_request_plan(measured_only, profiles)
+        self.assertFalse(result["all_budget_gates_passed"])
+        self.assertIn("parallel_service_ms_exceeds_budget", {item["kind"] for item in result["budget_evaluation"]["violations"]})
+
+    def test_budget_policy_rejects_unknown_capacity_and_blocked_routes(self) -> None:
+        plan, errors = router.load_request_plan(FIXTURE)
+        self.assertEqual(errors, [])
+        strict = copy.deepcopy(plan)
+        strict["budget_policy"] = {
+            "max_total_batch_tokens": 50000,
+            "allow_unknown_capacity": False,
+            "allow_blocked_requests": False,
+        }
+        profiles, profile_errors = select_model_provider.load_profile_records([])
+        self.assertEqual(profile_errors, [])
+        result = router.route_request_plan(strict, profiles)
+        kinds = {item["kind"] for item in result["budget_evaluation"]["violations"]}
+        self.assertIn("unknown_capacity_provider_ids", kinds)
+        self.assertIn("blocked_requests_present", kinds)
+        self.assertFalse(result["all_budget_gates_passed"])
+
     def test_rejects_duplicate_node_ids(self) -> None:
         plan, errors = router.load_request_plan(FIXTURE)
         self.assertEqual(errors, [])
@@ -80,6 +133,18 @@ class RouteModelProviderRequestsTest(unittest.TestCase):
         bad["requests"][0]["tier"] = "wizard"
         errors = router.validate_request_plan(bad)
         self.assertTrue(any("tier is unknown" in item for item in errors))
+
+    def test_rejects_invalid_budget_policy(self) -> None:
+        plan, errors = router.load_request_plan(FIXTURE)
+        self.assertEqual(errors, [])
+        bad = copy.deepcopy(plan)
+        bad["budget_policy"] = {
+            "allow_unknown_capacity": "sometimes",
+            "mystery": 1,
+        }
+        errors = router.validate_request_plan(bad)
+        self.assertTrue(any("allow_unknown_capacity must be boolean" in item for item in errors))
+        self.assertTrue(any("unknown field" in item for item in errors))
 
 
 if __name__ == "__main__":

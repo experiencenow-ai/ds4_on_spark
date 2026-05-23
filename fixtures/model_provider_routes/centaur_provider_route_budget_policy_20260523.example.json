@@ -1,0 +1,24 @@
+{
+  "format": "centaur-provider-route-requests-v1",
+  "run_id": "centaur-provider-route-budget-policy-20260523",
+  "budget_policy": {
+    "max_total_batch_tokens": 32768,
+    "max_parallel_service_ms_at_measured_output_tps": 200000.0,
+    "allow_unknown_capacity": false,
+    "allow_blocked_requests": false
+  },
+  "requests": [
+    {
+      "node_id": "n_hard_reasoning",
+      "tier": "near_frontier_local",
+      "lane": "hard_reasoning",
+      "batch_tokens": 16384
+    },
+    {
+      "node_id": "n_batch_judge",
+      "tier": "near_frontier_local",
+      "lane": "batch_judge",
+      "batch_tokens": 16384
+    }
+  ]
+}
