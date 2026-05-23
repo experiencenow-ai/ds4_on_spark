@@ -29,10 +29,10 @@ class SelectModelProviderTest(unittest.TestCase):
     def test_lane_mismatch_returns_structured_blocker(self) -> None:
         profiles, errors = selector.load_profile_records([])
         self.assertEqual(errors, [])
-        result = selector.select_provider(profiles, "local_coder", "routine_code_patch", 256)
+        result = selector.select_provider(profiles, "local_coder", "unserved_lane", 256)
         self.assertFalse(result["selected"])
         self.assertEqual(result["blocker_kind"], "no_eligible_provider")
-        self.assertIn("not_production_eligible", result["rejection_summary"])
+        self.assertIn("lane_not_supported", result["rejection_summary"])
 
     def test_max_wait_budget_filters_selected_provider(self) -> None:
         profiles, errors = selector.load_profile_records([])
@@ -48,6 +48,22 @@ class SelectModelProviderTest(unittest.TestCase):
         result = selector.select_provider(profiles, "local_small", "candidate_prefilter", 1024, require_production_eligible=False)
         self.assertTrue(result["selected"], result)
         self.assertEqual(result["selected_provider"]["tier"], "local_small")
+
+    def test_selects_measured_local_small_provider_by_default(self) -> None:
+        profiles, errors = selector.load_profile_records([])
+        self.assertEqual(errors, [])
+        result = selector.select_provider(profiles, "local_small", "candidate_prefilter", 32)
+        self.assertTrue(result["selected"], result)
+        self.assertEqual(result["selected_provider"]["provider_id"], "spark2-hf-qwen-qwen3-5-2b-local_small-measured")
+        self.assertGreater(result["selected_provider"]["measured_output_tps"], 20.0)
+
+    def test_selects_measured_local_coder_provider_by_default(self) -> None:
+        profiles, errors = selector.load_profile_records([])
+        self.assertEqual(errors, [])
+        result = selector.select_provider(profiles, "local_coder", "schema_repair", 32)
+        self.assertTrue(result["selected"], result)
+        self.assertEqual(result["selected_provider"]["provider_id"], "spark2-hf-qwen-qwen3-5-2b-local_coder-measured")
+        self.assertEqual(result["selected_provider"]["tier"], "local_coder")
 
 
 if __name__ == "__main__":

@@ -55,7 +55,8 @@ Required profile fields:
 - `tier`: one of the shared tier vocabulary values above.
 - `model_id`: upstream model ID or local runtime ID.
 - `runtime`: one of `deterministic`, `vllm`, `sglang`, `llama_cpp`,
-  `ds4_custom_runtime`, `ds4_layer_pipeline`, `simulator`, or `frontier_api`.
+  `transformers_cli`, `local_openai_compatible`, `ds4_custom_runtime`,
+  `ds4_layer_pipeline`, `simulator`, or `frontier_api`.
 - `endpoint`: runtime-agnostic endpoint metadata, or `null` for manifest-bound
   providers.
 - `node_ids`: zero or more deployment node IDs. Empty means the provider is
@@ -82,15 +83,23 @@ Example fixtures live under `fixtures/model_providers/`:
 
 - `qwen_local_provider.example.json`
 - `ling_local_provider.example.json`
+- `spark2-hf-qwen-qwen3-5-2b-local_small-measured.example.json`
+- `spark2-hf-qwen-qwen3-5-2b-local_coder-measured.example.json`
 - `dsv4_spark_pipeline_provider.example.json`
 - `vllm_deepseek_v4_flash_pp2_200g_near_frontier_20260522.example.json`
 - `frontier_api_placeholder_provider.example.json`
 
 They intentionally leave measured throughput and quality scores as `null`
-unless a matching artifact exists. The vLLM PP=2 near-frontier fixture is the
-current measured exception: it points at the 2026-05-22 PP=2 direct-200G probe
-artifact and records the selected no-MTP batch lane. This avoids turning
-source/model-card claims into local DS4 performance claims.
+unless a matching artifact exists. Current measured exceptions:
+
+- vLLM PP=2 near-frontier points at the 2026-05-22 PP=2 direct-200G
+  probe artifact and records the selected no-MTP batch lane.
+- Spark2 Qwen3.5-2B local-small/local-coder profiles point at the executed
+  small-model qualification record in
+  `fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/`
+  and the throughput addendum generated from those records.
+
+This avoids turning source/model-card claims into local DS4 performance claims.
 
 ## Validation
 
@@ -120,8 +129,10 @@ Centaur-facing dry selection is available without importing any runtime code:
 
 ```sh
 python3 scripts/select_model_provider.py --tier near_frontier_local --lane hard_reasoning --batch-tokens 16384
-python3 scripts/select_model_provider.py --tier local_small --lane candidate_prefilter --batch-tokens 1024 --allow-non-production
+python3 scripts/select_model_provider.py --tier local_small --lane candidate_prefilter --batch-tokens 32
+python3 scripts/select_model_provider.py --tier local_coder --lane schema_repair --batch-tokens 32
 python3 scripts/route_model_provider_requests.py fixtures/model_provider_routes/centaur_provider_route_requests_20260522.example.json --allow-blocked
+python3 scripts/route_model_provider_requests.py fixtures/model_provider_routes/centaur_provider_route_small_models_20260523.example.json
 python3 scripts/validate_model_provider_routing.py
 ```
 
@@ -173,6 +184,12 @@ Use `scripts/validate_model_provider_routing.py` for checked-in request or plan
 artifacts. It validates route-request shape, and for routing plans it recomputes
 provider load, blocker summary, and capacity summary from the routes so stale or
 hand-edited aggregate fields fail loudly.
+
+Use `scripts/build_small_model_provider_profiles.py` to regenerate the measured
+Spark2 local-small/local-coder profiles from
+`fixtures/small_model_qualification/throughput_addendum_20260523.json`. The
+generator requires `pass_rate=1.0` and uses committed executed-run records only;
+it does not call live providers.
 
 ## Centaur Boundary
 
