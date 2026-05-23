@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import json
 import sys
 from argparse import ArgumentParser
 from pathlib import Path
@@ -9,31 +8,10 @@ from typing import Any, Optional
 if __package__ in (None, ""):
 	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from scripts._lib.json_utils import emit_json_result
+from scripts._lib.json_utils import load_json_object
 from scripts._lib.json_utils import optional_int_field
 from scripts._lib.json_utils import optional_string_field
-
-
-def die_json(errors: list[str], warnings: list[str]) -> int:
-	out = {
-		"ok": (len(errors) == 0),
-		"errors": errors,
-		"warnings": warnings,
-	}
-	print(json.dumps(out, indent=2, sort_keys=True))
-	return 0 if out["ok"] else 1
-
-
-def load_json(path: Path, errors: list[str], label: str) -> Optional[dict[str, Any]]:
-	try:
-		with path.open("r", encoding="utf-8") as f:
-			doc = json.load(f)
-	except Exception as e:
-		errors.append(f"{label}: failed to load JSON: {e}")
-		return None
-	if not isinstance(doc, dict):
-		errors.append(f"{label}: top-level JSON is not an object")
-		return None
-	return doc
 
 
 def get_dict(doc: dict[str, Any], key: str) -> Optional[dict[str, Any]]:
@@ -80,11 +58,11 @@ def main() -> int:
 	contract_path = Path(args.contract_probe_json)
 	llama_path = Path(args.llamacpp_probe_json)
 
-	contract = load_json(contract_path, errors, "contract")
-	llama = load_json(llama_path, errors, "llamacpp")
+	contract = load_json_object(contract_path, errors, "contract")
+	llama = load_json_object(llama_path, errors, "llamacpp")
 	if contract is None or llama is None:
 		if args.json:
-			return die_json(errors, warnings)
+			return emit_json_result(errors, warnings)
 		for e in errors:
 			print(f"error: {e}")
 		return 1
@@ -182,7 +160,7 @@ def main() -> int:
 		warnings.append(f"llamacpp probe contains tensors not present in contract: {extra_llama}")
 
 	if args.json:
-		return die_json(errors, warnings)
+		return emit_json_result(errors, warnings)
 
 	for w in warnings[:64]:
 		print(f"warning: {w}")
