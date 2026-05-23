@@ -10,8 +10,10 @@ from typing import Any, Optional
 
 try:
 	from scripts._lib.source_probe import sha256_file
+	from scripts._lib.source_probe import sha256_lines
 except ImportError:
 	from _lib.source_probe import sha256_file
+	from _lib.source_probe import sha256_lines
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,13 +68,6 @@ def build_checkpoint_keys() -> list[str]:
 	if not isinstance(weight_map, dict):
 		return []
 	return sorted([k for k in weight_map.keys() if isinstance(k, str)])
-
-def sha256_lines(lines: list[str]) -> str:
-	h = sha256()
-	for line in lines:
-		h.update(line.encode("utf-8"))
-		h.update(b"\n")
-	return h.hexdigest()
 
 def sha256_json(obj) -> str:
 	b = json.dumps(obj, sort_keys=True, separators=(",", ":")).encode("utf-8")

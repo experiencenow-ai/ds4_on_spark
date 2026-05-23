@@ -14,9 +14,11 @@ from typing import Any
 try:
 	from scripts._lib.json_utils import artifact_sha256
 	from scripts._lib.json_utils import is_sha256_text
+	from scripts._lib.source_probe import tail_text
 except ImportError:
 	from _lib.json_utils import artifact_sha256
 	from _lib.json_utils import is_sha256_text
+	from _lib.source_probe import tail_text
 
 
 FORMAT = "ds4-full-stack-truth-v1"
@@ -167,13 +169,6 @@ def classify_blocker(text: str, rc: int) -> str:
 	if "command not found" in low or "unknown option" in low or "no such file" in low or "not found" in low and "./ds4" in low:
 		return "command_runtime_bug"
 	return "unknown"
-
-
-def tail_text(text: str, limit: int = 4000) -> str:
-	text = text.strip()
-	if len(text) <= limit:
-		return text
-	return text[-limit:]
 
 
 def ratios(tokens_per_second: float | None, ceilings: dict[str, float]) -> dict[str, float | None]:

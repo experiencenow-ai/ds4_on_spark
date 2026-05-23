@@ -6,13 +6,14 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from hashlib import sha256
 from pathlib import Path
 
 try:
 	from scripts._lib.source_probe import sha256_file
+	from scripts._lib.source_probe import sha256_lines
 except ImportError:
 	from _lib.source_probe import sha256_file
+	from _lib.source_probe import sha256_lines
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,13 +46,6 @@ def find_mtp_layer_ids(weight_keys: set[str]) -> list[int]:
 		except ValueError:
 			continue
 	return sorted(ids)
-
-def sha256_lines(lines: list[str]) -> str:
-	h = sha256()
-	for line in lines:
-		h.update(line.encode("utf-8"))
-		h.update(b"\n")
-	return h.hexdigest()
 
 def repo_relpath(path: Path) -> str:
 	try:

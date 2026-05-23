@@ -13,8 +13,10 @@ from typing import Any
 
 try:
 	from scripts._lib.json_utils import artifact_sha256
+	from scripts._lib.source_probe import tail_text
 except ImportError:
 	from _lib.json_utils import artifact_sha256
+	from _lib.source_probe import tail_text
 
 
 RECORD_FORMAT = "ds4-perf-iceberg-record-v1"
@@ -157,13 +159,6 @@ def finite_from_probe(probe: dict[str, Any], rc: int) -> bool:
 		if is_number(value):
 			return int(value) == 0
 	return rc == 0 and hash_from_probe(probe) != ""
-
-
-def tail_text(text: str, limit: int = 4000) -> str:
-	text = text.strip()
-	if len(text) <= limit:
-		return text
-	return text[-limit:]
 
 
 def classify_blocker(text: str, rc: int, component_kind: str = "") -> str:
