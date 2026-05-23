@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 from pathlib import Path
 from typing import Any
 
@@ -53,50 +54,90 @@ def summarize_by_domain(rows: list[dict[str, Any]]) -> dict[tuple[str, str], dic
 	return out
 
 
-def build_comparison(baseline_path: Path, candidate_path: Path, baseline_label: str, candidate_label: str, equivalent_pp: float) -> dict[str, Any]:
-	base_rows, base_summary = load_rows(baseline_path)
-	cand_rows, cand_summary = load_rows(candidate_path)
-	base_by_id = {str(row.get("case_id")): row for row in base_rows}
-	cand_by_id = {str(row.get("case_id")): row for row in cand_rows}
-	common_ids = sorted(set(base_by_id) & set(cand_by_id))
-	if len(common_ids) == 0:
-		raise ValueError("no overlapping case_id values")
-	baseline_only = 0
-	candidate_only = 0
-	both_pass = 0
-	both_fail = 0
+def answer_marker_present(text: str) -> bool:
+	return re.search(r"(?im)\banswer\s*[:：]", text) is not None
+
+
+def comparison_status(base_pass: bool, cand_pass: bool) -> str:
+	if base_pass and cand_pass:
+		return "both_pass"
+	if base_pass:
+		return "baseline_only_pass"
+	if cand_pass:
+		return "candidate_only_pass"
+	return "both_fail"
+
+
+def row_brief(case_id: str, base: dict[str, Any], cand: dict[str, Any]) -> dict[str, Any]:
+	base_pass = bool(base.get("passed"))
+	cand_pass = bool(cand.get("passed"))
+	return {
+		"case_index": cand.get("case_index", base.get("case_index", 0)),
+		"case_id": case_id,
+		"source": cand.get("source", base.get("source", "")),
+		"domain": cand.get("domain", base.get("domain", "")),
+		"expected_answer": cand.get("expected_answer", base.get("expected_answer", "")),
+		"baseline_passed": base_pass,
+		"baseline_observed_answer": base.get("observed_answer", ""),
+		"baseline_generated_tokens": int(base.get("generated_tokens") or 0),
+		"candidate_passed": cand_pass,
+		"candidate_observed_answer": cand.get("observed_answer", ""),
+		"candidate_generated_tokens": int(cand.get("generated_tokens") or 0),
+		"candidate_answer_marker_present": answer_marker_present(str(cand.get("generated_text") or "")),
+		"comparison_status": comparison_status(base_pass, cand_pass),
+	}
+
+
+def length_cap_summary(capped: list[dict[str, Any]]) -> dict[str, Any]:
+	without_marker = sum(1 for row in capped if not row["candidate_answer_marker_present"])
+	discordant = sum(1 for row in capped if row["comparison_status"] in ("baseline_only_pass", "candidate_only_pass"))
+	return {
+		"length_capped_count": len(capped),
+		"length_capped_passed": sum(1 for row in capped if row["candidate_passed"]),
+		"length_capped_without_answer_marker": without_marker,
+		"length_capped_discordant_count": discordant,
+		"cap_altered_comparison_delta": discordant > 0,
+		"verdict": "may_affect_comparison" if discordant > 0 else "no_comparison_delta_but_grading_risk",
+	}
+
+
+def collect_case_outcomes(common_ids: list[str], base_by_id: dict[str, dict[str, Any]], cand_by_id: dict[str, dict[str, Any]], length_cap_tokens: int) -> dict[str, Any]:
+	out = {"baseline_only": 0, "candidate_only": 0, "both_pass": 0, "both_fail": 0, "discordant_cases": [], "length_capped_cases": []}
 	for case_id in common_ids:
-		base_pass = bool(base_by_id[case_id].get("passed"))
-		cand_pass = bool(cand_by_id[case_id].get("passed"))
-		if base_pass and cand_pass:
-			both_pass += 1
-		elif base_pass:
-			baseline_only += 1
-		elif cand_pass:
-			candidate_only += 1
+		base = base_by_id[case_id]
+		cand = cand_by_id[case_id]
+		base_pass = bool(base.get("passed"))
+		cand_pass = bool(cand.get("passed"))
+		if int(cand.get("generated_tokens") or 0) >= length_cap_tokens:
+			out["length_capped_cases"].append(row_brief(case_id, base, cand))
+		status = comparison_status(base_pass, cand_pass)
+		if status == "both_pass":
+			out["both_pass"] += 1
+		elif status == "baseline_only_pass":
+			out["baseline_only"] += 1
+			out["discordant_cases"].append(row_brief(case_id, base, cand))
+		elif status == "candidate_only_pass":
+			out["candidate_only"] += 1
+			out["discordant_cases"].append(row_brief(case_id, base, cand))
 		else:
-			both_fail += 1
-	base_passed = sum(1 for row in base_rows if row.get("passed") is True)
-	cand_passed = sum(1 for row in cand_rows if row.get("passed") is True)
-	base_total = len(base_rows)
-	cand_total = len(cand_rows)
-	base_rate = pass_rate(base_passed, base_total)
-	cand_rate = pass_rate(cand_passed, cand_total)
-	diff_pp = (cand_rate - base_rate) * 100.0
+			out["both_fail"] += 1
+	return out
+
+
+def quality_verdict(diff_pp: float, equivalent_pp: float) -> str:
 	if abs(diff_pp) <= equivalent_pp:
-		verdict = "equivalent"
-	elif diff_pp > 0:
-		verdict = "better"
-	else:
-		verdict = "worse"
-	p_value = exact_mcnemar_pvalue(baseline_only, candidate_only)
+		return "equivalent"
+	return "better" if diff_pp > 0 else "worse"
+
+
+def build_domain_table(base_rows: list[dict[str, Any]], cand_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 	base_domains = summarize_by_domain(base_rows)
 	cand_domains = summarize_by_domain(cand_rows)
-	domain_table = []
+	rows = []
 	for key in sorted(set(base_domains) | set(cand_domains)):
 		base = base_domains.get(key, {"question_count": 0, "passed": 0, "failed": 0})
 		cand = cand_domains.get(key, {"question_count": 0, "passed": 0, "failed": 0})
-		domain_table.append({
+		rows.append({
 			"source": key[0],
 			"domain": key[1],
 			"baseline_passed": base["passed"],
@@ -106,6 +147,35 @@ def build_comparison(baseline_path: Path, candidate_path: Path, baseline_label: 
 			"candidate_total": cand["question_count"],
 			"candidate_pass_rate": pass_rate(cand["passed"], cand["question_count"]),
 		})
+	return rows
+
+
+def analysis_recommendations() -> list[str]:
+	return [
+		"Record length_capped and answer_marker_present on future pipeline-quality question rows.",
+		"Treat length-capped rows without an explicit Answer: marker as grading-risk cases even when fallback extraction happens to match.",
+		"Add a stop policy or answer-line extraction mode before using long max_tokens runs for quality deltas.",
+	]
+
+
+def build_comparison(baseline_path: Path, candidate_path: Path, baseline_label: str, candidate_label: str, equivalent_pp: float, length_cap_tokens: int) -> dict[str, Any]:
+	base_rows, base_summary = load_rows(baseline_path)
+	cand_rows, cand_summary = load_rows(candidate_path)
+	base_by_id = {str(row.get("case_id")): row for row in base_rows}
+	cand_by_id = {str(row.get("case_id")): row for row in cand_rows}
+	common_ids = sorted(set(base_by_id) & set(cand_by_id))
+	if len(common_ids) == 0:
+		raise ValueError("no overlapping case_id values")
+	outcomes = collect_case_outcomes(common_ids, base_by_id, cand_by_id, length_cap_tokens)
+	base_passed = sum(1 for row in base_rows if row.get("passed") is True)
+	cand_passed = sum(1 for row in cand_rows if row.get("passed") is True)
+	base_total = len(base_rows)
+	cand_total = len(cand_rows)
+	base_rate = pass_rate(base_passed, base_total)
+	cand_rate = pass_rate(cand_passed, cand_total)
+	diff_pp = (cand_rate - base_rate) * 100.0
+	verdict = quality_verdict(diff_pp, equivalent_pp)
+	p_value = exact_mcnemar_pvalue(outcomes["baseline_only"], outcomes["candidate_only"])
 	return {
 		"format": FORMAT,
 		"baseline_label": baseline_label,
@@ -122,13 +192,18 @@ def build_comparison(baseline_path: Path, candidate_path: Path, baseline_label: 
 		"candidate_pass_rate": cand_rate,
 		"difference_percentage_points": diff_pp,
 		"mcnemar_p_value": p_value,
-		"both_pass": both_pass,
-		"both_fail": both_fail,
-		"baseline_only_pass": baseline_only,
-		"candidate_only_pass": candidate_only,
+		"both_pass": outcomes["both_pass"],
+		"both_fail": outcomes["both_fail"],
+		"baseline_only_pass": outcomes["baseline_only"],
+		"candidate_only_pass": outcomes["candidate_only"],
+		"discordant_cases": sorted(outcomes["discordant_cases"], key=lambda row: int(row.get("case_index") or 0)),
+		"length_cap_tokens": length_cap_tokens,
+		"length_cap_summary": length_cap_summary(outcomes["length_capped_cases"]),
+		"length_capped_cases": sorted(outcomes["length_capped_cases"], key=lambda row: int(row.get("case_index") or 0)),
+		"recommendations": analysis_recommendations(),
 		"verdict": verdict,
 		"verdict_line": f"{candidate_label} quality is {verdict} than {baseline_label} by {diff_pp:.2f} percentage points on ds4-eval, p-value {p_value:.6g}.",
-		"domain_table": domain_table,
+		"domain_table": build_domain_table(base_rows, cand_rows),
 	}
 
 
@@ -151,7 +226,32 @@ def build_markdown(comparison: dict[str, Any]) -> str:
 	lines.extend([
 		"",
 		f"Discordant pairs: baseline-only pass {comparison['baseline_only_pass']}, candidate-only pass {comparison['candidate_only_pass']}.",
+		"",
+		"## Discordant Cases",
+		"",
+		"| # | Case | Source | Domain | Baseline | Candidate |",
+		"| ---: | --- | --- | --- | --- | --- |",
 	])
+	for row in comparison.get("discordant_cases", []):
+		lines.append(f"| {row['case_index']} | {row['case_id']} | {row['source']} | {row['domain']} | {row['baseline_observed_answer']} ({'pass' if row['baseline_passed'] else 'fail'}) | {row['candidate_observed_answer']} ({'pass' if row['candidate_passed'] else 'fail'}) |")
+	cap = comparison["length_cap_summary"]
+	lines.extend([
+		"",
+		"## Length Cap Review",
+		"",
+		f"Candidate rows at the {comparison['length_cap_tokens']}-token cap: {cap['length_capped_count']}.",
+		f"Capped rows without an explicit `Answer:` marker: {cap['length_capped_without_answer_marker']}.",
+		f"Capped rows that changed the baseline/candidate pass delta: {cap['length_capped_discordant_count']}.",
+		f"Length-cap verdict: `{cap['verdict']}`.",
+		"",
+		"| # | Case | Status | Observed | Expected | Answer marker |",
+		"| ---: | --- | --- | --- | --- | --- |",
+	])
+	for row in comparison.get("length_capped_cases", []):
+		lines.append(f"| {row['case_index']} | {row['case_id']} | {row['comparison_status']} | {row['candidate_observed_answer']} | {row['expected_answer']} | {row['candidate_answer_marker_present']} |")
+	lines.extend(["", "Recommendations:"])
+	for item in comparison.get("recommendations", []):
+		lines.append(f"- {item}")
 	return "\n".join(lines) + "\n"
 
 
@@ -162,6 +262,7 @@ def build_parser() -> argparse.ArgumentParser:
 	ap.add_argument("--baseline-label", default="antirez IQ2XXS PP=1")
 	ap.add_argument("--candidate-label", default="vLLM MXFP4 TP=2")
 	ap.add_argument("--equivalent-pp", type=float, default=3.0)
+	ap.add_argument("--length-cap-tokens", type=int, default=16000)
 	ap.add_argument("--out", required=True)
 	ap.add_argument("--markdown-out", default="")
 	return ap
@@ -169,7 +270,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
 	args = build_parser().parse_args(argv)
-	comparison = build_comparison(Path(args.baseline), Path(args.candidate), args.baseline_label, args.candidate_label, args.equivalent_pp)
+	comparison = build_comparison(Path(args.baseline), Path(args.candidate), args.baseline_label, args.candidate_label, args.equivalent_pp, args.length_cap_tokens)
 	Path(args.out).parent.mkdir(parents=True, exist_ok=True)
 	Path(args.out).write_text(json.dumps(comparison, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 	if args.markdown_out:
