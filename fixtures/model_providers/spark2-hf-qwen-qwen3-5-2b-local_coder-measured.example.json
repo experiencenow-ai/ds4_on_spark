@@ -43,7 +43,7 @@
   },
   "source_refs": [
     "docs/model-provider-tiers.md",
-    "docs/spark-model-cache.md"
+    "docs/spark-ring.md"
   ],
   "supported_lanes": [
     "routine_code_patch",

@@ -1,5 +1,9 @@
 # DeepSeek V4 Flash (Execution Contract)
 
+> Supersedes: `docs/model-deepseek-v4-flash.md`
+
+This is a canonical document. Update this file instead of adding overlapping docs.
+
 This document is **source-derived** from upstream DeepSeek V4 Flash configs and the official reference implementation shipped in the upstream model repo.
 
 ## Upstream source of truth

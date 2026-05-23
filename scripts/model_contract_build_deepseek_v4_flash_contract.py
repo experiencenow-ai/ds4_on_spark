@@ -341,7 +341,7 @@ def build_oracle_contract() -> dict:
 				"requires_prefill_and_decode": True,
 				"topk_k": prompts_default_topk,
 				"topk_ids_exact": True,
-				"logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md.",
+				"logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-provider-tiers.md.",
 			},
 			"note": "Do not commit oracle outputs until reviewed; the default automation refuses to download weights.",
 		},
@@ -2040,7 +2040,7 @@ def build_contract() -> dict:
 						"oracle_generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
 						"acceptance_requires_prefill_and_decode": True,
 						"acceptance_topk_ids_exact": True,
-						"acceptance_logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md",
+						"acceptance_logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-provider-tiers.md",
 					},
 				},
 				"runtime": {

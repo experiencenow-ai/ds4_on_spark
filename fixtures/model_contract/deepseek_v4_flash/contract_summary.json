@@ -1846,7 +1846,7 @@
       "super_forward_expr": "x = super().forward(x, start_pos, input_ids)"
     },
     "trust_gates": {
-      "acceptance_logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md",
+      "acceptance_logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-provider-tiers.md",
       "acceptance_requires_prefill_and_decode": true,
       "acceptance_topk_ids_exact": true,
       "artifact_requires_mtp_contract_complete": true,
@@ -1915,7 +1915,7 @@
     },
     "logits_oracle": {
       "acceptance": {
-        "logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md.",
+        "logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-provider-tiers.md.",
         "requires_prefill_and_decode": true,
         "topk_ids_exact": true,
         "topk_k": 64

@@ -25,8 +25,8 @@
   },
   "last_probe_artifact": "",
   "source_refs": [
-    "docs/ds4-spark-layer-pipeline-plan.md",
-    "docs/expert-scaling-proof-plan.md"
+    "docs/ds4-pipeline.md",
+    "docs/ds4-pipeline.md"
   ],
   "notes": "Deployment topology is resolved from a stage manifest; this fixture intentionally does not encode a fixed Spark count."
 }

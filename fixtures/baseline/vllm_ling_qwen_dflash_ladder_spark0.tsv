@@ -1,5 +1,5 @@
 # vLLM ladder template for Spark0 (Ling/Qwen target-only + paired Qwen DFlash).
-# Pinned ordering mirrors docs/upstream-qwen-dflash.md (2026-05-12 UTC).
+# Pinned ordering mirrors docs/upstream.md (2026-05-12 UTC).
 #
 # Usage:
 #   BUNDLE_LABEL=ling-qwen-ladder \

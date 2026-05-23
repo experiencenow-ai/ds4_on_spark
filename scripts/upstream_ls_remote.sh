@@ -8,7 +8,7 @@ Usage: ./scripts/upstream_ls_remote.sh [--head|--pinned|--all]
 
 Modes:
   --head    Print default-branch HEAD for a curated list (legacy behavior).
-  --pinned  Print the current resolution of refs pinned in docs/upstream-manifest.md.
+  --pinned  Print the current resolution of refs pinned in docs/upstream.md.
   --all     Print both reports (HEAD first, then pinned).
 
 Default is --head for backwards compatibility.
@@ -116,7 +116,7 @@ print_ref()
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MANIFEST_MD="${ROOT_DIR}/docs/upstream-manifest.md"
+MANIFEST_MD="${ROOT_DIR}/docs/upstream.md"
 
 manifest_rows()
 {

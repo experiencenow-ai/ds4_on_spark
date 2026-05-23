@@ -1,5 +1,9 @@
 # Entropy Buffers (Centaur/DS4 metrics track)
 
+> Supersedes: `docs/entropy-buffers.md`
+
+This is a canonical document. Update this file instead of adding overlapping docs.
+
 This track defines **measurable entropy metrics** for the Centaur/DS4 multi-model workflow and provides **deterministic** tools that summarize entropy from mixed JSONL benchmark + judge logs.
 
 Goals:

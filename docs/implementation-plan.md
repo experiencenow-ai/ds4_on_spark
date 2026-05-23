@@ -1,5 +1,9 @@
 # Implementation Plan
 
+> Supersedes: `docs/implementation-plan.md`
+
+This is a canonical document. Update this file instead of adding overlapping docs.
+
 ## Review Summary
 
 The draft design has the right shape: a narrow DeepSeek V4 Flash engine for

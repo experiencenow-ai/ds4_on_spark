@@ -281,7 +281,7 @@ Contents:
 
 Runbook:
 
-- \`docs/centaur-spark0-v73-smoke.md\`
+- \`docs/centaur-runbooks.md\`
 EOF
 
 redact="$root/scripts/centaur_redact_fixture_bundle.sh"

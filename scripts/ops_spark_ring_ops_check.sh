@@ -328,21 +328,21 @@ do_work()
 	echo "== next =="
 	case "$picked_preflight" in
 		tp2)
-			echo "readiness rubric: docs/spark-ring-ops-readiness-tp2.md"
-			echo "operating checklist: docs/spark-ring-ops-checklist-tp2.md"
-			echo "deployment guide: docs/deployment-spark0-spark1.md"
+			echo "readiness rubric: docs/spark-ring.md"
+			echo "operating checklist: docs/spark-ring.md"
+			echo "deployment guide: docs/deployment.md"
 			;;
 		tp3)
-			echo "readiness rubric: docs/spark-ring-ops-readiness-tp3.md"
-			echo "operating checklist: docs/spark-ring-ops-checklist-tp3.md"
+			echo "readiness rubric: docs/spark-ring.md"
+			echo "operating checklist: docs/spark-ring.md"
 			;;
 		tp4)
-			echo "readiness rubric: docs/ops-tp4-readiness.md"
-			echo "operating checklist: docs/spark-ring-ops-checklist.md"
+			echo "readiness rubric: docs/ops-tp.md"
+			echo "operating checklist: docs/spark-ring.md"
 			;;
 		*)
-			echo "readiness rubric: docs/spark-ring-ops-readiness-tp3.md"
-			echo "operating checklist: docs/spark-ring-ops-checklist-tp3.md"
+			echo "readiness rubric: docs/spark-ring.md"
+			echo "operating checklist: docs/spark-ring.md"
 			;;
 		esac
 		echo "== done =="

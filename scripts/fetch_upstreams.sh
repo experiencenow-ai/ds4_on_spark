@@ -4,7 +4,7 @@ export GIT_TERMINAL_PROMPT=0
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UPSTREAM_DIR="${ROOT_DIR}/upstreams"
-MANIFEST_MD="${ROOT_DIR}/docs/upstream-manifest.md"
+MANIFEST_MD="${ROOT_DIR}/docs/upstream.md"
 
 mkdir -p "${UPSTREAM_DIR}"
 
@@ -14,7 +14,7 @@ usage()
 Usage: ./scripts/fetch_upstreams.sh <name|all>
 
 Clones pinned upstream refs into ./upstreams (ignored by git) and verifies the
-checked-out commit matches docs/upstream-manifest.md.
+checked-out commit matches docs/upstream.md.
 
 Targets:
   ds4
@@ -160,7 +160,7 @@ verify_pinned_checkout()
 		echo "FAIL ${name}: pinned commit mismatch after fetch" >&2
 		echo "  expected: ${expected}" >&2
 		echo "  got:      ${got}" >&2
-		echo "  hint: run ./scripts/upstream_verify_pins.sh and update docs/upstream-manifest.md if pins drifted" >&2
+		echo "  hint: run ./scripts/upstream_verify_pins.sh and update docs/upstream.md if pins drifted" >&2
 		return 1
 	fi
 

@@ -78,6 +78,7 @@ PROBE_DOC_PATTERN = re.compile(
     # almost certainly a per-iteration probe/status doc — the LANES.md
     # forbidden 'vXX notes' anti-pattern, just with timestamp encoding.
     r".*-\d{4}-\d{2}-\d{2}(T\d{4}Z)?$"      # any-name-YYYY-MM-DD[THHMMZ]
+    r"|^baseline-.*\d{4}-\d{2}-\d{2}"        # baseline reports with date in the middle
     r"|^spark.*-probe.*"                      # spark*-probe-anything
     r"|.*-iteration-\d"
     r"|.*-v\d+-notes"

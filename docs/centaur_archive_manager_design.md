@@ -1,5 +1,9 @@
 # Centaur Archive Manager Design
 
+> Supersedes: `docs/centaur_archive_manager_design.md`
+
+This is a canonical document. Update this file instead of adding overlapping docs.
+
 ## Scope
 
 The Centaur archive manager is the long-term memory layer for KV cache blobs,

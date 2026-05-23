@@ -7,7 +7,7 @@ oracle-vs-candidate diffs can localize correctness mismatches before acceptance
 sweeps.
 
 Reference:
-- docs/mtp-one-token-draft-probe.md (optional debug keys)
+- docs/mtp.md (optional debug keys)
 """
 
 from __future__ import annotations

@@ -3,7 +3,7 @@
 
 This probe is intended for Spark-style hosts where a llama.cpp runtime source tree
 already exists. It does not build or run a model; it only scans source files for
-the narrow multi-slot reservation fixes tracked in docs/baseline-multislot-parallel2.md.
+the narrow multi-slot reservation fixes tracked in docs/baseline.md.
 """
 
 import base64
