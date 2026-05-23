@@ -31,6 +31,12 @@ import re
 import sys
 from collections import defaultdict
 
+from audit_code_similarity import DEFAULT_MIN_FUNCTION_LINES as DEFAULT_SIMILARITY_MIN_LINES
+from audit_code_similarity import DEFAULT_SIMILARITY_THRESHOLD
+from audit_code_similarity import pair_keys
+from audit_code_similarity import resolve_centaur_root
+from audit_code_similarity import run_similarity_audit
+
 
 def _normalize_body(body_nodes: list[ast.stmt]) -> str:
     """Hash a function body for cross-file equality detection.
@@ -102,12 +108,14 @@ def load_baseline(repo: pathlib.Path) -> dict | None:
     return json.loads(p.read_text())
 
 
-def write_baseline(repo: pathlib.Path, dups: dict, probes: list[pathlib.Path]) -> None:
+def write_baseline(repo: pathlib.Path, dups: dict, probes: list[pathlib.Path], similarity: dict) -> None:
     p = repo / ".audit-baseline.json"
     payload = {
         "duplicate_function_hashes": sorted(dups.keys()),
         "duplicate_function_counts": {h: len(locs) for h, locs in dups.items()},
         "probe_docs": sorted(str(d.relative_to(repo)) for d in probes),
+        "similarity_threshold": similarity.get("threshold"),
+        "similarity_function_pairs": sorted(pair_keys(similarity.get("pairs", []))),
     }
     p.write_text(json.dumps(payload, indent=2) + "\n")
 
@@ -116,6 +124,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--baseline-snapshot", action="store_true",
                         help="Write current violation set as the baseline and exit 0.")
+    parser.add_argument("--centaur-root", help="Path to a Centaur checkout containing centaur.py. Defaults to CENTAUR_REPO or ../centaur.")
+    parser.add_argument("--similarity-threshold", type=float, default=DEFAULT_SIMILARITY_THRESHOLD)
+    parser.add_argument("--similarity-min-lines", type=int, default=DEFAULT_SIMILARITY_MIN_LINES)
     args = parser.parse_args()
 
     repo = pathlib.Path(__file__).resolve().parent.parent
@@ -129,12 +140,22 @@ def main() -> int:
     baseline = load_baseline(repo)
     dups = find_duplicate_functions(scripts_dir)
     probes = find_probe_docs(docs_dir)
+    centaur_root = resolve_centaur_root(repo, args.centaur_root)
+    similarity = run_similarity_audit(
+        repo,
+        centaur_root,
+        float(args.similarity_threshold),
+        int(args.similarity_min_lines),
+        5,
+        200,
+    )
 
     if args.baseline_snapshot:
-        write_baseline(repo, dups, probes)
+        write_baseline(repo, dups, probes, similarity)
         print(f"\nBaseline snapshot written:")
         print(f"  duplicate-function hashes: {len(dups)}")
         print(f"  forbidden probe docs:      {len(probes)}")
+        print(f"  similarity pairs:          {len(similarity.get('pairs', []))}")
         print(f"\nFuture audit runs will fail on NEW violations only.")
         return 0
 
@@ -166,8 +187,25 @@ def main() -> int:
         if len(probes) > 10:
             print(f"        ... and {len(probes) - 10} more")
 
+    print("\n3. Centaur near-duplicate function similarity:")
+    print(f"   import: {similarity.get('centaur_import')}")
+    print(f"   centaur_root: {centaur_root}")
+    print(f"   threshold={similarity.get('threshold')} functions={similarity.get('function_count')} elapsed={similarity.get('elapsed_seconds')}s")
+    similarity_pairs = similarity.get("pairs", []) if isinstance(similarity.get("pairs"), list) else []
+    if not similarity_pairs:
+        print("   (none)")
+    else:
+        print(f"   {len(similarity_pairs)} pairs at or above threshold")
+        for pair in similarity_pairs[:25]:
+            key = str(pair.get("left", "")) + " <=> " + str(pair.get("right", ""))
+            new = baseline is None or key not in baseline.get("similarity_function_pairs", [])
+            marker = " *** NEW ***" if new and baseline is not None else ""
+            print(f"   {float(pair.get('score', 0.0)):.3f} {pair.get('reason')}:{marker}")
+            print(f"        {pair.get('left')}")
+            print(f"        {pair.get('right')}")
+
     # 3. Largest scripts (potential split candidates)
-    print("\n3. Largest scripts (>500 LOC, candidates for decomposition):")
+    print("\n4. Largest scripts (>500 LOC, candidates for decomposition):")
     big = find_large_scripts(scripts_dir, 500)
     if not big:
         print("   (none)")
@@ -176,7 +214,7 @@ def main() -> int:
             print(f"   {n:5d} {p.relative_to(repo)}")
 
     # 4. Aggregate totals
-    print("\n4. Aggregate totals:")
+    print("\n5. Aggregate totals:")
     scripts_loc = sum(sum(1 for _ in p.read_text().splitlines()) for p in scripts_dir.glob("*.py"))
     docs_count = sum(1 for _ in docs_dir.glob("*.md"))
     docs_size_kb = sum(p.stat().st_size for p in docs_dir.glob("*.md")) // 1024
@@ -199,25 +237,32 @@ def main() -> int:
     baseline_hashes = set(baseline.get("duplicate_function_hashes", []))
     baseline_counts = baseline.get("duplicate_function_counts", {})
     baseline_probes = set(baseline.get("probe_docs", []))
+    baseline_similarity = set(baseline.get("similarity_function_pairs", []))
     new_dup_hashes = set(dups.keys()) - baseline_hashes
     grown_dup_hashes = {
         h for h, locs in dups.items()
         if h in baseline_hashes and len(locs) > baseline_counts.get(h, 0)
     }
     new_probes = set(str(p.relative_to(repo)) for p in probes) - baseline_probes
-    if new_dup_hashes or grown_dup_hashes or new_probes:
+    new_similarity = pair_keys(similarity_pairs) - baseline_similarity
+    if new_dup_hashes or grown_dup_hashes or new_probes or new_similarity:
         print(f"\n*** NEW VIOLATIONS ***")
         print(f"  brand-new duplicate-function groups: {len(new_dup_hashes)}")
         print(f"  existing groups that GREW (more copies added): {len(grown_dup_hashes)}")
         print(f"  new forbidden probe docs:             {len(new_probes)}")
+        print(f"  new Centaur similarity pairs:         {len(new_similarity)}")
         if grown_dup_hashes:
             print(f"\n  Grown groups (copy count increased):")
             for h in sorted(grown_dup_hashes):
                 print(f"    [{h}] was {baseline_counts.get(h, 0)} copies, now {len(dups[h])}")
+        if new_similarity:
+            print(f"\n  New Centaur similarity pairs:")
+            for key in sorted(new_similarity)[:25]:
+                print(f"    {key}")
         print(f"\nNo new rot allowed. Fix or remove these before this PR can land.")
         return 1
     print(f"\nOK. No new violations vs baseline. ({len(dups)} pre-existing dup groups,")
-    print(f"{len(probes)} pre-existing probe docs remain to clean up.)")
+    print(f"{len(probes)} pre-existing probe docs, {len(similarity_pairs)} pre-existing similarity pairs remain to clean up.)")
     return 0
 
 
