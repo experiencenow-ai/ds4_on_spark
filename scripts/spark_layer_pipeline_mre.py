@@ -22,6 +22,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._lib.spark_ssh import ssh_prefix as build_ssh_prefix
+
 
 COMMON_SSH_OPTS = [
     "-o",
@@ -141,14 +146,6 @@ def pipeline_order(links: list[Link]) -> list[str]:
     return order
 
 
-def ssh_prefix(node: Node) -> list[str]:
-    cmd = ["ssh", *COMMON_SSH_OPTS]
-    if node.jump is not None:
-        cmd.extend(["-J", node.jump])
-    cmd.append(node.ssh)
-    return cmd
-
-
 def scp_prefix(node: Node) -> list[str]:
     cmd = ["scp", *COMMON_SSH_OPTS]
     if node.jump is not None:
@@ -181,8 +178,9 @@ def deploy(nodes: dict[str, Node], order: list[str], worker: str) -> None:
             )
             if result.returncode != 0:
                 raise RuntimeError(f"scp C worker to {name} failed: {result.stderr.strip()}")
+            compile_cmd = f"gcc -O3 -Wall -Wextra -o {REMOTE_C_BIN} {REMOTE_C_SRC}"
             result = subprocess.run(
-                [*ssh_prefix(node), f"gcc -O3 -Wall -Wextra -o {REMOTE_C_BIN} {REMOTE_C_SRC}"],
+                [*build_ssh_prefix(node.ssh, node.jump, COMMON_SSH_OPTS), compile_cmd],
                 check=False,
                 text=True,
                 stdout=subprocess.PIPE,
@@ -377,8 +375,9 @@ def run_controller(args: argparse.Namespace) -> int:
     procs: list[tuple[int, str, subprocess.Popen[str]]] = []
     for rank in reversed(range(world_size)):
         node = nodes[order[rank]]
+        remote_cmd = rank_cmd(rank, world_size, args, links)
         proc = subprocess.Popen(
-            [*ssh_prefix(node), rank_cmd(rank, world_size, args, links)],
+            [*build_ssh_prefix(node.ssh, node.jump, COMMON_SSH_OPTS), remote_cmd],
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -400,7 +399,7 @@ def run_controller(args: argparse.Namespace) -> int:
             results.append(result)
     seq_prefix = ["python3", REMOTE_SCRIPT] if args.worker == "python" else [REMOTE_C_BIN]
     sequential_cmd = [
-        *ssh_prefix(nodes[order[0]]),
+        *build_ssh_prefix(nodes[order[0]].ssh, nodes[order[0]].jump, COMMON_SSH_OPTS),
         *seq_prefix,
         "--role",
         "sequential",

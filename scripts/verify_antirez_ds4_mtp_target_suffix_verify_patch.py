@@ -3,19 +3,21 @@
 
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
+
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._lib.patch_verify import added_patch_text
+from scripts._lib.patch_verify import require_substrings
+from scripts._lib.patch_verify import run_patch_verifier
 
 
 def validate_patch_text(text: str) -> list[str]:
 	errors: list[str] = []
-	added = "\n".join(
-		line[1:]
-		for line in text.splitlines()
-		if line.startswith("+") and not line.startswith("+++ ")
-	)
-	required = [
+	added = added_patch_text(text)
+	require_substrings(errors, added, [
 		"const bool use_target_suffix2 =",
 		"draft_n == 2 && getenv(\"DS4_MTP_SERIAL_SUFFIX\") == NULL;",
 		"static int metal_graph_try_mtp_suffix2_direct(",
@@ -132,10 +134,7 @@ def validate_patch_text(text: str) -> list[str]:
 		"first_eval=%.3f ms",
 		"row0_top1_head ? 2 : 3",
 		"row0_top1_head ? 1 : 0",
-	]
-	for needle in required:
-		if needle not in added:
-			errors.append(f"missing expected added substring: {needle!r}")
+	], "expected added substring")
 	for forbidden in [
 		"DS4_MTP_DRAFT=4",
 		"draft_n == 4",
@@ -157,18 +156,5 @@ def validate_patch_text(text: str) -> list[str]:
 	return errors
 
 
-def main() -> int:
-	ap = argparse.ArgumentParser()
-	ap.add_argument("--patch", required=True)
-	args = ap.parse_args()
-	errors = validate_patch_text(Path(args.patch).read_text(encoding="utf-8"))
-	if errors:
-		for error in errors:
-			print(f"error: {error}", file=sys.stderr)
-		return 2
-	print("ok=true")
-	return 0
-
-
 if __name__ == "__main__":
-	raise SystemExit(main())
+	run_patch_verifier(validate_patch_text)

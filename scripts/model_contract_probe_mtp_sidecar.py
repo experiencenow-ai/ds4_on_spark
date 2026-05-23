@@ -11,6 +11,11 @@ from typing import Any, BinaryIO, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._lib.model_contract import read_bytes
+
 
 @dataclass(frozen=True)
 class TensorDesc:
@@ -20,13 +25,6 @@ class TensorDesc:
 	ggml_type: int
 	rel_offset: int
 	file_index: int
-
-
-def read_bytes(f: BinaryIO, n: int) -> bytes:
-	b = f.read(n)
-	if len(b) != n:
-		raise EOFError(f"unexpected EOF reading {n} bytes")
-	return b
 
 
 def read_u32_le(f: BinaryIO) -> int:

@@ -13,6 +13,11 @@ from typing import Any, BinaryIO, Callable, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._lib.model_contract import read_bytes
+
 
 @dataclass(frozen=True)
 class InspectResult:
@@ -57,13 +62,6 @@ def read_u64_le(f: BinaryIO) -> int:
 	if len(b) != 8:
 		raise EOFError("unexpected EOF reading u64")
 	return int(struct.unpack("<Q", b)[0])
-
-
-def read_bytes(f: BinaryIO, n: int) -> bytes:
-	b = f.read(n)
-	if len(b) != n:
-		raise EOFError(f"unexpected EOF reading {n} bytes")
-	return b
 
 
 def read_gguf_string(f: BinaryIO, n: int) -> str:

@@ -3,9 +3,16 @@
 
 from __future__ import annotations
 
-import argparse
-import json
+import sys
 from pathlib import Path
+
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._lib.patch_verify import added_patch_text
+from scripts._lib.patch_verify import read_text_or_die
+from scripts._lib.patch_verify import removed_patch_text
+from scripts._lib.patch_verify import run_json_patch_report
 
 
 REQUIRED_SNIPPETS = [
@@ -27,17 +34,9 @@ FORBIDDEN_SNIPPETS = [
 
 
 def verify_patch(path: Path) -> dict[str, object]:
-	text = path.read_text(encoding="utf-8")
-	added = "\n".join(
-		line[1:]
-		for line in text.splitlines()
-		if line.startswith("+") and not line.startswith("+++ ")
-	)
-	removed = "\n".join(
-		line[1:]
-		for line in text.splitlines()
-		if line.startswith("-") and not line.startswith("--- ")
-	)
+	text = read_text_or_die(str(path))
+	added = added_patch_text(text)
+	removed = removed_patch_text(text)
 	missing = [snippet for snippet in REQUIRED_SNIPPETS if snippet not in added]
 	forbidden = [snippet for snippet in FORBIDDEN_SNIPPETS if snippet in added]
 	not_removed = [snippet for snippet in FORBIDDEN_SNIPPETS if snippet not in removed]
@@ -52,12 +51,7 @@ def verify_patch(path: Path) -> dict[str, object]:
 
 
 def main() -> int:
-	ap = argparse.ArgumentParser()
-	ap.add_argument("--patch", required=True)
-	args = ap.parse_args()
-	result = verify_patch(Path(args.patch))
-	print(json.dumps(result, indent=2, sort_keys=True))
-	return 0 if result["ok"] else 1
+	return run_json_patch_report(verify_patch)
 
 
 if __name__ == "__main__":

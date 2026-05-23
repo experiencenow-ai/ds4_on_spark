@@ -12,28 +12,19 @@ make the oracle JSON probe usable as a stable correctness reference:
 
 from __future__ import annotations
 
-import argparse
 import sys
+from pathlib import Path
 
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-def _die(msg: str) -> None:
-	print(msg, file=sys.stderr)
-	raise SystemExit(2)
-
-
-def _read_text(path: str) -> str:
-	try:
-		with open(path, "r", encoding="utf-8") as f:
-			return f.read()
-	except OSError as e:
-		_die(f"failed to read {path}: {e}")
-	return ""
+from scripts._lib.patch_verify import require_substrings
+from scripts._lib.patch_verify import run_patch_verifier
 
 
 def validate_patch_text(patch_text: str) -> list[str]:
 	errors: list[str] = []
-
-	required_substrings = [
+	require_substrings(errors, patch_text, [
 		"diff --git a/ds4.c b/ds4.c",
 		"diff --git a/ds4.h b/ds4.h",
 		"diff --git a/ds4_cli.c b/ds4_cli.c",
@@ -65,11 +56,7 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"c.gen.temperature = 0.0f;",
 		"c.gen.top_p = 1.0f;",
 		"c.gen.n_predict = 1;",
-	]
-
-	for s in required_substrings:
-		if s not in patch_text:
-			errors.append(f"missing expected substring: {s!r}")
+	])
 
 	# Guardrail: ensure the generator path is wired before the normal generation loop.
 	if "if (cfg->gen.dump_mtp_one_token_json)" not in patch_text:
@@ -87,20 +74,8 @@ def validate_patch_text(patch_text: str) -> list[str]:
 
 
 def main() -> None:
-	ap = argparse.ArgumentParser()
-	ap.add_argument("--patch", required=True)
-	args = ap.parse_args()
-
-	patch_text = _read_text(args.patch)
-	errors = validate_patch_text(patch_text)
-	if errors:
-		for e in errors[:64]:
-			print(f"error: {e}", file=sys.stderr)
-		raise SystemExit(2)
-
-	print("ok=true")
+	run_patch_verifier(validate_patch_text)
 
 
 if __name__ == "__main__":
 	main()
-

@@ -8,15 +8,15 @@ import copy
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
-try:
-    from scripts._lib.json_utils import check_bool_field as check_bool
-    from scripts._lib.json_utils import load_json as _load_json
-except ImportError:
-    from _lib.json_utils import check_bool_field as check_bool
-    from _lib.json_utils import load_json as _load_json
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._lib.json_utils import check_bool_field as check_bool
+from scripts._lib.json_utils import load_json as _load_json
 
 
 FORMAT = "centaur-standard-runtime-model-benchmark-v1"

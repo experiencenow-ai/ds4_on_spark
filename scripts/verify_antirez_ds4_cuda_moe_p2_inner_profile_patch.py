@@ -3,27 +3,19 @@
 
 from __future__ import annotations
 
-import argparse
 import sys
+from pathlib import Path
 
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-def _die(msg: str) -> None:
-	print(msg, file=sys.stderr)
-	raise SystemExit(2)
-
-
-def _read_text(path: str) -> str:
-	try:
-		with open(path, "r", encoding="utf-8") as f:
-			return f.read()
-	except OSError as e:
-		_die(f"failed to read {path}: {e}")
-	return ""
+from scripts._lib.patch_verify import require_substrings
+from scripts._lib.patch_verify import run_patch_verifier
 
 
 def validate_patch_text(patch_text: str) -> list[str]:
 	errors: list[str] = []
-	required = [
+	require_substrings(errors, patch_text, [
 		"DS4_CUDA_MOE_P2_INNER_PROFILE",
 		"uint32_t write_aux,",
 		"if (write_aux) {",
@@ -44,25 +36,14 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"\\\"down_ms\\\":%.3f",
 		"\\\"accumulate_or_scatter_ms\\\":%.3f",
 		"\\\"total_routed_moe_ms\\\":%.3f",
-	]
-	for s in required:
-		if s not in patch_text:
-			errors.append(f"missing expected patch substring: {s!r}")
+	], "expected patch substring")
 	if "profile_moe = getenv(\"DS4_CUDA_MOE_PROFILE\") != NULL || profile_moe_inner" not in patch_text:
 		errors.append("inner profile must enable the existing CUDA event path")
 	return errors
 
 
 def main() -> None:
-	ap = argparse.ArgumentParser()
-	ap.add_argument("--patch", required=True)
-	args = ap.parse_args()
-	errors = validate_patch_text(_read_text(args.patch))
-	if errors:
-		for e in errors:
-			print(f"error: {e}", file=sys.stderr)
-		raise SystemExit(2)
-	print("ok=true")
+	run_patch_verifier(validate_patch_text)
 
 
 if __name__ == "__main__":

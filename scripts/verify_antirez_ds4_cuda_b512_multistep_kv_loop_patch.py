@@ -3,19 +3,21 @@
 
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
+
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._lib.patch_verify import added_patch_text
+from scripts._lib.patch_verify import require_substrings
+from scripts._lib.patch_verify import run_patch_verifier
 
 
 def validate_patch_text(text: str) -> list[str]:
 	errors: list[str] = []
-	added = "\n".join(
-		line[1:]
-		for line in text.splitlines()
-		if line.startswith("+") and not line.startswith("+++ ")
-	)
-	required = [
+	added = added_patch_text(text)
+	require_substrings(errors, added, [
 		"DS4_CUDA_STACK_PROBE_DECODE_STEPS",
 		"static bool cuda_stack_probe_seed_committed_tokens(",
 		"ds4_gpu_tensor_write(g->prefill_tokens,",
@@ -28,27 +30,11 @@ def validate_patch_text(text: str) -> list[str]:
 		"per_step_decode_ms",
 		"per_step_token_commit_ms",
 		"per_step_token_hashes",
-	]
-	for needle in required:
-		if needle not in added:
-			errors.append(f"missing expected added substring: {needle!r}")
+	], "expected added substring")
 	if "row_replacement" in added:
 		errors.append("patch must not implement row replacement in this PR")
 	return errors
 
 
-def main() -> int:
-	ap = argparse.ArgumentParser()
-	ap.add_argument("--patch", required=True)
-	args = ap.parse_args()
-	errors = validate_patch_text(Path(args.patch).read_text(encoding="utf-8"))
-	if errors:
-		for error in errors:
-			print(f"error: {error}", file=sys.stderr)
-		return 2
-	print("ok=true")
-	return 0
-
-
 if __name__ == "__main__":
-	raise SystemExit(main())
+	run_patch_verifier(validate_patch_text)

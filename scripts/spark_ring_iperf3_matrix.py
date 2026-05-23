@@ -17,6 +17,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._lib.spark_ssh import ssh_prefix as build_ssh_prefix
+
 
 COMMON_SSH_OPTS = [
     "-o",
@@ -134,17 +139,9 @@ def load_manifest(path: Path | None) -> tuple[dict[str, Node], list[Edge]]:
     return nodes, edges
 
 
-def ssh_prefix(node: Node) -> list[str]:
-    cmd = ["ssh", *COMMON_SSH_OPTS]
-    if node.jump is not None:
-        cmd.extend(["-J", node.jump])
-    cmd.append(node.ssh)
-    return cmd
-
-
 def run_remote(node: Node, remote_cmd: str, timeout: int) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [*ssh_prefix(node), remote_cmd],
+        [*build_ssh_prefix(node.ssh, node.jump, COMMON_SSH_OPTS), remote_cmd],
         check=False,
         timeout=timeout,
         text=True,

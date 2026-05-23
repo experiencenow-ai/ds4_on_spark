@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import ast
 import json
 import re
 import subprocess
@@ -8,12 +7,14 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-try:
-	from scripts._lib.source_probe import sha256_file
-	from scripts._lib.source_probe import sha256_lines
-except ImportError:
-	from _lib.source_probe import sha256_file
-	from _lib.source_probe import sha256_lines
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._lib.model_contract import find_mtp_layer_ids
+from scripts._lib.model_contract import parse_ds4_mtp_sidecar_expected_tensor_names
+from scripts._lib.model_contract import parse_tokenizer_added_token_ids
+from scripts._lib.source_probe import sha256_file
+from scripts._lib.source_probe import sha256_lines
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,47 +34,11 @@ class Failure:
 	msg: str
 
 
-def find_mtp_layer_ids(weight_keys: set[str]) -> list[int]:
-	ids = set()
-	for k in weight_keys:
-		if not k.startswith("mtp."):
-			continue
-		parts = k.split(".", 2)
-		if len(parts) < 2:
-			continue
-		try:
-			ids.add(int(parts[1]))
-		except ValueError:
-			continue
-	return sorted(ids)
-
 def repo_relpath(path: Path) -> str:
 	try:
 		return path.relative_to(ROOT).as_posix()
 	except ValueError:
 		return str(path)
-
-def parse_tokenizer_added_token_ids(tokenizer_json: Path):
-	if not tokenizer_json.exists():
-		return None
-	try:
-		tok = load_json(tokenizer_json)
-	except Exception:
-		return None
-	added_tokens = tok.get("added_tokens") if isinstance(tok, dict) else None
-	if not isinstance(added_tokens, list):
-		return None
-	out: dict[str, int] = {}
-	for t in added_tokens:
-		if not isinstance(t, dict):
-			continue
-		content = t.get("content", None)
-		tid = t.get("id", None)
-		if not isinstance(content, str) or not isinstance(tid, int):
-			continue
-		out[content] = int(tid)
-	return out
-
 
 def build_weight_key_prefix_fingerprints(weight_keys: list[str], sample_n: int = 5) -> dict:
 	prefix_to_keys: dict[str, list[str]] = {}
@@ -101,42 +66,6 @@ def build_weight_key_prefix_fingerprints(weight_keys: list[str], sample_n: int =
 		}
 	return out
 
-
-
-def parse_ds4_mtp_sidecar_expected_tensor_names(probe_py: Path):
-	if not probe_py.exists():
-		return None
-	text = probe_py.read_text(encoding="utf-8")
-	try:
-		mod = ast.parse(text, filename=str(probe_py))
-	except SyntaxError:
-		return None
-
-	found: list[list[str]] = []
-	for node in ast.walk(mod):
-		if not isinstance(node, ast.Assign):
-			continue
-		if len(node.targets) != 1:
-			continue
-		t = node.targets[0]
-		if not isinstance(t, ast.Name) or t.id != "expected_names":
-			continue
-		if not isinstance(node.value, ast.List):
-			continue
-		vals: list[str] = []
-		ok = True
-		for elt in node.value.elts:
-			if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-				vals.append(elt.value)
-			else:
-				ok = False
-				break
-		if ok and vals:
-			found.append(vals)
-	if not found:
-		return None
-	found.sort(key=len, reverse=True)
-	return list(found[0])
 
 
 def payload_samples_fingerprint_lines(reference_doc: dict) -> list[str]:

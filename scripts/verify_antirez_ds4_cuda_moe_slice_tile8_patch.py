@@ -3,9 +3,14 @@
 
 from __future__ import annotations
 
-import argparse
-import json
+import sys
 from pathlib import Path
+
+if __package__ in (None, ""):
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._lib.patch_verify import read_text_or_die
+from scripts._lib.patch_verify import run_json_patch_report
 
 
 REQUIRED_SNIPPETS = [
@@ -23,7 +28,7 @@ REQUIRED_SNIPPETS = [
 
 
 def verify_patch(path: Path) -> dict[str, object]:
-	text = path.read_text(encoding="utf-8")
+	text = read_text_or_die(str(path))
 	missing = [snippet for snippet in REQUIRED_SNIPPETS if snippet not in text]
 	return {
 		"format": "ds4-antirez-slice-tile8-gateup-patch-check-v1",
@@ -34,12 +39,7 @@ def verify_patch(path: Path) -> dict[str, object]:
 
 
 def main() -> int:
-	ap = argparse.ArgumentParser()
-	ap.add_argument("--patch", required=True)
-	args = ap.parse_args()
-	result = verify_patch(Path(args.patch))
-	print(json.dumps(result, indent=2, sort_keys=True))
-	return 0 if result["ok"] else 1
+	return run_json_patch_report(verify_patch)
 
 
 if __name__ == "__main__":

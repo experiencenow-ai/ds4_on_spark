@@ -13,6 +13,14 @@ ArtifactLoader = Callable[[Path], dict[str, Any]]
 ArtifactValidator = Callable[[dict[str, Any]], list[str]]
 
 
+def check_bool_field(obj: dict[str, Any], field: str, path: Path, errors: list[str]) -> bool:
+	value = obj.get(field)
+	if not isinstance(value, bool):
+		errors.append(f"{path}: {field} must be a boolean")
+		return False
+	return bool(value)
+
+
 def validate_artifact_paths(paths: Iterable[str], load_json: ArtifactLoader, validate_artifact: ArtifactValidator) -> int:
 	failed = False
 	for raw in paths:
