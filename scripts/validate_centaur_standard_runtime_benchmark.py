@@ -12,10 +12,10 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from scripts._lib.json_utils import check_bool_field
+    from scripts._lib.json_utils import check_bool_field as check_bool
     from scripts._lib.json_utils import load_json as _load_json
 except ImportError:
-    from _lib.json_utils import check_bool_field
+    from _lib.json_utils import check_bool_field as check_bool
     from _lib.json_utils import load_json as _load_json
 
 
@@ -96,10 +96,6 @@ def as_str(obj: dict[str, Any], field: str, path: Path, errors: list[str], allow
     if value.strip() == "" and not allow_empty:
         errors.append(err(path, f"{field} must be a non-empty string"))
     return value.strip()
-
-
-def check_bool(obj: dict[str, Any], field: str, path: Path, errors: list[str]) -> bool:
-    return check_bool_field(obj, field, path, errors)
 
 
 def check_int(obj: dict[str, Any], field: str, path: Path, errors: list[str]) -> int:

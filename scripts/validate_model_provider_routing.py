@@ -14,8 +14,8 @@ if __package__ in (None, ""):
 
 from scripts import route_model_provider_requests as router
 from scripts import select_model_provider
-from scripts._lib.json_utils import check_bool_field
-from scripts._lib.json_utils import check_non_empty_string_field
+from scripts._lib.json_utils import check_bool_field as check_bool
+from scripts._lib.json_utils import check_non_empty_string_field as check_string
 
 
 def default_paths() -> list[Path]:
@@ -44,14 +44,6 @@ def check_int(obj: dict[str, Any], field: str, path: Path, errors: list[str]) ->
         errors.append(err(path, f"{field} must be a non-negative integer"))
         return 0
     return int(value)
-
-
-def check_bool(obj: dict[str, Any], field: str, path: Path, errors: list[str]) -> bool:
-    return check_bool_field(obj, field, path, errors)
-
-
-def check_string(obj: dict[str, Any], field: str, path: Path, errors: list[str]) -> str:
-    return check_non_empty_string_field(obj, field, path, errors)
 
 
 def check_number_or_null(obj: dict[str, Any], field: str, path: Path, errors: list[str]) -> None:
