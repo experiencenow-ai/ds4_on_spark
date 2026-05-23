@@ -1,11 +1,14 @@
 import io
 import json
+import http.server
 import tempfile
+import threading
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
 from scripts import pipeline_quality_regression as quality
+from scripts import compare_pipeline_quality_runs as compare
 from scripts import pipeline_throughput_truth as truth
 
 
@@ -146,6 +149,7 @@ class PipelineQualityRegressionTest(unittest.TestCase):
 		integer = quality.EvalCase("AIME2025", "int", "d", "t", "q", (), "0042")
 		comp = quality.EvalCase("COMPSEC", "comp", "d", "t", "q", (), "10-14")
 		self.assertEqual(quality.pick_answer(mc, "analysis\nAnswer: B"), "B")
+		self.assertEqual(quality.pick_answer(mc, "Question choices: A. wrong B. right\nI first compare A and B.\nAnswer: B"), "B")
 		self.assertTrue(quality.answer_matches(mc, "B", "Answer: B"))
 		self.assertEqual(quality.pick_answer(integer, "work 1 2 Answer: 00042"), "42")
 		self.assertTrue(quality.answer_matches(integer, "42", "Answer: 42"))
@@ -190,6 +194,64 @@ class PipelineQualityRegressionTest(unittest.TestCase):
 			self.assertEqual(throughput["question_count"], 4)
 			self.assertGreater(throughput["aggregate_output_tokens_per_s"], 0.0)
 			self.assertEqual(throughput["domain_breakdown"][0]["source"], "AIME2025")
+
+	def test_openai_chat_runner_uses_completion_usage_and_trace_output(self) -> None:
+		class Handler(http.server.BaseHTTPRequestHandler):
+			def do_POST(self) -> None:
+				length = int(self.headers.get("content-length", "0"))
+				payload = json.loads(self.rfile.read(length).decode("utf-8"))
+				self.server.requests.append(payload)  # type: ignore[attr-defined]
+				body = json.dumps({
+					"choices": [{"message": {"content": "Reasoning done.\nAnswer: B"}}],
+					"usage": {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18},
+				}).encode("utf-8")
+				self.send_response(200)
+				self.send_header("content-type", "application/json")
+				self.send_header("content-length", str(len(body)))
+				self.end_headers()
+				self.wfile.write(body)
+
+			def log_message(self, _fmt: str, *_args: object) -> None:
+				return
+
+		server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+		server.requests = []  # type: ignore[attr-defined]
+		thread = threading.Thread(target=server.serve_forever)
+		thread.daemon = True
+		thread.start()
+		try:
+			with tempfile.TemporaryDirectory() as d:
+				root = Path(d)
+				source = root / "ds4_eval.c"
+				out = root / "quality.jsonl"
+				trace = root / "quality.trace.txt"
+				source.write_text(DS4_EVAL_MINI, encoding="utf-8")
+				with redirect_stdout(io.StringIO()):
+					rc = quality.main([
+						"--ds4-eval-source", str(source),
+						"--openai-chat-url", f"http://127.0.0.1:{server.server_port}/v1/chat/completions",
+						"--openai-model", "unit-model",
+						"--questions", "1",
+						"--max-tokens", "8",
+						"--run-id", "openai-unit",
+						"--runner-id", "unit-vllm",
+						"--backend-mode", "vllm",
+						"--out", str(out),
+						"--trace-out", str(trace),
+					])
+				self.assertEqual(rc, 0)
+				rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+				self.assertTrue(rows[0]["passed"])
+				self.assertEqual(rows[0]["generated_tokens"], 7)
+				self.assertEqual(rows[0]["coordinator"]["kind"], "openai_chat")
+				self.assertEqual(rows[0]["openai_usage"]["completion_tokens"], 7)
+				self.assertIn("MODEL_OUTPUT_BEGIN", trace.read_text(encoding="utf-8"))
+				self.assertEqual(server.requests[0]["model"], "unit-model")  # type: ignore[attr-defined]
+				self.assertEqual(server.requests[0]["seed"], 1)  # type: ignore[attr-defined]
+		finally:
+			server.shutdown()
+			server.server_close()
+			thread.join(timeout=5)
 
 	def test_baseline_delta_marks_token_divergence(self) -> None:
 		with tempfile.TemporaryDirectory() as d:
@@ -246,6 +308,34 @@ class PipelineQualityRegressionTest(unittest.TestCase):
 			self.assertEqual(rows[0]["question_kind"], "multiple_choice")
 			self.assertEqual(rows[1]["question_kind"], "compsec")
 			self.assertEqual(rows[0]["generated_text"], "Answer: B")
+
+	def test_compares_quality_runs_with_mcnemar_verdict(self) -> None:
+		with tempfile.TemporaryDirectory() as d:
+			root = Path(d)
+			baseline = root / "baseline.jsonl"
+			candidate = root / "candidate.jsonl"
+			out = root / "comparison.json"
+			md = root / "comparison.md"
+			base_rows = [
+				{"record_type": "question", "case_id": "a", "source": "S", "domain": "D", "passed": True},
+				{"record_type": "question", "case_id": "b", "source": "S", "domain": "D", "passed": True},
+				{"record_type": "summary", "run_id": "base"},
+			]
+			cand_rows = [
+				{"record_type": "question", "case_id": "a", "source": "S", "domain": "D", "passed": True},
+				{"record_type": "question", "case_id": "b", "source": "S", "domain": "D", "passed": False},
+				{"record_type": "summary", "run_id": "cand"},
+			]
+			baseline.write_text("".join(json.dumps(row) + "\n" for row in base_rows), encoding="utf-8")
+			candidate.write_text("".join(json.dumps(row) + "\n" for row in cand_rows), encoding="utf-8")
+			with redirect_stdout(io.StringIO()):
+				rc = compare.main(["--baseline", str(baseline), "--candidate", str(candidate), "--out", str(out), "--markdown-out", str(md)])
+			self.assertEqual(rc, 0)
+			result = json.loads(out.read_text(encoding="utf-8"))
+			self.assertEqual(result["baseline_only_pass"], 1)
+			self.assertEqual(result["candidate_only_pass"], 0)
+			self.assertEqual(result["verdict"], "worse")
+			self.assertIn("vLLM MXFP4 TP=2 ds4-eval Comparison", md.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

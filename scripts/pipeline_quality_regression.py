@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import concurrent.futures
 import hashlib
 import json
 import re
@@ -12,6 +13,7 @@ import shlex
 import subprocess
 import tempfile
 import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +43,8 @@ class GenerationResult:
 	raw_stdout: str
 	raw_stderr: str
 	returncode: int
+	completion_tokens: int = 0
+	metadata: dict[str, Any] | None = None
 
 
 def sha256_text(text: str) -> str:
@@ -191,8 +195,13 @@ def find_answer_letter(generated: str, nchoices: int) -> str:
 		return "?"
 	visible = _visible_answer_text(generated)
 	max_answer = chr(ord("A") + nchoices - 1)
-	answer_pos = visible.lower().find("answer")
-	if answer_pos >= 0:
+	for pattern in (r"(?im)\b(?:final\s+)?answer\s*[:：]\s*\(?([A-Z])\)?\b", r"(?im)\banswer\s+is\s+\(?([A-Z])\)?\b"):
+		matches = [m.group(1).upper() for m in re.finditer(pattern, visible)]
+		matches = [m for m in matches if "A" <= m <= max_answer]
+		if matches:
+			return matches[-1]
+	answer_positions = [match.start() for match in re.finditer(r"answer", visible, flags=re.I)]
+	for answer_pos in reversed(answer_positions):
 		window = visible[answer_pos:answer_pos + 96]
 		for offset, ch in enumerate(window):
 			c = ch.upper()
@@ -223,8 +232,8 @@ def _scan_first_integer(text: str) -> str | None:
 
 def find_integer_answer(generated: str) -> str:
 	visible = _visible_answer_text(generated)
-	answer_pos = visible.lower().find("answer")
-	if answer_pos >= 0:
+	answer_positions = [match.start() for match in re.finditer(r"answer", visible, flags=re.I)]
+	for answer_pos in reversed(answer_positions):
 		found = _scan_first_integer(visible[answer_pos:answer_pos + 160])
 		if found is not None:
 			return found
@@ -241,8 +250,8 @@ def normalize_compsec_line_spec(text: str) -> str:
 
 def find_compsec_answer(generated: str) -> str:
 	visible = _visible_answer_text(generated)
-	answer_pos = visible.lower().find("answer")
-	if answer_pos >= 0:
+	answer_positions = [match.start() for match in re.finditer(r"answer", visible, flags=re.I)]
+	for answer_pos in reversed(answer_positions):
 		window = visible[answer_pos:answer_pos + 160]
 		window = window.splitlines()[0] if "\n" in window else window
 		got = normalize_compsec_line_spec(window)
@@ -330,16 +339,22 @@ def _text_from_command_output(stdout: str, obj: dict[str, Any] | None) -> str:
 def generation_from_stdout(stdout: str, stderr: str, elapsed_sec: float, returncode: int) -> GenerationResult:
 	obj = _last_json_object(stdout)
 	token_ids: list[int] = []
+	completion_tokens = 0
 	if obj is not None:
 		raw_ids = obj.get("token_ids") or obj.get("tokens") or obj.get("committed_token_ids")
 		if isinstance(raw_ids, list) and all(isinstance(item, int) for item in raw_ids):
 			token_ids = list(raw_ids)
+		if isinstance(obj.get("generated_tokens"), int):
+			completion_tokens = int(obj["generated_tokens"])
+		usage = obj.get("usage")
+		if isinstance(usage, dict) and isinstance(usage.get("completion_tokens"), int):
+			completion_tokens = int(usage["completion_tokens"])
 	if not token_ids:
 		token_ids = _parse_token_ids(stdout)
 	if obj is not None and isinstance(obj.get("elapsed_sec"), (int, float)):
 		elapsed_sec = float(obj["elapsed_sec"])
 	text = _text_from_command_output(stdout, obj)
-	return GenerationResult(text=text, token_ids=token_ids, elapsed_sec=elapsed_sec, raw_stdout=stdout, raw_stderr=stderr, returncode=returncode)
+	return GenerationResult(text=text, token_ids=token_ids, elapsed_sec=elapsed_sec, raw_stdout=stdout, raw_stderr=stderr, returncode=returncode, completion_tokens=completion_tokens, metadata=obj)
 
 
 def run_command(command_template: str, prompt: str, case: EvalCase, max_tokens: int) -> GenerationResult:
@@ -371,6 +386,77 @@ def run_http(url: str, prompt: str, case: EvalCase, max_tokens: int, timeout: fl
 		stdout = resp.read().decode("utf-8")
 	elapsed = time.perf_counter() - start
 	return generation_from_stdout(stdout, "", elapsed, 0)
+
+
+def _openai_choice_text(obj: dict[str, Any]) -> str:
+	choices = obj.get("choices")
+	if not isinstance(choices, list) or not choices:
+		return ""
+	choice = choices[0]
+	if not isinstance(choice, dict):
+		return ""
+	message = choice.get("message")
+	if isinstance(message, dict):
+		parts: list[str] = []
+		for key in ("reasoning_content", "reasoning"):
+			value = message.get(key)
+			if isinstance(value, str) and value.strip():
+				parts.append(value.strip())
+		content = message.get("content")
+		if isinstance(content, str):
+			parts.append(content)
+		return "\n".join(parts).strip()
+	text = choice.get("text")
+	return text.strip() if isinstance(text, str) else ""
+
+
+def generation_from_openai_chat_response(stdout: str, elapsed_sec: float, returncode: int = 0, stderr: str = "") -> GenerationResult:
+	try:
+		obj = json.loads(stdout)
+	except json.JSONDecodeError:
+		return GenerationResult(text="", token_ids=[], elapsed_sec=elapsed_sec, raw_stdout=stdout, raw_stderr=stderr, returncode=returncode)
+	if not isinstance(obj, dict):
+		return GenerationResult(text="", token_ids=[], elapsed_sec=elapsed_sec, raw_stdout=stdout, raw_stderr=stderr, returncode=returncode)
+	usage = obj.get("usage")
+	completion_tokens = 0
+	if isinstance(usage, dict) and isinstance(usage.get("completion_tokens"), int):
+		completion_tokens = int(usage["completion_tokens"])
+	text = _openai_choice_text(obj)
+	return GenerationResult(text=text, token_ids=[], elapsed_sec=elapsed_sec, raw_stdout=stdout, raw_stderr=stderr, returncode=returncode, completion_tokens=completion_tokens, metadata=obj)
+
+
+def run_openai_chat(url: str, model: str, prompt: str, case: EvalCase, max_tokens: int, timeout: float, api_key: str, extra_json: str) -> GenerationResult:
+	payload: dict[str, Any] = {
+		"model": model,
+		"messages": [{"role": "user", "content": prompt}],
+		"max_tokens": max_tokens,
+		"temperature": 0,
+		"top_p": 1,
+		"stream": False,
+		"seed": 1,
+		"metadata": {"case_id": case.case_id},
+	}
+	if extra_json:
+		extra = json.loads(extra_json)
+		if not isinstance(extra, dict):
+			raise ValueError("--openai-extra-json must decode to an object")
+		payload.update(extra)
+	data = json.dumps(payload).encode("utf-8")
+	headers = {"content-type": "application/json"}
+	if api_key:
+		headers["authorization"] = f"Bearer {api_key}"
+	req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+	start = time.perf_counter()
+	try:
+		with urllib.request.urlopen(req, timeout=timeout) as resp:
+			stdout = resp.read().decode("utf-8")
+		return generation_from_openai_chat_response(stdout, time.perf_counter() - start)
+	except urllib.error.HTTPError as exc:
+		body = exc.read().decode("utf-8", errors="replace")
+		return generation_from_openai_chat_response(body, time.perf_counter() - start, exc.code, body)
+	except urllib.error.URLError as exc:
+		stderr = f"urlopen failed: {exc.reason}"
+		return GenerationResult(text="", token_ids=[], elapsed_sec=time.perf_counter() - start, raw_stdout="", raw_stderr=stderr, returncode=1)
 
 
 def load_baseline(path: Path | None) -> dict[str, dict[str, Any]]:
@@ -616,64 +702,80 @@ def build_long_context_case(path: Path | None, repeat: int, answer: str) -> Eval
 	return EvalCase("LONG_CONTEXT_RECALL", "long-context-recall", "Recall", "long context recall", question, (), answer)
 
 
+def run_case_record(args: argparse.Namespace, index: int, case_count: int, case: EvalCase, baseline: dict[str, dict[str, Any]]) -> dict[str, Any]:
+	prompt = build_rendered_prompt(case)
+	if args.openai_chat_url:
+		result = run_openai_chat(args.openai_chat_url, args.openai_model, prompt, case, args.max_tokens, args.http_timeout, args.openai_api_key, args.openai_extra_json)
+		coordinator = {"kind": "openai_chat", "url": args.openai_chat_url, "model": args.openai_model}
+	elif args.http_url:
+		result = run_http(args.http_url, prompt, case, args.max_tokens, args.http_timeout)
+		coordinator = {"kind": "http", "url": args.http_url}
+	else:
+		result = run_command(args.command, prompt, case, args.max_tokens)
+		coordinator = {"kind": "command", "command": args.command}
+	if result.returncode != 0:
+		raise RuntimeError(f"generation command failed for {case.case_id}: rc={result.returncode} stderr={result.raw_stderr.strip()}")
+	observed = pick_answer(case, result.text)
+	ok = answer_matches(case, observed, result.text)
+	generated_tokens = result.completion_tokens if result.completion_tokens > 0 else len(result.token_ids)
+	if generated_tokens == 0:
+		generated_tokens = max(1, len(result.text.split()))
+	record = {
+		"format": FORMAT,
+		"record_type": "question",
+		"run_id": args.run_id,
+		"backend_mode": args.backend_mode,
+		"runner_id": args.runner_id,
+		"case_index": index,
+		"case_count": case_count,
+		"source": case.source,
+		"case_id": case.case_id,
+		"domain": case.domain,
+		"title": case.title,
+		"question_kind": "multiple_choice" if case.choices else ("compsec" if is_compsec(case) else ("exact_text" if case.source == "LONG_CONTEXT_RECALL" else "exact_integer")),
+		"expected_answer": case.answer,
+		"observed_answer": observed,
+		"passed": ok,
+		"prompt_sha256": sha256_text(prompt),
+		"output_sha256": sha256_text(result.text),
+		"generated_text": result.text,
+		"token_ids": result.token_ids,
+		"generated_tokens": generated_tokens,
+		"elapsed_sec": result.elapsed_sec,
+		"output_tokens_per_s": generated_tokens / result.elapsed_sec if result.elapsed_sec > 0 else 0.0,
+		"coordinator": coordinator,
+	}
+	if result.metadata is not None and isinstance(result.metadata.get("usage"), dict):
+		record["openai_usage"] = result.metadata["usage"]
+	delta = baseline_delta(record, baseline)
+	if delta is not None:
+		record["baseline_delta"] = delta
+	return record
+
+
 def run_cases(args: argparse.Namespace) -> tuple[list[dict[str, Any]], dict[str, Any]]:
 	cases = load_eval_cases(Path(args.ds4_eval_source), args.questions)
 	if args.include_long_context:
 		cases.append(build_long_context_case(Path(args.long_context_file) if args.long_context_file else None, args.long_context_repeat, args.long_context_answer))
 	baseline = load_baseline(Path(args.baseline) if args.baseline else None)
-	records: list[dict[str, Any]] = []
-	total_tokens = 0
-	total_elapsed = 0.0
-	passed = 0
-	failed = 0
-	for index, case in enumerate(cases, start=1):
-		prompt = build_rendered_prompt(case)
-		if args.http_url:
-			result = run_http(args.http_url, prompt, case, args.max_tokens, args.http_timeout)
-			coordinator = {"kind": "http", "url": args.http_url}
-		else:
-			result = run_command(args.command, prompt, case, args.max_tokens)
-			coordinator = {"kind": "command", "command": args.command}
-		if result.returncode != 0:
-			raise RuntimeError(f"generation command failed for {case.case_id}: rc={result.returncode} stderr={result.raw_stderr.strip()}")
-		observed = pick_answer(case, result.text)
-		ok = answer_matches(case, observed, result.text)
-		generated_tokens = len(result.token_ids)
-		if generated_tokens == 0:
-			generated_tokens = max(1, len(result.text.split()))
-		total_tokens += generated_tokens
-		total_elapsed += result.elapsed_sec
-		passed += 1 if ok else 0
-		failed += 0 if ok else 1
-		record = {
-			"format": FORMAT,
-			"record_type": "question",
-			"run_id": args.run_id,
-			"backend_mode": args.backend_mode,
-			"runner_id": args.runner_id,
-			"case_index": index,
-			"case_count": len(cases),
-			"source": case.source,
-			"case_id": case.case_id,
-			"domain": case.domain,
-			"title": case.title,
-			"question_kind": "multiple_choice" if case.choices else ("compsec" if is_compsec(case) else ("exact_text" if case.source == "LONG_CONTEXT_RECALL" else "exact_integer")),
-			"expected_answer": case.answer,
-			"observed_answer": observed,
-			"passed": ok,
-			"prompt_sha256": sha256_text(prompt),
-			"output_sha256": sha256_text(result.text),
-			"generated_text": result.text,
-			"token_ids": result.token_ids,
-			"generated_tokens": generated_tokens,
-			"elapsed_sec": result.elapsed_sec,
-			"output_tokens_per_s": generated_tokens / result.elapsed_sec if result.elapsed_sec > 0 else 0.0,
-			"coordinator": coordinator,
-		}
-		delta = baseline_delta(record, baseline)
-		if delta is not None:
-			record["baseline_delta"] = delta
-		records.append(record)
+	start = time.perf_counter()
+	if args.concurrency > 1:
+		if not args.openai_chat_url:
+			raise RuntimeError("--concurrency > 1 is currently supported only with --openai-chat-url")
+		records = []
+		with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as executor:
+			futures = [executor.submit(run_case_record, args, index, len(cases), case, baseline) for index, case in enumerate(cases, start=1)]
+			for future in concurrent.futures.as_completed(futures):
+				records.append(future.result())
+		records.sort(key=lambda row: int(row["case_index"]))
+	else:
+		records = [run_case_record(args, index, len(cases), case, baseline) for index, case in enumerate(cases, start=1)]
+	wall_elapsed = time.perf_counter() - start
+	total_tokens = sum(int(row.get("generated_tokens") or 0) for row in records)
+	total_elapsed = sum(float(row.get("elapsed_sec") or 0.0) for row in records)
+	passed = sum(1 for row in records if row.get("passed") is True)
+	failed = sum(1 for row in records if row.get("passed") is False)
+	aggregate_elapsed = wall_elapsed if args.concurrency > 1 else total_elapsed
 	summary = {
 		"format": FORMAT,
 		"record_type": "summary",
@@ -685,7 +787,10 @@ def run_cases(args: argparse.Namespace) -> tuple[list[dict[str, Any]], dict[str,
 		"failed": failed,
 		"generated_tokens": total_tokens,
 		"elapsed_sec": total_elapsed,
-		"aggregate_output_tokens_per_s": total_tokens / total_elapsed if total_elapsed > 0 else 0.0,
+		"wall_elapsed_sec": wall_elapsed,
+		"concurrency": args.concurrency,
+		"aggregate_elapsed_basis": "wall_elapsed_sec" if args.concurrency > 1 else "elapsed_sec",
+		"aggregate_output_tokens_per_s": total_tokens / aggregate_elapsed if aggregate_elapsed > 0 else 0.0,
 		"domain_breakdown": summarize_domains(records),
 		"baseline_path": args.baseline or "",
 	}
@@ -695,6 +800,45 @@ def run_cases(args: argparse.Namespace) -> tuple[list[dict[str, Any]], dict[str,
 def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 	path.parent.mkdir(parents=True, exist_ok=True)
 	path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+
+
+def build_trace_text(records: list[dict[str, Any]], summary: dict[str, Any]) -> str:
+	lines = [
+		"# ds4-eval-compatible pipeline quality trace",
+		f"run_id: {summary.get('run_id', '')}",
+		f"runner_id: {summary.get('runner_id', '')}",
+		f"backend_mode: {summary.get('backend_mode', '')}",
+		f"questions: {summary.get('question_count', 0)}",
+		"",
+	]
+	for row in records:
+		status = "PASSED" if row.get("passed") else "FAILED"
+		text = str(row.get("generated_text") or "")
+		encoded = text.encode("utf-8")
+		lines.extend([
+			f"===== CASE {row.get('case_index')}/{row.get('case_count')} {row.get('source')}/{row.get('case_id')} =====",
+			f"source: {row.get('source', '')}",
+			f"id: {row.get('case_id', '')}",
+			f"domain: {row.get('domain', '')}",
+			f"title: {row.get('title', '')}",
+			f"status: {status}",
+			f"picked: {row.get('observed_answer', '')}",
+			f"expected: {row.get('expected_answer', '')}",
+			f"generated_tokens: {row.get('generated_tokens', 0)}",
+			f"elapsed_sec: {row.get('elapsed_sec', 0.0):.6f}",
+			f"MODEL_OUTPUT_BEGIN bytes={len(encoded)}",
+			text,
+			"MODEL_OUTPUT_END",
+			"",
+		])
+	lines.extend([
+		"===== SUMMARY =====",
+		f"passed: {summary.get('passed', 0)}",
+		f"failed: {summary.get('failed', 0)}",
+		f"total: {summary.get('question_count', 0)}",
+		f"aggregate_output_tokens_per_s: {summary.get('aggregate_output_tokens_per_s', 0.0):.6f}",
+	])
+	return "\n".join(lines) + "\n"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -708,15 +852,21 @@ def build_parser() -> argparse.ArgumentParser:
 	ap.add_argument("--ds4-eval-command", default="")
 	ap.add_argument("--command", default="")
 	ap.add_argument("--http-url", default="")
+	ap.add_argument("--openai-chat-url", default="")
+	ap.add_argument("--openai-model", default="deepseek-v4-flash")
+	ap.add_argument("--openai-api-key", default="")
+	ap.add_argument("--openai-extra-json", default="")
 	ap.add_argument("--http-timeout", type=float, default=600.0)
+	ap.add_argument("--concurrency", type=int, default=1)
 	ap.add_argument("--questions", type=int, default=0)
 	ap.add_argument("--max-tokens", type=int, default=512)
 	ap.add_argument("--run-id", default="pipeline-quality-regression")
 	ap.add_argument("--runner-id", default="pipeline-quality-runner")
-	ap.add_argument("--backend-mode", default="pp1", choices=("pp1", "ppn", "pipeline", "other"))
+	ap.add_argument("--backend-mode", default="pp1", choices=("pp1", "ppn", "pipeline", "vllm", "other"))
 	ap.add_argument("--baseline", default="")
 	ap.add_argument("--out", required=True)
 	ap.add_argument("--summary-out", default="")
+	ap.add_argument("--trace-out", default="")
 	ap.add_argument("--include-long-context", action="store_true")
 	ap.add_argument("--long-context-file", default="")
 	ap.add_argument("--long-context-repeat", type=int, default=1)
@@ -727,12 +877,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
 	args = build_parser().parse_args(argv)
+	generators = [bool(args.command), bool(args.http_url), bool(args.openai_chat_url)]
 	if args.ds4_eval_trace:
-		if args.command or args.http_url:
-			raise SystemExit("--ds4-eval-trace cannot be combined with --command or --http-url")
+		if any(generators):
+			raise SystemExit("--ds4-eval-trace cannot be combined with generation backends")
 		records, summary = load_ds4_eval_trace(Path(args.ds4_eval_trace), args)
-	elif bool(args.command) == bool(args.http_url):
-		raise SystemExit("provide exactly one of --command or --http-url")
+	elif sum(generators) != 1:
+		raise SystemExit("provide exactly one of --command, --http-url, or --openai-chat-url")
 	else:
 		if not args.ds4_eval_source:
 			raise SystemExit("--ds4-eval-source is required without --ds4-eval-trace")
@@ -742,6 +893,9 @@ def main(argv: list[str] | None = None) -> int:
 	if args.summary_out:
 		Path(args.summary_out).parent.mkdir(parents=True, exist_ok=True)
 		Path(args.summary_out).write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+	if args.trace_out:
+		Path(args.trace_out).parent.mkdir(parents=True, exist_ok=True)
+		Path(args.trace_out).write_text(build_trace_text(records, summary), encoding="utf-8")
 	print(json.dumps(summary, sort_keys=True))
 	if args.fail_on_question_failure and summary["failed"]:
 		return 1

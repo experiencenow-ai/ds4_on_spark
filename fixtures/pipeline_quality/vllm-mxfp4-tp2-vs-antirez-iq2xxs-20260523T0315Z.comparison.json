@@ -1,0 +1,315 @@
+{
+  "baseline_label": "antirez IQ2XXS PP=1",
+  "baseline_only_pass": 2,
+  "baseline_pass_rate": 0.7934782608695652,
+  "baseline_passed": 73,
+  "baseline_path": "fixtures/pipeline_quality/lane-d-pp1-redo-20260521T0412Z.jsonl",
+  "baseline_run_id": "lane-d-pp1-redo-20260521T0412Z",
+  "baseline_total": 92,
+  "both_fail": 12,
+  "both_pass": 71,
+  "candidate_label": "vLLM MXFP4 TP=2",
+  "candidate_only_pass": 7,
+  "candidate_pass_rate": 0.8478260869565217,
+  "candidate_passed": 78,
+  "candidate_path": "fixtures/pipeline_quality/vllm-mxfp4-tp2-ds4-eval-20260523T0315Z.jsonl",
+  "candidate_run_id": "vllm-mxfp4-tp2-ds4-eval-20260523T0315Z",
+  "candidate_total": 92,
+  "difference_percentage_points": 5.434782608695654,
+  "domain_table": [
+    {
+      "baseline_pass_rate": 0.7142857142857143,
+      "baseline_passed": 5,
+      "baseline_total": 7,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 7,
+      "candidate_total": 7,
+      "domain": "Algebra",
+      "source": "AIME2025"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 1,
+      "baseline_total": 1,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 1,
+      "candidate_total": 1,
+      "domain": "Algebra, Geometry",
+      "source": "AIME2025"
+    },
+    {
+      "baseline_pass_rate": 0.42857142857142855,
+      "baseline_passed": 3,
+      "baseline_total": 7,
+      "candidate_pass_rate": 0.7142857142857143,
+      "candidate_passed": 5,
+      "candidate_total": 7,
+      "domain": "Combinatorics",
+      "source": "AIME2025"
+    },
+    {
+      "baseline_pass_rate": 0.0,
+      "baseline_passed": 0,
+      "baseline_total": 1,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 1,
+      "candidate_total": 1,
+      "domain": "Combinatorics, Number Theory",
+      "source": "AIME2025"
+    },
+    {
+      "baseline_pass_rate": 0.8,
+      "baseline_passed": 4,
+      "baseline_total": 5,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 5,
+      "candidate_total": 5,
+      "domain": "Geometry",
+      "source": "AIME2025"
+    },
+    {
+      "baseline_pass_rate": 0.5,
+      "baseline_passed": 2,
+      "baseline_total": 4,
+      "candidate_pass_rate": 0.5,
+      "candidate_passed": 2,
+      "candidate_total": 4,
+      "domain": "Number Theory",
+      "source": "AIME2025"
+    },
+    {
+      "baseline_pass_rate": 0.6666666666666666,
+      "baseline_passed": 2,
+      "baseline_total": 3,
+      "candidate_pass_rate": 0.6666666666666666,
+      "candidate_passed": 2,
+      "candidate_total": 3,
+      "domain": "Botan",
+      "source": "COMPSEC"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 2,
+      "baseline_total": 2,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 2,
+      "candidate_total": 2,
+      "domain": "Firebird",
+      "source": "COMPSEC"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 1,
+      "baseline_total": 1,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 1,
+      "candidate_total": 1,
+      "domain": "FreeBSD / librpcsec_gss",
+      "source": "COMPSEC"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 1,
+      "baseline_total": 1,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 1,
+      "candidate_total": 1,
+      "domain": "GNU Inetutils telnetd",
+      "source": "COMPSEC"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 1,
+      "baseline_total": 1,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 1,
+      "candidate_total": 1,
+      "domain": "Linux kernel",
+      "source": "COMPSEC"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 1,
+      "baseline_total": 1,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 1,
+      "candidate_total": 1,
+      "domain": "Linux kernel AppArmor",
+      "source": "COMPSEC"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 1,
+      "baseline_total": 1,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 1,
+      "candidate_total": 1,
+      "domain": "Linux kernel USB gadget storage",
+      "source": "COMPSEC"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 3,
+      "baseline_total": 3,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 3,
+      "candidate_total": 3,
+      "domain": "Mbed TLS",
+      "source": "COMPSEC"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 1,
+      "baseline_total": 1,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 1,
+      "candidate_total": 1,
+      "domain": "PHP",
+      "source": "COMPSEC"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 1,
+      "baseline_total": 1,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 1,
+      "candidate_total": 1,
+      "domain": "PHP PDO Firebird",
+      "source": "COMPSEC"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 1,
+      "baseline_total": 1,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 1,
+      "candidate_total": 1,
+      "domain": "libexpat",
+      "source": "COMPSEC"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 1,
+      "baseline_total": 1,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 1,
+      "candidate_total": 1,
+      "domain": "uds-c",
+      "source": "COMPSEC"
+    },
+    {
+      "baseline_pass_rate": 0.3333333333333333,
+      "baseline_passed": 1,
+      "baseline_total": 3,
+      "candidate_pass_rate": 0.3333333333333333,
+      "candidate_passed": 1,
+      "candidate_total": 3,
+      "domain": "Biology",
+      "source": "GPQA Diamond"
+    },
+    {
+      "baseline_pass_rate": 0.75,
+      "baseline_passed": 9,
+      "baseline_total": 12,
+      "candidate_pass_rate": 0.8333333333333334,
+      "candidate_passed": 10,
+      "candidate_total": 12,
+      "domain": "Chemistry",
+      "source": "GPQA Diamond"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 10,
+      "baseline_total": 10,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 10,
+      "candidate_total": 10,
+      "domain": "Physics",
+      "source": "GPQA Diamond"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 2,
+      "baseline_total": 2,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 2,
+      "candidate_total": 2,
+      "domain": "Agronomy",
+      "source": "SuperGPQA"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 8,
+      "baseline_total": 8,
+      "candidate_pass_rate": 0.875,
+      "candidate_passed": 7,
+      "candidate_total": 8,
+      "domain": "Engineering",
+      "source": "SuperGPQA"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 1,
+      "baseline_total": 1,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 1,
+      "candidate_total": 1,
+      "domain": "Law",
+      "source": "SuperGPQA"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 1,
+      "baseline_total": 1,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 1,
+      "candidate_total": 1,
+      "domain": "Literature and Arts",
+      "source": "SuperGPQA"
+    },
+    {
+      "baseline_pass_rate": 1.0,
+      "baseline_passed": 2,
+      "baseline_total": 2,
+      "candidate_pass_rate": 1.0,
+      "candidate_passed": 2,
+      "candidate_total": 2,
+      "domain": "Medicine",
+      "source": "SuperGPQA"
+    },
+    {
+      "baseline_pass_rate": 0.0,
+      "baseline_passed": 0,
+      "baseline_total": 1,
+      "candidate_pass_rate": 0.0,
+      "candidate_passed": 0,
+      "candidate_total": 1,
+      "domain": "Military Science",
+      "source": "SuperGPQA"
+    },
+    {
+      "baseline_pass_rate": 0.8571428571428571,
+      "baseline_passed": 6,
+      "baseline_total": 7,
+      "candidate_pass_rate": 0.7142857142857143,
+      "candidate_passed": 5,
+      "candidate_total": 7,
+      "domain": "Science",
+      "source": "SuperGPQA"
+    },
+    {
+      "baseline_pass_rate": 0.6666666666666666,
+      "baseline_passed": 2,
+      "baseline_total": 3,
+      "candidate_pass_rate": 0.6666666666666666,
+      "candidate_passed": 2,
+      "candidate_total": 3,
+      "domain": "Sociology",
+      "source": "SuperGPQA"
+    }
+  ],
+  "format": "pipeline-quality-comparison-v1",
+  "mcnemar_p_value": 0.1796875,
+  "verdict": "better",
+  "verdict_line": "vLLM MXFP4 TP=2 quality is better than antirez IQ2XXS PP=1 by 5.43 percentage points on ds4-eval, p-value 0.179688."
+}
