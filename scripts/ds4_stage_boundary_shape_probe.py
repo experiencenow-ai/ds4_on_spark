@@ -4,16 +4,18 @@
 from __future__ import annotations
 
 import argparse
-import copy
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
 try:
+	from scripts._lib.json_utils import artifact_sha256
 	from scripts._lib.json_utils import load_json
+	from scripts._lib.json_utils import sha256_obj
 except ImportError:
+	from _lib.json_utils import artifact_sha256
 	from _lib.json_utils import load_json
+	from _lib.json_utils import sha256_obj
 
 
 FORMAT = "ds4-stage-boundary-shape-v1"
@@ -44,20 +46,6 @@ REQUIRED = (
 	"command_sha256",
 	"artifact_refs",
 )
-
-
-def canonical_bytes(obj: Any) -> bytes:
-	return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-
-
-def sha256_obj(obj: Any) -> str:
-	return "sha256:" + hashlib.sha256(canonical_bytes(obj)).hexdigest()
-
-
-def artifact_sha256(obj: dict[str, Any]) -> str:
-	tmp = copy.deepcopy(obj)
-	tmp.pop("artifact_sha256", None)
-	return sha256_obj(tmp)
 
 
 def write_json(path: Path, obj: dict[str, Any]) -> None:

@@ -4,16 +4,18 @@
 from __future__ import annotations
 
 import argparse
-import copy
-import hashlib
 import json
 import math
 from pathlib import Path
 from typing import Any
 
 try:
+	from scripts._lib.json_utils import artifact_sha256
+	from scripts._lib.json_utils import is_sha256_text
 	from scripts._lib.json_utils import load_json
 except ImportError:
+	from _lib.json_utils import artifact_sha256
+	from _lib.json_utils import is_sha256_text
 	from _lib.json_utils import load_json
 
 
@@ -71,30 +73,8 @@ REQUIRED = (
 )
 
 
-def canonical_bytes(obj: Any) -> bytes:
-	return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-
-
-def sha256_obj(obj: Any) -> str:
-	return "sha256:" + hashlib.sha256(canonical_bytes(obj)).hexdigest()
-
-
-def artifact_sha256(obj: dict[str, Any]) -> str:
-	tmp = copy.deepcopy(obj)
-	tmp.pop("artifact_sha256", None)
-	return sha256_obj(tmp)
-
-
 def write_json(path: Path, obj: dict[str, Any]) -> None:
 	path.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def is_sha256_text(value: Any, allow_empty: bool = False) -> bool:
-	if allow_empty and value == "":
-		return True
-	if not isinstance(value, str):
-		return False
-	return value.startswith("sha256:") and len(value) == 71
 
 
 def is_number(value: Any) -> bool:
