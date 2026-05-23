@@ -4,15 +4,17 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts._lib.json_utils import canonical_hash, load_json, make_validate_paths
+
 
 FORMAT = "ds4-vllm-config-tuning-v1"
-HASH_FIELDS = {"artifact_sha256"}
 
 
 def default_paths() -> list[Path]:
@@ -20,24 +22,12 @@ def default_paths() -> list[Path]:
 	return(sorted((root / "fixtures" / "vllm_config_tuning").glob("*.example.json")))
 
 
-def canonical_hash(obj: dict[str, Any]) -> str:
-	payload = copy.deepcopy(obj)
-	for field in HASH_FIELDS:
-		payload.pop(field, None)
-	data = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
-	return(hashlib.sha256(data).hexdigest())
-
-
 def err(path: Path, msg: str) -> str:
 	return(f"{path}: {msg}")
 
 
 def load(path: Path) -> dict[str, Any]:
-	with path.open("r", encoding="utf-8") as f:
-		obj = json.load(f)
-	if not isinstance(obj, dict):
-		raise ValueError("root JSON must be an object")
-	return(obj)
+	return(load_json(path, "root JSON"))
 
 
 def attempt_best_tps(attempt: dict[str, Any]) -> float:
@@ -115,14 +105,7 @@ def validate(obj: dict[str, Any], path: Path) -> list[str]:
 	return(errors)
 
 
-def validate_paths(paths: list[Path]) -> dict[str, Any]:
-	all_errors: list[str] = []
-	for path in paths:
-		try:
-			all_errors.extend(validate(load(path), path))
-		except Exception as e:
-			all_errors.append(err(path, str(e)))
-	return({"ok": len(all_errors) == 0, "errors": all_errors})
+validate_paths = make_validate_paths(validate, load)
 
 
 def main() -> int:
