@@ -17,6 +17,12 @@ from scripts import select_model_provider
 
 REQUEST_FORMAT = "centaur-provider-route-requests-v1"
 PLAN_FORMAT = "centaur-provider-routing-plan-v1"
+BUDGET_POLICY_FIELDS = {
+    "max_total_batch_tokens",
+    "max_parallel_service_ms_at_measured_output_tps",
+    "allow_unknown_capacity",
+    "allow_blocked_requests",
+}
 
 
 def as_nonempty_str(obj: dict[str, Any], field: str, errors: list[str], prefix: str) -> str:
@@ -35,11 +41,38 @@ def as_nonnegative_int(obj: dict[str, Any], field: str, errors: list[str], prefi
     return int(value)
 
 
+def as_nonnegative_number(obj: dict[str, Any], field: str, errors: list[str], prefix: str) -> float:
+    value = obj.get(field)
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or float(value) < 0.0:
+        errors.append(f"{prefix}.{field} must be a non-negative number")
+        return 0.0
+    return float(value)
+
+
+def validate_budget_policy(obj: Any, errors: list[str]) -> None:
+    if obj is None:
+        return
+    if not isinstance(obj, dict):
+        errors.append("plan.budget_policy must be an object when present")
+        return
+    for field in obj:
+        if field not in BUDGET_POLICY_FIELDS:
+            errors.append(f"plan.budget_policy has unknown field: {field}")
+    if "max_total_batch_tokens" in obj and obj.get("max_total_batch_tokens") is not None:
+        as_nonnegative_int(obj, "max_total_batch_tokens", errors, "plan.budget_policy")
+    if "max_parallel_service_ms_at_measured_output_tps" in obj and obj.get("max_parallel_service_ms_at_measured_output_tps") is not None:
+        as_nonnegative_number(obj, "max_parallel_service_ms_at_measured_output_tps", errors, "plan.budget_policy")
+    for field in ("allow_unknown_capacity", "allow_blocked_requests"):
+        if field in obj and not isinstance(obj.get(field), bool):
+            errors.append(f"plan.budget_policy.{field} must be boolean when present")
+
+
 def validate_request_plan(obj: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     if obj.get("format") != REQUEST_FORMAT:
         errors.append(f"format must be {REQUEST_FORMAT}")
     as_nonempty_str(obj, "run_id", errors, "plan")
+    validate_budget_policy(obj.get("budget_policy"), errors)
     requests = obj.get("requests")
     if not isinstance(requests, list) or len(requests) == 0:
         errors.append("plan.requests must be a non-empty list")
@@ -159,6 +192,58 @@ def capacity_summary(load: dict[str, dict[str, Any]], blocked_count: int) -> dic
     }
 
 
+def normalized_budget_policy(plan: dict[str, Any]) -> dict[str, Any] | None:
+    policy = plan.get("budget_policy")
+    if not isinstance(policy, dict):
+        return None
+    return {
+        "max_total_batch_tokens": policy.get("max_total_batch_tokens"),
+        "max_parallel_service_ms_at_measured_output_tps": policy.get("max_parallel_service_ms_at_measured_output_tps"),
+        "allow_unknown_capacity": bool(policy.get("allow_unknown_capacity", False)),
+        "allow_blocked_requests": bool(policy.get("allow_blocked_requests", False)),
+    }
+
+
+def budget_evaluation(plan: dict[str, Any], routes: list[dict[str, Any]], capacity: dict[str, Any]) -> dict[str, Any]:
+    policy = normalized_budget_policy(plan)
+    total_batch_tokens = sum(int(route.get("batch_tokens", 0)) for route in routes)
+    blocked_count = sum(1 for route in routes if route.get("selected") is not True)
+    unknown_capacity = list(capacity.get("unknown_capacity_provider_ids", []))
+    estimated_parallel_ms = capacity.get("estimated_parallel_service_ms_at_measured_output_tps")
+    observed = {
+        "total_batch_tokens": total_batch_tokens,
+        "blocked_request_count": blocked_count,
+        "unknown_capacity_provider_ids": unknown_capacity,
+        "estimated_parallel_service_ms_at_measured_output_tps": estimated_parallel_ms,
+    }
+    if policy is None:
+        return {
+            "enforced": False,
+            "accepted": True,
+            "policy": None,
+            "observed": observed,
+            "violations": [],
+        }
+    violations: list[dict[str, Any]] = []
+    max_tokens = policy.get("max_total_batch_tokens")
+    if isinstance(max_tokens, int) and not isinstance(max_tokens, bool) and total_batch_tokens > max_tokens:
+        violations.append({"kind": "total_batch_tokens_exceeds_budget", "limit": max_tokens, "observed": total_batch_tokens})
+    max_ms = policy.get("max_parallel_service_ms_at_measured_output_tps")
+    if isinstance(max_ms, (int, float)) and not isinstance(max_ms, bool) and estimated_parallel_ms is not None and float(estimated_parallel_ms) > float(max_ms):
+        violations.append({"kind": "parallel_service_ms_exceeds_budget", "limit": float(max_ms), "observed": float(estimated_parallel_ms)})
+    if policy["allow_unknown_capacity"] is not True and unknown_capacity:
+        violations.append({"kind": "unknown_capacity_provider_ids", "provider_ids": unknown_capacity})
+    if policy["allow_blocked_requests"] is not True and blocked_count > 0:
+        violations.append({"kind": "blocked_requests_present", "count": blocked_count})
+    return {
+        "enforced": True,
+        "accepted": len(violations) == 0,
+        "policy": policy,
+        "observed": observed,
+        "violations": violations,
+    }
+
+
 def route_request_plan(plan: dict[str, Any], profiles: list[dict[str, Any]], default_require_production_eligible: bool = True) -> dict[str, Any]:
     routes: list[dict[str, Any]] = []
     for request in plan["requests"]:
@@ -175,6 +260,8 @@ def route_request_plan(plan: dict[str, Any], profiles: list[dict[str, Any]], def
     selected_count = sum(1 for route in routes if route["selected"] is True)
     blocked_count = len(routes) - selected_count
     load = provider_load(routes)
+    capacity = capacity_summary(load, blocked_count)
+    budget = budget_evaluation(plan, routes, capacity)
     return {
         "format": PLAN_FORMAT,
         "run_id": plan["run_id"],
@@ -183,7 +270,9 @@ def route_request_plan(plan: dict[str, Any], profiles: list[dict[str, Any]], def
         "blocked_count": blocked_count,
         "all_requests_routed": blocked_count == 0,
         "provider_load": load,
-        "capacity_summary": capacity_summary(load, blocked_count),
+        "capacity_summary": capacity,
+        "budget_evaluation": budget,
+        "all_budget_gates_passed": bool(budget["accepted"]),
         "blocker_summary": blocker_summary(routes),
         "routes": routes,
     }
@@ -193,6 +282,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Route a Centaur provider request plan through DS4 provider profiles.")
     parser.add_argument("request_plan", help="Request-plan JSON using centaur-provider-route-requests-v1.")
     parser.add_argument("--allow-blocked", action="store_true", help="Return exit 0 even when some requests cannot be routed.")
+    parser.add_argument("--allow-budget-violations", action="store_true", help="Return exit 0 even when the plan violates budget_policy.")
     parser.add_argument("--allow-non-production", action="store_true", help="Default requests to allow non-production providers unless the request overrides it.")
     parser.add_argument("--profiles", nargs="*", default=[], help="Provider profile JSON paths. Defaults to fixtures/model_providers/*.json.")
     args = parser.parse_args()
@@ -206,7 +296,9 @@ def main() -> int:
         return 2
     result = route_request_plan(plan, profiles, default_require_production_eligible=not args.allow_non_production)
     print(json.dumps(result, indent=2, sort_keys=True))
-    if result["all_requests_routed"] or args.allow_blocked:
+    routed_ok = result["all_requests_routed"] or args.allow_blocked
+    budget_ok = result["all_budget_gates_passed"] or args.allow_budget_violations
+    if routed_ok and budget_ok:
         return 0
     return 1
 
