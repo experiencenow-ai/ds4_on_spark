@@ -1,15 +1,15 @@
 {
-  "cannot_derive_passed_record_count": 0,
+  "cannot_derive_passed_record_count": 38,
   "coverage": {
     "passed_records_accounted_for": true,
     "passed_records_with_tok_s": 53,
     "passed_records_without_tok_s": 0
   },
   "created_at": "2026-05-23T02:37:20.476743Z",
-  "derived_passed_record_count": 53,
+  "derived_passed_record_count": 41,
   "format": "small-model-throughput-addendum-v1",
-  "passed_record_count": 53,
-  "record_count": 91,
+  "passed_record_count": 41,
+  "record_count": 79,
   "records": [
     {
       "cannot_derive_reason": null,
@@ -43,23 +43,6 @@
       "prompt_count": 4,
       "serve_backend": "llama.cpp",
       "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/002_gguf-mistralai-Ministral-3-3B-Instruct-2512-GGUF-Ministral-3-3B-Instruct-2512-BF16.json",
-      "status": "passed"
-    },
-    {
-      "cannot_derive_reason": null,
-      "cost_proxy": 60.0,
-      "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
-      "derivation_status": "derived",
-      "mean_tok_s": 9.65752361314615,
-      "median_tok_s": 9.66591527670338,
-      "model_id": "gguf-mistralai-Ministral-3-3B-Instruct-2512-GGUF-Ministral-3-3B-Instruct-2512-BF16-mmproj",
-      "p50_latency_ms": 724.226,
-      "p95_latency_ms": 729.05,
-      "pass_count": 0,
-      "pass_rate": 0.0,
-      "prompt_count": 4,
-      "serve_backend": "llama.cpp",
-      "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/003_gguf-mistralai-Ministral-3-3B-Instruct-2512-GGUF-Ministral-3-3B-Instruct-2512-BF16-mmproj.json",
       "status": "passed"
     },
     {
@@ -135,23 +118,6 @@
       "cost_proxy": 60.0,
       "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
       "derivation_status": "derived",
-      "mean_tok_s": 9.851862641417803,
-      "median_tok_s": 9.815451908569749,
-      "model_id": "gguf-mistralai-Ministral-3-3B-Reasoning-2512-GGUF-Ministral-3-3B-Reasoning-2512-BF16-mmproj",
-      "p50_latency_ms": 713.421,
-      "p95_latency_ms": 727.028,
-      "pass_count": 0,
-      "pass_rate": 0.0,
-      "prompt_count": 4,
-      "serve_backend": "llama.cpp",
-      "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/008_gguf-mistralai-Ministral-3-3B-Reasoning-2512-GGUF-Ministral-3-3B-Reasoning-2512-BF16-mmproj.json",
-      "status": "passed"
-    },
-    {
-      "cannot_derive_reason": null,
-      "cost_proxy": 60.0,
-      "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
-      "derivation_status": "derived",
       "mean_tok_s": 1.449667260044092,
       "median_tok_s": 1.4327778878488369,
       "model_id": "gguf-mistralai-Ministral-3-3B-Reasoning-2512-GGUF-Ministral-3-3B-Reasoning-2512-Q4_K_M",
@@ -213,23 +179,6 @@
       "prompt_count": 4,
       "serve_backend": "llama.cpp",
       "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/012_gguf-mistralai-Ministral-3-8B-Instruct-2512-GGUF-Ministral-3-8B-Instruct-2512-BF16.json",
-      "status": "passed"
-    },
-    {
-      "cannot_derive_reason": null,
-      "cost_proxy": 160.0,
-      "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
-      "derivation_status": "derived",
-      "mean_tok_s": 9.763635061820837,
-      "median_tok_s": 9.7476884808708,
-      "model_id": "gguf-mistralai-Ministral-3-8B-Instruct-2512-GGUF-Ministral-3-8B-Instruct-2512-BF16-mmproj",
-      "p50_latency_ms": 718.1285,
-      "p95_latency_ms": 720.765,
-      "pass_count": 0,
-      "pass_rate": 0.0,
-      "prompt_count": 4,
-      "serve_backend": "llama.cpp",
-      "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/013_gguf-mistralai-Ministral-3-8B-Instruct-2512-GGUF-Ministral-3-8B-Instruct-2512-BF16-mmproj.json",
       "status": "passed"
     },
     {
@@ -305,23 +254,6 @@
       "cost_proxy": 160.0,
       "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
       "derivation_status": "derived",
-      "mean_tok_s": 8.79799816861125,
-      "median_tok_s": 9.636865761901145,
-      "model_id": "gguf-mistralai-Ministral-3-8B-Reasoning-2512-GGUF-Ministral-3-8B-Reasoning-2512-BF16-mmproj",
-      "p50_latency_ms": 726.4275,
-      "p95_latency_ms": 732.447,
-      "pass_count": 0,
-      "pass_rate": 0.0,
-      "prompt_count": 4,
-      "serve_backend": "llama.cpp",
-      "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/018_gguf-mistralai-Ministral-3-8B-Reasoning-2512-GGUF-Ministral-3-8B-Reasoning-2512-BF16-mmproj.json",
-      "status": "passed"
-    },
-    {
-      "cannot_derive_reason": null,
-      "cost_proxy": 160.0,
-      "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
-      "derivation_status": "derived",
       "mean_tok_s": 1.1222530821242547,
       "median_tok_s": 1.2306765625845193,
       "model_id": "gguf-mistralai-Ministral-3-8B-Reasoning-2512-GGUF-Ministral-3-8B-Reasoning-2512-Q4_K_M",
@@ -383,23 +315,6 @@
       "prompt_count": 4,
       "serve_backend": "llama.cpp",
       "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/022_gguf-mistralai-Ministral-3-14B-Instruct-2512-GGUF-Ministral-3-14B-Instruct-2512-BF16.json",
-      "status": "passed"
-    },
-    {
-      "cannot_derive_reason": null,
-      "cost_proxy": 280.0,
-      "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
-      "derivation_status": "derived",
-      "mean_tok_s": 9.648906581566578,
-      "median_tok_s": 9.625894043797196,
-      "model_id": "gguf-mistralai-Ministral-3-14B-Instruct-2512-GGUF-Ministral-3-14B-Instruct-2512-BF16-mmproj",
-      "p50_latency_ms": 727.236,
-      "p95_latency_ms": 731.951,
-      "pass_count": 0,
-      "pass_rate": 0.0,
-      "prompt_count": 4,
-      "serve_backend": "llama.cpp",
-      "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/023_gguf-mistralai-Ministral-3-14B-Instruct-2512-GGUF-Ministral-3-14B-Instruct-2512-BF16-mmproj.json",
       "status": "passed"
     },
     {
@@ -472,23 +387,6 @@
     },
     {
       "cannot_derive_reason": null,
-      "cost_proxy": 280.0,
-      "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
-      "derivation_status": "derived",
-      "mean_tok_s": 9.668743294294668,
-      "median_tok_s": 9.688533094962633,
-      "model_id": "gguf-mistralai-Ministral-3-14B-Reasoning-2512-GGUF-Ministral-3-14B-Reasoning-2512-BF16-mmproj",
-      "p50_latency_ms": 722.5055,
-      "p95_latency_ms": 723.678,
-      "pass_count": 0,
-      "pass_rate": 0.0,
-      "prompt_count": 4,
-      "serve_backend": "llama.cpp",
-      "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/028_gguf-mistralai-Ministral-3-14B-Reasoning-2512-GGUF-Ministral-3-14B-Reasoning-2512-BF16-mmproj.json",
-      "status": "passed"
-    },
-    {
-      "cannot_derive_reason": null,
       "cost_proxy": 56.0,
       "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
       "derivation_status": "derived",
@@ -536,108 +434,6 @@
       "prompt_count": 4,
       "serve_backend": "llama.cpp",
       "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/031_gguf-mistralai-Ministral-3-14B-Reasoning-2512-GGUF-Ministral-3-14B-Reasoning-2512-Q8_0.json",
-      "status": "passed"
-    },
-    {
-      "cannot_derive_reason": null,
-      "cost_proxy": 540.0,
-      "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
-      "derivation_status": "derived",
-      "mean_tok_s": 8.462342390038977,
-      "median_tok_s": 8.484662106115113,
-      "model_id": "qwen36_mtp-Qwen3.6-27B-MTP-Q8_0",
-      "p50_latency_ms": 825.033,
-      "p95_latency_ms": 828.573,
-      "pass_count": 0,
-      "pass_rate": 0.0,
-      "prompt_count": 4,
-      "serve_backend": "llama.cpp",
-      "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/032_qwen36_mtp-Qwen3.6-27B-MTP-Q8_0.json",
-      "status": "passed"
-    },
-    {
-      "cannot_derive_reason": null,
-      "cost_proxy": 540.0,
-      "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
-      "derivation_status": "derived",
-      "mean_tok_s": 4.885806512223203,
-      "median_tok_s": 4.808329790729182,
-      "model_id": "qwen36_mtp_q4-Qwen3.6-27B-MTP-Q4_K_M",
-      "p50_latency_ms": 1455.8125,
-      "p95_latency_ms": 1458.531,
-      "pass_count": 0,
-      "pass_rate": 0.0,
-      "prompt_count": 4,
-      "serve_backend": "llama.cpp",
-      "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/033_qwen36_mtp_q4-Qwen3.6-27B-MTP-Q4_K_M.json",
-      "status": "passed"
-    },
-    {
-      "cannot_derive_reason": null,
-      "cost_proxy": null,
-      "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
-      "derivation_status": "derived",
-      "mean_tok_s": 0.0,
-      "median_tok_s": 0.0,
-      "model_id": "ds4-DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2",
-      "p50_latency_ms": 60005.192500000005,
-      "p95_latency_ms": 60005.743,
-      "pass_count": 0,
-      "pass_rate": 0.0,
-      "prompt_count": 4,
-      "serve_backend": "llama.cpp",
-      "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/034_ds4-DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.json",
-      "status": "passed"
-    },
-    {
-      "cannot_derive_reason": null,
-      "cost_proxy": null,
-      "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
-      "derivation_status": "derived",
-      "mean_tok_s": 1.5170792693461097,
-      "median_tok_s": 1.6150086078540042,
-      "model_id": "ds4-DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix",
-      "p50_latency_ms": 43447.503,
-      "p95_latency_ms": 60005.291,
-      "pass_count": 0,
-      "pass_rate": 0.0,
-      "prompt_count": 4,
-      "serve_backend": "llama.cpp",
-      "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/035_ds4-DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.json",
-      "status": "passed"
-    },
-    {
-      "cannot_derive_reason": null,
-      "cost_proxy": null,
-      "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
-      "derivation_status": "derived",
-      "mean_tok_s": 6.851207574095027,
-      "median_tok_s": 6.391796231483907,
-      "model_id": "ds4-DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32",
-      "p50_latency_ms": 6713.873,
-      "p95_latency_ms": 8019.46,
-      "pass_count": 0,
-      "pass_rate": 0.0,
-      "prompt_count": 4,
-      "serve_backend": "llama.cpp",
-      "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/036_ds4-DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.json",
-      "status": "passed"
-    },
-    {
-      "cannot_derive_reason": null,
-      "cost_proxy": null,
-      "cost_proxy_basis": "model_size_params_billion / max(pass_rate, 0.05)",
-      "derivation_status": "derived",
-      "mean_tok_s": 23.533306930194254,
-      "median_tok_s": 30.227626935460286,
-      "model_id": "ling-Ling-2.6-flash-IQ4_NL-bailing_hybrid-20260505-LJ",
-      "p50_latency_ms": 2133.7345,
-      "p95_latency_ms": 2321.178,
-      "pass_count": 0,
-      "pass_rate": 0.0,
-      "prompt_count": 4,
-      "serve_backend": "llama.cpp",
-      "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/037_ling-Ling-2.6-flash-IQ4_NL-bailing_hybrid-20260505-LJ.json",
       "status": "passed"
     },
     {
@@ -1568,71 +1364,51 @@
     {
       "cost_proxy": 0.3,
       "model_id": "smoke-stories15M-q4_0",
-      "pass_rate": 0.0,
-      "serve_backend": "llama.cpp",
       "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/001_smoke-stories15M-q4_0.json"
     },
     {
       "cost_proxy": 1.0666666666666667,
       "model_id": "hf-Qwen-Qwen3.5-0.8B",
-      "pass_rate": 0.75,
-      "serve_backend": "transformers",
       "source_record": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/001_hf-Qwen-Qwen3.5-0.8B.json"
     },
     {
       "cost_proxy": 2.0,
       "model_id": "hf-Qwen-Qwen3.5-2B",
-      "pass_rate": 1.0,
-      "serve_backend": "transformers",
       "source_record": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/003_hf-Qwen-Qwen3.5-2B.json"
     },
     {
       "cost_proxy": 3.0,
       "model_id": "gguf-mistralai-Ministral-3-3B-Instruct-2512-GGUF-Ministral-3-3B-Instruct-2512-Q4_K_M",
-      "pass_rate": 1.0,
-      "serve_backend": "llama.cpp",
       "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/004_gguf-mistralai-Ministral-3-3B-Instruct-2512-GGUF-Ministral-3-3B-Instruct-2512-Q4_K_M.json"
     },
     {
       "cost_proxy": 3.0,
       "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-1.5B",
-      "pass_rate": 0.5,
-      "serve_backend": "transformers",
       "source_record": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/002_hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-1.5B.json"
     },
     {
       "cost_proxy": 4.0,
       "model_id": "gguf-mistralai-Ministral-3-3B-Instruct-2512-GGUF-Ministral-3-3B-Instruct-2512-BF16",
-      "pass_rate": 0.75,
-      "serve_backend": "llama.cpp",
       "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/002_gguf-mistralai-Ministral-3-3B-Instruct-2512-GGUF-Ministral-3-3B-Instruct-2512-BF16.json"
     },
     {
       "cost_proxy": 4.0,
       "model_id": "gguf-mistralai-Ministral-3-3B-Instruct-2512-GGUF-Ministral-3-3B-Instruct-2512-Q5_K_M",
-      "pass_rate": 0.75,
-      "serve_backend": "llama.cpp",
       "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/005_gguf-mistralai-Ministral-3-3B-Instruct-2512-GGUF-Ministral-3-3B-Instruct-2512-Q5_K_M.json"
     },
     {
       "cost_proxy": 4.0,
       "model_id": "gguf-mistralai-Ministral-3-3B-Instruct-2512-GGUF-Ministral-3-3B-Instruct-2512-Q8_0",
-      "pass_rate": 0.75,
-      "serve_backend": "llama.cpp",
       "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/006_gguf-mistralai-Ministral-3-3B-Instruct-2512-GGUF-Ministral-3-3B-Instruct-2512-Q8_0.json"
     },
     {
       "cost_proxy": 7.0,
       "model_id": "hf-zai-org-SWE-Dev-7B",
-      "pass_rate": 1.0,
-      "serve_backend": "transformers",
       "source_record": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/009_hf-zai-org-SWE-Dev-7B.json"
     },
     {
       "cost_proxy": 8.0,
       "model_id": "gguf-mistralai-Ministral-3-8B-Instruct-2512-GGUF-Ministral-3-8B-Instruct-2512-Q5_K_M",
-      "pass_rate": 1.0,
-      "serve_backend": "llama.cpp",
       "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/015_gguf-mistralai-Ministral-3-8B-Instruct-2512-GGUF-Ministral-3-8B-Instruct-2512-Q5_K_M.json"
     }
   ],
@@ -1640,72 +1416,52 @@
     {
       "mean_tok_s": 40.747303634839035,
       "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-1.5B",
-      "pass_rate": 0.5,
-      "serve_backend": "transformers",
       "source_record": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/002_hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-1.5B.json"
     },
     {
       "mean_tok_s": 40.21930060317706,
       "model_id": "hf-Qwen-Qwen3.5-0.8B",
-      "pass_rate": 0.75,
-      "serve_backend": "transformers",
       "source_record": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/001_hf-Qwen-Qwen3.5-0.8B.json"
     },
     {
       "mean_tok_s": 24.793756596290248,
       "model_id": "hf-Qwen-Qwen3.5-2B",
-      "pass_rate": 1.0,
-      "serve_backend": "transformers",
       "source_record": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/003_hf-Qwen-Qwen3.5-2B.json"
-    },
-    {
-      "mean_tok_s": 23.533306930194254,
-      "model_id": "ling-Ling-2.6-flash-IQ4_NL-bailing_hybrid-20260505-LJ",
-      "pass_rate": 0.0,
-      "serve_backend": "llama.cpp",
-      "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/037_ling-Ling-2.6-flash-IQ4_NL-bailing_hybrid-20260505-LJ.json"
     },
     {
       "mean_tok_s": 19.182116582232027,
       "model_id": "hf-microsoft-Phi-4-mini-reasoning",
-      "pass_rate": 0.25,
-      "serve_backend": "transformers",
       "source_record": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/024_hf-microsoft-Phi-4-mini-reasoning.json"
     },
     {
       "mean_tok_s": 13.603121658254722,
       "model_id": "hf-Qwen-Qwen3.5-4B",
-      "pass_rate": 0.0,
-      "serve_backend": "transformers",
       "source_record": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/007_hf-Qwen-Qwen3.5-4B.json"
     },
     {
       "mean_tok_s": 12.085627730025637,
       "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Llama-8B",
-      "pass_rate": 0.25,
-      "serve_backend": "transformers",
       "source_record": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/011_hf-deepseek-ai-DeepSeek-R1-Distill-Llama-8B.json"
     },
     {
       "mean_tok_s": 10.326384271364883,
       "model_id": "hf-deepseek-ai-DeepSeek-R1-0528-Qwen3-8B",
-      "pass_rate": 0.0,
-      "serve_backend": "transformers",
       "source_record": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/010_hf-deepseek-ai-DeepSeek-R1-0528-Qwen3-8B.json"
     },
     {
-      "mean_tok_s": 9.851862641417803,
-      "model_id": "gguf-mistralai-Ministral-3-3B-Reasoning-2512-GGUF-Ministral-3-3B-Reasoning-2512-BF16-mmproj",
-      "pass_rate": 0.0,
-      "serve_backend": "llama.cpp",
-      "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/008_gguf-mistralai-Ministral-3-3B-Reasoning-2512-GGUF-Ministral-3-3B-Reasoning-2512-BF16-mmproj.json"
+      "mean_tok_s": 9.668916746240205,
+      "model_id": "hf-Qwen-Qwen3.5-9B",
+      "source_record": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/012_hf-Qwen-Qwen3.5-9B.json"
     },
     {
-      "mean_tok_s": 9.763635061820837,
-      "model_id": "gguf-mistralai-Ministral-3-8B-Instruct-2512-GGUF-Ministral-3-8B-Instruct-2512-BF16-mmproj",
-      "pass_rate": 0.0,
-      "serve_backend": "llama.cpp",
-      "source_record": "fixtures/small_model_qualification/batch_spark2_20260521T1210Z/013_gguf-mistralai-Ministral-3-8B-Instruct-2512-GGUF-Ministral-3-8B-Instruct-2512-BF16-mmproj.json"
+      "mean_tok_s": 9.594032099702924,
+      "model_id": "hf-zai-org-GLM-4.7-Flash",
+      "source_record": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/027_hf-zai-org-GLM-4.7-Flash.json"
+    },
+    {
+      "mean_tok_s": 9.141823227736843,
+      "model_id": "hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-7B",
+      "source_record": "fixtures/small_model_qualification/transformers_spark2_20260521T1320Z/008_hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-7B.json"
     }
   ]
 }

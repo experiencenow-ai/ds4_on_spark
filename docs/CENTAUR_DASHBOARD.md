@@ -70,7 +70,7 @@ The product target is `a machine that creates machines that solves domains effic
 | Tier | % | Provider(s) live | Notes |
 |---|---:|---|---|
 | `deterministic` | 60 | Internal deterministic tools | Existing test fixtures pass; not formally qualified |
-| `local_small` | 45 | Corpus exists on Spark2 (#1213/#1214/#1239) — all 53 status=passed records across 91 attempts have derivable executed-run tok/s in `fixtures/small_model_qualification/throughput_addendum_20260523.json`. Fastest local-small candidates: `hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-1.5B` at 40.747 tok/s and `hf-Qwen-Qwen3.5-0.8B` at 40.219 tok/s. Router wiring still pending. |
+| `local_small` | 45 | Corpus exists on Spark2 (#1213/#1214/#1239) — all 41 retained status=passed records across 79 retained attempts have derivable executed-run tok/s in `fixtures/small_model_qualification/throughput_addendum_20260523.json`. Fastest local-small candidates: `hf-deepseek-ai-DeepSeek-R1-Distill-Qwen-1.5B` at 40.747 tok/s and `hf-Qwen-Qwen3.5-0.8B` at 40.219 tok/s. Router wiring still pending. |
 | `local_coder` | 45 | Same corpus; coding-specialized models present with throughput addendum coverage. Best correctness+throughput coder row in the addendum is `hf-Qwen-Qwen3.5-2B` at 24.794 tok/s with pass_rate 1.0; `hf-zai-org-SWE-Dev-7B` and `hf-zai-org-SWE-Dev-32B` also passed the eval prompts at 6.596 and 2.861 tok/s. Router wiring still pending. |
 | `near_frontier_local` | 60 | **vLLM PP=2 TP=2 on Spark4/5 LIVE** (centaur PR #100, merged 10:54Z). Spark4 currently DOWN since ~11:30Z. Live measured at 106 tok/s c=64. Sweep claimed 310 tok/s — under investigation #1208. |
 | `frontier_api` | 50 | Anthropic / OpenAI integration exists | Used by qualification escalation; not load-tested |

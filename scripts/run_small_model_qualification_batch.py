@@ -136,7 +136,7 @@ def write_results_doc(path: Path, summary: dict[str, Any]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def run_batch(inventory: dict[str, Any], eval_set: dict[str, Any], output_dir: Path, host: str, llama_cli: str, timeout_seconds: float, limit: int = 0, model_ids: list[str] | None = None, run_id: str = "20260521T1210Z", transformers_python: str = DEFAULT_TRANSFORMERS_PYTHON, transformers_docker_image: str = DEFAULT_TRANSFORMERS_DOCKER_IMAGE, transformers_model_mount: str = DEFAULT_TRANSFORMERS_MODEL_MOUNT, results_doc: Path = Path("docs/SMALL_MODEL_QUALIFICATION_RESULTS.md")) -> dict[str, Any]:
+def run_batch(inventory: dict[str, Any], eval_set: dict[str, Any], output_dir: Path, host: str, llama_cli: str, timeout_seconds: float, limit: int = 0, model_ids: list[str] | None = None, run_id: str = "20260521T1210Z", transformers_python: str = DEFAULT_TRANSFORMERS_PYTHON, transformers_docker_image: str = DEFAULT_TRANSFORMERS_DOCKER_IMAGE, transformers_model_mount: str = DEFAULT_TRANSFORMERS_MODEL_MOUNT, results_doc: Path | None = None) -> dict[str, Any]:
     started = time.perf_counter()
     models = list(inventory.get("models") or [])
     models = sorted(models, key=lambda model: (model.get("serve_backend") != "llama.cpp", model.get("model_size_params") is None, int(model.get("model_size_params") or 10**18), str(model.get("model_id") or "")))
@@ -159,7 +159,8 @@ def run_batch(inventory: dict[str, Any], eval_set: dict[str, Any], output_dir: P
         print(json.dumps({"index": index, "model_id": record.get("model_id"), "status": record.get("status"), "pass_rate": record.get("aggregate_metrics", {}).get("pass_rate"), "path": str(record_path)}, sort_keys=True), flush=True)
     summary = build_summary(records, inventory, output_dir, started)
     write_json(output_dir / f"batch_summary_spark2_{run_id}.json", summary)
-    write_results_doc(results_doc, summary)
+    if results_doc is not None:
+        write_results_doc(results_doc, summary)
     return summary
 
 
@@ -177,11 +178,12 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--model-id", action="append", default=[])
     parser.add_argument("--run-id", default="20260521T1210Z")
-    parser.add_argument("--results-doc", default="docs/SMALL_MODEL_QUALIFICATION_RESULTS.md")
+    parser.add_argument("--results-doc", default="")
     args = parser.parse_args()
     inventory = load_json(Path(args.inventory))
     eval_set = load_eval_set(Path(args.eval_set))
-    summary = run_batch(inventory, eval_set, Path(args.output_dir), args.host, args.llama_cli, args.timeout_seconds, args.limit, args.model_id, args.run_id, args.transformers_python, args.transformers_docker_image, args.transformers_model_mount, Path(args.results_doc))
+    results_doc = Path(args.results_doc) if args.results_doc else None
+    summary = run_batch(inventory, eval_set, Path(args.output_dir), args.host, args.llama_cli, args.timeout_seconds, args.limit, args.model_id, args.run_id, args.transformers_python, args.transformers_docker_image, args.transformers_model_mount, results_doc)
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
 

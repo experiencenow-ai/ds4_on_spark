@@ -1,0 +1,398 @@
+{
+  "blocker_kind": "one_or_more_cells_blocked",
+  "cells": [
+    {
+      "accepted_draft_tokens": 0,
+      "attempted_draft_tokens": 0,
+      "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\n\n\nLoading model... \nFailed to load the model",
+      "blocker_kind": "runtime_unsupported_architecture",
+      "draft_acceptance_rate": null,
+      "executed_prompt_count": 1,
+      "model_id": "ds4-DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32",
+      "model_path": "/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+      "mtp_k": 0,
+      "per_prompt_results": [
+        {
+          "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\n\n\nLoading model... \nFailed to load the model",
+          "blocker_kind": "runtime_unsupported_architecture",
+          "command": "ssh -o BatchMode=yes -o ConnectTimeout=8 spark2 'timeout -k 5s 180 /home/spark2/src/llama.cpp-kamnxt-master/build-rpc-cuda-nvcc/bin/llama-cli -m /home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf -p '\"'\"'You are a local Centaur worker. Task 1/50.\nCentaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. \nSignal: file_0.py repeats parsing code, provider_0 has evidence level 0, and issue #1325 needs a concise operational answer.\nQuestion: identify the duplicate helper and the shared abstraction. Answer in two short sentences.'\"'\"' -n 32 --temp 0 --no-display-prompt --single-turn --simple-io --show-timings --no-warmup'",
+          "latency_ms": 3294.825,
+          "perf": {
+            "accepted_draft_tokens": 0,
+            "attempted_draft_tokens": 0,
+            "draft_acceptance_rate": null,
+            "total_ms": null,
+            "total_tokens": 0
+          },
+          "prompt_sha256": "sha256:37a6dd1cd4fce47c9edaa98f8b7c155a58c10834faef967a21a9fac2cec2e625",
+          "returncode": 1,
+          "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\n",
+          "stdout_tail": "\nLoading model... \nFailed to load the model\n",
+          "task_id": "centaur_01",
+          "tok_s": 0.0
+        }
+      ],
+      "planned_prompt_count": 50,
+      "status": "blocked",
+      "successful_prompt_count": 0,
+      "tok_s_mean": 0.0
+    },
+    {
+      "accepted_draft_tokens": 0,
+      "attempted_draft_tokens": 0,
+      "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\n\n\nLoading model... \nFailed to load the model",
+      "blocker_kind": "runtime_unsupported_architecture",
+      "draft_acceptance_rate": null,
+      "executed_prompt_count": 1,
+      "model_id": "ds4-DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32",
+      "model_path": "/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+      "mtp_k": 2,
+      "per_prompt_results": [
+        {
+          "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\n\n\nLoading model... \nFailed to load the model",
+          "blocker_kind": "runtime_unsupported_architecture",
+          "command": "ssh -o BatchMode=yes -o ConnectTimeout=8 spark2 'timeout -k 5s 180 /home/spark2/src/llama.cpp-kamnxt-master/build-rpc-cuda-nvcc/bin/llama-cli -m /home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf -p '\"'\"'You are a local Centaur worker. Task 1/50.\nCentaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. \nSignal: file_0.py repeats parsing code, provider_0 has evidence level 0, and issue #1325 needs a concise operational answer.\nQuestion: identify the duplicate helper and the shared abstraction. Answer in two short sentences.'\"'\"' -n 32 --temp 0 --no-display-prompt --single-turn --simple-io --show-timings --no-warmup --draft 2 --draft-min 2'",
+          "latency_ms": 854.426,
+          "perf": {
+            "accepted_draft_tokens": 0,
+            "attempted_draft_tokens": 0,
+            "draft_acceptance_rate": null,
+            "total_ms": null,
+            "total_tokens": 0
+          },
+          "prompt_sha256": "sha256:37a6dd1cd4fce47c9edaa98f8b7c155a58c10834faef967a21a9fac2cec2e625",
+          "returncode": 1,
+          "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\n",
+          "stdout_tail": "\nLoading model... \nFailed to load the model\n",
+          "task_id": "centaur_01",
+          "tok_s": 0.0
+        }
+      ],
+      "planned_prompt_count": 50,
+      "status": "blocked",
+      "successful_prompt_count": 0,
+      "tok_s_mean": 0.0
+    },
+    {
+      "accepted_draft_tokens": 0,
+      "attempted_draft_tokens": 0,
+      "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\n\n\nLoading model... \nFailed to load the model",
+      "blocker_kind": "runtime_unsupported_architecture",
+      "draft_acceptance_rate": null,
+      "executed_prompt_count": 1,
+      "model_id": "ds4-DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32",
+      "model_path": "/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+      "mtp_k": 4,
+      "per_prompt_results": [
+        {
+          "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\n\n\nLoading model... \nFailed to load the model",
+          "blocker_kind": "runtime_unsupported_architecture",
+          "command": "ssh -o BatchMode=yes -o ConnectTimeout=8 spark2 'timeout -k 5s 180 /home/spark2/src/llama.cpp-kamnxt-master/build-rpc-cuda-nvcc/bin/llama-cli -m /home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf -p '\"'\"'You are a local Centaur worker. Task 1/50.\nCentaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. \nSignal: file_0.py repeats parsing code, provider_0 has evidence level 0, and issue #1325 needs a concise operational answer.\nQuestion: identify the duplicate helper and the shared abstraction. Answer in two short sentences.'\"'\"' -n 32 --temp 0 --no-display-prompt --single-turn --simple-io --show-timings --no-warmup --draft 4 --draft-min 4'",
+          "latency_ms": 833.211,
+          "perf": {
+            "accepted_draft_tokens": 0,
+            "attempted_draft_tokens": 0,
+            "draft_acceptance_rate": null,
+            "total_ms": null,
+            "total_tokens": 0
+          },
+          "prompt_sha256": "sha256:37a6dd1cd4fce47c9edaa98f8b7c155a58c10834faef967a21a9fac2cec2e625",
+          "returncode": 1,
+          "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: error loading model architecture: unknown model architecture: 'deepseek4_mtp_support'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf'\n",
+          "stdout_tail": "\nLoading model... \nFailed to load the model\n",
+          "task_id": "centaur_01",
+          "tok_s": 0.0
+        }
+      ],
+      "planned_prompt_count": 50,
+      "status": "blocked",
+      "successful_prompt_count": 0,
+      "tok_s_mean": 0.0
+    },
+    {
+      "accepted_draft_tokens": 0,
+      "attempted_draft_tokens": 0,
+      "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\n\n\nLoading model... \nFailed to load the model",
+      "blocker_kind": "checkpoint_corrupt_or_incomplete",
+      "draft_acceptance_rate": null,
+      "executed_prompt_count": 1,
+      "model_id": "qwen36_mtp-Qwen3.6-27B-MTP-Q8_0",
+      "model_path": "/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf",
+      "mtp_k": 0,
+      "per_prompt_results": [
+        {
+          "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\n\n\nLoading model... \nFailed to load the model",
+          "blocker_kind": "checkpoint_corrupt_or_incomplete",
+          "command": "ssh -o BatchMode=yes -o ConnectTimeout=8 spark2 'timeout -k 5s 180 /home/spark2/src/llama.cpp-kamnxt-master/build-rpc-cuda-nvcc/bin/llama-cli -m /home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf -p '\"'\"'You are a local Centaur worker. Task 1/50.\nCentaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. \nSignal: file_0.py repeats parsing code, provider_0 has evidence level 0, and issue #1325 needs a concise operational answer.\nQuestion: identify the duplicate helper and the shared abstraction. Answer in two short sentences.'\"'\"' -n 32 --temp 0 --no-display-prompt --single-turn --simple-io --show-timings --no-warmup'",
+          "latency_ms": 866.516,
+          "perf": {
+            "accepted_draft_tokens": 0,
+            "attempted_draft_tokens": 0,
+            "draft_acceptance_rate": null,
+            "total_ms": null,
+            "total_tokens": 0
+          },
+          "prompt_sha256": "sha256:37a6dd1cd4fce47c9edaa98f8b7c155a58c10834faef967a21a9fac2cec2e625",
+          "returncode": 1,
+          "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\n",
+          "stdout_tail": "\nLoading model... \nFailed to load the model\n",
+          "task_id": "centaur_01",
+          "tok_s": 0.0
+        }
+      ],
+      "planned_prompt_count": 50,
+      "status": "blocked",
+      "successful_prompt_count": 0,
+      "tok_s_mean": 0.0
+    },
+    {
+      "accepted_draft_tokens": 0,
+      "attempted_draft_tokens": 0,
+      "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\n\n\nLoading model... \nFailed to load the model",
+      "blocker_kind": "checkpoint_corrupt_or_incomplete",
+      "draft_acceptance_rate": null,
+      "executed_prompt_count": 1,
+      "model_id": "qwen36_mtp-Qwen3.6-27B-MTP-Q8_0",
+      "model_path": "/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf",
+      "mtp_k": 2,
+      "per_prompt_results": [
+        {
+          "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\n\n\nLoading model... \nFailed to load the model",
+          "blocker_kind": "checkpoint_corrupt_or_incomplete",
+          "command": "ssh -o BatchMode=yes -o ConnectTimeout=8 spark2 'timeout -k 5s 180 /home/spark2/src/llama.cpp-kamnxt-master/build-rpc-cuda-nvcc/bin/llama-cli -m /home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf -p '\"'\"'You are a local Centaur worker. Task 1/50.\nCentaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. \nSignal: file_0.py repeats parsing code, provider_0 has evidence level 0, and issue #1325 needs a concise operational answer.\nQuestion: identify the duplicate helper and the shared abstraction. Answer in two short sentences.'\"'\"' -n 32 --temp 0 --no-display-prompt --single-turn --simple-io --show-timings --no-warmup --draft 2 --draft-min 2'",
+          "latency_ms": 902.285,
+          "perf": {
+            "accepted_draft_tokens": 0,
+            "attempted_draft_tokens": 0,
+            "draft_acceptance_rate": null,
+            "total_ms": null,
+            "total_tokens": 0
+          },
+          "prompt_sha256": "sha256:37a6dd1cd4fce47c9edaa98f8b7c155a58c10834faef967a21a9fac2cec2e625",
+          "returncode": 1,
+          "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\n",
+          "stdout_tail": "\nLoading model... \nFailed to load the model\n",
+          "task_id": "centaur_01",
+          "tok_s": 0.0
+        }
+      ],
+      "planned_prompt_count": 50,
+      "status": "blocked",
+      "successful_prompt_count": 0,
+      "tok_s_mean": 0.0
+    },
+    {
+      "accepted_draft_tokens": 0,
+      "attempted_draft_tokens": 0,
+      "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\n\n\nLoading model... \nFailed to load the model",
+      "blocker_kind": "checkpoint_corrupt_or_incomplete",
+      "draft_acceptance_rate": null,
+      "executed_prompt_count": 1,
+      "model_id": "qwen36_mtp-Qwen3.6-27B-MTP-Q8_0",
+      "model_path": "/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf",
+      "mtp_k": 4,
+      "per_prompt_results": [
+        {
+          "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\n\n\nLoading model... \nFailed to load the model",
+          "blocker_kind": "checkpoint_corrupt_or_incomplete",
+          "command": "ssh -o BatchMode=yes -o ConnectTimeout=8 spark2 'timeout -k 5s 180 /home/spark2/src/llama.cpp-kamnxt-master/build-rpc-cuda-nvcc/bin/llama-cli -m /home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf -p '\"'\"'You are a local Centaur worker. Task 1/50.\nCentaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. \nSignal: file_0.py repeats parsing code, provider_0 has evidence level 0, and issue #1325 needs a concise operational answer.\nQuestion: identify the duplicate helper and the shared abstraction. Answer in two short sentences.'\"'\"' -n 32 --temp 0 --no-display-prompt --single-turn --simple-io --show-timings --no-warmup --draft 4 --draft-min 4'",
+          "latency_ms": 867.303,
+          "perf": {
+            "accepted_draft_tokens": 0,
+            "attempted_draft_tokens": 0,
+            "draft_acceptance_rate": null,
+            "total_ms": null,
+            "total_tokens": 0
+          },
+          "prompt_sha256": "sha256:37a6dd1cd4fce47c9edaa98f8b7c155a58c10834faef967a21a9fac2cec2e625",
+          "returncode": 1,
+          "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: tensor 'token_embd.weight' data is not within the file bounds, model is corrupted or incomplete\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp/Qwen3.6-27B-MTP-Q8_0.gguf'\n",
+          "stdout_tail": "\nLoading model... \nFailed to load the model\n",
+          "task_id": "centaur_01",
+          "tok_s": 0.0
+        }
+      ],
+      "planned_prompt_count": 50,
+      "status": "blocked",
+      "successful_prompt_count": 0,
+      "tok_s_mean": 0.0
+    },
+    {
+      "accepted_draft_tokens": 0,
+      "attempted_draft_tokens": 0,
+      "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\n\n\nLoading model... \nFailed to load the model",
+      "blocker_kind": "checkpoint_missing_tensor",
+      "draft_acceptance_rate": null,
+      "executed_prompt_count": 1,
+      "model_id": "qwen36_mtp_q4-Qwen3.6-27B-MTP-Q4_K_M",
+      "model_path": "/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf",
+      "mtp_k": 0,
+      "per_prompt_results": [
+        {
+          "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\n\n\nLoading model... \nFailed to load the model",
+          "blocker_kind": "checkpoint_missing_tensor",
+          "command": "ssh -o BatchMode=yes -o ConnectTimeout=8 spark2 'timeout -k 5s 180 /home/spark2/src/llama.cpp-kamnxt-master/build-rpc-cuda-nvcc/bin/llama-cli -m /home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf -p '\"'\"'You are a local Centaur worker. Task 1/50.\nCentaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. \nSignal: file_0.py repeats parsing code, provider_0 has evidence level 0, and issue #1325 needs a concise operational answer.\nQuestion: identify the duplicate helper and the shared abstraction. Answer in two short sentences.'\"'\"' -n 32 --temp 0 --no-display-prompt --single-turn --simple-io --show-timings --no-warmup'",
+          "latency_ms": 1404.336,
+          "perf": {
+            "accepted_draft_tokens": 0,
+            "attempted_draft_tokens": 0,
+            "draft_acceptance_rate": null,
+            "total_ms": null,
+            "total_tokens": 0
+          },
+          "prompt_sha256": "sha256:37a6dd1cd4fce47c9edaa98f8b7c155a58c10834faef967a21a9fac2cec2e625",
+          "returncode": 1,
+          "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\n",
+          "stdout_tail": "\nLoading model... \nFailed to load the model\n",
+          "task_id": "centaur_01",
+          "tok_s": 0.0
+        }
+      ],
+      "planned_prompt_count": 50,
+      "status": "blocked",
+      "successful_prompt_count": 0,
+      "tok_s_mean": 0.0
+    },
+    {
+      "accepted_draft_tokens": 0,
+      "attempted_draft_tokens": 0,
+      "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\n\n\nLoading model... \nFailed to load the model",
+      "blocker_kind": "checkpoint_missing_tensor",
+      "draft_acceptance_rate": null,
+      "executed_prompt_count": 1,
+      "model_id": "qwen36_mtp_q4-Qwen3.6-27B-MTP-Q4_K_M",
+      "model_path": "/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf",
+      "mtp_k": 2,
+      "per_prompt_results": [
+        {
+          "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\n\n\nLoading model... \nFailed to load the model",
+          "blocker_kind": "checkpoint_missing_tensor",
+          "command": "ssh -o BatchMode=yes -o ConnectTimeout=8 spark2 'timeout -k 5s 180 /home/spark2/src/llama.cpp-kamnxt-master/build-rpc-cuda-nvcc/bin/llama-cli -m /home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf -p '\"'\"'You are a local Centaur worker. Task 1/50.\nCentaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. \nSignal: file_0.py repeats parsing code, provider_0 has evidence level 0, and issue #1325 needs a concise operational answer.\nQuestion: identify the duplicate helper and the shared abstraction. Answer in two short sentences.'\"'\"' -n 32 --temp 0 --no-display-prompt --single-turn --simple-io --show-timings --no-warmup --draft 2 --draft-min 2'",
+          "latency_ms": 1434.76,
+          "perf": {
+            "accepted_draft_tokens": 0,
+            "attempted_draft_tokens": 0,
+            "draft_acceptance_rate": null,
+            "total_ms": null,
+            "total_tokens": 0
+          },
+          "prompt_sha256": "sha256:37a6dd1cd4fce47c9edaa98f8b7c155a58c10834faef967a21a9fac2cec2e625",
+          "returncode": 1,
+          "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\n",
+          "stdout_tail": "\nLoading model... \nFailed to load the model\n",
+          "task_id": "centaur_01",
+          "tok_s": 0.0
+        }
+      ],
+      "planned_prompt_count": 50,
+      "status": "blocked",
+      "successful_prompt_count": 0,
+      "tok_s_mean": 0.0
+    },
+    {
+      "accepted_draft_tokens": 0,
+      "attempted_draft_tokens": 0,
+      "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\n\n\nLoading model... \nFailed to load the model",
+      "blocker_kind": "checkpoint_missing_tensor",
+      "draft_acceptance_rate": null,
+      "executed_prompt_count": 1,
+      "model_id": "qwen36_mtp_q4-Qwen3.6-27B-MTP-Q4_K_M",
+      "model_path": "/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf",
+      "mtp_k": 4,
+      "per_prompt_results": [
+        {
+          "blocker_detail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\n\n\nLoading model... \nFailed to load the model",
+          "blocker_kind": "checkpoint_missing_tensor",
+          "command": "ssh -o BatchMode=yes -o ConnectTimeout=8 spark2 'timeout -k 5s 180 /home/spark2/src/llama.cpp-kamnxt-master/build-rpc-cuda-nvcc/bin/llama-cli -m /home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf -p '\"'\"'You are a local Centaur worker. Task 1/50.\nCentaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. Centaur promotes state machines only after deterministic verification, measured artifacts, and no invented throughput. \nSignal: file_0.py repeats parsing code, provider_0 has evidence level 0, and issue #1325 needs a concise operational answer.\nQuestion: identify the duplicate helper and the shared abstraction. Answer in two short sentences.'\"'\"' -n 32 --temp 0 --no-display-prompt --single-turn --simple-io --show-timings --no-warmup --draft 4 --draft-min 4'",
+          "latency_ms": 1547.763,
+          "perf": {
+            "accepted_draft_tokens": 0,
+            "attempted_draft_tokens": 0,
+            "draft_acceptance_rate": null,
+            "total_ms": null,
+            "total_tokens": 0
+          },
+          "prompt_sha256": "sha256:37a6dd1cd4fce47c9edaa98f8b7c155a58c10834faef967a21a9fac2cec2e625",
+          "returncode": 1,
+          "stderr_tail": "ggml_cuda_init: found 1 CUDA devices (Total VRAM: 122566 MiB):\n  Device 0: NVIDIA GB10, compute capability 12.1, VMM: yes, VRAM: 122566 MiB\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_fit_params: encountered an error while trying to fit params to free device memory: failed to load model\nllama_model_load: error loading model: missing tensor 'blk.64.ssm_conv1d.weight'\nllama_model_load_from_file_impl: failed to load model\ncommon_init_from_params: failed to load model '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\nsrv    load_model: failed to load model, '/home/spark2/models/qwen36_mtp_q4/Qwen3.6-27B-MTP-Q4_K_M.gguf'\n",
+          "stdout_tail": "\nLoading model... \nFailed to load the model\n",
+          "task_id": "centaur_01",
+          "tok_s": 0.0
+        }
+      ],
+      "planned_prompt_count": 50,
+      "status": "blocked",
+      "successful_prompt_count": 0,
+      "tok_s_mean": 0.0
+    }
+  ],
+  "created_at": "2026-05-23T04:33:19.000072Z",
+  "format": "small-model-mtp-c1-benchmark-v1",
+  "hardware_node": "spark2",
+  "k_values": [
+    0,
+    2,
+    4
+  ],
+  "llama_cli": "/home/spark2/src/llama.cpp-kamnxt-master/build-rpc-cuda-nvcc/bin/llama-cli",
+  "model_ids": [
+    "ds4-DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32",
+    "qwen36_mtp-Qwen3.6-27B-MTP-Q8_0",
+    "qwen36_mtp_q4-Qwen3.6-27B-MTP-Q4_K_M"
+  ],
+  "prompt_count": 50,
+  "prompt_hashes": [
+    "sha256:37a6dd1cd4fce47c9edaa98f8b7c155a58c10834faef967a21a9fac2cec2e625",
+    "sha256:2319c994db20f92605e94f3fa0a1715b617350cbb6e793a13dfdc71816554f89",
+    "sha256:642bff9cd1c1fe169b7bf941ff6c6b807f9b81f2a479fa03c34cb7fd75fe0058",
+    "sha256:77877d709564600600457225f29ef76b9adfb84b7bbfc1b8df1e75526d66cce2",
+    "sha256:a547d1a1e9176fcce87e2bb4d6434fc4d3c74033a6cb31d4d327fa6f30b455a8",
+    "sha256:ca30227d11fff162e7c81ab11bb08a8fb31fe5e5e0a93cdc9dd63ff37e68c83c",
+    "sha256:73efb4c50ceccfdca9d63a4540d4abf9b5c7dfd0365c1381dac6afd55db44be2",
+    "sha256:e268de8d471d47d2bae2b30d40aceeb8a4b63571948e243bebc2fd438a930136",
+    "sha256:18477cbcb61bd29fb0a92bd4dcc75b1bb26440bab9110968796ccc743670de13",
+    "sha256:5da0b75ff1d2e0c67ae25b93b7808e146481825ed048df57e1d9d89ed56c98a2",
+    "sha256:aa0334ab7ffeb0ad56213f8116209f81d6127d6b660c18ff451029a4bd8e7811",
+    "sha256:ae8e9bfdb636a8a66ee82e9f089bcf61fe2b7c5800a8aeb56912aaf15c778c60",
+    "sha256:2532d36ba88da66c85af6ba48b707ba0f8c073dca3422ef8ed43620cbb1f9de8",
+    "sha256:2b67040b64bf2738b3f8435de7d3d6a68461add3235eb1bbea0840d68e8ae524",
+    "sha256:d8e0009a5332886426f5a6c31acb01528175f49cf821e843301c49ae08c9bf71",
+    "sha256:5d1316ee1e37739f1aab89a210fe2a1e77b43deb08b2ae719150f0b0148a6e4d",
+    "sha256:381b0930d4848b01cac2fe7a8cf8d9f0e5a7e9febbda2d5aa7bd9cb0d0487ed8",
+    "sha256:41f20cf5ecf146c361e999270ac05339b6e40cae7f823a4f79dbcad749ee1dcb",
+    "sha256:fcd1b6e6fdb9829279652d50007e9e384982d1be95b827300cb904cafbbfbbb9",
+    "sha256:02c54581a422eff769990995e05a6c71c9e3817f173ea5af40a421f924abb158",
+    "sha256:53b50305f08d13b7d53ff420a9c6d2e3472b7895613de62e9e129a0640cd87ce",
+    "sha256:abf42765dc44c0923e1ec65658c9ebc1c472fcc9a26d166fcf41bb9320da0b82",
+    "sha256:f28c6f55d7586686a4d79ea0677c0645fc988a8bd87f1af87a4b0eb4b2f3c65c",
+    "sha256:b18de2bcb44118886639cf829fe7e7838654f9d966563c34847b07be773a2ab4",
+    "sha256:a6e37deccd215a434e347a593a97c0e2be4590cfbd33521822a4ee2ffac97852",
+    "sha256:59808a92f0badeec4911837203fd52526ce91aaa786177c056caf7d451ad42b7",
+    "sha256:ad7ddf018d391dff865ac9fd17206902d1af7873f2ff420636d51f46f98b2d9e",
+    "sha256:5d3439f0dbb51ae091ba9d4b5a8dc63491fea81e87d1db070e430580fb36d1c0",
+    "sha256:9d43d4bd15cd6387cf760a11dd3571009817264aa9bdb287316891da5fdd4473",
+    "sha256:176dd305b2379b77f282765408749ee4b3ee93620018c91a39da0d83a6eb95a1",
+    "sha256:90a1e1d88bbc26356778b701e1c7c925c7a6efed89f6388b6239cc6c118c1b42",
+    "sha256:cce60cfd331a7cfce304217bbdc5d15362942c6a59f7b4e6c16e5e499eb2d619",
+    "sha256:8888d89dd3aa4c446e582128cd3a64dcfe8d74c3bcd5c836992c937b491f7daa",
+    "sha256:17b32952c297f7bd87977e9517d1f508a53651bdbe073e9ad3e2774f001c0b11",
+    "sha256:a39250d4f8af14853e6820009ba35a35a70f5973f3c1fbd51b98e61561713ddc",
+    "sha256:b9ea6ba2a3706d2de12b69966e1b99db3e986d28939928a19d974accce665fe7",
+    "sha256:4ff7800a1efce970303c69f39ce1b47cb6a84a295e6709bb7d266e885a3fef73",
+    "sha256:688f0abe3bca737cf294ab1a8eb071d5354910e03e065fc54a26e2b9c083a389",
+    "sha256:9d89559d9258b3249590b85239359373174a2d2efb52b76ab1544bfca7f83f30",
+    "sha256:c53ea16439126759eba7c679b0abb0d475c34171103e452d63b6d5cc63175b38",
+    "sha256:66c783f31bc4163a4451f6edb1985784730f71745b4af2e949f7c65eac9338a6",
+    "sha256:0c98b2c05f51aefa75cf4131a3f030c2302ab6d63502af2fba7f6cb39b1139dd",
+    "sha256:444ad449e04f3cb1d798897fa2d6b7bf999ab1512d6e3b96b0402d0e42ba5eca",
+    "sha256:44a5e7f26ac205e48154ece9410ac6c23151f0619a639d00f56cd43872156ec2",
+    "sha256:f3c81f23ba6155eb7958ba8c18321961e503bb0effd7c2ff14a4b32a0cab7e02",
+    "sha256:91fb937a9ea4b63ea08258a45e3d7e4060613e9bfbe24d3f60df2590e497e0ac",
+    "sha256:32b07c4ba5f5a0759ce12b73937f421cb29eae26113491acca23ce5866f742d5",
+    "sha256:940b0f1ee9d522326374bd9971df7558dced3de0ddbef73f03379b407b3496ad",
+    "sha256:abe828993cf1fcaab86530101bfb72c0b5977eeb37c96cfd72bef63f98e81e37",
+    "sha256:a0fd13091d5ca8afa323a97656bb7b72ba67e9b492247c9a18c543351563e0a3"
+  ],
+  "prompt_workload": "centaur_shape_50x500_tokenish_c1",
+  "run_id": "20260523Ttrack1_spark2_mtp_c1_master"
+}
