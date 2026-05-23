@@ -6,6 +6,9 @@ STATE_DIR=/run/ds4-rescue
 FAIL_FILE=$STATE_DIR/sshd-watchdog.failures
 LOCK_DIR=$STATE_DIR/sshd-watchdog.lock
 REBOOT_AFTER="${DS4_WATCHDOG_REBOOT_AFTER:-0}"
+TOP_MEM_COUNT="${DS4_WATCHDOG_KILL_TOP_MEM_COUNT:-16}"
+MIN_KILL_RSS_KB="${DS4_WATCHDOG_MIN_KILL_RSS_KB:-262144}"
+KILL_GPU_PROCS="${DS4_WATCHDOG_KILL_GPU_PROCS:-1}"
 
 log()
 {
@@ -95,6 +98,85 @@ kill_allowlisted_processes()
 	fi
 }
 
+kill_gpu_compute_processes()
+{
+	pid=""
+	mem=""
+	if [ "$KILL_GPU_PROCS" != "1" ] || ! command -v nvidia-smi >/dev/null 2>&1
+	then
+		return 0
+	fi
+	nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits 2>/dev/null | while IFS=, read -r pid mem
+	do
+		pid="$(echo "$pid" | tr -dc '0-9')"
+		mem="$(echo "$mem" | tr -dc '0-9')"
+		case "$pid" in
+		''|*[!0-9]*)
+			continue
+			;;
+		esac
+		if [ "$pid" -le 2 ] || [ "$pid" -eq "$$" ]
+		then
+			continue
+		fi
+		log "killing GPU compute process pid=$pid used_gpu_mib=${mem:-unknown}"
+		kill -9 "$pid" >/dev/null 2>&1 || true
+	done
+}
+
+kill_top_memory_processes()
+{
+	ps -eo pid=,ppid=,user=,rss=,comm=,args= --sort=-rss 2>/dev/null | awk -v min="$MIN_KILL_RSS_KB" -v limit="$TOP_MEM_COUNT" -v self="$$" '
+	function protected(pid,ppid,user,rss,comm,args) {
+		if (pid <= 2 || pid == self || ppid == self)
+			return 1
+		if (comm ~ /^(\[.*\]|systemd|systemctl|sshd|ssh|NetworkManager|wpa_supplicant|systemd-network|systemd-resolve|resolved|dbus-daemon|avahi-daemon|chronyd|systemd-journal|systemd-udevd|login|agetty|sudo|su|sh|bash|dash|awk|ps|logger)$/)
+			return 1
+		if (args ~ /ds4-sshd-watchdog/)
+			return 1
+		return 0
+	}
+	BEGIN {
+		killed = 0
+	}
+	{
+		pid = $1
+		ppid = $2
+		user = $3
+		rss = $4
+		comm = $5
+		args = ""
+		for (i=6; i<=NF; i++)
+			args = args $i (i<NF ? " " : "")
+		if (rss < min)
+			next
+		if (protected(pid,ppid,user,rss,comm,args))
+			next
+		printf "%s %s %s %s\n", pid, rss, comm, args
+		killed++
+		if (killed >= limit)
+			exit
+	}' | while read -r pid rss comm args
+	do
+		case "$pid" in
+		''|*[!0-9]*)
+			continue
+			;;
+		esac
+		log "killing top memory process pid=$pid rss_kb=$rss comm=$comm args=$args"
+		kill -9 "$pid" >/dev/null 2>&1 || true
+	done
+}
+
+kill_heavy_runtimes()
+{
+	log "killing allowlisted and memory-heavy runtimes"
+	kill_allowlisted_containers
+	kill_allowlisted_processes
+	kill_gpu_compute_processes
+	kill_top_memory_processes
+}
+
 clear_failures()
 {
 	mkdir -p "$STATE_DIR"
@@ -152,20 +234,19 @@ run_rescue()
 		clear_failures
 		return 0
 	fi
-	log "SSH banner still failing after restart; killing allowlisted heavy runtimes"
-	kill_allowlisted_containers
-	kill_allowlisted_processes
+	log "SSH banner still failing after restart; escalating to runtime and memory-hog kill"
+	kill_heavy_runtimes
 	sleep 5
 	restart_ssh || true
 	sleep 2
 	if probe_ssh
 	then
-		log "SSH banner recovered after killing allowlisted runtimes"
+		log "SSH banner recovered after runtime and memory-hog kill"
 		clear_failures
 		return 0
 	fi
 	failures="$(record_failure)"
-	log "SSH banner still failing after heavy-runtime kill; consecutive_failures=$failures"
+	log "SSH banner still failing after escalation; consecutive_failures=$failures"
 	maybe_reboot "$failures"
 	return 1
 }
