@@ -4,9 +4,13 @@ import json
 import os
 import sys
 from argparse import ArgumentParser
-from hashlib import sha256
 from pathlib import Path
 from typing import Any
+
+try:
+	from scripts._lib.source_probe import sha256_file
+except ImportError:
+	from _lib.source_probe import sha256_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,14 +39,6 @@ def init_dist() -> tuple[int, int, int]:
 		if not dist.is_initialized():
 			dist.init_process_group("nccl")
 	return world_size, rank, local_rank
-
-
-def sha256_file(path: Path) -> str:
-	h = sha256()
-	with path.open("rb") as f:
-		for chunk in iter(lambda: f.read(1024 * 1024), b""):
-			h.update(chunk)
-	return h.hexdigest()
 
 
 def try_version(modname: str) -> str:

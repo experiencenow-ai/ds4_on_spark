@@ -13,22 +13,16 @@ from typing import Any
 try:
 	from scripts._lib.json_utils import artifact_sha256
 	from scripts._lib.json_utils import load_json
+	from scripts._lib.json_utils import max_number
 except ImportError:
 	from _lib.json_utils import artifact_sha256
 	from _lib.json_utils import load_json
+	from _lib.json_utils import max_number
 
 
 FORMAT = "ds4-interactive-small-batch-benchmark-v1"
 OUTPUT_MODES = {"full_vocab"}
 PROMPT_SHAPES = {"independent_rows", "single_combined_prompt_control"}
-
-
-def canonical_bytes(obj: Any) -> bytes:
-	return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-
-
-def sha256_obj(obj: Any) -> str:
-	return "sha256:" + hashlib.sha256(canonical_bytes(obj)).hexdigest()
 
 
 def sha256_file(path: Path) -> str:
@@ -38,13 +32,6 @@ def sha256_file(path: Path) -> str:
 def write_json(path: Path, obj: dict[str, Any]) -> None:
 	path.parent.mkdir(parents=True, exist_ok=True)
 	path.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def max_number(values: Any) -> float:
-	if not isinstance(values, list):
-		return 0.0
-	nums = [float(v) for v in values if isinstance(v, (int, float))]
-	return max(nums) if nums else 0.0
 
 
 def nested_last_ms(stage: dict[str, Any]) -> float:

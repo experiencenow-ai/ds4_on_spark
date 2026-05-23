@@ -9,6 +9,11 @@ from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 
+try:
+	from scripts._lib.source_probe import sha256_file
+except ImportError:
+	from _lib.source_probe import sha256_file
+
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "fixtures" / "model_contract" / "deepseek_v4_flash"
@@ -46,13 +51,6 @@ def sha256_lines(lines: list[str]) -> str:
 	for line in lines:
 		h.update(line.encode("utf-8"))
 		h.update(b"\n")
-	return h.hexdigest()
-
-def sha256_file(path: Path) -> str:
-	h = sha256()
-	with path.open("rb") as f:
-		for chunk in iter(lambda: f.read(1024 * 1024), b""):
-			h.update(chunk)
 	return h.hexdigest()
 
 def repo_relpath(path: Path) -> str:

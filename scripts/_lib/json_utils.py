@@ -59,6 +59,13 @@ def number_or_none(raw: Any) -> float | None:
 		return None
 
 
+def max_number(values: Any) -> float:
+	if not isinstance(values, list):
+		return 0.0
+	nums = [float(v) for v in values if isinstance(v, (int, float))]
+	return max(nums) if nums else 0.0
+
+
 def validate_json_paths(paths: list[Path], validate_func: Callable[[dict[str, Any], Path], list[str]], load_func: Callable[[Path], dict[str, Any]] = load_json) -> dict[str, Any]:
 	all_errors: list[str] = []
 	for path in paths:

@@ -8,6 +8,11 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any, Optional
 
+try:
+	from scripts._lib.source_probe import sha256_file
+except ImportError:
+	from _lib.source_probe import sha256_file
+
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "fixtures" / "model_contract" / "deepseek_v4_flash"
@@ -61,13 +66,6 @@ def build_checkpoint_keys() -> list[str]:
 	if not isinstance(weight_map, dict):
 		return []
 	return sorted([k for k in weight_map.keys() if isinstance(k, str)])
-
-def sha256_file(path: Path) -> str:
-	h = sha256()
-	with path.open("rb") as f:
-		for chunk in iter(lambda: f.read(1024 * 1024), b""):
-			h.update(chunk)
-	return h.hexdigest()
 
 def sha256_lines(lines: list[str]) -> str:
 	h = sha256()
