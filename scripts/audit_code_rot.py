@@ -33,6 +33,7 @@ from collections import defaultdict
 
 from audit_code_similarity import DEFAULT_MIN_FUNCTION_LINES as DEFAULT_SIMILARITY_MIN_LINES
 from audit_code_similarity import DEFAULT_SIMILARITY_THRESHOLD
+from audit_code_similarity import normalize_pair_key
 from audit_code_similarity import pair_keys
 from audit_code_similarity import resolve_centaur_root
 from audit_code_similarity import run_similarity_audit
@@ -197,9 +198,12 @@ def main() -> int:
         print("   (none)")
     else:
         print(f"   {len(similarity_pairs)} pairs at or above threshold")
+        baseline_similarity = set()
+        if baseline is not None:
+            baseline_similarity = {normalize_pair_key(str(key)) for key in baseline.get("similarity_function_pairs", [])}
         for pair in similarity_pairs[:25]:
-            key = str(pair.get("left", "")) + " <=> " + str(pair.get("right", ""))
-            new = baseline is None or key not in baseline.get("similarity_function_pairs", [])
+            key = normalize_pair_key(str(pair.get("left", "")) + " <=> " + str(pair.get("right", "")))
+            new = baseline is None or key not in baseline_similarity
             marker = " *** NEW ***" if new and baseline is not None else ""
             print(f"   {float(pair.get('score', 0.0)):.3f} {pair.get('reason')}:{marker}")
             print(f"        {pair.get('left')}")
@@ -238,7 +242,7 @@ def main() -> int:
     baseline_hashes = set(baseline.get("duplicate_function_hashes", []))
     baseline_counts = baseline.get("duplicate_function_counts", {})
     baseline_probes = set(baseline.get("probe_docs", []))
-    baseline_similarity = set(baseline.get("similarity_function_pairs", []))
+    baseline_similarity = {normalize_pair_key(str(key)) for key in baseline.get("similarity_function_pairs", [])}
     new_dup_hashes = set(dups.keys()) - baseline_hashes
     grown_dup_hashes = {
         h for h, locs in dups.items()

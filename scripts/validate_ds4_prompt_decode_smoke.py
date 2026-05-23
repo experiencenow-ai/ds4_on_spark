@@ -9,15 +9,10 @@ from pathlib import Path
 
 try:
 	from scripts import build_ds4_prompt_decode_smoke as smoke
+	from scripts._lib.json_utils import load_json
 except ImportError:
 	import build_ds4_prompt_decode_smoke as smoke
-
-
-def load_json(path: Path) -> dict:
-	obj = json.loads(path.read_text(encoding="utf-8"))
-	if not isinstance(obj, dict):
-		raise ValueError(f"{path}: root must be an object")
-	return obj
+	from _lib.json_utils import load_json
 
 
 def main() -> int:

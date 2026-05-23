@@ -9,6 +9,11 @@ import re
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts._lib.json_utils import load_json as _load_json
+except ImportError:
+    from _lib.json_utils import load_json as _load_json
+
 
 FORMATS = {"ds4-model-provider-profile-v1", "centaur-model-provider-profile-v1"}
 TIERS = {"deterministic", "local_small", "local_coder", "near_frontier_local", "frontier_api"}
@@ -208,11 +213,7 @@ def validate_profile(obj: dict[str, Any], path: Path, root: Path | None = None) 
 
 
 def load_profile(path: Path) -> dict[str, Any]:
-	with path.open("r", encoding="utf-8") as f:
-		obj = json.load(f)
-	if not isinstance(obj, dict):
-		raise ValueError(f"{path}: root JSON must be an object")
-	return obj
+	return _load_json(path, "root JSON")
 
 
 def validate_paths(paths: list[Path]) -> dict[str, Any]:

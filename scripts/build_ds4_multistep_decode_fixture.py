@@ -13,13 +13,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts import validate_ds4_end_to_end_decode as decode
-
-
-def load_json(path: Path) -> dict[str, Any]:
-	obj = json.loads(path.read_text(encoding="utf-8"))
-	if not isinstance(obj, dict):
-		raise ValueError(f"{path}: root must be an object")
-	return obj
+from scripts._lib.json_utils import load_json
 
 
 def write_json(path: Path, obj: dict[str, Any]) -> None:

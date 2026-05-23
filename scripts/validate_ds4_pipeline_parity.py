@@ -11,6 +11,11 @@ import math
 from pathlib import Path
 from typing import Any
 
+try:
+	from scripts._lib.json_utils import load_json
+except ImportError:
+	from _lib.json_utils import load_json
+
 
 FORMAT = "ds4-layer-pipeline-parity-v1"
 SCHEMA_VERSION = 1
@@ -78,13 +83,6 @@ def artifact_sha256(obj: dict[str, Any]) -> str:
 	tmp = copy.deepcopy(obj)
 	tmp.pop("artifact_sha256", None)
 	return sha256_obj(tmp)
-
-
-def load_json(path: Path) -> dict[str, Any]:
-	obj = json.loads(path.read_text(encoding="utf-8"))
-	if not isinstance(obj, dict):
-		raise ValueError(f"{path}: root must be an object")
-	return obj
 
 
 def write_json(path: Path, obj: dict[str, Any]) -> None:

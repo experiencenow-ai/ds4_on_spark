@@ -11,6 +11,11 @@ import re
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts._lib.json_utils import load_json as _load_json
+except ImportError:
+    from _lib.json_utils import load_json as _load_json
+
 
 FORMAT = "centaur-standard-runtime-model-benchmark-v1"
 RUNTIMES = {"llama_cpp", "sglang", "vllm", "local_openai_compatible"}
@@ -244,11 +249,7 @@ def validate_benchmark(obj: dict[str, Any], path: Path) -> list[str]:
 
 
 def load_benchmark(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as f:
-        obj = json.load(f)
-    if not isinstance(obj, dict):
-        raise ValueError(f"{path}: root JSON must be an object")
-    return obj
+    return _load_json(path, "root JSON")
 
 
 def validate_paths(paths: list[Path]) -> dict[str, Any]:

@@ -14,9 +14,11 @@ from typing import Any
 try:
 	from scripts import ds4_stage_boundary_shape_probe as boundary_probe
 	from scripts import validate_ds4_pipeline_parity as parity
+	from scripts._lib.json_utils import load_json
 except ImportError:
 	import ds4_stage_boundary_shape_probe as boundary_probe
 	import validate_ds4_pipeline_parity as parity
+	from _lib.json_utils import load_json
 
 
 def canonical_bytes(obj: Any) -> bytes:
@@ -29,13 +31,6 @@ def sha256_text(text: str) -> str:
 
 def sha256_obj(obj: Any) -> str:
 	return "sha256:" + hashlib.sha256(canonical_bytes(obj)).hexdigest()
-
-
-def load_json(path: Path) -> dict[str, Any]:
-	obj = json.loads(path.read_text(encoding="utf-8"))
-	if not isinstance(obj, dict):
-		raise ValueError(f"{path}: root must be an object")
-	return obj
 
 
 def dependency_blocker() -> str:

@@ -93,7 +93,10 @@ That step-function on correctness ensures Centaur cannot "win" by being cheap-an
 
 ## 2.5. The diamond refinement domain — first real Centaur use case for self-improvement
 
-Per ct direction 2026-05-23, the **first real Centaur state-machine use case** is the diamond-refinement loop: take working but coal-quality Python code and mechanically refine it into functionally-equivalent diamond-quality code via local-model proposal + deterministic verification.
+Per ct direction 2026-05-23, the **first real Centaur state-machine use
+case** is the diamond-refinement loop: take working but coal-quality Python
+code and mechanically refine it into functionally-equivalent diamond-quality
+code via local-model proposal + deterministic verification.
 
 This is the architectural prototype for how Centaur produces diamond output across all future domains (§1.5).
 
@@ -111,30 +114,52 @@ This is the architectural prototype for how Centaur produces diamond output acro
 
 **The methodology distinction (per ct):**
 
-> "code prototyping where you just want anything that works as quickly as possible without any code quality constraints — then that process converts an ambiguous and fuzzy english language specification into a verifiable (compilable) specification. Given that it becomes a lot more mechanical and does not require genius level thinking, just excellent craftsmanship. And we both know AI can do this."
+> "code prototyping where you just want anything that works as quickly as
+> possible without any code quality constraints — then that process converts
+> an ambiguous and fuzzy english language specification into a verifiable
+> (compilable) specification. Given that it becomes a lot more mechanical
+> and does not require genius level thinking, just excellent craftsmanship.
+> And we both know AI can do this."
 
 Two distinct methodologies:
 
-- **Creative prototyping** (ambiguous English → working code): requires genius-level reasoning. Done by xhigh agents on frontier APIs.
-- **Mechanical refinement** (working code → diamond code): requires craftsmanship, not invention. Done by Sparks on local models.
+- **Creative prototyping** (ambiguous English → working code): requires
+  genius-level reasoning. Done by xhigh agents on frontier APIs.
+- **Mechanical refinement** (working code → diamond code): requires
+  craftsmanship, not invention. Done by Sparks on local models.
 
-The diamond-refinement domain is the canonical instance of mechanical refinement. Once it works on this codebase, the same Centaur harness handles "refine X for diamond" for any future X — generated assembly from a Crenshaw compiler candidate, a state machine emitted by a higher-level Centaur run, etc.
+The diamond-refinement domain is the canonical instance of mechanical
+refinement. Once it works on this codebase, the same Centaur harness handles
+"refine X for diamond" for any future X — generated assembly from a Crenshaw
+compiler candidate, a state machine emitted by a higher-level Centaur run, etc.
 
-**Why this comes before Crenshaw in practice.** The diamond-refinement domain has all the properties of a real Centaur domain (deterministic metric, bounded test set, local-model-amenable workload) but with three killer features for getting started:
+**Why this comes before Crenshaw in practice.** The diamond-refinement domain
+has all the properties of a real Centaur domain (deterministic metric, bounded
+test set, local-model-amenable workload) but with three killer features:
 
 1. **No API cost.** Frontier calls are not in the loop.
 2. **The test set is real code we already own.** No domain authoring required for the first batch — the codebase is the domain.
-3. **The diamond standard from §1.5 is the fitness function.** The same standard the factory is supposed to enforce on its own output. Self-application: the first job of the diamond-making machine is to make the diamond-making machine itself diamond.
+3. **The diamond standard from §1.5 is the fitness function.** The same
+   standard the factory enforces on its output. Self-application: the first
+   job of the diamond-making machine is to make itself diamond.
 
-**The diamond-making process is itself a Centaur state machine — and the heterogeneous-provider point matters (ct direction 2026-05-23):**
+**The diamond-making process is itself a Centaur state machine — and the
+heterogeneous-provider point matters (ct direction 2026-05-23):**
 
-> "no single model will suffice, we need a full statemachine to make diamonds, along with deterministic, and different models doing different parts of the coal -> diamond process"
+> "no single model will suffice, we need a full statemachine to make diamonds,
+> along with deterministic, and different models doing different parts of the
+> coal -> diamond process"
 
-The diamond-making state machine has many nodes. Each node has its own *type of work* and routes to its own appropriate provider tier (per Module 7). Some nodes are deterministic Python tooling; some call local small models on Sparks; some call frontier models. The *machine* is what Centaur evolves — its graph topology, its per-node providers, its verification gates — not any single model selection.
+The diamond-making state machine has many nodes. Each node has its own *type
+of work* and routes to its own provider tier (per Module 7). Some nodes are
+deterministic Python tooling; some call local small models on Sparks; some
+call frontier models. The *machine* is what Centaur evolves — graph topology,
+per-node providers, and verification gates — not any single model selection.
 
 ### 2.5.1. Node types in the diamond-making state machine
 
-Concrete node inventory for the diamond-making domain. Each entry is its own node in the machine; the machine's edges specify when each runs.
+Concrete node inventory for the diamond-making domain. Each entry is its own
+node in the machine; the machine's edges specify when each runs.
 
 | Node | Work | Tier (Module 7) | Why this tier |
 |---|---|---|---|
@@ -161,36 +186,68 @@ parse_targets → compute_similarity_matrix → fork:
   ├── cluster_path:   cluster_above_threshold → propose_cluster_unification → propose_naming → propose_docstring → apply_to_sandbox → run_tests → run_audit → score_candidate → commit_or_reject
 ```
 
-This is one state machine with **multiple node types and multiple provider tiers**, all wired into one verifiable pipeline. The cluster path takes the frontier-reasoning step at one specific node; everything else is deterministic or local.
+This is one state machine with **multiple node types and multiple provider
+tiers**, all wired into one verifiable pipeline. The cluster path takes the
+frontier-reasoning step at one specific node; everything else is deterministic
+or local.
 
 ### 2.5.2. What Centaur evolves about this machine
 
 Per Module 5, Centaur mutates *the machine*:
 
-- **Reparameterize**: change one node's config — including `model_id` at that node specifically. The cluster_unification node might evolve from Sonnet to Opus and back; the inline_refactor node might evolve from Qwen3.5-2B to Phi-4-mini-reasoning. *Each node converges to its own cheapest-sufficient provider.* The same machine ends up with different model_ids at different nodes.
-- **Swap-node**: replace one node with an alternative implementing the same type signature (e.g. swap `propose_cluster_unification[Sonnet]` for `propose_cluster_unification[deterministic_template_matching]` if the templates turn out to handle most cases).
+- **Reparameterize**: change one node's config — including `model_id` at that
+  node specifically. Each node converges to its own cheapest-sufficient
+  provider, so one machine can carry different model_ids at different nodes.
+- **Swap-node**: replace one node with an alternative implementing the same
+  type signature, e.g. swap `propose_cluster_unification[Sonnet]` for a
+  deterministic template matcher if templates handle most cases.
 - **Insert-node**: add a node (e.g. `propose_alternative_unification` after a failed verification, to retry with a different prompt).
-- **Strength-reduce**: replace an LLM node with a deterministic-op subgraph when one exists in the library. For naming, a deterministic node `generate_name_from_signature(callers, parameters)` may suffice and would be cheaper than an LLM call. The mutator tries this; if quality holds, it sticks.
+- **Strength-reduce**: replace an LLM node with a deterministic-op subgraph
+  when one exists. For naming, `generate_name_from_signature(callers,
+  parameters)` may suffice and would be cheaper than an LLM call.
 - **Strength-raise**: replace a deterministic node with an LLM call when the deterministic node is failing quality.
 
-The output of Module 9 (Promoter): a specific machine where each node has converged to its specific cheapest-sufficient provider. The frontier-API spend concentrates at the one or two nodes that genuinely need it. The local-model and deterministic nodes carry the bulk of the work. *That* is the cost-optimal diamond-maker.
+The output of Module 9 (Promoter): a specific machine where each node has
+converged to its cheapest-sufficient provider. Frontier-API spend concentrates
+at the one or two nodes that genuinely need it. Local-model and deterministic
+nodes carry the bulk of the work. *That* is the cost-optimal diamond-maker.
 
 ### 2.5.3. Two execution patterns in this one machine
 
 ct framing 2026-05-23:
-> "there is still need for frontier intelligence in identifying non-identical but similar enough pieces of coal that can be combined. The combining two pieces of coal into one denser piece (without making it more complex!) that can only happen after the smoke clears and we see all the lumps of coal and can properly categorize them to see which ones are neighbors."
+> "there is still need for frontier intelligence in identifying non-identical
+> but similar enough pieces of coal that can be combined. The combining two
+> pieces of coal into one denser piece (without making it more complex!) that
+> can only happen after the smoke clears and we see all the lumps of coal and
+> can properly categorize them to see which ones are neighbors."
 
 Two execution patterns flow through the same machine but at different lifecycle stages:
 
-**Stage A — mechanical refinement** (issue #1345): the inline_path and decompose_path dominate. The cluster_path runs but most cluster candidates are noise (the codebase is still diesel smoke; everything looks similar to everything else). Frontier-API spend is minimal during this stage; most work is local-small or deterministic. Output: coal-quality codebase.
+**Stage A — mechanical refinement** (issue #1345): the inline_path and
+decompose_path dominate. The cluster_path runs but most cluster candidates are
+noise. Frontier-API spend is minimal; most work is local-small or
+deterministic. Output: coal-quality codebase.
 
-**Stage B — cluster combination** (issue #1348): after Stage A reduces the noise, the cluster_path produces signal-rich candidates. Frontier-API spend per candidate is higher but candidate count is lower (fewer real clusters than noise-clusters). The frontier model is solving genuinely hard synthesis problems, not pattern-matching on coincidental similarity.
+**Stage B — cluster combination** (issue #1348): after Stage A reduces the
+noise, the cluster_path produces signal-rich candidates. Frontier spend per
+candidate is higher but candidate count is lower. The frontier model solves
+hard synthesis, not pattern-matching on coincidental similarity.
 
-**Same machine. Different execution-time mix of which nodes fire most.** Stage A and Stage B aren't separate machines; they're the same machine in different population stages. The mutator handles the transition automatically — as inline candidates run dry (every easy single-caller helper has been inlined), the population shifts toward cluster-path candidates because those are where remaining gains live.
+**Same machine. Different execution-time mix of which nodes fire most.** Stage
+A and Stage B are the same machine in different population stages. As inline
+candidates run dry, the population shifts toward cluster-path candidates
+because those are where remaining gains live.
 
 ### 2.5.4. Why this matters
 
-The point is not "one model per loop." The point is: **the diamond-making machine routes each kind of work to its appropriate provider, and Centaur evolves both the graph and the per-node providers.** DSv4-Flash at 30 tok/s is one candidate; Qwen3.5-2B at 25 tok/s is another; Sonnet via API is another. They get tested at the specific nodes whose work matches their capability profile, not globally. The machine that emerges has heterogeneous provider assignments at heterogeneous node types — exactly what the strength-reduction principle requires.
+The point is not "one model per loop." The point is: **the diamond-making
+machine routes each kind of work to its appropriate provider, and Centaur
+evolves both the graph and the per-node providers.** DSv4-Flash at 30 tok/s is
+one candidate; Qwen3.5-2B at 25 tok/s is another; Sonnet via API is another.
+They get tested at the specific nodes whose work matches their capability
+profile, not globally. The resulting machine has heterogeneous provider
+assignments at heterogeneous node types — exactly what strength reduction
+requires.
 
 **Issues #1345 (mechanical-path implementation) and #1348 (cluster-path implementation) capture the work.** Both ship code into the same diamond-making state machine; they are facets of the same domain, not separate domains.
 
@@ -981,10 +1038,22 @@ Resolved decisions are recorded here as part of the spec's truth. Deferred items
 
 This is the *specification*. It is not the project plan. The dashboard tracks progress against this spec. The issue backlog drives the next concrete work. The protocol coordinates the agents doing the work.
 
-This document is expected to be revised. Every revision must be a PR with a `Closes #N` reference where N is a "spec amendment" issue summarizing the change. The current revision is **v1.6, 2026-05-23T08:00Z** (corrected §2.5 from "two loops with one model each" to "one state machine with many node types and heterogeneous provider assignments." Per ct direction: "no single model will suffice, we need a full statemachine to make diamonds, along with deterministic, and different models doing different parts of the coal -> diamond process." §2.5.1 now enumerates the node inventory and per-node tier assignment; §2.5.2 documents what Centaur evolves (the graph + per-node providers); §2.5.3 frames Stage A and Stage B as different lifecycle stages of the SAME machine, not different machines. Issues #1345 and #1348 reframed as paths within the same machine, not separate state machines).
+This document is expected to be revised. Every revision must be a PR with a
+`Closes #N` reference where N is a "spec amendment" issue summarizing the
+change. The current revision is **v1.6, 2026-05-23T08:00Z** (corrected §2.5
+from "two loops with one model each" to "one state machine with many node types
+and heterogeneous provider assignments." Per ct direction: "no single model
+will suffice, we need a full statemachine to make diamonds, along with
+deterministic, and different models doing different parts of the coal -> diamond
+process." §2.5.1 now enumerates the node inventory and per-node tier assignment;
+§2.5.2 documents what Centaur evolves; §2.5.3 frames Stage A and Stage B as
+different lifecycle stages of the SAME machine. Issues #1345 and #1348 are
+paths within the same machine, not separate state machines).
 
-Earlier revisions: **v1.5, 2026-05-23T07:30Z** (initial two-loop framing — superseded by v1.6's single-machine multi-node framing). **v1.4, 2026-05-23T07:00Z** (§2.5 added — diamond refinement domain). **v1.3, 2026-05-23T06:30Z** (§1.5 diamond-quality standard; Module 8 artifact_quality). **v1.2, 2026-05-23T03:30Z** (Module 11 KV-cache archive; Module 7 batched-throughput + real quality). **v1.1, 2026-05-21T17:30Z** (founder Q1/Q2/Q3 resolved; LongMem zeroth-domain added).
-
-Earlier revisions: **v1.2, 2026-05-23T03:30Z** (Module 11 expanded to cover the DAS-backed KV-cache archive subsystem; Module 7 extended to require batched-throughput economics and real quality measurement). **v1.1, 2026-05-21T17:30Z** (founder review applied — Q1, Q2, Q3 resolved; LongMem zeroth-domain added).
-
-Earlier revisions: **v1.1, 2026-05-21T17:30Z** (founder review applied — Q1, Q2, Q3 resolved; LongMem zeroth-domain added per founder direction; Module 12 rewritten for concurrent multi-level + backward injection; §10 critical path now LongMem-first then Crenshaw).
+Earlier revisions: **v1.5, 2026-05-23T07:30Z** (initial two-loop framing —
+superseded by v1.6's single-machine multi-node framing). **v1.4,
+2026-05-23T07:00Z** (§2.5 added — diamond refinement domain). **v1.3,
+2026-05-23T06:30Z** (§1.5 diamond-quality standard; Module 8 artifact_quality).
+**v1.2, 2026-05-23T03:30Z** (Module 11 KV-cache archive; Module 7
+batched-throughput + real quality). **v1.1, 2026-05-21T17:30Z** (founder
+Q1/Q2/Q3 resolved; LongMem zeroth-domain added).

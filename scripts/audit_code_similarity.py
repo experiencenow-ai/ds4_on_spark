@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import sys
 import tempfile
 import time
@@ -26,6 +27,7 @@ DEFAULT_SIMILARITY_THRESHOLD = 0.85
 DEFAULT_MIN_FUNCTION_LINES = 40
 DEFAULT_SHINGLE_WIDTH = 5
 DEFAULT_PREFILTER_FLOOR = DEFAULT_SIMILARITY_THRESHOLD
+LINE_REF_RE = re.compile(r"@\d+$")
 
 
 @dataclass(frozen=True)
@@ -219,8 +221,23 @@ def run_similarity_audit(repo: pathlib.Path, centaur_root: pathlib.Path, thresho
     }
 
 
+def normalize_pair_ref(ref: str) -> str:
+    return LINE_REF_RE.sub("@*", ref)
+
+
+def normalize_pair_key(key: str) -> str:
+    if " <=> " not in key:
+        return normalize_pair_ref(key)
+    left, right = key.split(" <=> ", 1)
+    return normalize_pair_ref(left) + " <=> " + normalize_pair_ref(right)
+
+
 def pair_keys(pairs: list[dict[str, Any]]) -> set[str]:
-    return {str(pair.get("left", "")) + " <=> " + str(pair.get("right", "")) for pair in pairs}
+    keys = set()
+    for pair in pairs:
+        key = str(pair.get("left", "")) + " <=> " + str(pair.get("right", ""))
+        keys.add(normalize_pair_key(key))
+    return keys
 
 
 def main() -> int:
