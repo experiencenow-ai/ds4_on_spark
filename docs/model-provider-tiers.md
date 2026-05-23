@@ -122,6 +122,7 @@ Centaur-facing dry selection is available without importing any runtime code:
 python3 scripts/select_model_provider.py --tier near_frontier_local --lane hard_reasoning --batch-tokens 16384
 python3 scripts/select_model_provider.py --tier local_small --lane candidate_prefilter --batch-tokens 1024 --allow-non-production
 python3 scripts/route_model_provider_requests.py fixtures/model_provider_routes/centaur_provider_route_requests_20260522.example.json --allow-blocked
+python3 scripts/validate_model_provider_routing.py
 ```
 
 The selector emits `centaur-provider-selection-v1` JSON. It treats `--tier` as
@@ -141,6 +142,11 @@ selected provider lacks measured output throughput, the capacity estimate stays
 `null` and the provider appears in `unknown_capacity_provider_ids`. The example
 fixture intentionally includes one too-tight wait-budget request so consumers
 can test both the selected-provider and structured-blocker paths.
+
+Use `scripts/validate_model_provider_routing.py` for checked-in request or plan
+artifacts. It validates route-request shape, and for routing plans it recomputes
+provider load, blocker summary, and capacity summary from the routes so stale or
+hand-edited aggregate fields fail loudly.
 
 ## Centaur Boundary
 
