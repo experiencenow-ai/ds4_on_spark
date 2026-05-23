@@ -10,10 +10,10 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from scripts._lib.json_utils import check_non_empty_string_field
+    from scripts._lib.json_utils import check_non_empty_string_field as as_str
     from scripts._lib.json_utils import load_json as _load_json
 except ImportError:
-    from _lib.json_utils import check_non_empty_string_field
+    from _lib.json_utils import check_non_empty_string_field as as_str
     from _lib.json_utils import load_json as _load_json
 
 
@@ -53,10 +53,6 @@ def default_profile_paths() -> list[Path]:
 
 def err(path: Path, msg: str) -> str:
 	return f"{path}: {msg}"
-
-
-def as_str(obj: dict[str, Any], field: str, path: Path, errors: list[str]) -> str:
-	return check_non_empty_string_field(obj, field, path, errors)
 
 
 def check_number_or_null(obj: dict[str, Any], field: str, path: Path, errors: list[str]) -> float | None:
