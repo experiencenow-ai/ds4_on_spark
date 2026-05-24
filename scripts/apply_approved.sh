@@ -2,7 +2,8 @@
 # Apply one human-approved Centaur review queue candidate as a branch + commit.
 set -euo pipefail
 
-python3 - "$@" <<'PY'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}" python3 - "$@" <<'PY'
 from __future__ import annotations
 
 import argparse
@@ -14,19 +15,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
-def safe_segment(value: str, limit: int = 80) -> str:
-    safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip(".-")
-    safe = safe.replace("..", ".")
-    return (safe[:limit] or "candidate").rstrip(".-") or "candidate"
-
-
-def load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as source:
-        data = json.load(source)
-    if not isinstance(data, dict):
-        raise ValueError(f"{path} did not contain a JSON object")
-    return data
+from centaur_diamond_helpers import (
+    safe_path_segment as safe_segment,
+    load_json,
+)
 
 
 def run_git(repo: Path, args: list[str]) -> str:

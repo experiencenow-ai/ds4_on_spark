@@ -203,24 +203,26 @@ release_spark()
 	fi
 }
 
-run_remote_loop()
+_ssh_step()
+{
+	step_name="$1"
+	spark="$2"
+	remote_log="$3"
+	shift 3
+	if "$@" > "$remote_log" 2>&1; then
+		return 0
+	fi
+	log_failure "$step_name" "$spark" "$(cat "$remote_log")"
+	rm -f "$remote_log"
+	return 1
+}
+
+_remote_run_diamond()
 {
 	spark="$1"
-	skip_file="$2"
-	remote_dir="/tmp/${RUN_ID}"
-	started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-	remote_log="$(mktemp)"
-	if ! ssh -o BatchMode=yes -o ConnectTimeout="$STATUS_TIMEOUT" "$spark" "mkdir -p '$remote_dir'" > "$remote_log" 2>&1; then
-		log_failure "spark_unreachable" "$spark" "$(cat "$remote_log")"
-		rm -f "$remote_log"
-		return 1
-	fi
-	if ! scp -q "$skip_file" "$spark:$remote_dir/skip_targets.json" > "$remote_log" 2>&1; then
-		log_failure "stage_skip_list_failed" "$spark" "$(cat "$remote_log")"
-		rm -f "$remote_log"
-		return 1
-	fi
-	if ! ssh -o BatchMode=yes -o ConnectTimeout="$STATUS_TIMEOUT" "$spark" \
+	remote_dir="$2"
+	remote_log="$3"
+	ssh -o BatchMode=yes -o ConnectTimeout="$STATUS_TIMEOUT" "$spark" \
 		"RUN_ID='$RUN_ID' MODEL='$MODEL' TARGET_COUNT='$TARGET_COUNT' PROMPT_VARIANTS='$PROMPT_VARIANTS' CENTAUR_REPO='$CENTAUR_REPO' SPARK_PORT='$SPARK_PORT' REMOTE_DIR='$remote_dir' MIN_FREE_GIB='$MIN_FREE_GIB' MIN_COMPLEXITY='$MIN_COMPLEXITY' DISCOVER_MAX_TARGETS='$DISCOVER_MAX_TARGETS' MAX_TOKENS='$MAX_TOKENS' WORKERS='$WORKERS' bash -s" > "$remote_log" 2>&1 <<'REMOTE'
 set -euo pipefail
 cd "$CENTAUR_REPO"
@@ -272,13 +274,13 @@ SPARKRUNNER_LAZY_MAX_TOKENS_CAP="$MAX_TOKENS" \
 CENTAUR_VERIFY_AFTER_DGX=1 \
 	./run_dgx_sparkrunner.sh
 REMOTE
-	then
-		log_failure "remote_run_failed" "$spark" "$(cat "$remote_log")"
-		rm -f "$remote_log"
-		return 1
-	fi
-	cat "$remote_log"
-	rm -f "$remote_log"
+}
+
+_collect_and_release()
+{
+	spark="$1"
+	remote_dir="$2"
+	started="$3"
 	incoming="$QUEUE_ROOT/incoming/$RUN_ID"
 	mkdir -p "$incoming"
 	if ! rsync -a "$spark:$remote_dir/dgx_batch/verified/" "$incoming/verified/"; then
@@ -294,6 +296,27 @@ REMOTE
 		--model "$MODEL" \
 		--started-at "$started" \
 		--ended-at "$ended"
+}
+
+run_remote_loop()
+{
+	spark="$1"
+	skip_file="$2"
+	remote_dir="/tmp/${RUN_ID}"
+	started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+	remote_log="$(mktemp)"
+	_ssh_step "spark_unreachable" "$spark" "$remote_log" \
+		ssh -o BatchMode=yes -o ConnectTimeout="$STATUS_TIMEOUT" "$spark" "mkdir -p '$remote_dir'" || return 1
+	_ssh_step "stage_skip_list_failed" "$spark" "$remote_log" \
+		scp -q "$skip_file" "$spark:$remote_dir/skip_targets.json" || return 1
+	if ! _remote_run_diamond "$spark" "$remote_dir" "$remote_log"; then
+		log_failure "remote_run_failed" "$spark" "$(cat "$remote_log")"
+		rm -f "$remote_log"
+		return 1
+	fi
+	cat "$remote_log"
+	rm -f "$remote_log"
+	_collect_and_release "$spark" "$remote_dir" "$started"
 }
 
 skip_file="$QUEUE_ROOT/incoming/$RUN_ID/skip_targets.json"

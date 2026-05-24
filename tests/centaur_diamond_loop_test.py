@@ -19,6 +19,43 @@ CANDIDATE = """def coal(x):
 """
 
 
+def _write_candidate_record(
+	record_dir: Path,
+	target_id: str,
+	candidate_id: str,
+	candidate_text: str,
+	accepted: bool,
+	diamond_score: float,
+) -> dict:
+	target = {
+		"target_id": target_id,
+		"path": "centaur/module.py",
+		"source": ORIGINAL,
+		"behavior_contract": "increment by one",
+	}
+	proposal = {
+		"candidate_id": candidate_id,
+		"model": "deepseek-ai/DeepSeek-V4-Flash",
+		"text": candidate_text,
+	}
+	verification = {
+		"accepted_for_review": accepted,
+		"diamond_score": diamond_score,
+		"verification_level": "unit-smoke",
+	}
+	(record_dir / "target.json").write_text(json.dumps(target), encoding="utf-8")
+	(record_dir / "proposal.json").write_text(json.dumps(proposal), encoding="utf-8")
+	(record_dir / "verification.json").write_text(json.dumps(verification), encoding="utf-8")
+	(record_dir / "review_packet.md").write_text("# Review\n", encoding="utf-8")
+	return {
+		"target_id": target_id,
+		"candidate_id": candidate_id,
+		"record_dir": str(record_dir),
+		"accepted_for_review": accepted,
+		"diamond_score": diamond_score,
+	}
+
+
 class CentaurDiamondLoopTest(unittest.TestCase):
 	def make_verified(self, tmp: Path) -> Path:
 		verified = tmp / "verified"
@@ -27,32 +64,12 @@ class CentaurDiamondLoopTest(unittest.TestCase):
 		rejected = records / "cand-2"
 		accepted.mkdir(parents=True)
 		rejected.mkdir(parents=True)
-		target = {
-			"target_id": "module:coal",
-			"path": "centaur/module.py",
-			"source": ORIGINAL,
-			"behavior_contract": "increment by one",
-		}
-		proposal = {
-			"candidate_id": "cand-1",
-			"model": "deepseek-ai/DeepSeek-V4-Flash",
-			"text": f"```python\n{CANDIDATE}```",
-		}
-		verification = {
-			"accepted_for_review": True,
-			"diamond_score": 12.5,
-			"verification_level": "unit-smoke",
-		}
-		(accepted / "target.json").write_text(json.dumps(target), encoding="utf-8")
-		(accepted / "proposal.json").write_text(json.dumps(proposal), encoding="utf-8")
-		(accepted / "verification.json").write_text(json.dumps(verification), encoding="utf-8")
-		(accepted / "review_packet.md").write_text("# Review\n", encoding="utf-8")
-		rejected_target = dict(target, target_id="module:other")
-		rejected_proposal = dict(proposal, candidate_id="cand-2", text="```python\nbroken\n```")
-		rejected_verification = dict(verification, accepted_for_review=False, diamond_score=-1000.0)
-		(rejected / "target.json").write_text(json.dumps(rejected_target), encoding="utf-8")
-		(rejected / "proposal.json").write_text(json.dumps(rejected_proposal), encoding="utf-8")
-		(rejected / "verification.json").write_text(json.dumps(rejected_verification), encoding="utf-8")
+		accepted_summary = _write_candidate_record(
+			accepted, "module:coal", "cand-1", f"```python\n{CANDIDATE}```", True, 12.5,
+		)
+		rejected_summary = _write_candidate_record(
+			rejected, "module:other", "cand-2", "```python\nbroken\n```", False, -1000.0,
+		)
 		summary = {
 			"format": "centaur-diamond-verification-index-v1",
 			"proposal_count": 2,
@@ -60,31 +77,8 @@ class CentaurDiamondLoopTest(unittest.TestCase):
 			"verified_count": 2,
 			"accepted_count": 1,
 			"rejected_count": 1,
-			"accepted": [
-				{
-					"target_id": "module:coal",
-					"candidate_id": "cand-1",
-					"record_dir": str(accepted),
-					"accepted_for_review": True,
-					"diamond_score": 12.5,
-				}
-			],
-			"records": [
-				{
-					"target_id": "module:coal",
-					"candidate_id": "cand-1",
-					"record_dir": str(accepted),
-					"accepted_for_review": True,
-					"diamond_score": 12.5,
-				},
-				{
-					"target_id": "module:other",
-					"candidate_id": "cand-2",
-					"record_dir": str(rejected),
-					"accepted_for_review": False,
-					"diamond_score": -1000.0,
-				},
-			],
+			"accepted": [accepted_summary],
+			"records": [accepted_summary, rejected_summary],
 		}
 		(verified / "verification_summary.json").write_text(json.dumps(summary), encoding="utf-8")
 		return verified

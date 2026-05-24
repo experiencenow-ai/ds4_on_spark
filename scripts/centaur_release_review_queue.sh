@@ -2,7 +2,8 @@
 # Materialize verified Centaur candidates into the human review queue.
 set -euo pipefail
 
-python3 - "$@" <<'PY'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}" python3 - "$@" <<'PY'
 from __future__ import annotations
 
 import argparse
@@ -15,46 +16,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
-def utc_now() -> dt.datetime:
-    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
-
-
-def parse_time(value: str) -> dt.datetime:
-    if not value:
-        return utc_now()
-    if value.endswith("Z"):
-        value = value[:-1] + "+00:00"
-    parsed = dt.datetime.fromisoformat(value)
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=dt.timezone.utc)
-    return parsed.astimezone(dt.timezone.utc).replace(microsecond=0)
-
-
-def safe_segment(value: str) -> str:
-    safe = re.sub(r"[^A-Za-z0-9_.@+-]+", "_", value).strip("_")
-    return safe[:180] or "item"
-
-
-def load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as source:
-        data = json.load(source)
-    if not isinstance(data, dict):
-        raise ValueError(f"{path} did not contain a JSON object")
-    return data
-
-
-def write_json(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def extract_source(text: str) -> str:
-    stripped = text.strip()
-    fenced = re.search(r"```(?:python)?\s*(.*?)```", stripped, flags=re.DOTALL | re.IGNORECASE)
-    if fenced:
-        return fenced.group(1).strip() + "\n"
-    return stripped + ("\n" if stripped else "")
+from centaur_diamond_helpers import (
+    utc_now,
+    parse_time,
+    safe_segment,
+    load_json,
+    write_json,
+    extract_source_from_text as extract_source,
+)
 
 
 def record_dir_for(verified_dir: Path, row: dict[str, Any]) -> Path:
