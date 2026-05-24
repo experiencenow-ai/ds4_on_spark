@@ -22,7 +22,9 @@ The gateway exposes:
 - `/v1/chat/completions`
 - `/ds4/status`
 - `/ds4/gpu`
+- `/ds4/services`
 - `/ds4/batches`
+- `/ds4/cpu/batches`
 - `/ds4/release`
 
 ## Automatic Tuning
@@ -193,3 +195,88 @@ scripts/ds4_gateway_batch_submit.py \
   --concurrency 4 \
   --max-tokens 32
 ```
+
+## CPU Service Batch API
+
+The same gateway also exposes CPU-side services for deterministic Centaur work
+that should not consume GPU decode slots:
+
+```sh
+curl -sS \
+  -H 'content-type: application/json' \
+  -d '{
+    "service": "json_validate",
+    "concurrency": 12,
+    "items": [
+      {"custom_id":"candidate-a","text":"{\"ok\":true}"},
+      {"custom_id":"candidate-b","text":"not json"}
+    ]
+  }' \
+  http://127.0.0.1:18090/ds4/cpu/batches
+```
+
+`/ds4/batches` is the unified submit surface: payloads with `model` use the
+model batch path, and payloads with `service` use the CPU service path.
+
+Response shape:
+
+```json
+{
+  "object": "ds4.cpu_batch",
+  "service": "json_validate",
+  "counts": {"total": 2, "succeeded": 2, "failed": 0},
+  "results": [
+    {"index": 0, "custom_id": "candidate-a", "ok": true, "response": {"valid": true}}
+  ]
+}
+```
+
+Built-in services:
+
+- `json_validate`: parse JSON text or inspect JSON objects; optional
+  `required_keys`.
+- `regex_match`: bounded regex checks with `i`, `m`, and `s` flags.
+- `sha256`: cache-key hashing for bounded text.
+- `text_metrics`: bytes, chars, lines, words, approximate tokens, and hash.
+- `diff_stats`: unified-diff file/add/delete counts plus `EVOLVE-BLOCK`
+  detection.
+- `command`: named allowlisted commands from `CPU_SERVICE_COMMANDS_JSON`.
+
+Use the helper for JSONL input:
+
+```sh
+printf '%s\n' \
+  '{"custom_id":"a","text":"{\"ok\":true}"}' \
+  '{"custom_id":"b","text":"nope"}' |
+scripts/ds4_cpu_batch_submit.py \
+  --base http://127.0.0.1:18090 \
+  --service json_validate \
+  --concurrency 12
+```
+
+Queue and safety knobs:
+
+- `CPU_SERVICE_WORKERS`: process-wide CPU worker pool size. Default keeps a few
+  cores free for the gateway, vLLM, tokenization, networking, and the OS.
+- `CPU_SERVICE_MAX_ITEMS`, `CPU_SERVICE_MAX_CONCURRENCY`, and
+  `CPU_SERVICE_DEFAULT_CONCURRENCY`: batch limits.
+- `CPU_SERVICE_MAX_TEXT_BYTES`: per-item text cap for built-ins.
+- `CPU_SERVICE_COMMANDS_JSON`: allowlisted command registry. The gateway never
+  accepts arbitrary shell strings from request payloads.
+
+Example command allowlist:
+
+```sh
+CPU_SERVICE_COMMANDS_JSON='{
+  "unit_tests": {
+    "argv": ["python3", "-m", "unittest", "tests.ds4_vllm_lazy_proxy_test"],
+    "cwd": "/home/spark0/ds4_on_spark",
+    "timeout_s": 120
+  }
+}'
+```
+
+The cluster dispatcher should treat CPU service batches like model batches: use
+one service per batch, preserve `custom_id`, keep results in input order, and
+route by queue depth plus service capability. CPU command jobs are for
+allowlisted local validation only, not a general remote execution API.

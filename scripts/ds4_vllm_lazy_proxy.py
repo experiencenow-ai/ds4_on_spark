@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import concurrent.futures
+import hashlib
 import http.client
 import json
 import os
 import fnmatch
+import re
 import signal
 import shlex
 import socket
@@ -29,6 +31,10 @@ HOP_HEADERS = {
 
 
 class VllmError(Exception):
+    pass
+
+
+class CpuServiceError(Exception):
     pass
 
 
@@ -87,6 +93,34 @@ def json_arg(value):
     if isinstance(value, str):
         return(value)
     return(json.dumps(value, separators=(",", ":")))
+
+
+def text_payload(item, max_bytes):
+    if not isinstance(item, dict):
+        raise CpuServiceError("CPU service item must be an object")
+    if "text" in item:
+        text = str(item.get("text", ""))
+    elif "content" in item:
+        text = str(item.get("content", ""))
+    else:
+        text = ""
+    if len(text.encode("utf-8")) > max_bytes:
+        raise CpuServiceError("text payload exceeds CPU_SERVICE_MAX_TEXT_BYTES=%d" % max_bytes)
+    return(text)
+
+
+def service_result(ok, response):
+    out = dict(response)
+    out["_ok"] = bool(ok)
+    return(out)
+
+
+def safe_text(value):
+    if value is None:
+        return("")
+    if isinstance(value, bytes):
+        return(value.decode("utf-8", "replace"))
+    return(str(value))
 
 
 def has_weight_file(files):
@@ -300,6 +334,294 @@ def gpu_snapshot():
     return(out)
 
 
+class CpuServices:
+    def __init__(self):
+        cores = os.cpu_count() or 4
+        default_workers = min(16, max(1, cores - 4))
+        self.workers = max(1, env_int("CPU_SERVICE_WORKERS", default_workers))
+        self.max_items = env_int("CPU_SERVICE_MAX_ITEMS", 1024)
+        self.max_concurrency = max(1, env_int("CPU_SERVICE_MAX_CONCURRENCY", self.workers))
+        self.default_concurrency = min(self.max_concurrency, max(1, env_int("CPU_SERVICE_DEFAULT_CONCURRENCY", min(4, self.max_concurrency))))
+        self.max_text_bytes = env_int("CPU_SERVICE_MAX_TEXT_BYTES", 1024 * 1024)
+        self.command_timeout = float(os.environ.get("CPU_SERVICE_COMMAND_TIMEOUT", "120"))
+        self.command_output_bytes = env_int("CPU_SERVICE_COMMAND_OUTPUT_BYTES", 65536)
+        self.commands = env_json("CPU_SERVICE_COMMANDS_JSON", {})
+        self.lock = threading.Lock()
+        self.pending = 0
+        self.active = 0
+        self.completed = 0
+        self.failed = 0
+        self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=self.workers, thread_name_prefix="ds4-cpu")
+        self.services = {
+            "json_validate": {
+                "fn": self.service_json_validate,
+                "description": "parse JSON text or inspect JSON object payloads",
+                "batchable": True,
+            },
+            "regex_match": {
+                "fn": self.service_regex_match,
+                "description": "run deterministic regex checks against bounded text",
+                "batchable": True,
+            },
+            "sha256": {
+                "fn": self.service_sha256,
+                "description": "compute SHA-256 cache keys for bounded text",
+                "batchable": True,
+            },
+            "text_metrics": {
+                "fn": self.service_text_metrics,
+                "description": "line, word, byte, approximate token, and hash metrics",
+                "batchable": True,
+            },
+            "diff_stats": {
+                "fn": self.service_diff_stats,
+                "description": "summarize unified-diff additions, deletions, files, and EVOLVE-BLOCK markers",
+                "batchable": True,
+            },
+            "command": {
+                "fn": self.service_command,
+                "description": "run named allowlisted local commands from CPU_SERVICE_COMMANDS_JSON",
+                "batchable": True,
+                "configured": sorted(self.commands),
+            },
+        }
+
+    def status(self):
+        with self.lock:
+            queue = {
+                "workers": self.workers,
+                "pending": self.pending,
+                "active": self.active,
+                "completed": self.completed,
+                "failed": self.failed,
+                "max_items": self.max_items,
+                "max_concurrency": self.max_concurrency,
+                "default_concurrency": self.default_concurrency,
+                "max_text_bytes": self.max_text_bytes,
+            }
+        services = {}
+        for name, rec in sorted(self.services.items()):
+            services[name] = {k: v for k, v in rec.items() if k != "fn"}
+        return({"object": "ds4.cpu_services", "queue": queue, "services": services})
+
+    def normalize_items(self, payload):
+        items = payload.get("items")
+        if items is None:
+            items = payload.get("requests")
+        if not isinstance(items, list):
+            raise CpuServiceError("CPU batch body must contain items or requests array")
+        if len(items) == 0:
+            raise CpuServiceError("CPU batch must contain at least one item")
+        if len(items) > self.max_items:
+            raise CpuServiceError("CPU batch item count %d exceeds CPU_SERVICE_MAX_ITEMS=%d" % (len(items), self.max_items))
+        return(items)
+
+    def concurrency(self, payload):
+        raw = payload.get("concurrency", self.default_concurrency)
+        try:
+            value = int(raw)
+        except Exception:
+            raise CpuServiceError("CPU batch concurrency must be an integer")
+        if value < 1:
+            raise CpuServiceError("CPU batch concurrency must be >= 1")
+        if value > self.max_concurrency:
+            raise CpuServiceError("CPU batch concurrency %d exceeds CPU_SERVICE_MAX_CONCURRENCY=%d" % (value, self.max_concurrency))
+        return(value)
+
+    def service_name(self, payload):
+        name = str(payload.get("service", "") or "")
+        if name not in self.services:
+            raise CpuServiceError("unknown CPU service: %s" % name)
+        return(name)
+
+    def item_request(self, item):
+        if not isinstance(item, dict):
+            raise CpuServiceError("CPU service item must be an object")
+        req = item.get("request")
+        if req is None:
+            req = item
+        if not isinstance(req, dict):
+            raise CpuServiceError("CPU service item request must be an object")
+        return(dict(req))
+
+    def run_one(self, service, idx, item, sem):
+        custom_id = item.get("custom_id") if isinstance(item, dict) else None
+        rec = {"index": idx, "custom_id": custom_id, "service": service, "ok": False}
+        start = now()
+        sem.acquire()
+        with self.lock:
+            self.pending -= 1
+            self.active += 1
+        try:
+            req = self.item_request(item)
+            for key in ("custom_id", "metadata", "request"):
+                req.pop(key, None)
+            out = self.services[service]["fn"](req)
+            ok = bool(out.pop("_ok", True)) if isinstance(out, dict) else True
+            rec.update({"ok": ok, "response": out})
+        except Exception as e:
+            rec["error"] = str(e)
+        finally:
+            sem.release()
+            rec["elapsed_s"] = round(now() - start, 6)
+            with self.lock:
+                self.active -= 1
+                self.completed += 1
+                if not rec.get("ok"):
+                    self.failed += 1
+        return(idx, rec)
+
+    def run_batch(self, service, items, concurrency, timeout):
+        sem = threading.Semaphore(concurrency)
+        with self.lock:
+            self.pending += len(items)
+        futs = [self.pool.submit(self.run_one, service, idx, item, sem) for idx, item in enumerate(items)]
+        results = [None] * len(items)
+        try:
+            done_iter = concurrent.futures.as_completed(futs, timeout=timeout)
+            for fut in done_iter:
+                idx, rec = fut.result()
+                results[idx] = rec
+        except concurrent.futures.TimeoutError:
+            for idx, fut in enumerate(futs):
+                if results[idx] is None:
+                    if fut.cancel():
+                        with self.lock:
+                            self.pending = max(0, self.pending - 1)
+                    results[idx] = {"index": idx, "service": service, "ok": False, "error": "CPU batch timeout"}
+        return(results)
+
+    def service_json_validate(self, item):
+        if "json" in item:
+            obj = item.get("json")
+        else:
+            text = text_payload(item, self.max_text_bytes)
+            try:
+                obj = json.loads(text)
+            except Exception as e:
+                return({"valid": False, "error": str(e)})
+        required = item.get("required_keys") or []
+        missing = []
+        if required:
+            if not isinstance(obj, dict):
+                missing = list(required)
+            else:
+                missing = [k for k in required if k not in obj]
+        return({
+            "valid": len(missing) == 0,
+            "type": type(obj).__name__,
+            "keys": sorted(obj) if isinstance(obj, dict) else [],
+            "missing_keys": missing,
+        })
+
+    def service_regex_match(self, item):
+        text = text_payload(item, self.max_text_bytes)
+        pattern = str(item.get("pattern", ""))
+        if pattern == "":
+            raise CpuServiceError("regex_match requires pattern")
+        flags = 0
+        for flag in item.get("flags") or []:
+            if flag == "i":
+                flags |= re.IGNORECASE
+            elif flag == "m":
+                flags |= re.MULTILINE
+            elif flag == "s":
+                flags |= re.DOTALL
+            else:
+                raise CpuServiceError("unsupported regex flag: %s" % flag)
+        rx = re.compile(pattern, flags)
+        if item.get("fullmatch"):
+            match = rx.fullmatch(text)
+            matches = [match] if match else []
+        else:
+            matches = list(rx.finditer(text))
+        limit = int(item.get("limit", 16))
+        return({
+            "matched": len(matches) != 0,
+            "count": len(matches),
+            "matches": [{"span": list(m.span()), "text": m.group(0), "groups": list(m.groups())} for m in matches[:limit]],
+        })
+
+    def service_sha256(self, item):
+        text = text_payload(item, self.max_text_bytes)
+        raw = text.encode("utf-8")
+        return({"sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)})
+
+    def service_text_metrics(self, item):
+        text = text_payload(item, self.max_text_bytes)
+        raw = text.encode("utf-8")
+        words = re.findall(r"\S+", text)
+        return({
+            "bytes": len(raw),
+            "chars": len(text),
+            "lines": 0 if text == "" else (text.count("\n") + (0 if text.endswith("\n") else 1)),
+            "words": len(words),
+            "approx_tokens": max(1, int((len(raw) + 3) / 4)) if raw else 0,
+            "sha256": hashlib.sha256(raw).hexdigest(),
+        })
+
+    def service_diff_stats(self, item):
+        text = text_payload(item, self.max_text_bytes)
+        files = set()
+        add = 0
+        delete = 0
+        for line in text.splitlines():
+            if line.startswith("diff --git "):
+                parts = line.split()
+                if len(parts) >= 4:
+                    files.add(parts[3][2:] if parts[3].startswith("b/") else parts[3])
+            elif line.startswith("+++ ") or line.startswith("--- "):
+                path = line[4:].strip()
+                if path not in ("/dev/null", ""):
+                    files.add(path[2:] if path.startswith(("a/", "b/")) else path)
+            elif line.startswith("+") and not line.startswith("+++"):
+                add += 1
+            elif line.startswith("-") and not line.startswith("---"):
+                delete += 1
+        return({
+            "files": sorted(files),
+            "file_count": len(files),
+            "additions": add,
+            "deletions": delete,
+            "changed_lines": add + delete,
+            "contains_evolve_block": "EVOLVE-BLOCK" in text,
+        })
+
+    def service_command(self, item):
+        name = str(item.get("name") or item.get("command") or "")
+        spec = self.commands.get(name)
+        if not isinstance(spec, dict):
+            raise CpuServiceError("unknown allowlisted command: %s" % name)
+        argv = spec.get("argv")
+        if not isinstance(argv, list) or len(argv) == 0:
+            raise CpuServiceError("allowlisted command %s has no argv" % name)
+        argv = [str(x) for x in argv]
+        if item.get("args"):
+            if not spec.get("allow_args"):
+                raise CpuServiceError("allowlisted command %s does not allow item args" % name)
+            argv.extend(str(x) for x in item.get("args"))
+        cwd = expand_path(spec.get("cwd", os.getcwd()))
+        stdin = None
+        if "stdin" in item:
+            if not spec.get("allow_stdin"):
+                raise CpuServiceError("allowlisted command %s does not allow stdin" % name)
+            stdin = str(item.get("stdin", ""))
+        timeout = min(float(item.get("timeout_s", spec.get("timeout_s", self.command_timeout))), self.command_timeout)
+        env = os.environ.copy()
+        env.update({str(k): str(v) for k, v in (spec.get("env") or {}).items()})
+        try:
+            proc = subprocess.run(argv, input=stdin, cwd=cwd, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+            out = {
+                "name": name,
+                "returncode": proc.returncode,
+                "stdout": safe_text(proc.stdout)[-self.command_output_bytes:],
+                "stderr": safe_text(proc.stderr)[-self.command_output_bytes:],
+            }
+            return(service_result(proc.returncode == 0, out))
+        except subprocess.TimeoutExpired as e:
+            return(service_result(False, {"name": name, "timeout_s": timeout, "stdout": safe_text(e.stdout)[-self.command_output_bytes:], "stderr": safe_text(e.stderr)[-self.command_output_bytes:]}))
+
+
 class LazyVllm:
     def __init__(self):
         self.host = os.environ.get("BACKEND_HOST", "127.0.0.1")
@@ -386,6 +708,7 @@ class LazyVllm:
                 "model_backends": {model: self.backend_label(model) for model in sorted(self.models)},
                 "model_tuning": {model: self.effective_tuning(model, self.models[model]) for model in sorted(self.models)},
                 "gateway_defaults": self.gateway_defaults(),
+                "cpu_services": CPU.status(),
                 "gpu": gpu_snapshot(),
                 "log": self.log_path,
                 "args": self.current_args if self.active() else [],
@@ -813,6 +1136,7 @@ class LazyVllm:
                     self.cond.notify_all()
 
 
+CPU = CpuServices()
 STATE = LazyVllm()
 
 
@@ -870,6 +1194,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/ds4/gpu":
             self.send_json(200, gpu_snapshot())
             return
+        if path in ("/ds4/services", "/ds4/cpu/services"):
+            self.send_json(200, CPU.status())
+            return
         self.proxy(None)
 
     def do_POST(self):
@@ -881,7 +1208,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, {"released": STATE.release(model), "status": STATE.status()})
             return
         if path in ("/ds4/batch", "/ds4/batches"):
-            self.handle_batch(body)
+            if self.is_cpu_batch(body):
+                self.handle_cpu_batch(body)
+            else:
+                self.handle_batch(body)
+            return
+        if path in ("/ds4/cpu/batch", "/ds4/cpu/batches", "/ds4/services/batches"):
+            self.handle_cpu_batch(body)
             return
         self.proxy(body)
 
@@ -926,6 +1259,13 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(req, dict):
             raise VllmError("batch item request must be an object")
         return(dict(req))
+
+    def is_cpu_batch(self, body):
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except Exception:
+            return(False)
+        return(isinstance(payload, dict) and payload.get("service") not in (None, "") and payload.get("model") in (None, ""))
 
     def batch_items(self, payload):
         items = payload.get("items")
@@ -1018,6 +1358,41 @@ class Handler(BaseHTTPRequestHandler):
             rec["error"] = str(e)
         rec["elapsed_s"] = round(now() - start, 6)
         return(idx, rec)
+
+    def handle_cpu_batch(self, body):
+        try:
+            if not body:
+                raise CpuServiceError("CPU batch body must be JSON")
+            payload = json.loads(body.decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise CpuServiceError("CPU batch body must be an object")
+            service = CPU.service_name(payload)
+            items = CPU.normalize_items(payload)
+            concurrency = CPU.concurrency(payload)
+            try:
+                timeout = float(payload.get("timeout_s", payload.get("timeout", 300.0)))
+            except Exception:
+                raise CpuServiceError("CPU batch timeout_s must be numeric")
+            if timeout <= 0:
+                raise CpuServiceError("CPU batch timeout_s must be > 0")
+            batch_id = "cpu-batch-%d" % int(now() * 1000)
+            results = CPU.run_batch(service, items, concurrency, timeout)
+            ok = sum(1 for rec in results if rec and rec.get("ok"))
+            self.send_json(200, {
+                "id": batch_id,
+                "object": "ds4.cpu_batch",
+                "status": "completed" if ok == len(results) else "completed_with_errors",
+                "created": int(now()),
+                "service": service,
+                "concurrency": concurrency,
+                "counts": {"total": len(results), "succeeded": ok, "failed": len(results) - ok},
+                "results": results,
+                "queue": CPU.status()["queue"],
+            })
+        except CpuServiceError as e:
+            self.send_json(400, {"error": {"message": str(e), "type": "ds4_cpu_batch"}})
+        except Exception:
+            self.send_json(500, {"error": {"message": traceback.format_exc(), "type": "ds4_cpu_batch"}})
 
     def handle_batch(self, body):
         try:

@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import sys
 import tempfile
 import unittest
 
@@ -172,6 +173,61 @@ class Ds4VllmLazyProxyTest(unittest.TestCase):
             }
             with self.assertRaises(module.VllmError):
                 handler.batch_resolved_model(payload, handler.batch_items(payload))
+
+    def test_cpu_service_batch_runs_builtin_services(self):
+        with tempfile.TemporaryDirectory() as td:
+            module = load_proxy({
+                "MODELS_ROOT": os.path.join(td, "hf"),
+                "GGUF_MODELS_ROOT": os.path.join(td, "gguf"),
+                "DEEPSEEK_V4_REMOTE_BASE": "",
+                "LOG_DIR": os.path.join(td, "logs"),
+                "CPU_SERVICE_WORKERS": "2",
+                "CPU_SERVICE_MAX_CONCURRENCY": "2",
+            })
+            cpu = module.CPU
+            handler = module.Handler.__new__(module.Handler)
+            self.assertTrue(handler.is_cpu_batch(json.dumps({"service": "json_validate", "items": []}).encode()))
+            self.assertFalse(handler.is_cpu_batch(json.dumps({"model": "m", "items": []}).encode()))
+            items = [
+                {"custom_id": "good", "text": '{"ok": true}', "required_keys": ["ok"]},
+                {"custom_id": "bad", "text": "not-json"},
+            ]
+            results = cpu.run_batch("json_validate", items, 2, 5.0)
+            self.assertEqual([r["custom_id"] for r in results], ["good", "bad"])
+            self.assertTrue(results[0]["ok"])
+            self.assertTrue(results[0]["response"]["valid"])
+            self.assertTrue(results[1]["ok"])
+            self.assertFalse(results[1]["response"]["valid"])
+            diff = "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n+EVOLVE-BLOCK\n-old\n"
+            stats = cpu.run_batch("diff_stats", [{"text": diff}], 1, 5.0)[0]["response"]
+            self.assertEqual(stats["additions"], 1)
+            self.assertEqual(stats["deletions"], 1)
+            self.assertTrue(stats["contains_evolve_block"])
+
+    def test_cpu_service_command_is_allowlisted(self):
+        with tempfile.TemporaryDirectory() as td:
+            commands = {
+                "upper": {
+                    "argv": [sys.executable, "-c", "import sys; print(sys.stdin.read().upper())"],
+                    "allow_stdin": True,
+                    "timeout_s": 10,
+                }
+            }
+            module = load_proxy({
+                "MODELS_ROOT": os.path.join(td, "hf"),
+                "GGUF_MODELS_ROOT": os.path.join(td, "gguf"),
+                "DEEPSEEK_V4_REMOTE_BASE": "",
+                "LOG_DIR": os.path.join(td, "logs"),
+                "CPU_SERVICE_WORKERS": "1",
+                "CPU_SERVICE_COMMANDS_JSON": json.dumps(commands),
+            })
+            result = module.CPU.run_batch("command", [{"name": "upper", "stdin": "ok"}], 1, 5.0)[0]
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["response"]["returncode"], 0)
+            self.assertEqual(result["response"]["stdout"].strip(), "OK")
+            missing = module.CPU.run_batch("command", [{"name": "missing"}], 1, 5.0)[0]
+            self.assertFalse(missing["ok"])
+            self.assertIn("unknown allowlisted command", missing["error"])
 
 
 if __name__ == "__main__":
