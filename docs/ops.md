@@ -45,11 +45,18 @@ As of the 2026-05-23 rollout, Spark0, Spark1, Spark2, Spark3, Spark6, and Spark7
 
 The scanner treats Hugging Face layout models as runnable when they have `config.json`, `tokenizer_config.json`, and weights under `~/models/hf`. It also includes Mistral-native layout models with `params.json`, `tokenizer_config.json`, and consolidated safetensors by launching vLLM with `--config-format mistral --tokenizer-mode mistral --load-format mistral`. This is why `mistralai/Mistral-Small-4-119B-2603-NVFP4` appears even though it does not have an HF `config.json`.
 
+The launcher also supports remote model relays for models that are not viable
+as single-GPU lazy backends. By default, DeepSeek V4 Flash requests for the
+local HF id `deepseek-ai/DeepSeek-V4-Flash` are rewritten to
+`deepseek-v4-flash` and proxied to the existing Spark4 two-node vLLM service at
+`http://10.10.100.14:8000`. Override with `DEEPSEEK_V4_REMOTE_BASE`,
+`DEEPSEEK_V4_REMOTE_MODEL`, or `DS4_REMOTE_MODELS_JSON` when the service moves.
+
 Install or refresh the proxy scripts on a Spark:
 
 ```sh
-rsync -a scripts/ds4_vllm_lazy_proxy.py scripts/ds4_vllm_lazy_proxy.sh scripts/ds4_vllm_lazy_release.sh sparkN:bin/
-ssh sparkN 'chmod +x ~/bin/ds4_vllm_lazy_proxy.py ~/bin/ds4_vllm_lazy_proxy.sh ~/bin/ds4_vllm_lazy_release.sh'
+rsync -a scripts/ds4_vllm_lazy_proxy.py scripts/ds4_vllm_lazy_proxy.sh scripts/ds4_vllm_lazy_release.sh scripts/ds4_vllm_lazy_sweep.py sparkN:bin/
+ssh sparkN 'chmod +x ~/bin/ds4_vllm_lazy_proxy.py ~/bin/ds4_vllm_lazy_proxy.sh ~/bin/ds4_vllm_lazy_release.sh ~/bin/ds4_vllm_lazy_sweep.py'
 ```
 
 Start the standard single-node lazy endpoint:
@@ -79,6 +86,32 @@ ssh sparkN 'PORT=8000 ~/bin/ds4_vllm_lazy_release.sh'
 ssh spark4 'PORT=8010 ~/bin/ds4_vllm_lazy_release.sh'
 ```
 
+Sweep all advertised models with load, one OpenAI chat, release, and idle-state
+verification:
+
+```sh
+ssh spark0 'OUT=/tmp/ds4_vllm_lazy_sweep_$(date -u +%Y%m%dT%H%M%SZ).jsonl; ~/bin/ds4_vllm_lazy_sweep.py --base http://127.0.0.1:8000 --out "$OUT" --timeout 2100 --max-tokens 4'
+```
+
+Spark0 verification on 2026-05-24 exercised all 27 advertised model ids. The
+latest passing evidence is in:
+
+- `/tmp/ds4_vllm_lazy_sweep_retest_20260523T231253Z.jsonl`
+- `/tmp/ds4_vllm_lazy_sweep_qwen122_fix_20260523T232739Z.jsonl`
+- `/tmp/ds4_vllm_lazy_sweep_remaining2_20260523T233846Z.jsonl`
+- `/tmp/ds4_vllm_lazy_sweep_fixes_20260524T012024Z.jsonl`
+- `/tmp/ds4_vllm_lazy_sweep_deepseek_remote_20260524T015000Z.jsonl`
+
+Result: 26 of 27 ids returned a successful chat completion and released back to
+`active=false`. The fixes required were `--max-num-seqs 128`, capping
+`--max-model-len` to each model config when lower than the global default,
+raising lazy startup timeout to 1800 seconds for large first-use loads, and
+relaying DeepSeek V4 Flash to the existing Spark4 two-node vLLM service.
+`microsoft/Phi-4-mini-flash-reasoning` remains blocked on this vLLM 0.21
+runtime: vLLM reports `Phi4FlashForCausalLM` was supported only until v0.10.2,
+and a direct `--model-impl transformers` probe also fails because the model
+needs `causal_conv1d`, `flash_attn`, `mamba_ssm`, and related CUDA modules.
+
 Sparkrun/Shinka can select any advertised model by name. The first LLM request cold-starts that backend, so the first request pays vLLM weight load and profiling time:
 
 ```sh
@@ -94,6 +127,7 @@ Important caveat: lazy launch makes all copied models addressable, but it does n
 - `ops-spark012-network-ports.md`: `curl -fsS "http://127.0.0.1:${DS4_METRICS_PORT}/metrics" | head`
 - `vllm-sparkrun-lazy`: `ssh sparkN 'curl -fsS http://127.0.0.1:8000/ds4/status | python3 -m json.tool'`
 - `vllm-sparkrun-lazy`: `ssh sparkN 'PORT=8000 ~/bin/ds4_vllm_lazy_release.sh'`
+- `vllm-sparkrun-lazy`: `ssh spark0 'OUT=/tmp/ds4_vllm_lazy_sweep_$(date -u +%Y%m%dT%H%M%SZ).jsonl; ~/bin/ds4_vllm_lazy_sweep.py --base http://127.0.0.1:8000 --out "$OUT" --timeout 2100 --max-tokens 4'`
 - `vllm-sparkrun-lazy`: `ssh spark0 'MODEL_NAME=Qwen/Qwen3.5-0.8B ENDPOINT=http://127.0.0.1:8000/v1 NUM_GENERATIONS=2 MAX_TOKENS=64 ~/bin/ds4_shinka_longmem_smoke.sh'`
 - `ops-run-notes.md`: `./scripts/ops_spark_ring_ops_check.sh --out "$RUN_DIR/ops_check_pre.txt" \`
 - `ops-run-notes.md`: `./scripts/ops_spark_ring_ops_check.sh --out "$RUN_DIR/ops_check_staged_ready.txt" \`

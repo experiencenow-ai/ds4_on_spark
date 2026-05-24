@@ -98,6 +98,21 @@ def unique_aliases(models):
     return(aliases)
 
 
+def remote_model_map(models):
+    out = {}
+    base = os.environ.get("DEEPSEEK_V4_REMOTE_BASE")
+    if base:
+        target = os.environ.get("DEEPSEEK_V4_REMOTE_MODEL", "deepseek-v4-flash")
+        for mid, rec in models.items():
+            arch = set(rec.get("architectures") or [])
+            if rec.get("model_type") == "deepseek_v4" or "DeepseekV4ForCausalLM" in arch:
+                out[mid] = {"base": base.rstrip("/"), "model": target}
+    extra = os.environ.get("DS4_REMOTE_MODELS_JSON")
+    if extra:
+        out.update(json.loads(extra))
+    return(out)
+
+
 class LazyVllm:
     def __init__(self):
         self.host = os.environ.get("BACKEND_HOST", "127.0.0.1")
@@ -107,13 +122,15 @@ class LazyVllm:
         self.pyhdr_home = os.path.expanduser(os.environ.get("PYHDR_HOME", "~/standard-runtimes/python3.12-dev-extract"))
         self.log_dir = os.path.expanduser(os.environ.get("LOG_DIR", "~/vllm-lazy-logs"))
         self.max_model_len = os.environ.get("MAX_MODEL_LEN", "32768")
+        self.max_num_seqs = os.environ.get("MAX_NUM_SEQS", "128")
         self.gpu_util = os.environ.get("GPU_MEMORY_UTILIZATION", "0.70")
-        self.start_timeout = env_int("START_TIMEOUT", 900)
+        self.start_timeout = env_int("START_TIMEOUT", 1800)
         self.idle_timeout = env_int("IDLE_TIMEOUT", 1800)
         self.trust_remote_code = os.environ.get("TRUST_REMOTE_CODE", "1") != "0"
         self.extra_args = shlex.split(os.environ.get("VLLM_EXTRA_ARGS", ""))
         self.models = model_dirs(self.models_root)
         self.aliases = unique_aliases(self.models)
+        self.remote_models = remote_model_map(self.models)
         self.cond = threading.Condition()
         self.current_model = None
         self.proc = None
@@ -132,6 +149,9 @@ class LazyVllm:
             return(self.aliases[model])
         raise VllmError("unknown model: %s" % model)
 
+    def remote_for(self, model):
+        return(self.remote_models.get(model))
+
     def active(self):
         return(self.proc is not None and self.proc.poll() is None)
 
@@ -149,6 +169,7 @@ class LazyVllm:
                 "idle_timeout": self.idle_timeout,
                 "models": sorted(self.models),
                 "aliases": self.aliases,
+                "remote_models": self.remote_models,
                 "log": self.log_path,
             })
 
@@ -156,6 +177,26 @@ class LazyVllm:
         safe = model.replace("/", "_").replace(":", "_").replace(" ", "_")
         self.log_path = os.path.join(self.log_dir, "%s-%d.log" % (safe, self.port))
         return(open(self.log_path, "ab", buffering=0))
+
+    def served_max_model_len(self, rec):
+        try:
+            requested = int(float(self.max_model_len))
+            cap = rec.get("max_model_len")
+            if cap not in (None, ""):
+                cap = int(float(cap))
+                if cap > 0 and cap < requested:
+                    return(str(cap))
+            return(str(requested))
+        except Exception:
+            return(self.max_model_len)
+
+    def model_args(self, rec):
+        args = []
+        arch = set(rec.get("architectures") or [])
+        if rec.get("model_type") == "deepseek_v4" or "DeepseekV4ForCausalLM" in arch:
+            args.extend(["--kv-cache-dtype", os.environ.get("DEEPSEEK_V4_KV_CACHE_DTYPE", "fp8")])
+            args.extend(["--tokenizer-mode", "deepseek_v4", "--load-format", "safetensors"])
+        return(args)
 
     def env(self):
         env = os.environ.copy()
@@ -186,7 +227,9 @@ class LazyVllm:
             "--port",
             str(self.port),
             "--max-model-len",
-            self.max_model_len,
+            self.served_max_model_len(rec),
+            "--max-num-seqs",
+            self.max_num_seqs,
             "--gpu-memory-utilization",
             self.gpu_util,
         ]
@@ -194,6 +237,7 @@ class LazyVllm:
             args.append("--trust-remote-code")
         if rec.get("format") == "mistral":
             args.extend(["--config-format", "mistral", "--tokenizer-mode", "mistral", "--load-format", "mistral"])
+        args.extend(self.model_args(rec))
         args.extend(self.extra_args)
         return(args)
 
@@ -387,20 +431,33 @@ class Handler(BaseHTTPRequestHandler):
             raise VllmError("request body must contain a model")
         return(model)
 
+    def rewrite_model(self, body, model):
+        if body is None:
+            return(body)
+        payload = json.loads(body.decode("utf-8"))
+        payload["model"] = model
+        return(json_bytes(payload))
+
     def proxy(self, body):
         path = urllib.parse.urlsplit(self.path).path
         counted = False
+        remote = None
         try:
             if path.startswith("/v1/") or path in ("/tokenize", "/detokenize"):
-                model = self.request_model(body) if self.command != "GET" else STATE.current_model
+                raw_model = self.request_model(body) if self.command != "GET" else STATE.current_model
+                model = STATE.resolve(raw_model)
                 if not model:
                     raise VllmError("no active model for GET proxy request")
-                STATE.ensure(model)
+                remote = STATE.remote_for(model)
+                if remote is not None:
+                    body = self.rewrite_model(body, remote.get("model", model))
+                else:
+                    STATE.ensure(model)
             with STATE.cond:
                 STATE.active_requests += 1
                 counted = True
                 STATE.last_used = now()
-            self.proxy_backend(body)
+            self.proxy_backend(body, remote)
         except VllmError as e:
             self.send_json(503, {"error": {"message": str(e), "type": "ds4_lazy_vllm"}})
         except Exception:
@@ -411,8 +468,16 @@ class Handler(BaseHTTPRequestHandler):
                     STATE.active_requests -= 1
                 STATE.last_used = now()
 
-    def proxy_backend(self, body):
-        conn = http.client.HTTPConnection(STATE.host, STATE.port, timeout=None)
+    def proxy_backend(self, body, remote=None):
+        if remote is None:
+            host = STATE.host
+            port = STATE.port
+        else:
+            u = urllib.parse.urlsplit(remote["base"])
+            host = u.hostname
+            port = u.port or (443 if u.scheme == "https" else 80)
+        conn_cls = http.client.HTTPSConnection if remote is not None and u.scheme == "https" else http.client.HTTPConnection
+        conn = conn_cls(host, port, timeout=None)
         headers = {}
         for key, value in self.headers.items():
             if key.lower() not in HOP_HEADERS and key.lower() != "host":
