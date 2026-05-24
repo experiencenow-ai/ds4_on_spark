@@ -4,7 +4,7 @@ After=default.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 %h/bin/spark_node_telemetry_monitor.py --node %u --interval 5 --out-dir /tmp/ds4_telemetry
+ExecStart=/usr/bin/python3 %h/bin/spark_node_telemetry_monitor.py --interval 5 --out-dir /tmp/ds4_telemetry
 Restart=always
 RestartSec=3
 
