@@ -16,7 +16,7 @@ for node in "${node_list[@]}"; do
 	scp "$monitor" "$node:~/bin/spark_node_telemetry_monitor.py" >/dev/null
 	ssh "$node" 'chmod +x ~/bin/spark_node_telemetry_monitor.py'
 	scp "$service" "$node:~/.config/systemd/user/ds4-spark-telemetry.service" >/dev/null
-	if ssh "$node" 'systemctl --user daemon-reload && systemctl --user enable --now ds4-spark-telemetry.service'; then
+	if ssh "$node" 'systemctl --user daemon-reload && systemctl --user enable ds4-spark-telemetry.service && systemctl --user restart ds4-spark-telemetry.service'; then
 		ssh "$node" 'systemctl --user --no-pager --plain status ds4-spark-telemetry.service | sed -n "1,8p"'
 	else
 		echo "systemd user service failed on $node; falling back to nohup"
