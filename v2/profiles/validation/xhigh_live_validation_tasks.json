@@ -1,0 +1,53 @@
+{
+  "format": "ds4-xhigh-live-validation-tasks-v1",
+  "validation_id": "ds4_v2_live_validation_2026_05_25",
+  "topology_ref": "profiles/topology/static_sparks.json",
+  "description": "First live checks required after the ds4_on_spark v2 substrate lands.",
+  "tasks": [
+    {
+      "task_id": "xhv-001-qwen-vllm-resident-lanes",
+      "runner": "vllm",
+      "target_nodes": ["spark0", "spark1", "spark2", "spark3", "spark7"],
+      "profiles": ["qwen3_6_27b_fp8_efficient_v1", "qwen3_6_35b_a3b_fp8_fastest_v1"],
+      "purpose": "Prove --runner vllm works against each resident Qwen lane with both static Qwen profiles loaded.",
+      "command_template": "ssh {node} 'cd {repo}/v2 && DS4_VLLM_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests {requests_jsonl} --out {out_dir}/{node}-qwen-vllm --runner vllm --runner-timeout-s 600 --run'",
+      "acceptance": ["all target nodes return completed_count=2", "each result status is completed", "selected profiles include both Qwen profile ids", "capture /v1/models and runner output"]
+    },
+    {
+      "task_id": "xhv-002-dsv4-vllm-mtp-spark45",
+      "runner": "vllm",
+      "target_nodes": ["spark4", "spark5"],
+      "profiles": ["dsv4_vllm_mtp_smartest_v1"],
+      "purpose": "Prove --runner vllm works against the grouped spark4+spark5 DSV4 vLLM/MTP lane.",
+      "command_template": "cd {repo}/v2 && DS4_VLLM_MTP_BASE_URL=http://spark4:8000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --topology profiles/topology/static_sparks.json --requests {requests_jsonl} --out {out_dir}/spark45-dsv4-vllm-mtp --runner vllm --runner-timeout-s 1200 --run",
+      "acceptance": ["request using capability=smartest and chat=true completes", "selected node is spark4+spark5", "transport base_url is the MTP endpoint", "record prompt/completion token usage when endpoint returns it"]
+    },
+    {
+      "task_id": "xhv-003-antirez-spark6",
+      "runner": "antirez",
+      "target_nodes": ["spark6"],
+      "profiles": ["dsv4_antirez_smart_v1"],
+      "purpose": "Prove --runner antirez works against the spark6 antirez/support lane.",
+      "command_template": "ssh spark6 'cd {repo}/v2 && DS4_ANTIREZ_BASE_URL=http://127.0.0.1:8080 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests {requests_jsonl} --out {out_dir}/spark6-antirez --runner antirez --runner-timeout-s 1200 --run'",
+      "acceptance": ["smart completion request completes", "selected profile is dsv4_antirez_smart_v1", "response is non-empty", "capture antirez endpoint/version if available"]
+    },
+    {
+      "task_id": "xhv-004-mac-studio-ds4-spark-chat",
+      "runner": "ds4-spark-chat",
+      "target_nodes": ["mac-studio", "spark4", "spark5"],
+      "profiles": ["dsv4_vllm_mtp_smartest_v1"],
+      "purpose": "Prove ds4-spark-chat works from Mac Studio against the resident DSV4 vLLM/MTP lane.",
+      "command_template": "cd {repo}/v2 && DS4_VLLM_MTP_BASE_URL=http://spark4:8000 PYTHONPATH=src python3 -m ds4_chat.cli --registry tools/registry.jsonl --history {out_dir}/mac-studio-chat-history.json --timeout-s 1200 --max-tokens 512 --ask 'Answer with one sentence: what are the three static DS4 v2 inference lanes?'",
+      "acceptance": ["command exits 0", "assistant response is non-empty", "history file is written", "no tool action is claimed without a tool result"]
+    },
+    {
+      "task_id": "xhv-005-web-tool-playwright-host",
+      "runner": "web-tool",
+      "target_nodes": ["web-tool-host"],
+      "profiles": [],
+      "purpose": "Install Playwright only if rendered web access is required, then prove tool:web.fetch rendered mode works.",
+      "command_template": "cd {repo}/v2 && python3 -m pip install '.[web]' && python3 -m playwright install chromium && PYTHONPATH=src python3 -m ds4_tools.cli invoke --registry tools/registry.jsonl --tool-id tool:web.fetch --arguments '{\"url\":\"https://example.com\",\"mode\":\"rendered\",\"max_text_chars\":1000}'",
+      "acceptance": ["install succeeds when rendered access is needed", "tool:web.fetch returns ok=true", "mode is rendered", "fallback text mode remains available without Playwright"]
+    }
+  ]
+}

@@ -13,14 +13,14 @@ The production Spark pool is intentionally static. Centaur and DS4 services shou
 | spark4 | DSV4 vLLM/MTP grouped lane half | `dsv4_vllm_mtp_smartest_v1` |
 | spark5 | DSV4 vLLM/MTP grouped lane half | `dsv4_vllm_mtp_smartest_v1` |
 | spark6 | Antirez/support/urgent lane | `dsv4_antirez_smart_v1` |
-| spark7 | Experiment lane | dynamic profiles only after explicit opt-in |
+| spark7 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1`, `qwen3_6_35b_a3b_fp8_fastest_v1` |
 
 This gives the service a normal production view of:
 
-- 4 Qwen lanes for `efficient` / `fastest` work;
+- 5 Qwen lanes for `efficient` / `fastest` work;
 - 1 DSV4 vLLM/MTP grouped lane for `smartest` chat/tool/reasoning work, consuming both spark4 and spark5;
 - 1 antirez/support lane for `smart` completion and urgent support work;
-- 1 experiment lane that may load/unload models without perturbing production lanes.
+- no dynamic production model ejection path.
 
 No Qwen profile is resident on spark6. Spark6 is reserved for antirez/support and does not have enough headroom for the Qwen resident pair.
 
@@ -28,7 +28,7 @@ No Qwen profile is resident on spark6. Spark6 is reserved for antirez/support an
 
 The inference scheduler owns node assignment. Centaur requests a capability and job class; it does not target a Spark directly.
 
-Normal queued requests prefer resident production lanes. Immediate requests prefer a reserved lane only when that lane has the requested resident profile. Efficient Qwen requests therefore remain on spark0-3; smart antirez requests may use spark6. The experiment lane is not used for production routing unless `allow_dynamic_load_for_unmatched_profiles` is explicitly enabled in the topology file.
+Normal queued requests prefer resident production lanes. Immediate requests prefer a reserved lane only when that lane has the requested resident profile. Efficient Qwen requests therefore remain on spark0-3 and spark7; smart antirez requests may use spark6. Dynamic loading is disabled in this production topology.
 
 The topology is stored in:
 
@@ -60,4 +60,4 @@ The batch manifest records `topology_id` and `selected_nodes`. Individual respon
 
 ## Why this exists
 
-The earlier approach made every local LLM attempt an experiment. Batch size, thinking budget, backend, and model loading decisions leaked into Centaur. Static residency turns Spark inference into a service boundary: production lanes are boring and measurable, while only spark7 performs model-loading experiments.
+The earlier approach made every local LLM attempt an experiment. Batch size, thinking budget, backend, and model loading decisions leaked into Centaur. Static residency turns Spark inference into a service boundary: production lanes are boring and measurable, and the scheduler does not unload resident models for lopsided short-term usage.

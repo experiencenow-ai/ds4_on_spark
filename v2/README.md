@@ -40,10 +40,10 @@ Initial default intent:
 
 The production Spark allocation is fixed in `profiles/topology/static_sparks.json`:
 
-- spark0-3 host resident Qwen lanes;
+- spark0-3 and spark7 host resident Qwen lanes with both Qwen profiles loaded;
 - spark4+spark5 jointly host one DSV4 vLLM/MTP lane because that profile consumes both Sparks;
 - spark6 is antirez/support only, with no Qwen resident profiles;
-- spark7 is the only dynamic experiment lane.
+- no production node unloads or ejects a resident model dynamically.
 
 This keeps Centaur-facing requests capability-based instead of Spark/backend-specific. See `docs/static-spark-topology.md`.
 
@@ -113,3 +113,5 @@ Live runner adapters now exist for OpenAI-compatible vLLM, vLLM/MTP, and antirez
 `tool:web.fetch` provides rendered-page access through Playwright when installed, with a plain HTML fallback for simple pages. See `docs/web-tools.md`.
 
 `ds4-spark-chat` is a simple Mac Studio-friendly chat CLI against the resident vLLM/MTP lane. It keeps the full chat history as prompt context and can use Spark tools, including spark7 command execution only when launched with `--allow-spark7-tools`. See `docs/spark-chat.md`.
+
+The first live validation checklist for the v2 substrate is in `docs/xhigh-live-validation.md` with a machine-readable task manifest at `profiles/validation/xhigh_live_validation_tasks.json`.

@@ -1,7 +1,7 @@
 {
   "format": "ds4-spark-topology-v1",
-  "topology_id": "static_sparks_2026_05_25_v3",
-  "description": "Static Spark allocation: Qwen lanes on spark0-3, one DSV4/vLLM/MTP grouped lane consuming spark4+spark5, antirez/support on spark6, experiments on spark7.",
+  "topology_id": "static_sparks_2026_05_25_v4",
+  "description": "Static Spark allocation: Qwen lanes on spark0-3 and spark7 with both Qwen resident profiles loaded, one DSV4/vLLM/MTP grouped lane consuming spark4+spark5, and antirez/support on spark6. No dynamic model ejection.",
   "nodes": [
     {
       "node_id": "spark0",
@@ -104,13 +104,16 @@
     {
       "node_id": "spark7",
       "roles": [
-        "experiment",
-        "dynamic_load"
+        "qwen_static",
+        "production"
       ],
-      "resident_profiles": [],
+      "resident_profiles": [
+        "qwen3_6_27b_fp8_efficient_v1",
+        "qwen3_6_35b_a3b_fp8_fastest_v1"
+      ],
       "default_capacity": 1,
       "immediate_reserved": false,
-      "dynamic_load": true
+      "dynamic_load": false
     }
   ],
   "routing_policy": {
@@ -123,7 +126,6 @@
       "production"
     ],
     "allow_dynamic_load_for_unmatched_profiles": false,
-    "experimental_node_id": "spark7",
     "profile_node_groups": {
       "dsv4_vllm_mtp_smartest_v1": [
         "spark4",
