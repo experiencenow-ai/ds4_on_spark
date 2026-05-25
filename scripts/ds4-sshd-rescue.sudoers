@@ -1,1 +1,0 @@
-%sudo ALL=(root) NOPASSWD: /usr/bin/systemctl restart ssh, /usr/bin/systemctl restart sshd, /usr/local/sbin/ds4-sshd-watchdog

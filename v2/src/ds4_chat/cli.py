@@ -9,7 +9,20 @@ from typing import Any
 from urllib import error, request as urlrequest
 
 from ds4_agent.loop import run_agent_loop
+from ds4_infer.profiles import ProfileRegistry
+from ds4_infer.queue import InferenceQueue
+from ds4_infer.runners import make_runner
+from ds4_infer.schemas import InferenceRequest
+from ds4_infer.topology import SparkTopology
 from ds4_tools.registry import ToolRegistry
+
+V2_ROOT = Path(__file__).resolve().parents[2]
+MODEL_ALIASES = {
+    "ds4a": "dsv4_antirez_smart_v1",
+    "ds4v": "dsv4_vllm_mtp_smartest_v1",
+    "qwen": "qwen3_6_27b_fp8_efficient_v1",
+    "fast": "qwen3_6_35b_a3b_fp8_fastest_v1",
+}
 
 DEFAULT_SYSTEM = """You are the local xhigh-style Spark operator for the DS4/Centaur system.
 You may help inspect and manage Sparks. Use tools when they give a more reliable answer than guessing.
@@ -55,13 +68,62 @@ class VllmChatModel:
         return {"role": "assistant", "content": json.dumps(data, sort_keys=True)}
 
 
+class QueueChatModel:
+    def __init__(self, *, queue_dir: str, profiles_dir: str, topology: str, model_alias: str, runner: str, timeout_s: int, max_tokens: int, temperature: float) -> None:
+        self.queue = InferenceQueue(queue_dir)
+        self.registry = ProfileRegistry.load(profiles_dir)
+        self.topology = SparkTopology.load(topology)
+        self.model_alias = model_alias
+        self.runner = make_runner(runner, timeout_s=timeout_s)
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+
+    def next_message(self, messages: list[dict]) -> dict:
+        request = self._request(messages)
+        batch_id = "chat-" + request.request_id
+        self.queue.submit_requests(requests=[request], registry=self.registry, topology=self.topology, batch_id=batch_id)
+        self.queue.work(registry=self.registry, runner=self.runner, limit=1)
+        collected = self.queue.collect(request_id=request.request_id)
+        result = collected.get("result", {}) if isinstance(collected, dict) else {}
+        output = result.get("output", {}) if isinstance(result, dict) else {}
+        text = output.get("text", "") if isinstance(output, dict) else ""
+        return {"role": "assistant", "content": str(text)}
+
+    def _request(self, messages: list[dict]) -> InferenceRequest:
+        profile_id = MODEL_ALIASES.get(self.model_alias, self.model_alias)
+        profile = self.registry.get(profile_id)
+        safe = _json_safe_messages(messages)
+        chat = bool(profile.supports_chat)
+        data: dict[str, Any] = {
+            "format": "ds4-inference-request-v1",
+            "request_id": f"chat-{int(__import__('time').time() * 1000)}",
+            "capability": None,
+            "chat": chat,
+            "immediate": True,
+            "job_class": _chat_job_class(profile.supported_job_classes, chat),
+            "max_output_tokens": self.max_tokens,
+            "thinking_budget_tokens": 0,
+            "temperature": self.temperature,
+            "input": {"messages": safe, "prompt": _transcript(safe)},
+            "output_contract": {"format": "text"},
+            "model_pin": {"profile_id": profile.profile_id},
+        }
+        return InferenceRequest.from_json(data)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ds4-spark-chat")
+    parser.add_argument("-m", "--model-alias", default="ds4v", help="profile id or alias: ds4v, ds4a, qwen, fast")
+    parser.add_argument("--mode", choices=["queue", "direct-vllm"], default="queue")
     parser.add_argument("--base-url", default=os.environ.get("DS4_VLLM_MTP_BASE_URL") or os.environ.get("DS4_VLLM_BASE_URL") or "http://spark4:8000")
     parser.add_argument("--model", default=os.environ.get("DS4_VLLM_MTP_MODEL") or "deepseek-v4-flash")
     parser.add_argument("--api-key", default=os.environ.get("DS4_VLLM_API_KEY", ""))
     parser.add_argument("--history", default=str(Path.home() / ".ds4_spark_chat_history.json"))
-    parser.add_argument("--registry", default="tools/registry.jsonl")
+    parser.add_argument("--queue-dir", default=str(Path.home() / ".ds4_v2_chat_queue"))
+    parser.add_argument("--profiles-dir", default=str(V2_ROOT / "profiles" / "models"))
+    parser.add_argument("--topology", default=str(V2_ROOT / "profiles" / "topology" / "static_sparks.json"))
+    parser.add_argument("--runner", choices=["spark", "auto", "fake"], default="spark")
+    parser.add_argument("--registry", default=str(V2_ROOT / "tools" / "registry.jsonl"))
     parser.add_argument("--system", default=DEFAULT_SYSTEM)
     parser.add_argument("--max-tokens", type=int, default=1024)
     parser.add_argument("--timeout-s", type=int, default=300)
@@ -76,7 +138,10 @@ def main(argv: list[str] | None = None) -> int:
     messages = _load_history(history_path)
     if not messages:
         messages.append({"role": "system", "content": args.system})
-    model = VllmChatModel(base_url=args.base_url, model=args.model, api_key=args.api_key, timeout_s=args.timeout_s, max_tokens=args.max_tokens, temperature=args.temperature)
+    if args.mode == "queue":
+        model = QueueChatModel(queue_dir=args.queue_dir, profiles_dir=args.profiles_dir, topology=args.topology, model_alias=args.model_alias, runner=args.runner, timeout_s=args.timeout_s, max_tokens=args.max_tokens, temperature=args.temperature)
+    else:
+        model = VllmChatModel(base_url=args.base_url, model=args.model, api_key=args.api_key, timeout_s=args.timeout_s, max_tokens=args.max_tokens, temperature=args.temperature)
     registry = ToolRegistry.load(args.registry) if not args.no_tools else None
     allowed_prefixes = ["tool:ds4.", "tool:web.", "tool:spark.status", "tool:spark.transfer."]
     if args.allow_spark7_tools:
@@ -149,6 +214,18 @@ def _json_safe_messages(messages: list[dict]) -> list[dict]:
             safe_message["tool_calls"] = message["tool_calls"]
         safe.append(safe_message)
     return safe
+
+
+def _transcript(messages: list[dict]) -> str:
+    return "\n".join(f"{message.get('role','user')}: {message.get('content','')}" for message in messages)
+
+
+def _chat_job_class(supported: tuple[str, ...], chat: bool) -> str:
+    preferred = ("tool_chat", "analysis", "summary", "atom_edit") if chat else ("analysis", "atom_edit", "summary")
+    for job_class in preferred:
+        if job_class in supported:
+            return job_class
+    return supported[0]
 
 
 if __name__ == "__main__":

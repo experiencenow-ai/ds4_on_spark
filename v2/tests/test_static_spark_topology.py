@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -11,13 +9,13 @@ from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.runners import FakeRunner
 from ds4_infer.schemas import InferenceRequest
 from ds4_infer.service import run_requests
+from ds4_infer.startup import startup_plan, warm_startup_models
 from ds4_infer.topology import SparkTopology
 
 ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 VALIDATION_TASKS = ROOT / "profiles" / "validation" / "xhigh_live_validation_tasks.json"
-RESIDENT_ENV_SCRIPT = ROOT / "scripts" / "print_resident_gateway_env.py"
 
 
 def make_request(request_id: str, *, capability: str, job_class: str, chat: bool = False, immediate: bool = False) -> InferenceRequest:
@@ -136,12 +134,35 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertIn("qwen3_6_27b_fp8_efficient_v1", qwen_task["profiles"])
         self.assertIn("qwen3_6_35b_a3b_fp8_fastest_v1", qwen_task["profiles"])
 
-    def test_resident_gateway_env_excludes_spark7_experimental(self) -> None:
-        spark0 = subprocess.run([sys.executable, str(RESIDENT_ENV_SCRIPT), "--node", "spark0"], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        spark7 = subprocess.run([sys.executable, str(RESIDENT_ENV_SCRIPT), "--node", "spark7"], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        self.assertIn("Qwen/Qwen3.6-27B-FP8", spark0.stdout)
-        self.assertIn("Qwen/Qwen3.6-35B-A3B-FP8", spark0.stdout)
-        self.assertIn("DS4_RESIDENT_MODELS_JSON=[]", spark7.stdout)
+    def test_startup_plan_warms_resident_models_and_skips_spark7(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        topology = SparkTopology.load(TOPOLOGY)
+        spark0 = startup_plan(topology=topology, registry=registry, node_id="spark0")
+        spark4 = startup_plan(topology=topology, registry=registry, node_id="spark4")
+        spark5 = startup_plan(topology=topology, registry=registry, node_id="spark5")
+        spark6 = startup_plan(topology=topology, registry=registry, node_id="spark6")
+        spark7 = startup_plan(topology=topology, registry=registry, node_id="spark7")
+        self.assertEqual([item["model_id"] for item in spark0["items"]], ["Qwen/Qwen3.6-27B-FP8", "Qwen/Qwen3.6-35B-A3B-FP8"])
+        self.assertEqual(spark4["items"][0]["action"], "group_primary_warm")
+        self.assertEqual(spark5["items"], [{"profile_id": "dsv4_vllm_mtp_smartest_v1", "action": "group_secondary", "primary_node": "spark4"}])
+        self.assertEqual(spark6["items"][0]["endpoint"], "/completion")
+        self.assertEqual(spark7["items"], [])
+
+    def test_startup_warm_posts_only_executable_items(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        topology = SparkTopology.load(TOPOLOGY)
+        plan = startup_plan(topology=topology, registry=registry, node_id="spark0")
+        calls: list[tuple[str, str]] = []
+
+        def poster(url: str, payload: dict, timeout_s: int) -> dict:
+            calls.append((url, payload["model"]))
+            return {"ok": True}
+
+        result = warm_startup_models(plan=plan, base_url="http://spark.local:8000", timeout_s=3, poster=poster)
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["warm_count"], 2)
+        self.assertEqual(calls[0], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-27B-FP8"))
+        self.assertEqual(calls[1], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-35B-A3B-FP8"))
 
 
 if __name__ == "__main__":

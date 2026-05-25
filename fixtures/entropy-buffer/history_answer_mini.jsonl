@@ -1,5 +1,0 @@
-{"type":"task_run","run_id":"hist.answer.mini","task_id":"mcq.toy.001","task_family":"mcq","prompt_template_id":"mcq.letter.v1","model_id":"mX","prompt":"Q1","output":"Final answer: A"}
-{"type":"task_run","run_id":"hist.answer.mini","task_id":"mcq.toy.002","task_family":"mcq","prompt_template_id":"mcq.letter.v1","model_id":"mX","prompt":"Q2","output":"Answer: A"}
-{"type":"task_run","run_id":"hist.answer.mini","task_id":"mcq.toy.003","task_family":"mcq","prompt_template_id":"mcq.letter.v1","model_id":"mX","prompt":"Q3","output":"A"}
-{"type":"task_run","run_id":"hist.answer.mini","task_id":"mcq.toy.004","task_family":"mcq","prompt_template_id":"mcq.letter.v1","model_id":"mX","prompt":"Q4","output":"(A)"}
-{"type":"task_run","run_id":"hist.answer.mini","task_id":"mcq.toy.005","task_family":"mcq","prompt_template_id":"mcq.letter.v1","model_id":"mX","prompt":"Q5","output":"Final answer: B"}

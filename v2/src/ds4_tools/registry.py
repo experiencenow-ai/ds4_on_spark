@@ -100,12 +100,28 @@ def _validate_arguments(schema: dict[str, Any], arguments: dict[str, Any]) -> No
             raise ValueError(f"tool arguments contain unsupported keys: {extra}")
     for key, value in arguments.items():
         expected = schema.get("properties", {}).get(key, {}).get("type")
-        if expected == "string" and not isinstance(value, str):
-            raise ValueError(f"argument {key!r} must be a string")
-        if expected == "integer" and not isinstance(value, int):
-            raise ValueError(f"argument {key!r} must be an integer")
-        if expected == "boolean" and not isinstance(value, bool):
-            raise ValueError(f"argument {key!r} must be a boolean")
+        if expected and not _type_matches(value, expected):
+            raise ValueError(f"argument {key!r} must be a {expected}")
+
+
+def _type_matches(value: Any, expected: str | list[str]) -> bool:
+    choices = expected if isinstance(expected, list) else [expected]
+    for choice in choices:
+        if choice == "string" and isinstance(value, str):
+            return True
+        if choice == "integer" and isinstance(value, int) and not isinstance(value, bool):
+            return True
+        if choice == "number" and isinstance(value, (int, float)) and not isinstance(value, bool):
+            return True
+        if choice == "boolean" and isinstance(value, bool):
+            return True
+        if choice == "array" and isinstance(value, list):
+            return True
+        if choice == "object" and isinstance(value, dict):
+            return True
+        if choice == "null" and value is None:
+            return True
+    return False
 
 def _execute_tool(root: Path, tool: ToolAtom, arguments: dict[str, Any]) -> dict[str, Any]:
     kind = str(tool.executor.get("kind", ""))

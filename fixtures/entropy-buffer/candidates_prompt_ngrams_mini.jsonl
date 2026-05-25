@@ -1,2 +1,0 @@
-{"task_id":"math.prompt.zzz","task_family":"math","prompt_template_id":"plain.v1","prompt":"alpha beta gamma","buffer_item_id":"entropy.v1:math.prompt.zzz:plain.v1"}
-{"task_id":"math.prompt.aaa","task_family":"math","prompt_template_id":"plain.v1","prompt":"delta epsilon zeta","buffer_item_id":"entropy.v1:math.prompt.aaa:plain.v1"}

@@ -36,6 +36,28 @@ The topology is stored in:
 profiles/topology/static_sparks.json
 ```
 
+## Startup Warmup
+
+Each production Spark should run the same startup command after reboot:
+
+```bash
+PYTHONPATH=src python3 -m ds4_infer.cli startup-models \
+  --profiles-dir profiles/models \
+  --topology profiles/topology/static_sparks.json \
+  --node-id spark0
+```
+
+The command reads this topology and warms only that node's resident profiles.
+Spark0-3 warm both Qwen profiles, spark4 warms the grouped DSV4 vLLM/MTP lane,
+spark5 records itself as the secondary half of that group, spark6 warms the
+antirez profile, and spark7 is a clean no-op because it is on demand.
+
+The user service template is in:
+
+```text
+v2/deploy/systemd-user/ds4-startup-models.service
+```
+
 Inspect capacity:
 
 ```bash
