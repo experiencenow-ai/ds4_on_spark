@@ -14,7 +14,7 @@
   "profile_direction": "lower_is_better",
   "profile_id": "locality_modularity_state_dry_v5",
   "profile_source": "centaur_complexity",
-  "root": "/private/tmp/ds4-origin-main-1407",
+  "root": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark",
   "scan": {
     "architecture_findings": [],
     "artifact_dir_exclusions": {
@@ -29,7 +29,7 @@
         "max_function_lines": 172,
         "max_locals": 26,
         "max_parameters": 9,
-        "score": 5344.156
+        "score": 5595.125
       },
       "module": {
         "api_boundary_violation_count": 0,
@@ -40,31 +40,31 @@
         "leaked_public_value_count": 0,
         "max_public_parameter_count": 7,
         "missing_declared_api_count": 0,
-        "public_api_count": 232,
+        "public_api_count": 239,
         "public_concurrency_api_count": 0,
-        "public_parameter_count": 206,
-        "public_value_count": 87,
-        "score": 419.25
+        "public_parameter_count": 216,
+        "public_value_count": 90,
+        "score": 428.5
       },
       "project": {
-        "file_count": 106,
+        "file_count": 109,
         "repeated_normalized_blocks": 413682,
-        "score": 33220194.377,
-        "total_line_count": 423311
+        "score": 33220952.16,
+        "total_line_count": 423745
       }
     },
     "components": {
-      "branching": 2690.0,
-      "comment_balance": 81.66,
-      "compressed_load": 2344.105,
+      "branching": 2768.0,
+      "comment_balance": 83.85,
+      "compressed_load": 2350.342,
       "duplication": 33034970.0,
       "file_architecture": 0.0,
-      "function_size": 1344.406,
-      "function_state": 923.75,
-      "line_shape": 181552.612,
+      "function_size": 1450.125,
+      "function_state": 991.0,
+      "line_shape": 182224.968,
       "module_boundary": 0.0,
-      "module_interface": 419.25,
-      "naming_noise": 1246.0,
+      "module_interface": 428.5,
+      "naming_noise": 1323.0,
       "nesting": 386.0
     },
     "concurrency_module_count": 1,
@@ -646,8 +646,36 @@
         "suggested_action": "extract the repeated command/report/parser pattern into one shared builder"
       }
     ],
-    "excluded_file_count": 23,
+    "excluded_file_count": 34,
     "excluded_path_samples": [
+      {
+        "path": ".git/",
+        "reason": "vcs_dir"
+      },
+      {
+        "path": "centaur/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
+        "path": "scripts/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
+        "path": "scripts/_lib/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
+        "path": "scripts/_lib/mtp_builders/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
+        "path": "tests/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
+        "path": "v2/scripts/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
       {
         "path": "v2/src/ds4_agent/__pycache__/",
         "reason": "artifact_dir:__pycache__"
@@ -685,11 +713,19 @@
         "reason": "not_explicitly_included"
       },
       {
-        "path": ".git",
+        "path": ".gitignore",
         "reason": "not_explicitly_included"
       },
       {
-        "path": ".gitignore",
+        "path": "deploy/config/model-gateway-qwen-resident.env.example",
+        "reason": "not_explicitly_included"
+      },
+      {
+        "path": "deploy/config/model-gateway-spark7-experimental.env.example",
+        "reason": "not_explicitly_included"
+      },
+      {
+        "path": "deploy/systemd-user/ds4-model-gateway.service",
         "reason": "not_explicitly_included"
       },
       {
@@ -709,40 +745,12 @@
         "reason": "not_explicitly_included"
       },
       {
-        "path": "v2/profiles/models/dsv4_antirez_smart.json",
-        "reason": "not_explicitly_included"
-      },
-      {
-        "path": "v2/profiles/models/dsv4_vllm_mtp_smartest.json",
-        "reason": "not_explicitly_included"
-      },
-      {
-        "path": "v2/profiles/models/qwen3_6_27b_fp8_efficient.json",
-        "reason": "not_explicitly_included"
-      },
-      {
-        "path": "v2/profiles/models/qwen3_6_35b_a3b_fp8_fastest.json",
-        "reason": "not_explicitly_included"
-      },
-      {
-        "path": "v2/profiles/routing/default_capabilities.json",
-        "reason": "not_explicitly_included"
-      },
-      {
-        "path": "v2/profiles/topology/static_sparks.json",
-        "reason": "not_explicitly_included"
-      },
-      {
-        "path": "v2/profiles/transfer/spark_200g.json",
-        "reason": "not_explicitly_included"
-      },
-      {
-        "path": "v2/pyproject.toml",
+        "path": "v2/deploy/systemd-user/ds4-startup-models.service",
         "reason": "not_explicitly_included"
       }
     ],
     "excluded_paths_truncated": false,
-    "file_count": 106,
+    "file_count": 109,
     "files_over_10000_lines": 3,
     "files_over_1000_lines": 5,
     "files_over_250_functions": 0,
@@ -750,10 +758,10 @@
     "format": "centaur-complexity-scan-v1",
     "functions_over_100": 2,
     "functions_over_50": 21,
-    "included_file_count": 106,
-    "largest_file_line_share": 0.6316,
+    "included_file_count": 109,
+    "largest_file_line_share": 0.6309,
     "limit": 25,
-    "max_exit_point_count": 10,
+    "max_exit_point_count": 12,
     "max_file_function_count": 45,
     "max_file_lines": 267359,
     "max_function_lines": 172,
@@ -955,20 +963,20 @@
     "module_max_public_parameter_count": 7,
     "module_missing_declared_api_count": 0,
     "module_mutable_global_count": 4,
-    "module_public_api_count": 232,
+    "module_public_api_count": 239,
     "module_public_concurrency_api_count": 0,
-    "module_public_parameter_count": 206,
-    "module_public_side_effect_api_count": 25,
-    "module_public_value_count": 87,
+    "module_public_parameter_count": 216,
+    "module_public_side_effect_api_count": 26,
+    "module_public_value_count": 90,
     "module_side_effect_domain_count": 1,
-    "module_visible_value_count": 87,
-    "path": "/private/tmp/ds4-origin-main-1407",
+    "module_visible_value_count": 90,
+    "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark",
     "product_scope_mode": "ignore_aware",
     "profile_id": "locality_modularity_state_dry_v5",
     "project_module_complexity_score": 78.633,
     "repeated_normalized_blocks": 413682,
-    "score": 33225957.783,
-    "side_effect_function_count": 72,
+    "score": 33226975.785,
+    "side_effect_function_count": 74,
     "status": "success",
     "top_files": [
       {
@@ -1133,7 +1141,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/deepseek_v4_flash/tokenizer.json",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/tokenizer.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 6367146,
@@ -1311,7 +1319,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/deepseek_v4_flash/checkpoint_keys.txt",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/checkpoint_keys.txt",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 2396264,
@@ -1412,7 +1420,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/deepseek_v4_flash/model.safetensors.index.json",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/model.safetensors.index.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 5371381,
@@ -1524,7 +1532,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/deepseek_v4_flash/mtp_checkpoint_keys.txt",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/mtp_checkpoint_keys.txt",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 48612,
@@ -1702,7 +1710,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/deepseek_v4_flash/contract_summary.json",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/contract_summary.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 217271,
@@ -1880,7 +1888,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/comparators/qwen3_5_27b/tokenizer_config.json",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/comparators/qwen3_5_27b/tokenizer_config.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 16710,
@@ -1969,7 +1977,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/comparators/ling_2_6_flash/tokenizer_config.json",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/comparators/ling_2_6_flash/tokenizer_config.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 5109,
@@ -2147,7 +2155,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/deepseek_v4_flash/pinned_gguf_inspects_summary.json",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/pinned_gguf_inspects_summary.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 14401,
@@ -2165,19 +2173,19 @@
       },
       {
         "architecture_flags": [],
-        "canonical_sha256": "sha256:fc2a0709d861b9cab12fa92ddcca0081c82a91278d98135d4e3d5b5ac8c05ef2",
-        "canonical_size_bytes": 7673,
+        "canonical_sha256": "sha256:80d67d940944f7f4a84c7947319a7e7326a0f77268634c9a3e14e9162b97436d",
+        "canonical_size_bytes": 7647,
         "comment_line_count": 0,
         "comment_ratio": 0.0,
         "components": {
           "branching": 0.0,
           "comment_balance": 0.0,
-          "compressed_load": 1.495,
+          "compressed_load": 1.488,
           "duplication": 0.0,
           "file_architecture": 0.0,
           "function_size": 0.0,
           "function_state": 0.0,
-          "line_shape": 6136.196,
+          "line_shape": 6082.168,
           "module_boundary": 0.0,
           "module_interface": 0.0,
           "naming_noise": 0.0,
@@ -2236,14 +2244,14 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/v2/tools/registry.jsonl",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/v2/tools/registry.jsonl",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
-        "raw_size_bytes": 7673,
+        "raw_size_bytes": 7647,
         "relative_path": "v2/tools/registry.jsonl",
         "repeated_block_byte_estimate": 0,
         "repeated_normalized_blocks": 0,
-        "score": 6137.691,
+        "score": 6083.656,
         "short_identifier_count": 0,
         "side_effect_function_count": 0,
         "top_level_definition_count": 0,
@@ -2578,7 +2586,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 7,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/deepseek_v4_flash/inference/kernel.py",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/inference/kernel.py",
         "project_module_complexity_score": 0,
         "public_api_function_count": 0,
         "raw_size_bytes": 22204,
@@ -2958,7 +2966,7 @@
         "module_side_effect_function_count": 13,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/v2/src/ds4_infer/runners.py",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/v2/src/ds4_infer/runners.py",
         "project_module_complexity_score": 0,
         "public_api_function_count": 0,
         "raw_size_bytes": 17909,
@@ -3136,7 +3144,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/deepseek_v4_flash/encoding/tests/test_input_3.json",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/encoding/tests/test_input_3.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 4546,
@@ -3292,7 +3300,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/comparators/qwen3_5_27b/config.json",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/comparators/qwen3_5_27b/config.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 4134,
@@ -3612,7 +3620,7 @@
         "module_side_effect_function_count": 3,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 23,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/deepseek_v4_flash/encoding/encoding_dsv4.py",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/encoding/encoding_dsv4.py",
         "project_module_complexity_score": 78.633,
         "public_api_function_count": 0,
         "raw_size_bytes": 27908,
@@ -3746,7 +3754,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/deepseek_v4_flash/encoding/tests/test_input_4.json",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/encoding/tests/test_input_4.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 2730,
@@ -4042,7 +4050,7 @@
         "module_side_effect_function_count": 6,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 5,
-        "path": "/private/tmp/ds4-origin-main-1407/v2/src/ds4_infer/queue.py",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/v2/src/ds4_infer/queue.py",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 21615,
@@ -4216,7 +4224,7 @@
         "module_side_effect_function_count": 1,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 2,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/deepseek_v4_flash/inference/convert.py",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/inference/convert.py",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 7075,
@@ -4503,7 +4511,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 7,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/deepseek_v4_flash/inference/model.py",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/inference/model.py",
         "project_module_complexity_score": 0,
         "public_api_function_count": 0,
         "raw_size_bytes": 38632,
@@ -4615,7 +4623,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/deepseek_v4_flash/inference/config.json",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/inference/config.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 991,
@@ -4962,7 +4970,7 @@
         "module_side_effect_function_count": 3,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 3,
-        "path": "/private/tmp/ds4-origin-main-1407/v2/tests/test_llm_runners_web_chat.py",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/v2/tests/test_llm_runners_web_chat.py",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 8458,
@@ -5051,7 +5059,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/deepseek_v4_flash/encoding/tests/test_output_3.txt",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/encoding/tests/test_output_3.txt",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 3313,
@@ -5268,7 +5276,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 2,
-        "path": "/private/tmp/ds4-origin-main-1407/v2/tests/test_transfer_plan.py",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/v2/tests/test_transfer_plan.py",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 2539,
@@ -5522,7 +5530,7 @@
         "module_side_effect_function_count": 2,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 2,
-        "path": "/private/tmp/ds4-origin-main-1407/v2/tests/test_agent_loop.py",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/v2/tests/test_agent_loop.py",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 3604,
@@ -5611,7 +5619,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/comparators/qwen3_5_27b/chat_template.jinja",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/comparators/qwen3_5_27b/chat_template.jinja",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 7756,
@@ -5756,7 +5764,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-origin-main-1407/fixtures/model_contract/comparators/ling_2_6_flash/config.json",
+        "path": "/Users/mac/Documents/New project 4/_codex_repos/ds4_on_spark/fixtures/model_contract/comparators/ling_2_6_flash/config.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 1886,
@@ -5773,7 +5781,7 @@
         "vague_identifier_count": 0
       }
     ],
-    "total_line_count": 423311,
+    "total_line_count": 423745,
     "version": 1
   },
   "status": "success"

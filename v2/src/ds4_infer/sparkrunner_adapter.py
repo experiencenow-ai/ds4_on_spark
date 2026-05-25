@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
             on_result=lambda claim, result: _append_response(response_path, record_by_request_id, args.model, args.response_format, claim.request_id, result),
         )
         status = queue.status(batch_id=batch_id)
-        if status.get("state") in {"completed", "completed_with_failures"}:
+        if status.get("state") in {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled"}:
             break
         if time.time() > args.deadline:
             raise TimeoutError(f"batch {batch_id} did not complete before timeout")

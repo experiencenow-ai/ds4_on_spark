@@ -47,6 +47,10 @@ The production Spark allocation is fixed in `profiles/topology/static_sparks.jso
 
 This keeps Centaur-facing requests capability-based instead of Spark/backend-specific. See `docs/static-spark-topology.md`.
 
+Production Sparks should run `ds4-infer startup-models` after reboot. The
+command warms only the resident profiles assigned to that Spark by topology;
+spark7 stays on demand.
+
 ## Inference queue
 
 Centaur submits individual requests and can poll either a request, a batch, or an event stream:
@@ -73,6 +77,23 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-poll \
 ```
 
 The queue internally groups requests by model/profile, Spark node, chat mode, job class, input/output/thinking buckets, and shared prefix hash. Workers claim one compatible group, commit the lease, and batch-capable runners submit that group to `/ds4/batches` as one request. Centaur does not need to know batch-size folklore.
+
+For Centaur lattice and LongMem batches, workers can prewarm vLLM Automatic
+Prefix Caching for repeated skeletons:
+
+```bash
+PYTHONPATH=src python3 -m ds4_infer.cli queue-work \
+  --queue-dir /tmp/ds4_queue \
+  --profiles-dir profiles/models \
+  --runner spark \
+  --node-id spark0 \
+  --warm-prefixes \
+  --limit 128
+```
+
+This is best-effort cache warming, not raw KV export/import: DS4 sends one tiny
+request per shared-prefix group on the same resident lane, then processes the
+real requests with byte-identical `shared_prefix` text.
 
 `--runner spark` executes the model request on the selected Spark over SSH,
 using that Spark's local `http://127.0.0.1:8000` DS4 API. Spark inference uses

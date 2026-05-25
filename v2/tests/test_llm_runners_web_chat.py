@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from ds4_chat.cli import QueueChatModel
 from ds4_infer.profiles import ProfileRegistry
-from ds4_infer.runners import SparkHttpRunner, extract_openai_completion_text, request_messages, request_prompt
+from ds4_infer.runners import AntirezRunner, OpenAICompatibleRunner, SparkHttpRunner, extract_openai_completion_text, request_messages, request_prompt
 from ds4_infer.schemas import InferenceRequest
 from ds4_tools.builtin import spark7_run_command, web_fetch
 from ds4_tools.registry import ToolRegistry
@@ -39,6 +39,30 @@ def make_request(*, chat: bool) -> InferenceRequest:
             "output_contract": {"format": "text"},
         }
     )
+
+
+class CapturingRunner(OpenAICompatibleRunner):
+    def __init__(self) -> None:
+        super().__init__(base_url="http://unused")
+        self.calls: list[tuple[str, dict]] = []
+
+    def _post_json(self, endpoint: str, payload: dict) -> dict:
+        self.calls.append((endpoint, payload))
+        if endpoint.endswith("/chat/completions"):
+            return {"choices": [{"message": {"role": "assistant", "content": "chat ok"}}], "usage": {"total_tokens": 3}}
+        return {"choices": [{"text": "completion ok"}], "usage": {"total_tokens": 2}}
+
+
+class CapturingAntirezRunner(AntirezRunner):
+    def __init__(self) -> None:
+        super().__init__(base_url="http://unused")
+        self.calls: list[tuple[str, dict]] = []
+
+    def _post_json(self, endpoint: str, payload: dict) -> dict:
+        self.calls.append((endpoint, payload))
+        if endpoint == "/completion":
+            raise RuntimeError("HTTP 404: not found")
+        return {"choices": [{"text": "thinking out loud</think>ANTIREZ_OK"}], "usage": {"total_tokens": 5}}
 
 
 def _chat_payload(content: str = "ok") -> dict:
@@ -71,6 +95,26 @@ def _captured_batch_item(profile_id: str, *, updates: dict | None = None, node: 
 
 
 class LlmRunnersWebChatTests(unittest.TestCase):
+    def test_openai_runner_uses_chat_and_completion_endpoints(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        runner = CapturingRunner()
+        chat_profile = registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
+        completion_profile = registry.resolve(capability="smart", chat=False, job_class="atom_edit")
+        chat_result = runner.run_one(make_request(chat=True), chat_profile)
+        completion_result = runner.run_one(make_request(chat=False), completion_profile)
+        self.assertEqual(chat_result["output"]["text"], "chat ok")
+        self.assertEqual(completion_result["output"]["text"], "completion ok")
+        self.assertEqual(runner.calls[0][0], "/v1/chat/completions")
+        self.assertEqual(runner.calls[1][0], "/v1/completions")
+
+    def test_antirez_runner_falls_back_to_openai_completion_endpoint(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        runner = CapturingAntirezRunner()
+        profile = registry.resolve(capability="smart", chat=False, job_class="atom_edit")
+        result = runner.run_one(make_request(chat=False), profile)
+        self.assertEqual(result["output"]["text"], "ANTIREZ_OK")
+        self.assertEqual([call[0] for call in runner.calls], ["/completion", "/v1/completions"])
+
     def test_prompt_and_message_builders_use_shared_prefix_and_suffix(self) -> None:
         request = make_request(chat=False)
         self.assertIn("system rules", request_prompt(request))

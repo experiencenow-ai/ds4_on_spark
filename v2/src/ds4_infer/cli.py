@@ -7,9 +7,11 @@ import time
 
 from .profiles import ProfileRegistry
 from .queue import InferenceQueue
-from .runners import CommandRunner, FakeRunner, SparkHttpRunner
+from .runners import AntirezRunner, AutoRunner, CommandRunner, FakeRunner, NixlProxyRunner, SparkHttpRunner, VllmOpenAIRunner
 from .service import load_requests_jsonl
 from .topology import SparkTopology
+
+RUNNER_CHOICES = ("fake", "command", "vllm", "nixl", "antirez", "auto", "spark")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -53,10 +55,35 @@ def _build_parser() -> argparse.ArgumentParser:
     queue_reap.add_argument("--queue-dir", required=True)
     queue_reap.add_argument("--max-attempts", type=int, default=3)
 
+    queue_warm = sub.add_parser("queue-warm-prefixes")
+    queue_warm.add_argument("--queue-dir", required=True)
+    queue_warm.add_argument("--profiles-dir", required=True)
+    queue_warm.add_argument("--runner", choices=RUNNER_CHOICES, default="fake")
+    queue_warm.add_argument("--runner-timeout-s", type=int, default=300)
+    queue_warm.add_argument("--command", nargs="*")
+    queue_warm.add_argument("--node-id")
+    queue_warm.add_argument("--batch-id")
+    queue_warm.add_argument("--batch-key")
+    queue_warm.add_argument("--min-group-size", type=int, default=2)
+    queue_warm.add_argument("--max-output-tokens", type=int, default=1)
+    queue_warm.add_argument("--force", action="store_true")
+
+    queue_prefix_status = sub.add_parser("queue-prefix-status")
+    queue_prefix_status.add_argument("--queue-dir", required=True)
+    queue_prefix_status.add_argument("--skeleton-hash")
+    queue_prefix_status.add_argument("--node-id")
+    queue_prefix_status.add_argument("--profile-id")
+
     queue_status = sub.add_parser("queue-status")
     queue_status.add_argument("--queue-dir", required=True)
     queue_status.add_argument("--request-id")
     queue_status.add_argument("--batch-id")
+
+    queue_cancel = sub.add_parser("queue-cancel")
+    queue_cancel.add_argument("--queue-dir", required=True)
+    queue_cancel.add_argument("--request-id")
+    queue_cancel.add_argument("--batch-id")
+    queue_cancel.add_argument("--reason", default="cancelled by operator")
 
     queue_poll = sub.add_parser("queue-poll")
     queue_poll.add_argument("--queue-dir", required=True)
@@ -84,7 +111,10 @@ def _run(args: argparse.Namespace) -> int:
         "queue-work": _cmd_queue_work,
         "queue-worker": _cmd_queue_work,
         "queue-reap-leases": _cmd_queue_reap,
+        "queue-warm-prefixes": _cmd_queue_warm_prefixes,
+        "queue-prefix-status": _cmd_queue_prefix_status,
         "queue-status": _cmd_queue_status,
+        "queue-cancel": _cmd_queue_cancel,
         "queue-poll": _cmd_queue_poll,
         "queue-collect": _cmd_queue_collect,
     }
@@ -176,6 +206,9 @@ def _queue_work_once(queue: InferenceQueue, registry: ProfileRegistry, runner: o
         worker_id=args.worker_id,
         lease_ttl_s=args.lease_ttl_s,
         heartbeat_interval_s=args.heartbeat_interval_s,
+        warm_prefixes=args.warm_prefixes,
+        warm_min_group_size=args.warm_min_group_size,
+        warm_max_output_tokens=args.warm_max_output_tokens,
     )
 
 
@@ -184,8 +217,37 @@ def _cmd_queue_reap(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_queue_warm_prefixes(args: argparse.Namespace) -> int:
+    queue = InferenceQueue(args.queue_dir)
+    registry = ProfileRegistry.load(args.profiles_dir)
+    runner = _make_runner(args.runner, args.command or [], args.runner_timeout_s)
+    _emit(
+        queue.warm_prefixes(
+            registry=registry,
+            runner=runner,
+            node_id=args.node_id,
+            batch_id=args.batch_id,
+            batch_key=args.batch_key,
+            min_group_size=args.min_group_size,
+            max_output_tokens=args.max_output_tokens,
+            force=args.force,
+        )
+    )
+    return 0
+
+
+def _cmd_queue_prefix_status(args: argparse.Namespace) -> int:
+    _emit(InferenceQueue(args.queue_dir).prefix_warm_status(skeleton_hash=args.skeleton_hash, node_id=args.node_id, profile_id=args.profile_id))
+    return 0
+
+
 def _cmd_queue_status(args: argparse.Namespace) -> int:
     _emit(InferenceQueue(args.queue_dir).status(request_id=args.request_id, batch_id=args.batch_id))
+    return 0
+
+
+def _cmd_queue_cancel(args: argparse.Namespace) -> int:
+    _emit(InferenceQueue(args.queue_dir).cancel(request_id=args.request_id, batch_id=args.batch_id, reason=args.reason))
     return 0
 
 
@@ -202,7 +264,7 @@ def _cmd_queue_collect(args: argparse.Namespace) -> int:
 def _add_queue_worker_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--queue-dir", required=True)
     parser.add_argument("--profiles-dir", required=True)
-    parser.add_argument("--runner", choices=["fake", "command", "spark"], default="fake")
+    parser.add_argument("--runner", choices=RUNNER_CHOICES, default="fake")
     parser.add_argument("--runner-timeout-s", type=int, default=300)
     parser.add_argument("--command", nargs="*")
     parser.add_argument("--node-id")
@@ -213,6 +275,9 @@ def _add_queue_worker_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--worker-id")
     parser.add_argument("--lease-ttl-s", type=int, default=900)
     parser.add_argument("--heartbeat-interval-s", type=float, default=5.0)
+    parser.add_argument("--warm-prefixes", action="store_true")
+    parser.add_argument("--warm-min-group-size", type=int, default=2)
+    parser.add_argument("--warm-max-output-tokens", type=int, default=1)
     parser.add_argument("--loop", action="store_true")
     parser.add_argument("--sleep-s", type=float, default=1.0)
     parser.add_argument("--max-iterations", type=int, default=0)
@@ -236,6 +301,14 @@ def _make_runner(kind: str, command: list[str], timeout_s: int):
         return FakeRunner()
     if kind == "command":
         return CommandRunner(command, timeout_s=timeout_s)
+    if kind == "vllm":
+        return VllmOpenAIRunner(timeout_s=timeout_s)
+    if kind == "nixl":
+        return NixlProxyRunner(timeout_s=timeout_s)
+    if kind == "antirez":
+        return AntirezRunner(timeout_s=timeout_s)
+    if kind == "auto":
+        return AutoRunner(timeout_s=timeout_s)
     if kind == "spark":
         return SparkHttpRunner(timeout_s=timeout_s)
     raise ValueError(f"unknown runner: {kind}")

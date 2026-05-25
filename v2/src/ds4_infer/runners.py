@@ -7,6 +7,7 @@ import shlex
 import subprocess
 import time
 from typing import Any, Protocol
+from urllib import error, request as urlrequest
 
 from .builders import model_batch_payload, request_messages, request_prompt
 from .profiles import ModelProfile
@@ -172,6 +173,158 @@ except urllib.error.HTTPError as exc:
         return result
 
 
+class OpenAICompatibleRunner:
+    def __init__(
+        self,
+        *,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        timeout_s: int = 300,
+        chat_endpoint: str = "/v1/chat/completions",
+        completion_endpoint: str = "/v1/completions",
+        default_extra_body: dict[str, Any] | None = None,
+    ) -> None:
+        self.base_url = (base_url or os.environ.get("DS4_OPENAI_BASE_URL") or "http://127.0.0.1:8000").rstrip("/")
+        self.api_key = api_key if api_key is not None else os.environ.get("DS4_OPENAI_API_KEY", "")
+        self.timeout_s = timeout_s
+        self.chat_endpoint = chat_endpoint
+        self.completion_endpoint = completion_endpoint
+        self.default_extra_body = dict(default_extra_body or {})
+
+    def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
+        started = time.time()
+        try:
+            if request.chat:
+                payload = _openai_payload(request, profile)
+                _merge_extra_body(payload, self.default_extra_body)
+                data = self._post_json(self.chat_endpoint, payload)
+                text = extract_openai_chat_text(data)
+            else:
+                payload: dict[str, Any] = {
+                    "model": profile.model_id,
+                    "prompt": request_prompt(request),
+                    "temperature": request.temperature,
+                    "max_tokens": request.max_output_tokens,
+                }
+                if request.thinking_budget_tokens > 0:
+                    payload["extra_body"] = {"thinking_budget_tokens": request.thinking_budget_tokens}
+                _merge_extra_body(payload, self.default_extra_body)
+                data = self._post_json(self.completion_endpoint, payload)
+                text = extract_openai_completion_text(data)
+            result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
+            result["usage"].update(_usage_from_response(data))
+            result["transport"] = {"base_url": self.base_url, "duration_s": round(time.time() - started, 6)}
+            return result
+        except Exception as exc:
+            result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": str(exc)}, sort_keys=True), status="transport_failed")
+            result["transport"] = {"base_url": self.base_url, "duration_s": round(time.time() - started, 6), "error": str(exc)}
+            return result
+
+    def _post_json(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+        body = json.dumps(payload).encode("utf-8")
+        headers = {"content-type": "application/json"}
+        if self.api_key:
+            headers["authorization"] = f"Bearer {self.api_key}"
+        req = urlrequest.Request(self.base_url + endpoint, data=body, headers=headers, method="POST")
+        try:
+            with urlrequest.urlopen(req, timeout=self.timeout_s) as response:
+                text = response.read().decode("utf-8")
+        except error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[-4000:]
+            raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
+        return json.loads(text)
+
+
+class VllmOpenAIRunner(OpenAICompatibleRunner):
+    def __init__(self, *, base_url: str | None = None, api_key: str | None = None, timeout_s: int = 300) -> None:
+        super().__init__(
+            base_url=base_url or os.environ.get("DS4_VLLM_BASE_URL") or os.environ.get("DS4_VLLM_MTP_BASE_URL"),
+            api_key=api_key if api_key is not None else os.environ.get("DS4_VLLM_API_KEY", ""),
+            timeout_s=timeout_s,
+            default_extra_body=_json_env("DS4_VLLM_EXTRA_BODY_JSON"),
+        )
+
+
+class NixlProxyRunner(OpenAICompatibleRunner):
+    def __init__(self, *, base_url: str | None = None, api_key: str | None = None, timeout_s: int = 300) -> None:
+        super().__init__(
+            base_url=base_url or os.environ.get("DS4_NIXL_BASE_URL") or "http://127.0.0.1:8192",
+            api_key=api_key if api_key is not None else os.environ.get("DS4_NIXL_API_KEY", ""),
+            timeout_s=timeout_s,
+            default_extra_body=_json_env("DS4_NIXL_EXTRA_BODY_JSON"),
+        )
+
+
+class AntirezRunner:
+    def __init__(self, *, base_url: str | None = None, timeout_s: int = 300) -> None:
+        self.base_url = (base_url or os.environ.get("DS4_ANTIREZ_BASE_URL") or "http://127.0.0.1:8080").rstrip("/")
+        self.timeout_s = timeout_s
+        self.completion_endpoint = os.environ.get("DS4_ANTIREZ_COMPLETION_ENDPOINT", "/completion")
+        self.fallback_completion_endpoint = os.environ.get("DS4_ANTIREZ_FALLBACK_COMPLETION_ENDPOINT", "/v1/completions")
+
+    def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
+        started = time.time()
+        try:
+            payload = {
+                "model": profile.model_id,
+                "prompt": request_prompt(request),
+                "temperature": request.temperature,
+                "max_tokens": request.max_output_tokens,
+                "n_predict": request.max_output_tokens,
+                "stream": False,
+            }
+            data = self._post_completion(payload)
+            text = extract_completion_like_text(data)
+            result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
+            result["usage"].update(_usage_from_response(data))
+            result["transport"] = {"base_url": self.base_url, "duration_s": round(time.time() - started, 6)}
+            return result
+        except Exception as exc:
+            result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": str(exc)}, sort_keys=True), status="transport_failed")
+            result["transport"] = {"base_url": self.base_url, "duration_s": round(time.time() - started, 6), "error": str(exc)}
+            return result
+
+    def _post_completion(self, payload: dict[str, Any]) -> dict[str, Any]:
+        endpoints = [self.completion_endpoint]
+        if self.fallback_completion_endpoint not in endpoints:
+            endpoints.append(self.fallback_completion_endpoint)
+        last_exc: Exception | None = None
+        for endpoint in endpoints:
+            try:
+                return self._post_json(endpoint, payload)
+            except Exception as exc:
+                last_exc = exc
+        assert last_exc is not None
+        raise last_exc
+
+    def _post_json(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+        body = json.dumps(payload).encode("utf-8")
+        req = urlrequest.Request(self.base_url + endpoint, data=body, headers={"content-type": "application/json"}, method="POST")
+        try:
+            with urlrequest.urlopen(req, timeout=self.timeout_s) as response:
+                text = response.read().decode("utf-8")
+        except error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[-4000:]
+            raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
+        return json.loads(text)
+
+
+class AutoRunner:
+    def __init__(self, *, timeout_s: int = 300) -> None:
+        self._vllm = VllmOpenAIRunner(timeout_s=timeout_s)
+        self._nixl = NixlProxyRunner(timeout_s=timeout_s)
+        self._antirez = AntirezRunner(timeout_s=timeout_s)
+
+    def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
+        if profile.backend in {"vllm", "vllm_mtp"}:
+            return self._vllm.run_one(request, profile)
+        if profile.backend == "vllm_nixl":
+            return self._nixl.run_one(request, profile)
+        if profile.backend == "antirez":
+            return self._antirez.run_one(request, profile)
+        return self._vllm.run_one(request, profile)
+
+
 def extract_openai_chat_text(data: dict[str, Any]) -> str:
     choices = data.get("choices")
     if isinstance(choices, list) and choices:
@@ -193,7 +346,7 @@ def extract_openai_completion_text(data: dict[str, Any]) -> str:
             return str(message.get("content"))
         text = choices[0].get("text") if isinstance(choices[0], dict) else None
         if text is not None:
-            return str(text)
+            return strip_visible_thinking(str(text))
     return extract_completion_like_text(data)
 
 
@@ -201,22 +354,57 @@ def extract_completion_like_text(data: dict[str, Any]) -> str:
     for key in ("content", "response", "text", "completion", "generated_text"):
         value = data.get(key)
         if isinstance(value, str):
-            return value
+            return strip_visible_thinking(value)
     choices = data.get("choices")
     if isinstance(choices, list) and choices and isinstance(choices[0], dict):
         for key in ("text", "content"):
             value = choices[0].get(key)
             if isinstance(value, str):
-                return value
+                return strip_visible_thinking(value)
     return json.dumps(data, sort_keys=True)
+
+
+def strip_visible_thinking(text: str) -> str:
+    marker = "</think>"
+    if marker not in text:
+        return text
+    return text.split(marker, 1)[1].lstrip()
 
 
 def make_runner(kind: str, *, timeout_s: int) -> Any:
     if kind == "fake":
         return FakeRunner()
+    if kind == "auto":
+        return AutoRunner(timeout_s=timeout_s)
+    if kind == "vllm":
+        return VllmOpenAIRunner(timeout_s=timeout_s)
+    if kind == "nixl":
+        return NixlProxyRunner(timeout_s=timeout_s)
+    if kind == "antirez":
+        return AntirezRunner(timeout_s=timeout_s)
     if kind == "spark":
         return SparkHttpRunner(timeout_s=timeout_s)
     raise ValueError(f"unknown runner: {kind}")
+
+
+def _openai_payload(request: InferenceRequest, profile: ModelProfile) -> dict[str, Any]:
+    if request.chat:
+        payload: dict[str, Any] = {
+            "model": profile.model_id,
+            "messages": request_messages(request),
+            "temperature": request.temperature,
+            "max_tokens": request.max_output_tokens,
+        }
+    else:
+        payload = {
+            "model": profile.model_id,
+            "prompt": request_prompt(request),
+            "temperature": request.temperature,
+            "max_tokens": request.max_output_tokens,
+        }
+    if request.thinking_budget_tokens > 0:
+        payload["extra_body"] = {"thinking_budget_tokens": request.thinking_budget_tokens}
+    return payload
 
 
 def _usage_from_response(data: dict[str, Any]) -> dict[str, Any]:
@@ -233,3 +421,12 @@ def _json_env(name: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _merge_extra_body(payload: dict[str, Any], extra_body: dict[str, Any]) -> None:
+    if not extra_body:
+        return
+    existing = payload.get("extra_body")
+    merged = dict(existing) if isinstance(existing, dict) else {}
+    merged.update(extra_body)
+    payload["extra_body"] = merged

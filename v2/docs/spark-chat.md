@@ -14,6 +14,10 @@ PYTHONPATH=src python3 -m ds4_chat.cli -m qwen
 PYTHONPATH=src python3 -m ds4_chat.cli -m ds4a
 ```
 
+If Spark hostnames do not resolve from the Mac Studio, run
+`python3 v2/scripts/print_spark_hosts.py` from the repo root and install the
+generated entries into `/etc/hosts`.
+
 Single question mode:
 
 ```bash

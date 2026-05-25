@@ -35,6 +35,28 @@ by the Spark runner; CPU service execution is handled by `ds4_tools.cpu_batch`.
 GPU/status endpoints are Spark-local service concerns and should be exposed by
 SparkRunner or the gateway process on each Spark, not by the Mac controller.
 
+## Startup resident loading
+
+The v2 way to make reboots boring is topology-driven warmup, not a hard-coded
+fleet script. Install `v2/deploy/systemd-user/ds4-startup-models.service` on
+each Spark with `DS4_NODE_ID` set to that Spark's topology ID, or leave it as
+`%H` when hostnames are `spark0` through `spark7`.
+
+At boot the service runs:
+
+```bash
+PYTHONPATH=src python3 -m ds4_infer.cli startup-models \
+  --profiles-dir profiles/models \
+  --topology profiles/topology/static_sparks.json \
+  --node-id "$DS4_NODE_ID"
+```
+
+That posts one tiny request per resident profile to the Spark-local
+OpenAI-compatible endpoint. It warms spark0-3 Qwen profiles, spark4's grouped
+DSV4 vLLM/MTP lane, and spark6's antirez profile. Spark5 is a grouped-lane
+secondary and spark7 is experimental/on-demand, so neither gets a production
+warmup request.
+
 ## Tuning defaults worth preserving
 
 The old GB10/Spark vLLM defaults were selected for throughput:
