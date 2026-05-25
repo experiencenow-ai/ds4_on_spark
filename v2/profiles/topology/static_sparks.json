@@ -129,6 +129,9 @@
         "spark4",
         "spark5"
       ]
+    },
+    "profile_node_group_ingress": {
+      "dsv4_vllm_mtp_smartest_v1": "spark5"
     }
   }
 }

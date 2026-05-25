@@ -83,6 +83,7 @@ class SparkTopology:
         if len(self._by_id) != len(self.nodes):
             raise ValueError("duplicate node_id in spark topology")
         self.profile_node_groups = _load_profile_node_groups(self.routing_policy, self._by_id)
+        self.profile_group_ingress = _load_profile_group_ingress(self.routing_policy, self.profile_node_groups)
 
     @staticmethod
     def load(path: str | Path) -> "SparkTopology":
@@ -108,9 +109,10 @@ class SparkTopology:
         current_load = current_load or {}
         grouped_node_ids = self.profile_node_groups.get(profile.profile_id)
         if grouped_node_ids:
+            ingress = self.profile_group_ingress.get(profile.profile_id, "+".join(grouped_node_ids))
             return SparkAssignment(
                 profile_id=profile.profile_id,
-                node_id="+".join(grouped_node_ids),
+                node_id=ingress,
                 resident=True,
                 dynamic_load=False,
                 reason="resident_profile_group",
@@ -191,3 +193,19 @@ def _load_profile_node_groups(routing_policy: dict[str, Any], nodes_by_id: dict[
                 raise ValueError(f"profile node group {profile_id!r} references node {node_id!r} that does not list the profile")
         groups[str(profile_id)] = node_ids
     return groups
+
+
+def _load_profile_group_ingress(routing_policy: dict[str, Any], groups: dict[str, tuple[str, ...]]) -> dict[str, str]:
+    raw = routing_policy.get("profile_node_group_ingress", {})
+    if not isinstance(raw, dict):
+        raise ValueError("routing_policy.profile_node_group_ingress must be an object")
+    out: dict[str, str] = {}
+    for profile_id, ingress in raw.items():
+        profile_key = str(profile_id)
+        node_id = str(ingress)
+        if profile_key not in groups:
+            raise ValueError(f"profile node group ingress references unknown profile group: {profile_key!r}")
+        if node_id not in groups[profile_key]:
+            raise ValueError(f"profile node group ingress {node_id!r} is not in group {profile_key!r}")
+        out[profile_key] = node_id
+    return out

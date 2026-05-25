@@ -3,11 +3,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 
 from .profiles import ProfileRegistry
 from .queue import InferenceQueue
-from .runners import AntirezRunner, AutoRunner, CommandRunner, FakeRunner, SparkHttpRunner, VllmOpenAIRunner
-from .service import load_requests_jsonl, run_requests
+from .runners import CommandRunner, FakeRunner, SparkHttpRunner
+from .service import load_requests_jsonl
 from .topology import SparkTopology
 
 
@@ -25,29 +26,31 @@ def main(argv: list[str] | None = None) -> int:
     submit = sub.add_parser("submit")
     submit.add_argument("--profiles-dir", required=True)
     submit.add_argument("--requests", required=True)
-    submit.add_argument("--out", required=True)
-    submit.add_argument("--runner", choices=["fake", "command", "vllm", "antirez", "auto", "spark"], default="fake")
-    submit.add_argument("--runner-timeout-s", type=int, default=300)
-    submit.add_argument("--topology")
-    submit.add_argument("--command", nargs="*")
-    submit.add_argument("--run", action="store_true")
 
     queue_submit = sub.add_parser("queue-submit")
     queue_submit.add_argument("--queue-dir", required=True)
     queue_submit.add_argument("--profiles-dir", required=True)
     queue_submit.add_argument("--requests", required=True)
-    queue_submit.add_argument("--topology")
+    queue_submit.add_argument("--topology", required=True)
     queue_submit.add_argument("--batch-id")
 
+    queue_submit_cpu = sub.add_parser("queue-submit-cpu")
+    queue_submit_cpu.add_argument("--queue-dir", required=True)
+    queue_submit_cpu.add_argument("--service", required=True)
+    queue_submit_cpu.add_argument("--items", required=True)
+    queue_submit_cpu.add_argument("--batch-id")
+    queue_submit_cpu.add_argument("--node-id")
+    queue_submit_cpu.add_argument("--immediate", action="store_true")
+
     queue_work = sub.add_parser("queue-work")
-    queue_work.add_argument("--queue-dir", required=True)
-    queue_work.add_argument("--profiles-dir", required=True)
-    queue_work.add_argument("--runner", choices=["fake", "command", "vllm", "antirez", "auto", "spark"], default="fake")
-    queue_work.add_argument("--runner-timeout-s", type=int, default=300)
-    queue_work.add_argument("--command", nargs="*")
-    queue_work.add_argument("--node-id")
-    queue_work.add_argument("--batch-key")
-    queue_work.add_argument("--limit", type=int, default=1)
+    _add_queue_worker_args(queue_work)
+
+    queue_worker = sub.add_parser("queue-worker")
+    _add_queue_worker_args(queue_worker)
+
+    queue_reap = sub.add_parser("queue-reap-leases")
+    queue_reap.add_argument("--queue-dir", required=True)
+    queue_reap.add_argument("--max-attempts", type=int, default=3)
 
     queue_status = sub.add_parser("queue-status")
     queue_status.add_argument("--queue-dir", required=True)
@@ -78,14 +81,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "submit":
-        registry = ProfileRegistry.load(args.profiles_dir)
         requests = load_requests_jsonl(args.requests)
-        if not args.run:
-            print(json.dumps({"state": "accepted", "request_count": len(requests)}, sort_keys=True))
-            return 0
-        runner = _make_runner(args.runner, args.command or [], args.runner_timeout_s)
-        topology = SparkTopology.load(args.topology) if args.topology else None
-        print(json.dumps(run_requests(requests=requests, registry=registry, runner=runner, out_dir=args.out, topology=topology), indent=2, sort_keys=True))
+        print(json.dumps({"state": "accepted", "request_count": len(requests), "live_run": "removed", "next": "use queue-submit plus queue-worker"}, sort_keys=True))
         return 0
 
     if args.cmd == "queue-submit":
@@ -96,11 +93,30 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id=args.batch_id), indent=2, sort_keys=True))
         return 0
 
-    if args.cmd == "queue-work":
+    if args.cmd == "queue-submit-cpu":
+        queue = InferenceQueue(args.queue_dir)
+        items = _load_jsonl(args.items)
+        print(json.dumps(queue.submit_cpu_requests(service=args.service, items=items, batch_id=args.batch_id, immediate=args.immediate, node_id=args.node_id), indent=2, sort_keys=True))
+        return 0
+
+    if args.cmd in {"queue-work", "queue-worker"}:
         queue = InferenceQueue(args.queue_dir)
         registry = ProfileRegistry.load(args.profiles_dir)
         runner = _make_runner(args.runner, args.command or [], args.runner_timeout_s)
-        print(json.dumps(queue.work(registry=registry, runner=runner, node_id=args.node_id, batch_key=args.batch_key, limit=args.limit), indent=2, sort_keys=True))
+        iterations = 0
+        while True:
+            result = queue.work(registry=registry, runner=runner, node_id=args.node_id, batch_key=args.batch_key, limit=args.limit, concurrency=args.concurrency, worker_id=args.worker_id, lease_ttl_s=args.lease_ttl_s, heartbeat_interval_s=args.heartbeat_interval_s)
+            print(json.dumps(result, sort_keys=True), flush=True)
+            iterations += 1
+            if not args.loop or (args.max_iterations > 0 and iterations >= args.max_iterations):
+                break
+            if result.get("claimed_count", 0) == 0:
+                time.sleep(args.sleep_s)
+        return 0
+
+    if args.cmd == "queue-reap-leases":
+        queue = InferenceQueue(args.queue_dir)
+        print(json.dumps(queue.requeue_expired_leases(max_attempts=args.max_attempts), indent=2, sort_keys=True))
         return 0
 
     if args.cmd == "queue-status":
@@ -121,17 +137,42 @@ def main(argv: list[str] | None = None) -> int:
     raise AssertionError(args.cmd)
 
 
+def _add_queue_worker_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--queue-dir", required=True)
+    parser.add_argument("--profiles-dir", required=True)
+    parser.add_argument("--runner", choices=["fake", "command", "spark"], default="fake")
+    parser.add_argument("--runner-timeout-s", type=int, default=300)
+    parser.add_argument("--command", nargs="*")
+    parser.add_argument("--node-id")
+    parser.add_argument("--batch-key")
+    parser.add_argument("--limit", type=int, default=1)
+    parser.add_argument("--concurrency", type=int, default=1)
+    parser.add_argument("--worker-id")
+    parser.add_argument("--lease-ttl-s", type=int, default=900)
+    parser.add_argument("--heartbeat-interval-s", type=float, default=5.0)
+    parser.add_argument("--loop", action="store_true")
+    parser.add_argument("--sleep-s", type=float, default=1.0)
+    parser.add_argument("--max-iterations", type=int, default=0)
+
+
+def _load_jsonl(path: str) -> list[dict]:
+    rows: list[dict] = []
+    with open(path, "r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if not isinstance(row, dict):
+                raise ValueError(f"CPU item line {line_number} must be a JSON object")
+            rows.append(row)
+    return rows
+
+
 def _make_runner(kind: str, command: list[str], timeout_s: int):
     if kind == "fake":
         return FakeRunner()
     if kind == "command":
         return CommandRunner(command, timeout_s=timeout_s)
-    if kind == "vllm":
-        return VllmOpenAIRunner(timeout_s=timeout_s)
-    if kind == "antirez":
-        return AntirezRunner(timeout_s=timeout_s)
-    if kind == "auto":
-        return AutoRunner(timeout_s=timeout_s)
     if kind == "spark":
         return SparkHttpRunner(timeout_s=timeout_s)
     raise ValueError(f"unknown runner: {kind}")

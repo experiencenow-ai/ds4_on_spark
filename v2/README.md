@@ -59,24 +59,25 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-submit \
   --requests requests.jsonl \
   --batch-id centaur-run-001
 
-PYTHONPATH=src python3 -m ds4_infer.cli queue-work \
+PYTHONPATH=src python3 -m ds4_infer.cli queue-worker \
   --queue-dir /tmp/ds4_queue \
   --profiles-dir profiles/models \
   --runner spark \
   --node-id spark0 \
-  --limit 16
+  --limit 16 \
+  --concurrency 8
 
 PYTHONPATH=src python3 -m ds4_infer.cli queue-poll \
   --queue-dir /tmp/ds4_queue \
   --after-event-id 0
 ```
 
-The queue internally groups requests by model/profile, Spark node, chat mode, job class, input/output/thinking buckets, and shared prefix hash. Centaur does not need to know batch-size folklore.
+The queue internally groups requests by model/profile, Spark node, chat mode, job class, input/output/thinking buckets, and shared prefix hash. Workers claim one compatible group, commit the lease, and batch-capable runners submit that group to `/ds4/batches` as one request. Centaur does not need to know batch-size folklore.
 
 `--runner spark` executes the model request on the selected Spark over SSH,
-using that Spark's local `http://127.0.0.1:8000` unified/OpenAI-compatible API.
-It tries `/ds4/batches` first and falls back to `/v1/chat/completions` or
-`/v1/completions` when only vLLM is exposed.
+using that Spark's local `http://127.0.0.1:8000` DS4 API. Spark inference uses
+`/ds4/batches`; legacy `/v1/*` endpoints are not part of the production
+contract.
 
 SparkRunner-compatible batches now use the queue path:
 
@@ -112,6 +113,16 @@ tool:spark.transfer.run
 
 Bash-backed tools use fixed argv, schema validation, timeouts, output caps, and no `shell=True`. CPU service batches use a bounded process-wide pool; allowlisted commands come only from `CPU_SERVICE_COMMANDS_JSON`.
 
+CPU services can also use the durable queue and worker lease path:
+
+```bash
+PYTHONPATH=src python3 -m ds4_infer.cli queue-submit-cpu \
+  --queue-dir /tmp/ds4_queue \
+  --service text_metrics \
+  --items cpu_items.jsonl \
+  --batch-id cpu-run-001
+```
+
 ## Spark transfer
 
 Plan a direct Spark-to-Spark transfer:
@@ -130,7 +141,7 @@ A separate local GitHub/Forgejo layer is not part of v2. Merged PRs in the main 
 
 ## Live runners, web tools, and Spark chat
 
-Live runner adapters now exist for OpenAI-compatible vLLM, vLLM/MTP, and antirez-style completion endpoints. See `docs/llm-runners.md`.
+Live runner adapters now exist for the DS4 Spark batch API, local vLLM compatibility probes, and antirez-style completion endpoints. See `docs/llm-runners.md`.
 
 `tool:web.fetch` provides rendered-page access through Playwright when installed, with a plain HTML fallback for simple pages. See `docs/web-tools.md`.
 

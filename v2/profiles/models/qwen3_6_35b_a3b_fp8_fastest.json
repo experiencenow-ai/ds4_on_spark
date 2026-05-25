@@ -7,6 +7,7 @@
   "supported_job_classes": ["summary", "json_repair", "triage", "tool_selection"],
   "supports_chat": true,
   "supports_completion": true,
+  "supports_thinking": true,
   "production_eligible": true,
   "quality": {"ds4_eval_correct": 68, "ds4_eval_total": 92, "ds4_eval_accuracy": 0.739},
   "performance": {"measured_output_tps": 241.8, "latency_rank": 0.5},

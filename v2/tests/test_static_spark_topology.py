@@ -68,7 +68,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         topology = SparkTopology.load(TOPOLOGY)
         profile = registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
         assignment = topology.assign_profile(profile, immediate=False, current_load={})
-        self.assertEqual(assignment.node_id, "spark4+spark5")
+        self.assertEqual(assignment.node_id, "spark5")
         self.assertEqual(assignment.node_ids, ("spark4", "spark5"))
         self.assertEqual(assignment.reason, "resident_profile_group")
 
@@ -87,10 +87,10 @@ class StaticSparkTopologyTests(unittest.TestCase):
             )
             self.assertEqual(manifest["topology_id"], "static_sparks_2026_05_25_v3")
             self.assertEqual(manifest["selected_nodes"]["spark0"], 1)
-            self.assertEqual(manifest["selected_nodes"]["spark4+spark5"], 1)
+            self.assertEqual(manifest["selected_nodes"]["spark5"], 1)
             responses = [json.loads(line) for line in (Path(tmp) / "responses.jsonl").read_text().splitlines()]
             self.assertEqual(responses[0]["selected_node"]["node_id"], "spark0")
-            self.assertEqual(responses[1]["selected_node"]["node_id"], "spark4+spark5")
+            self.assertEqual(responses[1]["selected_node"]["node_id"], "spark5")
             self.assertEqual(responses[1]["selected_node"]["node_ids"], ["spark4", "spark5"])
 
     def test_immediate_smart_request_uses_antirez_support_lane(self) -> None:

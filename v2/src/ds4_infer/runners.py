@@ -7,8 +7,8 @@ import shlex
 import subprocess
 import time
 from typing import Any, Protocol
-from urllib import error, request as urlrequest
 
+from .builders import model_batch_payload, request_messages, request_prompt
 from .profiles import ModelProfile
 from .schemas import InferenceRequest, make_result
 
@@ -20,6 +20,11 @@ class Runner(Protocol):
 
 class NodeRunner(Protocol):
     def run_one_on_node(self, request: InferenceRequest, profile: ModelProfile, node_id: str | None) -> dict:
+        ...
+
+
+class BatchNodeRunner(Protocol):
+    def run_many_on_node(self, requests: list[InferenceRequest], profile: ModelProfile, node_id: str | None, *, concurrency: int = 1) -> dict[str, dict]:
         ...
 
 
@@ -63,49 +68,50 @@ class SparkHttpRunner:
         self.timeout_s = timeout_s
         self.command_runner = command_runner or subprocess.run
         self.base_url = os.environ.get("DS4_SPARK_HTTP_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
-        self.batch_first = os.environ.get("DS4_SPARK_BATCH_FIRST", "1") != "0"
         self.node_map = _json_env("DS4_SPARK_NODE_MAP_JSON")
 
     def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
         return self.run_one_on_node(request, profile, None)
 
     def run_one_on_node(self, request: InferenceRequest, profile: ModelProfile, node_id: str | None) -> dict:
+        return self.run_many_on_node([request], profile, node_id, concurrency=1)[request.request_id]
+
+    def run_many_on_node(self, requests: list[InferenceRequest], profile: ModelProfile, node_id: str | None, *, concurrency: int = 1) -> dict[str, dict]:
         started = time.time()
-        host = self._host(node_id)
-        payload = self._payload(request, profile)
+        request_list = list(requests)
+        if not request_list:
+            return {}
         try:
-            data = self._remote_post(host, payload)
-            text = extract_openai_chat_text(data) if request.chat else extract_openai_completion_text(data)
-            result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
-            result["usage"].update(_usage_from_response(data))
-            result["transport"] = {"node_id": host, "base_url": self.base_url, "duration_s": round(time.time() - started, 6)}
-            return result
+            host = self._host(node_id)
+            payload = self._payload_many(request_list, profile, concurrency=concurrency)
+            batch = self._remote_post_batch(host, payload)
+            return self._batch_results(request_list, profile, host, batch, started, concurrency)
         except Exception as exc:
-            result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": str(exc)}, sort_keys=True), status="transport_failed")
-            result["transport"] = {"node_id": host, "base_url": self.base_url, "duration_s": round(time.time() - started, 6), "error": str(exc)}
-            return result
+            return {request.request_id: self._transport_failure(request, profile, node_id, started, str(exc)) for request in request_list}
 
     def _host(self, node_id: str | None) -> str:
-        raw = (node_id or os.environ.get("DS4_SPARK_DEFAULT_NODE") or "spark4").split("+", 1)[0]
-        mapped = self.node_map.get(raw, raw)
+        raw = node_id or os.environ.get("DS4_SPARK_DEFAULT_NODE")
+        if not raw:
+            raise ValueError("spark runner requires selected node_id or DS4_SPARK_DEFAULT_NODE")
+        mapped = self.node_map.get(raw)
+        if mapped is None:
+            if "+" in raw:
+                mapped = raw.rsplit("+", 1)[-1]
+            else:
+                mapped = self.node_map.get(raw, raw)
         return str(mapped)
 
     def _payload(self, request: InferenceRequest, profile: ModelProfile) -> dict[str, Any]:
-        item: dict[str, Any] = {"custom_id": request.request_id, "max_tokens": request.max_output_tokens, "temperature": request.temperature}
-        if request.chat:
-            item["messages"] = request_messages(request)
-        else:
-            item["prompt"] = request_prompt(request)
+        return self._payload_many([request], profile, concurrency=1)
+
+    def _payload_many(self, requests: list[InferenceRequest], profile: ModelProfile, *, concurrency: int) -> dict[str, Any]:
         return {
-            "request_id": request.request_id,
+            "request_ids": [request.request_id for request in requests],
             "model": profile.model_id,
-            "batch_first": self.batch_first,
-            "batch_payload": {"model": profile.model_id, "items": [item], "concurrency": 1, "timeout_s": self.timeout_s, "max_tokens": request.max_output_tokens},
-            "openai_endpoint": "/v1/chat/completions" if request.chat else "/v1/completions",
-            "openai_payload": _openai_payload(request, profile),
+            "batch_payload": model_batch_payload(requests, profile, timeout_s=self.timeout_s, concurrency=concurrency),
         }
 
-    def _remote_post(self, host: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _remote_post_batch(self, host: str, payload: dict[str, Any]) -> dict[str, Any]:
         remote = r'''
 import json,sys,urllib.error,urllib.request
 base_url = __import__("os").environ.get("DS4_SPARK_HTTP_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
@@ -116,16 +122,8 @@ def post(endpoint, body):
     with urllib.request.urlopen(req, timeout=%d) as response:
         return json.loads(response.read().decode("utf-8"))
 try:
-    result = None
-    if payload.get("batch_first"):
-        try:
-            batch = post("/ds4/batches", payload["batch_payload"])
-            result = batch.get("results", [{}])[0].get("response", batch)
-        except Exception:
-            result = None
-    if result is None:
-        result = post(payload["openai_endpoint"], payload["openai_payload"])
-    print(json.dumps(result, sort_keys=True))
+    batch = post("/ds4/batches", payload["batch_payload"])
+    print(json.dumps(batch, sort_keys=True))
 except urllib.error.HTTPError as exc:
     detail = exc.read().decode("utf-8", errors="replace")[-4000:]
     raise SystemExit("HTTP %%s: %%s" %% (exc.code, detail))
@@ -143,140 +141,35 @@ except urllib.error.HTTPError as exc:
             raise RuntimeError(str(completed.stderr)[-4000:])
         return json.loads(str(completed.stdout))
 
-
-class OpenAICompatibleRunner:
-    def __init__(self, *, base_url: str | None = None, api_key: str | None = None, timeout_s: int = 300, chat_endpoint: str = "/v1/chat/completions", completion_endpoint: str = "/v1/completions", default_extra_body: dict[str, Any] | None = None) -> None:
-        self.base_url = (base_url or os.environ.get("DS4_OPENAI_BASE_URL") or "http://127.0.0.1:8000").rstrip("/")
-        self.api_key = api_key if api_key is not None else os.environ.get("DS4_OPENAI_API_KEY", "")
-        self.timeout_s = timeout_s
-        self.chat_endpoint = chat_endpoint
-        self.completion_endpoint = completion_endpoint
-        self.default_extra_body = dict(default_extra_body or {})
-
-    def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
-        started = time.time()
-        try:
-            if request.chat:
-                data = self._post_json(self.chat_endpoint, self._chat_payload(request, profile))
-                text = extract_openai_chat_text(data)
-            else:
-                data = self._post_json(self.completion_endpoint, self._completion_payload(request, profile))
-                text = extract_openai_completion_text(data)
+    def _batch_results(self, requests: list[InferenceRequest], profile: ModelProfile, host: str, batch: dict[str, Any], started: float, concurrency: int) -> dict[str, dict]:
+        rows = batch.get("results")
+        if not isinstance(rows, list):
+            raise RuntimeError(f"invalid DS4 batch response: {json.dumps(batch, sort_keys=True)[-4000:]}")
+        by_id = {str(row.get("custom_id")): row for row in rows if isinstance(row, dict) and row.get("custom_id") is not None}
+        out: dict[str, dict] = {}
+        for index, request in enumerate(requests):
+            row = by_id.get(request.request_id)
+            if row is None and index < len(rows) and isinstance(rows[index], dict):
+                row = rows[index]
+            if not isinstance(row, dict):
+                out[request.request_id] = self._transport_failure(request, profile, host, started, "missing DS4 batch item")
+                continue
+            if not row.get("ok"):
+                out[request.request_id] = self._transport_failure(request, profile, host, started, json.dumps(row, sort_keys=True)[-4000:])
+                continue
+            response = row.get("response", batch)
+            response = response if isinstance(response, dict) else {"text": str(response)}
+            text = extract_openai_chat_text(response) if request.chat else extract_openai_completion_text(response)
             result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
-            result["usage"].update(_usage_from_response(data))
-            result["transport"] = {"base_url": self.base_url, "duration_s": round(time.time() - started, 6)}
-            return result
-        except Exception as exc:
-            result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": str(exc)}, sort_keys=True), status="transport_failed")
-            result["transport"] = {"base_url": self.base_url, "duration_s": round(time.time() - started, 6), "error": str(exc)}
-            return result
+            result["usage"].update(_usage_from_response(response))
+            result["transport"] = {"node_id": host, "base_url": self.base_url, "endpoint": "/ds4/batches", "batch_size": len(requests), "batch_concurrency": concurrency, "duration_s": round(time.time() - started, 6)}
+            out[request.request_id] = result
+        return out
 
-    def _chat_payload(self, request: InferenceRequest, profile: ModelProfile) -> dict[str, Any]:
-        payload = _openai_payload(request, profile)
-        _merge_extra_body(payload, self.default_extra_body)
-        return payload
-
-    def _completion_payload(self, request: InferenceRequest, profile: ModelProfile) -> dict[str, Any]:
-        payload: dict[str, Any] = {"model": profile.model_id, "prompt": request_prompt(request), "temperature": request.temperature, "max_tokens": request.max_output_tokens}
-        if request.thinking_budget_tokens > 0:
-            payload["extra_body"] = {"thinking_budget_tokens": request.thinking_budget_tokens}
-        _merge_extra_body(payload, self.default_extra_body)
-        return payload
-
-    def _post_json(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
-        body = json.dumps(payload).encode("utf-8")
-        headers = {"content-type": "application/json"}
-        if self.api_key:
-            headers["authorization"] = f"Bearer {self.api_key}"
-        req = urlrequest.Request(self.base_url + endpoint, data=body, headers=headers, method="POST")
-        try:
-            with urlrequest.urlopen(req, timeout=self.timeout_s) as response:
-                text = response.read().decode("utf-8")
-        except error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")[-4000:]
-            raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
-        return json.loads(text)
-
-
-class VllmOpenAIRunner(OpenAICompatibleRunner):
-    def __init__(self, *, base_url: str | None = None, api_key: str | None = None, timeout_s: int = 300) -> None:
-        super().__init__(base_url=base_url or os.environ.get("DS4_VLLM_BASE_URL") or os.environ.get("DS4_VLLM_MTP_BASE_URL"), api_key=api_key if api_key is not None else os.environ.get("DS4_VLLM_API_KEY", ""), timeout_s=timeout_s, default_extra_body=_json_env("DS4_VLLM_EXTRA_BODY_JSON"))
-
-
-class AntirezRunner:
-    def __init__(self, *, base_url: str | None = None, timeout_s: int = 300) -> None:
-        self.base_url = (base_url or os.environ.get("DS4_ANTIREZ_BASE_URL") or "http://127.0.0.1:8080").rstrip("/")
-        self.timeout_s = timeout_s
-
-    def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
-        started = time.time()
-        try:
-            payload = {"model": profile.model_id, "prompt": request_prompt(request), "temperature": request.temperature, "max_tokens": request.max_output_tokens, "n_predict": request.max_output_tokens, "stream": False}
-            data = self._post_json("/completion", payload)
-            text = extract_completion_like_text(data)
-            result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
-            result["usage"].update(_usage_from_response(data))
-            result["transport"] = {"base_url": self.base_url, "duration_s": round(time.time() - started, 6)}
-            return result
-        except Exception as exc:
-            result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": str(exc)}, sort_keys=True), status="transport_failed")
-            result["transport"] = {"base_url": self.base_url, "duration_s": round(time.time() - started, 6), "error": str(exc)}
-            return result
-
-    def _post_json(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
-        body = json.dumps(payload).encode("utf-8")
-        req = urlrequest.Request(self.base_url + endpoint, data=body, headers={"content-type": "application/json"}, method="POST")
-        try:
-            with urlrequest.urlopen(req, timeout=self.timeout_s) as response:
-                text = response.read().decode("utf-8")
-        except error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")[-4000:]
-            raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
-        return json.loads(text)
-
-
-class AutoRunner:
-    def __init__(self, *, timeout_s: int = 300) -> None:
-        self._vllm = VllmOpenAIRunner(timeout_s=timeout_s)
-        self._antirez = AntirezRunner(timeout_s=timeout_s)
-
-    def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
-        if profile.backend in {"vllm", "vllm_mtp"}:
-            return self._vllm.run_one(request, profile)
-        if profile.backend == "antirez":
-            return self._antirez.run_one(request, profile)
-        return self._vllm.run_one(request, profile)
-
-
-def request_prompt(request: InferenceRequest) -> str:
-    data = request.input
-    if isinstance(data.get("prompt"), str):
-        return str(data["prompt"])
-    parts: list[str] = []
-    for key in ("shared_prefix", "suffix", "target", "instruction"):
-        value = data.get(key)
-        if isinstance(value, str) and value:
-            parts.append(value)
-    if not parts and isinstance(data.get("messages"), list):
-        parts.extend(str(message.get("content", "")) for message in data["messages"] if isinstance(message, dict))
-    return "\n\n".join(parts)
-
-
-def request_messages(request: InferenceRequest) -> list[dict[str, str]]:
-    raw_messages = request.input.get("messages")
-    if isinstance(raw_messages, list) and raw_messages:
-        messages: list[dict[str, str]] = []
-        for message in raw_messages:
-            if isinstance(message, dict):
-                messages.append({"role": str(message.get("role", "user")), "content": str(message.get("content", ""))})
-        if messages:
-            return messages
-    messages = []
-    system = request.input.get("system")
-    if isinstance(system, str) and system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": request_prompt(request)})
-    return messages
+    def _transport_failure(self, request: InferenceRequest, profile: ModelProfile, node_id: str | None, started: float, error: str) -> dict:
+        result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": error}, sort_keys=True), status="transport_failed")
+        result["transport"] = {"node_id": node_id, "base_url": self.base_url, "endpoint": "/ds4/batches", "duration_s": round(time.time() - started, 6), "error": error}
+        return result
 
 
 def extract_openai_chat_text(data: dict[str, Any]) -> str:
@@ -295,6 +188,9 @@ def extract_openai_chat_text(data: dict[str, Any]) -> str:
 def extract_openai_completion_text(data: dict[str, Any]) -> str:
     choices = data.get("choices")
     if isinstance(choices, list) and choices:
+        message = choices[0].get("message", {}) if isinstance(choices[0], dict) else {}
+        if isinstance(message, dict) and message.get("content") is not None:
+            return str(message.get("content"))
         text = choices[0].get("text") if isinstance(choices[0], dict) else None
         if text is not None:
             return str(text)
@@ -318,19 +214,9 @@ def extract_completion_like_text(data: dict[str, Any]) -> str:
 def make_runner(kind: str, *, timeout_s: int) -> Any:
     if kind == "fake":
         return FakeRunner()
-    if kind == "auto":
-        return AutoRunner(timeout_s=timeout_s)
-    return SparkHttpRunner(timeout_s=timeout_s)
-
-
-def _openai_payload(request: InferenceRequest, profile: ModelProfile) -> dict[str, Any]:
-    if request.chat:
-        payload: dict[str, Any] = {"model": profile.model_id, "messages": request_messages(request), "temperature": request.temperature, "max_tokens": request.max_output_tokens}
-    else:
-        payload = {"model": profile.model_id, "prompt": request_prompt(request), "temperature": request.temperature, "max_tokens": request.max_output_tokens}
-    if request.thinking_budget_tokens > 0:
-        payload["extra_body"] = {"thinking_budget_tokens": request.thinking_budget_tokens}
-    return payload
+    if kind == "spark":
+        return SparkHttpRunner(timeout_s=timeout_s)
+    raise ValueError(f"unknown runner: {kind}")
 
 
 def _usage_from_response(data: dict[str, Any]) -> dict[str, Any]:
@@ -347,12 +233,3 @@ def _json_env(name: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return parsed if isinstance(parsed, dict) else {}
-
-
-def _merge_extra_body(payload: dict[str, Any], extra_body: dict[str, Any]) -> None:
-    if not extra_body:
-        return
-    existing = payload.get("extra_body")
-    merged = dict(existing) if isinstance(existing, dict) else {}
-    merged.update(extra_body)
-    payload["extra_body"] = merged

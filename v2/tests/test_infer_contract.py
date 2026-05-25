@@ -19,6 +19,8 @@ class InferenceContractTests(unittest.TestCase):
         profile = ProfileRegistry.load(PROFILES).resolve(capability="efficient", chat=False, job_class="atom_edit")
         self.assertEqual(profile.profile_id, "qwen3_6_27b_fp8_efficient_v1")
         self.assertEqual(profile.quality["ds4_eval_correct"], 76)
+        self.assertLess(profile.performance["single_stream_decode_tok_s"], profile.performance["aggregate_decode_tok_s_at_16"])
+        self.assertLess(profile.performance["aggregate_decode_tok_s_at_16"], profile.performance["aggregate_decode_tok_s_at_32"])
 
     def test_fastest_routes_to_qwen_a3b_for_triage(self) -> None:
         profile = ProfileRegistry.load(PROFILES).resolve(capability="fastest", chat=False, job_class="triage")

@@ -30,6 +30,12 @@ The inference scheduler owns node assignment. Centaur requests a capability and 
 
 Normal queued requests prefer resident production lanes. Immediate requests prefer a reserved lane only when that lane has the requested resident profile. Efficient Qwen requests therefore remain on spark0-3; smart antirez requests may use spark6. The experiment lane is not used for production routing unless `allow_dynamic_load_for_unmatched_profiles` is explicitly enabled in the topology file.
 
+Qwen capacity planning uses aggregate batched decode. Single-stream Qwen27
+decode is about 8 generated tok/s on this Spark shape, while 16-32 running
+sequences recover roughly 100-187 generated tok/s aggregate per Spark. Keep
+batch workers deep enough to feed vLLM continuous batching before judging lane
+throughput.
+
 The topology is stored in:
 
 ```text
@@ -44,19 +50,18 @@ PYTHONPATH=src python3 -m ds4_infer.cli topology \
   --capacity
 ```
 
-Run a request batch through the topology planner:
+Submit a request batch through the topology planner:
 
 ```bash
-PYTHONPATH=src python3 -m ds4_infer.cli submit \
+PYTHONPATH=src python3 -m ds4_infer.cli queue-submit \
+  --queue-dir /tmp/ds4_queue \
   --profiles-dir profiles/models \
   --topology profiles/topology/static_sparks.json \
   --requests requests.jsonl \
-  --out /tmp/ds4_infer_run \
-  --runner fake \
-  --run
+  --batch-id topology-smoke
 ```
 
-The batch manifest records `topology_id` and `selected_nodes`. Individual responses include the selected node assignment. The MTP profile appears as `spark4+spark5` with `node_ids=["spark4", "spark5"]`. This is a planning/contract layer; real network dispatch belongs in the runner implementation.
+Queue submission records selected nodes. Individual responses include the selected node assignment. The MTP profile appears as `spark4+spark5` with `node_ids=["spark4", "spark5"]`. The Spark runner now fails closed when a live model call has no selected node.
 
 ## Why this exists
 
