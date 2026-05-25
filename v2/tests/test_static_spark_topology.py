@@ -44,6 +44,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(capacity["qwen3_6_35b_a3b_fp8_fastest_v1"], 4)
         self.assertEqual(capacity["dsv4_vllm_mtp_smartest_v1"], 1)
         self.assertEqual(capacity["dsv4_antirez_smart_v1"], 1)
+        self.assertEqual(capacity["qwen3_6_27b_fp8_nixl_experimental_v1"], 1)
 
     def test_qwen_requests_spread_across_qwen_lanes_only(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
@@ -88,7 +89,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
                 out_dir=tmp,
                 topology=SparkTopology.load(TOPOLOGY),
             )
-            self.assertEqual(manifest["topology_id"], "static_sparks_2026_05_25_v4")
+            self.assertEqual(manifest["topology_id"], "static_sparks_2026_05_25_v5")
             self.assertEqual(manifest["selected_nodes"]["spark0"], 1)
             self.assertEqual(manifest["selected_nodes"]["spark4+spark5"], 1)
             responses = [json.loads(line) for line in (Path(tmp) / "responses.jsonl").read_text().splitlines()]
@@ -112,7 +113,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertTrue(all(not node.dynamic_load for node in production_nodes))
         spark7 = [node for node in topology.nodes if node.node_id == "spark7"][0]
         self.assertTrue(spark7.dynamic_load)
-        self.assertEqual(spark7.resident_profiles, ())
+        self.assertEqual(spark7.resident_profiles, ("qwen3_6_27b_fp8_nixl_experimental_v1",))
 
     def test_xhigh_live_validation_manifest_lists_required_checks(self) -> None:
         manifest = json.loads(VALIDATION_TASKS.read_text(encoding="utf-8"))

@@ -110,6 +110,12 @@ def transfer_run(arguments: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "transfer": run_transfer(topology, TransferRequest.from_json(payload), timeout_s=int(arguments.get("timeout_s", 3600)), dry_run=bool(arguments.get("dry_run", True)))}
 
 
+def nixl_plan(arguments: dict[str, Any]) -> dict[str, Any]:
+    from ds4_nixl.service import NixlDeployment, plan_deployment
+    deployment = NixlDeployment.load(Path(str(arguments.get("deployment", "profiles/nixl/qwen27_spark7_nixl.json"))))
+    return {"ok": True, "plan": plan_deployment(deployment)}
+
+
 class _TextExtractor(HTMLParser):
     def __init__(self) -> None:
         super().__init__()

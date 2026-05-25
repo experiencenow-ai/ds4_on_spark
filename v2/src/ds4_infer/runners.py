@@ -203,6 +203,11 @@ class VllmOpenAIRunner(OpenAICompatibleRunner):
         super().__init__(base_url=base_url or os.environ.get("DS4_VLLM_BASE_URL") or os.environ.get("DS4_VLLM_MTP_BASE_URL"), api_key=api_key if api_key is not None else os.environ.get("DS4_VLLM_API_KEY", ""), timeout_s=timeout_s, default_extra_body=_json_env("DS4_VLLM_EXTRA_BODY_JSON"))
 
 
+class NixlProxyRunner(OpenAICompatibleRunner):
+    def __init__(self, *, base_url: str | None = None, api_key: str | None = None, timeout_s: int = 300) -> None:
+        super().__init__(base_url=base_url or os.environ.get("DS4_NIXL_BASE_URL") or "http://127.0.0.1:8192", api_key=api_key if api_key is not None else os.environ.get("DS4_NIXL_API_KEY", ""), timeout_s=timeout_s, default_extra_body=_json_env("DS4_NIXL_EXTRA_BODY_JSON"))
+
+
 class AntirezRunner:
     def __init__(self, *, base_url: str | None = None, timeout_s: int = 300) -> None:
         self.base_url = (base_url or os.environ.get("DS4_ANTIREZ_BASE_URL") or "http://127.0.0.1:8080").rstrip("/")
@@ -253,11 +258,14 @@ class AntirezRunner:
 class AutoRunner:
     def __init__(self, *, timeout_s: int = 300) -> None:
         self._vllm = VllmOpenAIRunner(timeout_s=timeout_s)
+        self._nixl = NixlProxyRunner(timeout_s=timeout_s)
         self._antirez = AntirezRunner(timeout_s=timeout_s)
 
     def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
         if profile.backend in {"vllm", "vllm_mtp"}:
             return self._vllm.run_one(request, profile)
+        if profile.backend == "vllm_nixl":
+            return self._nixl.run_one(request, profile)
         if profile.backend == "antirez":
             return self._antirez.run_one(request, profile)
         return self._vllm.run_one(request, profile)
@@ -342,6 +350,8 @@ def make_runner(kind: str, *, timeout_s: int) -> Any:
         return FakeRunner()
     if kind == "auto":
         return AutoRunner(timeout_s=timeout_s)
+    if kind == "nixl":
+        return NixlProxyRunner(timeout_s=timeout_s)
     return SparkHttpRunner(timeout_s=timeout_s)
 
 
