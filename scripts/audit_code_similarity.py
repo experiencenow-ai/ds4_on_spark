@@ -42,7 +42,7 @@ class FunctionPiece:
 def _candidate_centaur_roots(repo: pathlib.Path, explicit: str | None) -> list[pathlib.Path]:
     candidates: list[pathlib.Path] = []
     if explicit:
-        candidates.append(pathlib.Path(explicit).expanduser())
+        return([pathlib.Path(explicit).expanduser()])
     if os.environ.get("CENTAUR_REPO"):
         candidates.append(pathlib.Path(str(os.environ["CENTAUR_REPO"])).expanduser())
     candidates.extend(

@@ -142,15 +142,27 @@ def main() -> int:
     baseline = load_baseline(repo)
     dups = find_duplicate_functions(scripts_dir)
     probes = find_probe_docs(docs_dir)
-    centaur_root = resolve_centaur_root(repo, args.centaur_root)
-    similarity = run_similarity_audit(
-        repo,
-        centaur_root,
-        float(args.similarity_threshold),
-        int(args.similarity_min_lines),
-        5,
-        200,
-    )
+    try:
+        centaur_root = resolve_centaur_root(repo, args.centaur_root)
+        similarity = run_similarity_audit(
+            repo,
+            centaur_root,
+            float(args.similarity_threshold),
+            int(args.similarity_min_lines),
+            5,
+            200,
+        )
+    except RuntimeError as exc:
+        centaur_root = pathlib.Path("<missing-centaur>")
+        similarity = {
+            "degraded": True,
+            "reason": str(exc),
+            "pairs": [],
+            "elapsed_seconds": 0.0,
+            "threshold": float(args.similarity_threshold),
+            "function_count": 0,
+            "centaur_import": "degraded: centaur repo unavailable",
+        }
 
     if args.baseline_snapshot:
         write_baseline(repo, dups, probes, similarity)

@@ -29,6 +29,23 @@ HOP_HEADERS = {
     "upgrade",
 }
 
+TUNING_KEYS = (
+    "max_model_len",
+    "max_num_seqs",
+    "max_num_batched_tokens",
+    "gpu_memory_utilization",
+    "enable_chunked_prefill",
+    "enable_prefix_caching",
+    "async_scheduling",
+    "kv_cache_dtype",
+    "reasoning_parser",
+    "tool_call_parser",
+    "attention_backend",
+    "enable_auto_tool_choice",
+    "speculative_config",
+    "extra_args",
+)
+
 
 class VllmError(Exception):
     pass
@@ -735,10 +752,6 @@ class LazyVllm:
         safe = ("%s-%s" % (self.models[model].get("backend", "backend"), model)).replace("/", "_").replace(":", "_").replace(" ", "_")
         return(os.path.join(self.log_dir, "%s-%d.log" % (safe, port)))
 
-    def open_log(self, model):
-        self.log_path = self.log_file_path(model, self.port)
-        return(open(self.log_path, "ab", buffering=0))
-
     def backend_label(self, model):
         if model in self.resident:
             return("resident_" + self.models[model].get("backend", "vllm_lazy_hf"))
@@ -747,14 +760,7 @@ class LazyVllm:
         return(self.models[model].get("backend", "vllm_lazy_hf"))
 
     def load_resident_specs(self):
-        raw_json = os.environ.get("DS4_RESIDENT_MODELS_JSON", "")
-        raw_models = os.environ.get("DS4_RESIDENT_MODELS", "")
-        if raw_json == "" and raw_models == "":
-            return([])
-        if raw_json != "":
-            items = json.loads(raw_json)
-        else:
-            items = [{"model": item.strip()} for item in raw_models.split(",") if item.strip()]
+        items = env_json("DS4_RESIDENT_MODELS_JSON", [])
         if not isinstance(items, list):
             raise VllmError("DS4_RESIDENT_MODELS_JSON must be a list")
         specs = []
@@ -787,22 +793,7 @@ class LazyVllm:
         rec = dict(self.models[model])
         if isinstance(spec.get("tuning"), dict):
             rec["tuning"] = merge_dicts(rec.get("tuning", {}), spec["tuning"])
-        for key in (
-            "max_model_len",
-            "max_num_seqs",
-            "max_num_batched_tokens",
-            "gpu_memory_utilization",
-            "enable_chunked_prefill",
-            "enable_prefix_caching",
-            "async_scheduling",
-            "kv_cache_dtype",
-            "reasoning_parser",
-            "tool_call_parser",
-            "attention_backend",
-            "enable_auto_tool_choice",
-            "speculative_config",
-            "extra_args",
-        ):
+        for key in TUNING_KEYS:
             if key in spec:
                 rec[key] = spec[key]
         return(rec)
@@ -922,25 +913,7 @@ class LazyVllm:
         cfg_models = self.tuning_config.get("models", {})
         model_cfg = cfg_models.get(model, {})
         alias_cfg = cfg_models.get(model.rsplit("/", 1)[-1], {})
-        direct = {}
-        for key in (
-            "max_model_len",
-            "max_num_seqs",
-            "max_num_batched_tokens",
-            "gpu_memory_utilization",
-            "enable_chunked_prefill",
-            "enable_prefix_caching",
-            "async_scheduling",
-            "kv_cache_dtype",
-            "reasoning_parser",
-            "tool_call_parser",
-            "attention_backend",
-            "enable_auto_tool_choice",
-            "speculative_config",
-            "extra_args",
-        ):
-            if key in rec:
-                direct[key] = rec[key]
+        direct = {key: rec[key] for key in TUNING_KEYS if key in rec}
         tuning = merge_dicts(
             self.auto_tuning(model, rec),
             self.tuning_config.get("defaults", {}),
@@ -992,6 +965,20 @@ class LazyVllm:
         if rec.get("model_type") == "deepseek_v4" or "DeepseekV4ForCausalLM" in arch:
             args.extend(["--tokenizer-mode", "deepseek_v4", "--load-format", "safetensors"])
         return(args)
+
+    def start_backend_proc(self, model, rec, port):
+        log_path = self.log_file_path(model, port)
+        log = open(log_path, "ab", buffering=0)
+        args = self.args(model, rec=rec, port=port)
+        proc = subprocess.Popen(
+            args,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            env=self.env(rec),
+            preexec_fn=os.setsid,
+            close_fds=True,
+        )
+        return(proc, args, log_path)
 
     def vllm_env(self):
         env = os.environ.copy()
@@ -1209,18 +1196,8 @@ class LazyVllm:
             with self.cond:
                 if self.active():
                     self.stop_locked("switch")
-                log = self.open_log(model)
-                args = self.args(model)
-                self.proc = subprocess.Popen(
-                    args,
-                    stdout=log,
-                    stderr=subprocess.STDOUT,
-                    env=self.env(rec),
-                    preexec_fn=os.setsid,
-                    close_fds=True,
-                )
+                self.proc, self.current_args, self.log_path = self.start_backend_proc(model, rec, self.port)
                 self.current_model = model
-                self.current_args = args
                 self.last_used = now()
             try:
                 self.wait_ready(model)
@@ -1239,17 +1216,7 @@ class LazyVllm:
             model = spec["model"]
             port = spec["port"]
             rec = spec["rec"]
-            log_path = self.log_file_path(model, port)
-            log = open(log_path, "ab", buffering=0)
-            args = self.args(model, rec=rec, port=port)
-            proc = subprocess.Popen(
-                args,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                env=self.env(rec),
-                preexec_fn=os.setsid,
-                close_fds=True,
-            )
+            proc, args, log_path = self.start_backend_proc(model, rec, port)
             self.resident[model] = {"proc": proc, "port": port, "args": args, "log": log_path}
             try:
                 self.wait_ready_proc(model, rec, proc, port, log_path)
