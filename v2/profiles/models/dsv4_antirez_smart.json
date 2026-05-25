@@ -1,7 +1,7 @@
 {
   "format": "ds4-model-profile-v1",
   "profile_id": "dsv4_antirez_smart_v1",
-  "model_id": "deepseek-v4-flash",
+  "model_id": "antirez/deepseek-v4-flash-iq2xxs-w2q2k-aprojq8-sexpq8-outq8-chat-v2",
   "backend": "antirez",
   "capability_classes": ["smart"],
   "supported_job_classes": ["atom_edit", "analysis", "debug", "cluster_synthesis"],

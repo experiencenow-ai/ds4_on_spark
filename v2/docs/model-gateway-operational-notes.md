@@ -8,32 +8,32 @@ are operational contracts, not a request to revive the monolithic lazy proxy.
 The old gateway supported four backend classes:
 
 - `vllm_lazy_hf`: discover Hugging Face model directories and start vLLM on demand.
-- `vllm_remote`: forward selected model IDs to a remote OpenAI-compatible vLLM endpoint.
+- `vllm_remote`: forward selected model IDs to a remote vLLM endpoint.
 - `ds4_server`: serve GGUF models, including the DeepSeek V4 Flash MTP sidecar when present.
 - `llama_server`: serve explicit JSON model specs through llama.cpp compatible server binaries.
 
-The v2 runtime should keep these as profile/backend concepts. The current
-Spark runner already prefers a Spark-local `/ds4/batches` endpoint and falls
-back to OpenAI-compatible completion endpoints, so model execution stays on the
+The v2 runtime should keep these as profile/backend concepts. The Spark runner
+uses the Spark-local `/ds4/batches` endpoint, so model execution stays on the
 Spark rather than the Mac Studio controller.
 
 ## Useful endpoint contracts
 
-The v1 operational surface included:
+The v1 operational surface included both legacy compatibility endpoints and
+DS4 endpoints. The v2 production contract is the DS4 surface.
 
-- `/v1/models`
-- `/v1/chat/completions`
 - `/ds4/status`
 - `/ds4/gpu`
+- `/ds4/models` or `/ds4/profiles`
 - `/ds4/services`
 - `/ds4/batches`
 - `/ds4/cpu/batches`
 - `/ds4/release`
 
-In v2, model batches live in `ds4_infer.queue` plus the Spark runner. CPU
-batches live in `ds4_tools.cpu_batch`. GPU/status endpoints are Spark-local
-service concerns and should be exposed by SparkRunner or the gateway process on
-each Spark, not by the Mac controller.
+In v2, model and CPU batches both enter the durable `ds4_infer.queue` when they
+need leases, status, polling, or completion notices. Model execution is handled
+by the Spark runner; CPU service execution is handled by `ds4_tools.cpu_batch`.
+GPU/status endpoints are Spark-local service concerns and should be exposed by
+SparkRunner or the gateway process on each Spark, not by the Mac controller.
 
 ## Startup resident loading
 
@@ -98,4 +98,4 @@ The CPU batch API enforced:
 - Bounded text payloads and allowlisted local command execution only.
 
 The v2 CPU implementation is `ds4_tools.cpu_batch`; the registry entry is
-`tool:ds4.cpu.batch`.
+`tool:ds4.cpu.batch`, and durable queued submission uses `queue-submit-cpu`.

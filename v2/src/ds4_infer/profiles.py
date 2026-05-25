@@ -13,6 +13,7 @@ class ModelProfile:
     supported_job_classes: tuple[str, ...]
     supports_chat: bool
     supports_completion: bool
+    supports_thinking: bool
     production_eligible: bool
     default_for: tuple[str, ...]
     quality: dict[str, Any]
@@ -34,6 +35,7 @@ class ModelProfile:
             supported_job_classes=tuple(str(item) for item in data["supported_job_classes"]),
             supports_chat=bool(data["supports_chat"]),
             supports_completion=bool(data["supports_completion"]),
+            supports_thinking=bool(data.get("supports_thinking", False)),
             production_eligible=bool(data["production_eligible"]),
             default_for=tuple(routing.get("default_for", [])),
             quality=dict(data.get("quality", {})),
@@ -50,6 +52,7 @@ class ModelProfile:
             "supported_job_classes": list(self.supported_job_classes),
             "supports_chat": self.supports_chat,
             "supports_completion": self.supports_completion,
+            "supports_thinking": self.supports_thinking,
             "production_eligible": self.production_eligible,
             "quality": self.quality,
             "performance": self.performance,

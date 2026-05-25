@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import json
+import os
+import shlex
+import subprocess
 import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
-from ds4_chat.cli import VllmChatModel
 from ds4_chat.cli import QueueChatModel
 from ds4_infer.profiles import ProfileRegistry
-from ds4_infer.runners import AntirezRunner, OpenAICompatibleRunner, SparkHttpRunner, request_messages, request_prompt
+from ds4_infer.runners import AntirezRunner, OpenAICompatibleRunner, SparkHttpRunner, extract_openai_completion_text, request_messages, request_prompt
 from ds4_infer.schemas import InferenceRequest
 from ds4_tools.builtin import spark7_run_command, web_fetch
 from ds4_tools.registry import ToolRegistry
@@ -62,6 +65,35 @@ class CapturingAntirezRunner(AntirezRunner):
         return {"choices": [{"text": "thinking out loud</think>ANTIREZ_OK"}], "usage": {"total_tokens": 5}}
 
 
+def _chat_payload(content: str = "ok") -> dict:
+    return {"choices": [{"message": {"role": "assistant", "content": content}}]}
+
+
+class _JsonDone:
+    returncode = 0
+    stderr = ""
+
+    def __init__(self, payload: dict) -> None:
+        self.stdout = json.dumps(payload)
+
+
+def _json_runner(calls: list, payload: dict, *, capture: str = "kwargs"):
+    def runner(command, **kwargs):
+        calls.append(command if capture == "command" else dict({"command": command}, **kwargs))
+        return _JsonDone(payload)
+    return runner
+
+
+def _captured_batch_item(profile_id: str, *, updates: dict | None = None, node: str = "spark0") -> dict:
+    calls = []
+    raw = make_request(chat=True).raw
+    raw.update(updates or {})
+    profile = ProfileRegistry.load(PROFILES).get(profile_id)
+    runner = SparkHttpRunner(timeout_s=30, command_runner=_json_runner(calls, _chat_payload()))
+    runner.run_one_on_node(InferenceRequest.from_json(raw), profile, node)
+    return json.loads(calls[0]["input"])["batch_payload"]["items"][0]
+
+
 class LlmRunnersWebChatTests(unittest.TestCase):
     def test_openai_runner_uses_chat_and_completion_endpoints(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
@@ -109,16 +141,6 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(result["mode"], "text")
         self.assertIn("Hello JS fallback", result["text"])
 
-    def test_vllm_chat_model_keeps_full_history_shape(self) -> None:
-        with _chat_server() as url:
-            model = VllmChatModel(base_url=url, model="m")
-            message = model.next_message([
-                {"role": "system", "content": "system"},
-                {"role": "user", "content": "hello"},
-            ])
-        self.assertEqual(message["role"], "assistant")
-        self.assertEqual(message["content"], "chat reply")
-
     def test_queue_chat_model_can_use_fake_runner_with_model_alias(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             model = QueueChatModel(
@@ -137,41 +159,122 @@ class LlmRunnersWebChatTests(unittest.TestCase):
 
     def test_spark_http_runner_uses_selected_node_over_ssh(self) -> None:
         calls = []
-
-        class Done:
-            returncode = 0
-            stdout = json.dumps({"choices": [{"message": {"role": "assistant", "content": "ok"}}], "usage": {"total_tokens": 1}})
-            stderr = ""
-
-        def runner(command, **kwargs):
-            calls.append((command, kwargs))
-            return Done()
+        payload = {"results": [{"custom_id": "r", "ok": True, "response": dict(_chat_payload("ok"), usage={"total_tokens": 1})}]}
 
         profile = ProfileRegistry.load(PROFILES).get("dsv4_vllm_mtp_smartest_v1")
         request = make_request(chat=True)
-        result = SparkHttpRunner(timeout_s=30, command_runner=runner).run_one_on_node(request, profile, "spark4+spark5")
+        result = SparkHttpRunner(timeout_s=30, command_runner=_json_runner(calls, payload)).run_one_on_node(request, profile, "spark4+spark5")
         self.assertEqual(result["output"]["text"], "ok")
-        self.assertEqual(calls[0][0][5], "spark4")
-        payload = json.loads(calls[0][1]["input"])
-        self.assertTrue(payload["batch_first"])
-        self.assertEqual(payload["batch_payload"]["model"], "deepseek-v4-flash")
+        self.assertEqual(calls[0]["command"][5], "spark5")
+        payload = json.loads(calls[0]["input"])
+        self.assertEqual(payload["batch_payload"]["model"], "deepseek-ai/DeepSeek-V4-Flash")
+        self.assertEqual(payload["batch_payload"]["items"][0]["thinking"], {"type": "disabled"})
+        self.assertEqual(payload["batch_payload"]["items"][0]["chat_template_kwargs"], {"thinking": False})
+        self.assertNotIn("openai_endpoint", payload)
+
+    def test_spark_http_runner_batches_multiple_requests_in_one_gateway_call(self) -> None:
+        calls = []
+        payload = {"results": [{"custom_id": "r", "ok": True, "response": _chat_payload("one")}, {"custom_id": "r2", "ok": True, "response": _chat_payload("two")}]}
+
+        profile = ProfileRegistry.load(PROFILES).get("dsv4_vllm_mtp_smartest_v1")
+        first = make_request(chat=True)
+        raw = make_request(chat=True).raw
+        raw["request_id"] = "r2"
+        results = SparkHttpRunner(timeout_s=30, command_runner=_json_runner(calls, payload)).run_many_on_node([first, InferenceRequest.from_json(raw)], profile, "spark4+spark5", concurrency=2)
+        payload = json.loads(calls[0]["input"])
+        self.assertEqual(len(payload["batch_payload"]["items"]), 2)
+        self.assertEqual(payload["batch_payload"]["concurrency"], 2)
+        self.assertEqual(results["r"]["output"]["text"], "one")
+        self.assertEqual(results["r2"]["output"]["text"], "two")
+
+    def test_spark_http_runner_fails_closed_without_selected_node(self) -> None:
+        calls = []
+
+        def runner(command, **kwargs):
+            calls.append(command)
+            raise AssertionError("runner should not be called without a node")
+
+        profile = ProfileRegistry.load(PROFILES).get("dsv4_vllm_mtp_smartest_v1")
+        result = SparkHttpRunner(timeout_s=30, command_runner=runner).run_one(make_request(chat=True), profile)
+        self.assertEqual(result["status"], "transport_failed")
+        self.assertIn("requires selected node_id", result["transport"]["error"])
+        self.assertEqual(calls, [])
+
+    def test_spark_http_runner_sets_profile_thinking_template_key(self) -> None:
+        cases = [
+            ("qwen3_6_27b_fp8_efficient_v1", {"capability": "efficient", "job_class": "summary"}, "spark0", {"type": "disabled"}, {"enable_thinking": False}, None),
+            ("qwen3_6_27b_fp8_efficient_v1", {"capability": "efficient", "job_class": "summary", "max_output_tokens": 64, "thinking_budget_tokens": 100}, "spark0", {"type": "enabled", "budget_tokens": 100}, {"enable_thinking": True}, 164),
+            ("dsv4_vllm_mtp_smartest_v1", {"max_output_tokens": 64, "thinking_budget_tokens": 100}, "spark4+spark5", {"type": "enabled", "budget_tokens": 100}, {"thinking": True}, 164),
+        ]
+        for profile_id, updates, node, thinking, template_kwargs, max_tokens in cases:
+            item = _captured_batch_item(profile_id, updates=updates, node=node)
+            self.assertEqual(item["thinking"], thinking)
+            self.assertEqual(item["chat_template_kwargs"], template_kwargs)
+            if max_tokens is not None:
+                self.assertEqual(item["max_tokens"], max_tokens)
+                self.assertEqual(item["thinking_token_budget"], 100)
+
+    def test_spark_http_runner_can_map_group_to_ingress_node(self) -> None:
+        calls = []
+
+        profile = ProfileRegistry.load(PROFILES).get("dsv4_vllm_mtp_smartest_v1")
+        with patch.dict(os.environ, {"DS4_SPARK_NODE_MAP_JSON": json.dumps({"spark4+spark5": "spark5"})}):
+            SparkHttpRunner(command_runner=_json_runner(calls, _chat_payload(), capture="command")).run_one_on_node(make_request(chat=True), profile, "spark4+spark5")
+        self.assertEqual(calls[0][5], "spark5")
+
+    def test_spark_http_runner_rejects_failed_ds4_batch_item(self) -> None:
+        with _local_json_server({"results": [{"ok": False, "status": 500, "response": {"error": "backend down"}}]}) as url:
+            def runner(command, **kwargs):
+                argv = shlex.split(command[-1])
+                env = os.environ.copy()
+                env["DS4_SPARK_HTTP_BASE_URL"] = url
+                return subprocess.run(argv, input=kwargs["input"], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, timeout=10, check=False)
+
+            profile = ProfileRegistry.load(PROFILES).get("qwen3_6_27b_fp8_efficient_v1")
+            result = SparkHttpRunner(timeout_s=5, command_runner=runner).run_one_on_node(make_request(chat=True), profile, "spark0")
+        self.assertEqual(result["status"], "transport_failed")
+        self.assertIn("backend down", result["transport"]["error"])
+
+    def test_completion_extractor_accepts_chat_shaped_response(self) -> None:
+        data = {"choices": [{"message": {"content": "dsv4 antirez ok", "reasoning_content": "hidden"}}]}
+        self.assertEqual(extract_openai_completion_text(data), "dsv4 antirez ok")
 
 
-class _local_html_server:
-    def __init__(self, body: str) -> None:
-        self.body = body.encode("utf-8")
+def _local_html_server(body: str):
+    return _local_server("GET", body.encode("utf-8"), "text/html; charset=utf-8")
+
+
+def _local_json_server(response: dict):
+    return _local_server("POST", json.dumps(response).encode("utf-8"), "application/json")
+
+
+class _local_server:
+    def __init__(self, method: str, body: bytes, content_type: str) -> None:
+        self.method = method
+        self.body = body
+        self.content_type = content_type
         self.httpd: HTTPServer | None = None
         self.thread: threading.Thread | None = None
 
     def __enter__(self) -> str:
+        method = self.method
         body = self.body
+        content_type = self.content_type
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:
+                self._send_body() if method == "GET" else self.send_error(405)
+
+            def do_POST(self) -> None:
+                self._send_body() if method == "POST" else self.send_error(405)
+
+            def _send_body(self) -> None:
                 self.send_response(200)
-                self.send_header("content-type", "text/html; charset=utf-8")
+                self.send_header("content-type", content_type)
+                self.send_header("content-length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+
             def log_message(self, format: str, *args) -> None:
                 return
 
@@ -183,33 +286,9 @@ class _local_html_server:
     def __exit__(self, exc_type, exc, tb) -> None:
         assert self.httpd is not None
         self.httpd.shutdown()
+        self.httpd.server_close()
         if self.thread is not None:
             self.thread.join(timeout=1)
-
-
-class _chat_server:
-    def __enter__(self) -> str:
-        class Handler(BaseHTTPRequestHandler):
-            def do_POST(self) -> None:
-                length = int(self.headers.get("content-length", "0"))
-                payload = json.loads(self.rfile.read(length).decode("utf-8"))
-                assert len(payload["messages"]) == 2
-                body = json.dumps({"choices": [{"message": {"role": "assistant", "content": "chat reply"}}]}).encode("utf-8")
-                self.send_response(200)
-                self.send_header("content-type", "application/json")
-                self.end_headers()
-                self.wfile.write(body)
-            def log_message(self, format: str, *args) -> None:
-                return
-
-        self.httpd = HTTPServer(("127.0.0.1", 0), Handler)
-        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
-        self.thread.start()
-        return f"http://127.0.0.1:{self.httpd.server_port}"
-
-    def __exit__(self, exc_type, exc, tb) -> None:
-        self.httpd.shutdown()
-        self.thread.join(timeout=1)
 
 
 if __name__ == "__main__":

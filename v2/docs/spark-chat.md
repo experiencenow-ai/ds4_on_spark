@@ -27,8 +27,8 @@ PYTHONPATH=src python3 -m ds4_chat.cli \
   --ask 'Check the planned Spark status command and explain what you would run.'
 ```
 
-`--mode direct-vllm` keeps the old direct OpenAI-compatible behavior for
-debugging a single endpoint, but queue mode is the default production path.
+Queue mode is the only supported production path. Chat requests go through the
+same queue and `/ds4/batches` runner as batch inference.
 
 Tools available by default:
 

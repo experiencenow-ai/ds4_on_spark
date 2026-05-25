@@ -42,9 +42,14 @@ def run_requests(*, requests: Iterable[InferenceRequest], registry: ProfileRegis
                     selected_nodes[assignment.node_id] = selected_nodes.get(assignment.node_id, 0) + 1
                 else:
                     assignment = None
-                result = runner.run_one(request, profile)
                 if assignment is not None:
+                    if hasattr(runner, "run_one_on_node"):
+                        result = runner.run_one_on_node(request, profile, assignment.node_id)  # type: ignore[attr-defined]
+                    else:
+                        result = runner.run_one(request, profile)
                     result["selected_node"] = assignment.to_public_dict()
+                else:
+                    result = runner.run_one(request, profile)
                 if result.get("status") == "completed":
                     completed_count += 1
                     responses.write(json.dumps(result, sort_keys=True) + "\n")
