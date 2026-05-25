@@ -89,6 +89,46 @@ def wait_for_notice(root: Path, request_id: str, timeout_s: float = 1.0) -> bool
     return path.exists()
 
 
+def _submit_ids(queue: InferenceQueue, request_ids: list[str]) -> None:
+    queue.submit_requests(requests=[make_request(request_id) for request_id in request_ids], registry=ProfileRegistry.load(PROFILES), batch_id="batch-a")
+
+
+def _work_thread(queue: InferenceQueue, runner, *, limit: int, concurrency: int) -> tuple[threading.Thread, dict[str, object]]:
+    worked: dict[str, object] = {}
+    thread = threading.Thread(
+        target=lambda: worked.update(
+            queue.work(
+                registry=ProfileRegistry.load(PROFILES),
+                runner=runner,
+                limit=limit,
+                concurrency=concurrency,
+                lease_ttl_s=5,
+                heartbeat_interval_s=0.05,
+            )
+        )
+    )
+    thread.start()
+    return thread, worked
+
+
+def _assert_done(case: unittest.TestCase, thread: threading.Thread, worked: dict[str, object], count: int) -> None:
+    case.assertTrue(thread.is_alive())
+    thread.join(timeout=2.0)
+    case.assertFalse(thread.is_alive())
+    case.assertEqual(worked["claimed_count"], count)
+    case.assertEqual(worked["completed_count"], count)
+
+
+def _assert_refill(case: unittest.TestCase, root: Path, queue: InferenceQueue, runner) -> dict[str, object]:
+    _submit_ids(queue, ["a_fast", "b_slow", "c_refill", "d_refill"])
+    thread, worked = _work_thread(queue, runner, limit=4, concurrency=2)
+    for request_id, timeout_s in (("a_fast", 0.4), ("c_refill", 0.6), ("d_refill", 0.8)):
+        case.assertTrue(wait_for_notice(root, request_id, timeout_s=timeout_s))
+    case.assertFalse((root / "notices" / "b_slow.json").exists())
+    _assert_done(case, thread, worked, 4)
+    return worked
+
+
 class InferenceQueueTests(unittest.TestCase):
     def test_submit_records_individual_request_status_and_batch_status(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -153,103 +193,28 @@ class InferenceQueueTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             queue = InferenceQueue(root)
-            queue.submit_requests(
-                requests=[make_request("fast0"), make_request("fast1"), make_request("slow")],
-                registry=ProfileRegistry.load(PROFILES),
-                batch_id="batch-a",
-            )
+            _submit_ids(queue, ["fast0", "fast1", "slow"])
             first_poll = queue.poll()
-            worked: dict[str, object] = {}
-            thread = threading.Thread(
-                target=lambda: worked.update(
-                    queue.work(
-                        registry=ProfileRegistry.load(PROFILES),
-                        runner=DelayedRunner({"fast0": 0.05, "fast1": 0.05, "slow": 1.0}),
-                        limit=3,
-                        concurrency=3,
-                        lease_ttl_s=5,
-                        heartbeat_interval_s=0.05,
-                    )
-                )
-            )
-            thread.start()
+            thread, worked = _work_thread(queue, DelayedRunner({"fast0": 0.05, "fast1": 0.05, "slow": 1.0}), limit=3, concurrency=3)
             self.assertTrue(wait_for_notice(root, "fast0", timeout_s=0.4))
             self.assertTrue(wait_for_notice(root, "fast1", timeout_s=0.4))
             self.assertFalse((root / "notices" / "slow.json").exists())
             second_poll = queue.poll(after_event_id=first_poll["newest_event_id"])
             self.assertIn("completed", [event["event_type"] for event in second_poll["events"]])
-            self.assertTrue(thread.is_alive())
-            thread.join(timeout=2.0)
-            self.assertFalse(thread.is_alive())
-            self.assertEqual(worked["claimed_count"], 3)
-            self.assertEqual(worked["completed_count"], 3)
+            _assert_done(self, thread, worked, 3)
 
     def test_worker_refills_inflight_window_before_slow_tail_finishes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             queue = InferenceQueue(root)
-            queue.submit_requests(
-                requests=[make_request("a_fast"), make_request("b_slow"), make_request("c_refill"), make_request("d_refill")],
-                registry=ProfileRegistry.load(PROFILES),
-                batch_id="batch-a",
-            )
-            worked: dict[str, object] = {}
-            thread = threading.Thread(
-                target=lambda: worked.update(
-                    queue.work(
-                        registry=ProfileRegistry.load(PROFILES),
-                        runner=DelayedRunner({"a_fast": 0.05, "b_slow": 1.0, "c_refill": 0.05, "d_refill": 0.05}),
-                        limit=4,
-                        concurrency=2,
-                        lease_ttl_s=5,
-                        heartbeat_interval_s=0.05,
-                    )
-                )
-            )
-            thread.start()
-            self.assertTrue(wait_for_notice(root, "a_fast", timeout_s=0.4))
-            self.assertTrue(wait_for_notice(root, "c_refill", timeout_s=0.6))
-            self.assertTrue(wait_for_notice(root, "d_refill", timeout_s=0.8))
-            self.assertFalse((root / "notices" / "b_slow.json").exists())
-            self.assertTrue(thread.is_alive())
-            thread.join(timeout=2.0)
-            self.assertFalse(thread.is_alive())
-            self.assertEqual(worked["claimed_count"], 4)
-            self.assertEqual(worked["completed_count"], 4)
+            _assert_refill(self, root, queue, DelayedRunner({"a_fast": 0.05, "b_slow": 1.0, "c_refill": 0.05, "d_refill": 0.05}))
 
     def test_batch_capable_model_runner_still_refills_and_notices_per_item(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             queue = InferenceQueue(root)
-            queue.submit_requests(
-                requests=[make_request("a_fast"), make_request("b_slow"), make_request("c_refill"), make_request("d_refill")],
-                registry=ProfileRegistry.load(PROFILES),
-                batch_id="batch-a",
-            )
             runner = BatchCapableDelayedRunner({"a_fast": 0.05, "b_slow": 1.0, "c_refill": 0.05, "d_refill": 0.05})
-            worked: dict[str, object] = {}
-            thread = threading.Thread(
-                target=lambda: worked.update(
-                    queue.work(
-                        registry=ProfileRegistry.load(PROFILES),
-                        runner=runner,
-                        limit=4,
-                        concurrency=2,
-                        lease_ttl_s=5,
-                        heartbeat_interval_s=0.05,
-                    )
-                )
-            )
-            thread.start()
-            self.assertTrue(wait_for_notice(root, "a_fast", timeout_s=0.4))
-            self.assertTrue(wait_for_notice(root, "c_refill", timeout_s=0.6))
-            self.assertTrue(wait_for_notice(root, "d_refill", timeout_s=0.8))
-            self.assertFalse((root / "notices" / "b_slow.json").exists())
-            self.assertTrue(thread.is_alive())
-            thread.join(timeout=2.0)
-            self.assertFalse(thread.is_alive())
-            self.assertEqual(worked["claimed_count"], 4)
-            self.assertEqual(worked["completed_count"], 4)
+            _assert_refill(self, root, queue, runner)
             self.assertEqual(runner.batch_calls, [])
 
     def test_cpu_service_jobs_use_same_durable_queue_and_notices(self) -> None:

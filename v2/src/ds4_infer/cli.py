@@ -12,7 +12,7 @@ from .service import load_requests_jsonl
 from .topology import SparkTopology
 
 
-def main(argv: list[str] | None = None) -> int:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ds4-infer")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -67,75 +67,136 @@ def main(argv: list[str] | None = None) -> int:
     queue_collect.add_argument("--queue-dir", required=True)
     queue_collect.add_argument("--request-id")
     queue_collect.add_argument("--batch-id")
+    return parser
 
-    args = parser.parse_args(argv)
 
-    if args.cmd == "profiles":
-        registry = ProfileRegistry.load(args.profiles_dir)
-        print(json.dumps([profile.to_public_dict() for profile in registry.all_profiles()], indent=2, sort_keys=True))
-        return 0
+def main(argv: list[str] | None = None) -> int:
+    return _run(_build_parser().parse_args(argv))
 
-    if args.cmd == "topology":
-        topology = SparkTopology.load(args.topology)
-        payload = topology.estimate_capacity_by_profile() if args.capacity else topology.to_public_dict()
-        print(json.dumps(payload, indent=2, sort_keys=True))
-        return 0
 
-    if args.cmd == "submit":
-        requests = load_requests_jsonl(args.requests)
-        print(json.dumps({"state": "accepted", "request_count": len(requests), "live_run": "removed", "next": "use queue-submit plus queue-worker"}, sort_keys=True))
-        return 0
+def _run(args: argparse.Namespace) -> int:
+    handlers = {
+        "profiles": _cmd_profiles,
+        "topology": _cmd_topology,
+        "submit": _cmd_submit,
+        "queue-submit": _cmd_queue_submit,
+        "queue-submit-cpu": _cmd_queue_submit_cpu,
+        "queue-work": _cmd_queue_work,
+        "queue-worker": _cmd_queue_work,
+        "queue-reap-leases": _cmd_queue_reap,
+        "queue-status": _cmd_queue_status,
+        "queue-poll": _cmd_queue_poll,
+        "queue-collect": _cmd_queue_collect,
+    }
+    try:
+        return handlers[args.cmd](args)
+    except KeyError as exc:
+        raise AssertionError(args.cmd) from exc
 
-    if args.cmd == "queue-submit":
-        queue = InferenceQueue(args.queue_dir)
-        registry = ProfileRegistry.load(args.profiles_dir)
-        topology = SparkTopology.load(args.topology) if args.topology else None
-        requests = load_requests_jsonl(args.requests)
-        print(json.dumps(queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id=args.batch_id), indent=2, sort_keys=True))
-        return 0
 
-    if args.cmd == "queue-submit-cpu":
-        queue = InferenceQueue(args.queue_dir)
-        items = _load_jsonl(args.items)
-        print(json.dumps(queue.submit_cpu_requests(service=args.service, items=items, batch_id=args.batch_id, immediate=args.immediate, node_id=args.node_id, timeout_s=args.timeout_s), indent=2, sort_keys=True))
-        return 0
+def _emit(payload: object, *, indent: int | None = 2, flush: bool = False) -> None:
+    print(json.dumps(payload, indent=indent, sort_keys=True), flush=flush)
 
-    if args.cmd in {"queue-work", "queue-worker"}:
-        queue = InferenceQueue(args.queue_dir)
-        registry = ProfileRegistry.load(args.profiles_dir)
-        runner = _make_runner(args.runner, args.command or [], args.runner_timeout_s)
-        iterations = 0
-        while True:
-            result = queue.work(registry=registry, runner=runner, node_id=args.node_id, batch_id=args.batch_id, batch_key=args.batch_key, limit=args.limit, concurrency=args.concurrency, worker_id=args.worker_id, lease_ttl_s=args.lease_ttl_s, heartbeat_interval_s=args.heartbeat_interval_s)
-            print(json.dumps(result, sort_keys=True), flush=True)
-            iterations += 1
-            if not args.loop or (args.max_iterations > 0 and iterations >= args.max_iterations):
-                break
-            if result.get("claimed_count", 0) == 0:
-                time.sleep(args.sleep_s)
-        return 0
 
-    if args.cmd == "queue-reap-leases":
-        queue = InferenceQueue(args.queue_dir)
-        print(json.dumps(queue.requeue_expired_leases(max_attempts=args.max_attempts), indent=2, sort_keys=True))
-        return 0
+def _cmd_profiles(args: argparse.Namespace) -> int:
+    registry = ProfileRegistry.load(args.profiles_dir)
+    _emit([profile.to_public_dict() for profile in registry.all_profiles()])
+    return 0
 
-    if args.cmd == "queue-status":
-        queue = InferenceQueue(args.queue_dir)
-        print(json.dumps(queue.status(request_id=args.request_id, batch_id=args.batch_id), indent=2, sort_keys=True))
-        return 0
 
-    if args.cmd == "queue-poll":
-        queue = InferenceQueue(args.queue_dir)
-        print(json.dumps(queue.poll(after_event_id=args.after_event_id, limit=args.limit), indent=2, sort_keys=True))
-        return 0
+def _cmd_topology(args: argparse.Namespace) -> int:
+    topology = SparkTopology.load(args.topology)
+    _emit(topology.estimate_capacity_by_profile() if args.capacity else topology.to_public_dict())
+    return 0
 
-    if args.cmd == "queue-collect":
-        queue = InferenceQueue(args.queue_dir)
-        print(json.dumps(queue.collect(request_id=args.request_id, batch_id=args.batch_id), indent=2, sort_keys=True))
-        return 0
 
-    raise AssertionError(args.cmd)
+def _cmd_submit(args: argparse.Namespace) -> int:
+    requests = load_requests_jsonl(args.requests)
+    _emit(
+        {
+            "state": "accepted",
+            "request_count": len(requests),
+            "live_run": "removed",
+            "next": "use queue-submit plus queue-worker",
+        },
+        indent=None,
+    )
+    return 0
+
+
+def _cmd_queue_submit(args: argparse.Namespace) -> int:
+    queue = InferenceQueue(args.queue_dir)
+    registry = ProfileRegistry.load(args.profiles_dir)
+    topology = SparkTopology.load(args.topology) if args.topology else None
+    requests = load_requests_jsonl(args.requests)
+    _emit(queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id=args.batch_id))
+    return 0
+
+
+def _cmd_queue_submit_cpu(args: argparse.Namespace) -> int:
+    queue = InferenceQueue(args.queue_dir)
+    _emit(
+        queue.submit_cpu_requests(
+            service=args.service,
+            items=_load_jsonl(args.items),
+            batch_id=args.batch_id,
+            immediate=args.immediate,
+            node_id=args.node_id,
+            timeout_s=args.timeout_s,
+        )
+    )
+    return 0
+
+
+def _cmd_queue_work(args: argparse.Namespace) -> int:
+    queue = InferenceQueue(args.queue_dir)
+    registry = ProfileRegistry.load(args.profiles_dir)
+    runner = _make_runner(args.runner, args.command or [], args.runner_timeout_s)
+    iterations = 0
+    while True:
+        result = _queue_work_once(queue, registry, runner, args)
+        _emit(result, indent=None, flush=True)
+        iterations += 1
+        if not args.loop or (args.max_iterations > 0 and iterations >= args.max_iterations):
+            break
+        if result.get("claimed_count", 0) == 0:
+            time.sleep(args.sleep_s)
+    return 0
+
+
+def _queue_work_once(queue: InferenceQueue, registry: ProfileRegistry, runner: object, args: argparse.Namespace) -> dict:
+    return queue.work(
+        registry=registry,
+        runner=runner,
+        node_id=args.node_id,
+        batch_id=args.batch_id,
+        batch_key=args.batch_key,
+        limit=args.limit,
+        concurrency=args.concurrency,
+        worker_id=args.worker_id,
+        lease_ttl_s=args.lease_ttl_s,
+        heartbeat_interval_s=args.heartbeat_interval_s,
+    )
+
+
+def _cmd_queue_reap(args: argparse.Namespace) -> int:
+    _emit(InferenceQueue(args.queue_dir).requeue_expired_leases(max_attempts=args.max_attempts))
+    return 0
+
+
+def _cmd_queue_status(args: argparse.Namespace) -> int:
+    _emit(InferenceQueue(args.queue_dir).status(request_id=args.request_id, batch_id=args.batch_id))
+    return 0
+
+
+def _cmd_queue_poll(args: argparse.Namespace) -> int:
+    _emit(InferenceQueue(args.queue_dir).poll(after_event_id=args.after_event_id, limit=args.limit))
+    return 0
+
+
+def _cmd_queue_collect(args: argparse.Namespace) -> int:
+    _emit(InferenceQueue(args.queue_dir).collect(request_id=args.request_id, batch_id=args.batch_id))
+    return 0
 
 
 def _add_queue_worker_args(parser: argparse.ArgumentParser) -> None:

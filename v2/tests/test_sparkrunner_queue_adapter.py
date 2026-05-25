@@ -39,25 +39,29 @@ def wait_for_rows(path: Path, count: int, timeout_s: float = 1.0) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
+def _write_jsonl(path: Path, *records: dict) -> None:
+    path.write_text("".join(json.dumps(record) + "\n" for record in records), encoding="utf-8")
+
+
+def _adapter_args(root: Path, requests: Path, responses: Path, *extra: str, queue_dir: Path | None = None) -> list[str]:
+    return [
+        "--input", str(requests),
+        "--output", str(responses),
+        "--queue-dir", str(queue_dir or root / "queue"),
+        "--profiles-dir", str(ROOT / "profiles" / "models"),
+        "--topology", str(ROOT / "profiles" / "topology" / "static_sparks.json"),
+        *extra,
+    ]
+
+
 class SparkRunnerQueueAdapterTests(unittest.TestCase):
     def test_adapter_runs_sparkrunner_contract_through_queue(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             requests = root / "requests.jsonl"
             responses = root / "responses.jsonl"
-            requests.write_text(json.dumps({"custom_id": "c:1", "prompt": "return ok", "max_tokens": 8}) + "\n", encoding="utf-8")
-            rc = sparkrunner_adapter.main(
-                [
-                    "--input", str(requests),
-                    "--output", str(responses),
-                    "--queue-dir", str(root / "queue"),
-                    "--profiles-dir", str(ROOT / "profiles" / "models"),
-                    "--topology", str(ROOT / "profiles" / "topology" / "static_sparks.json"),
-                    "--model", "qwen",
-                    "--runner", "fake",
-                    "--timeout-s", "30",
-                ]
-            )
+            _write_jsonl(requests, {"custom_id": "c:1", "prompt": "return ok", "max_tokens": 8})
+            rc = sparkrunner_adapter.main(_adapter_args(root, requests, responses, "--model", "qwen", "--runner", "fake", "--timeout-s", "30"))
             self.assertEqual(rc, 0)
             rows = [json.loads(line) for line in responses.read_text(encoding="utf-8").splitlines()]
         self.assertEqual(rows[0]["custom_id"], "c:1")
@@ -74,19 +78,9 @@ class SparkRunnerQueueAdapterTests(unittest.TestCase):
             queue.submit_requests(requests=[_stale_request("aaa-stale")], registry=registry, topology=topology, batch_id="stale")
             requests = root / "requests.jsonl"
             responses = root / "responses.jsonl"
-            requests.write_text(json.dumps({"custom_id": "fresh", "prompt": "return ok", "max_tokens": 8}) + "\n", encoding="utf-8")
+            _write_jsonl(requests, {"custom_id": "fresh", "prompt": "return ok", "max_tokens": 8})
             rc = sparkrunner_adapter.main(
-                [
-                    "--input", str(requests),
-                    "--output", str(responses),
-                    "--queue-dir", str(queue_dir),
-                    "--profiles-dir", str(ROOT / "profiles" / "models"),
-                    "--topology", str(ROOT / "profiles" / "topology" / "static_sparks.json"),
-                    "--model", "qwen",
-                    "--runner", "fake",
-                    "--work-limit", "1",
-                    "--timeout-s", "30",
-                ]
+                _adapter_args(root, requests, responses, "--model", "qwen", "--runner", "fake", "--work-limit", "1", "--timeout-s", "30", queue_dir=queue_dir)
             )
             rows = [json.loads(line) for line in responses.read_text(encoding="utf-8").splitlines()]
             stale_status = queue.status(request_id="aaa-stale")
@@ -100,18 +94,9 @@ class SparkRunnerQueueAdapterTests(unittest.TestCase):
             root = Path(temp_dir)
             requests = root / "requests.jsonl"
             responses = root / "responses.jsonl"
-            requests.write_text(json.dumps({"custom_id": "diamond", "prompt": "source", "job_class": "atom_edit"}) + "\n", encoding="utf-8")
+            _write_jsonl(requests, {"custom_id": "diamond", "prompt": "source", "job_class": "atom_edit"})
             sparkrunner_adapter.main(
-                [
-                    "--input", str(requests),
-                    "--output", str(responses),
-                    "--queue-dir", str(root / "queue"),
-                    "--profiles-dir", str(ROOT / "profiles" / "models"),
-                    "--topology", str(ROOT / "profiles" / "topology" / "static_sparks.json"),
-                    "--model", "qwen",
-                    "--runner", "fake",
-                    "--response-format", "inference",
-                ]
+                _adapter_args(root, requests, responses, "--model", "qwen", "--runner", "fake", "--response-format", "inference")
             )
             row = json.loads(responses.read_text(encoding="utf-8").splitlines()[0])
         self.assertEqual(row["format"], "ds4-inference-result-v1")
@@ -122,24 +107,9 @@ class SparkRunnerQueueAdapterTests(unittest.TestCase):
             root = Path(temp_dir)
             requests = root / "requests.jsonl"
             responses = root / "responses.jsonl"
-            requests.write_text(
-                json.dumps({"custom_id": "slow", "prompt": "slow"}) + "\n" +
-                json.dumps({"custom_id": "fast", "prompt": "fast"}) + "\n",
-                encoding="utf-8",
-            )
+            _write_jsonl(requests, {"custom_id": "slow", "prompt": "slow"}, {"custom_id": "fast", "prompt": "fast"})
             result: dict[str, int] = {}
-            args = [
-                "--input", str(requests),
-                "--output", str(responses),
-                "--queue-dir", str(root / "queue"),
-                "--profiles-dir", str(ROOT / "profiles" / "models"),
-                "--topology", str(ROOT / "profiles" / "topology" / "static_sparks.json"),
-                "--model", "ds4v",
-                "--runner", "fake",
-                "--work-limit", "2",
-                "--concurrency", "2",
-                "--timeout-s", "10",
-            ]
+            args = _adapter_args(root, requests, responses, "--model", "ds4v", "--runner", "fake", "--work-limit", "2", "--concurrency", "2", "--timeout-s", "10")
             with mock.patch.object(sparkrunner_adapter, "make_runner", return_value=DelayedRunner({"slow": 1.5, "fast": 0.05})):
                 thread = threading.Thread(target=lambda: result.update({"rc": sparkrunner_adapter.main(args)}))
                 thread.start()

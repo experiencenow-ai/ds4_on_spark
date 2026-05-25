@@ -22,6 +22,62 @@ REQUEST_NOTICE_FORMAT = "ds4-inference-completion-notice-v1"
 BATCH_STATUS_FORMAT = "ds4-inference-batch-status-v1"
 TERMINAL_STATES = {"completed", "failed"}
 CPU_QUEUE_TIMEOUT_KEY = "__ds4_queue_timeout_s"
+REQUEST_COLUMNS_SQL = """
+create table if not exists requests(
+    request_id text primary key,
+    batch_id text not null,
+    request_kind text not null default 'model',
+    service_name text,
+    state text not null,
+    priority integer not null,
+    immediate integer not null,
+    batch_key text not null,
+    selected_profile_id text not null,
+    selected_node_id text,
+    request_json text not null,
+    result_json text,
+    error text,
+    created_at real not null,
+    updated_at real not null,
+    started_at real,
+    completed_at real,
+    lease_id text,
+    leased_by text,
+    lease_expires_at real,
+    heartbeat_at real,
+    attempt_count integer not null default 0
+)
+"""
+QUEUE_SCHEMA_SQL = (
+    """
+    create table if not exists batches(
+        batch_id text primary key,
+        state text not null default 'queued',
+        created_at real not null,
+        updated_at real not null,
+        request_count integer not null default 0,
+        queued_count integer not null default 0,
+        running_count integer not null default 0,
+        completed_count integer not null default 0,
+        failed_count integer not null default 0
+    )
+    """,
+    REQUEST_COLUMNS_SQL,
+    "create index if not exists idx_requests_state_node_key "
+    "on requests(state, selected_node_id, batch_key, priority, created_at)",
+    "create index if not exists idx_requests_lease on requests(state, lease_expires_at, lease_id)",
+    "create index if not exists idx_requests_batch on requests(batch_id, state)",
+    """
+    create table if not exists events(
+        event_id integer primary key autoincrement,
+        created_at real not null,
+        request_id text not null,
+        event_type text not null,
+        state text not null,
+        payload_json text not null
+    )
+    """,
+)
 
 
 @dataclass(frozen=True)
@@ -139,7 +195,12 @@ class InferenceQueue:
                 )
                 request_ids.append(request.request_id)
             self._refresh_batch_row(conn, batch_id)
-        return QueueSubmission(batch_id=batch_id, request_ids=tuple(request_ids), selected_profiles=selected_profiles, selected_nodes=selected_nodes).to_public_dict()
+        return QueueSubmission(
+            batch_id=batch_id,
+            request_ids=tuple(request_ids),
+            selected_profiles=selected_profiles,
+            selected_nodes=selected_nodes,
+        ).to_public_dict()
 
     def submit_cpu_requests(
         self,
@@ -151,16 +212,8 @@ class InferenceQueue:
         node_id: str | None = None,
         timeout_s: float | None = None,
     ) -> dict[str, Any]:
-        item_list = [dict(item) for item in items]
-        if not item_list:
-            raise ValueError("cannot submit an empty CPU request set")
         batch_id = batch_id or new_id("cpu-batch")
-        service = str(service)
-        if timeout_s is not None and timeout_s <= 0:
-            raise ValueError("timeout_s must be positive")
-        from ds4_tools.cpu_batch import validate_cpu_submission
-        validate_cpu_submission(service, len(item_list))
-        seen: set[str] = set()
+        service, item_list = _validated_cpu_items(service, items, timeout_s)
         now = time.time()
         request_ids: list[str] = []
         batch_key = cpu_batch_key(service=service, node_id=node_id, immediate=immediate, timeout_s=timeout_s)
@@ -169,37 +222,64 @@ class InferenceQueue:
                 "insert into batches(batch_id, created_at, updated_at) values (?, ?, ?)",
                 (batch_id, now, now),
             )
-            for index, item in enumerate(item_list):
-                request_id = safe_request_id(str(item.get("custom_id") or item.get("request_id") or f"{service}-{index}"), index, seen)
-                item.setdefault("custom_id", request_id)
-                if timeout_s is not None:
-                    item[CPU_QUEUE_TIMEOUT_KEY] = float(timeout_s)
-                conn.execute(
-                    """
-                    insert into requests(
-                        request_id, batch_id, request_kind, service_name, state, priority, immediate, batch_key,
-                        selected_profile_id, selected_node_id, request_json,
-                        created_at, updated_at
-                    ) values (?, ?, 'cpu', ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        request_id,
-                        batch_id,
-                        service,
-                        0 if immediate else 10,
-                        1 if immediate else 0,
-                        batch_key,
-                        f"cpu:{service}",
-                        node_id,
-                        json.dumps(item, sort_keys=True),
-                        now,
-                        now,
-                    ),
+            for request_id, item in _cpu_request_rows(service, item_list, timeout_s):
+                self._insert_cpu_request(
+                    conn,
+                    request_id=request_id,
+                    batch_id=batch_id,
+                    service=service,
+                    item=item,
+                    immediate=immediate,
+                    batch_key=batch_key,
+                    node_id=node_id,
+                    now=now,
                 )
-                self._insert_event(conn, request_id, "submitted", "queued", {"batch_id": batch_id, "batch_key": batch_key, "service": service, "selected_node_id": node_id})
+                event = {"batch_id": batch_id, "batch_key": batch_key, "service": service, "selected_node_id": node_id}
+                self._insert_event(conn, request_id, "submitted", "queued", event)
                 request_ids.append(request_id)
             self._refresh_batch_row(conn, batch_id)
-        return QueueSubmission(batch_id=batch_id, request_ids=tuple(request_ids), selected_profiles={}, selected_nodes={node_id: len(request_ids)} if node_id else {}, selected_services={service: len(request_ids)}).to_public_dict()
+        return QueueSubmission(
+            batch_id=batch_id,
+            request_ids=tuple(request_ids),
+            selected_profiles={},
+            selected_nodes={node_id: len(request_ids)} if node_id else {},
+            selected_services={service: len(request_ids)},
+        ).to_public_dict()
+
+    def _insert_cpu_request(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        request_id: str,
+        batch_id: str,
+        service: str,
+        item: dict[str, Any],
+        immediate: bool,
+        batch_key: str,
+        node_id: str | None,
+        now: float,
+    ) -> None:
+        conn.execute(
+            """
+            insert into requests(
+                request_id, batch_id, request_kind, service_name, state, priority, immediate, batch_key,
+                selected_profile_id, selected_node_id, request_json, created_at, updated_at
+            ) values (?, ?, 'cpu', ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                request_id,
+                batch_id,
+                service,
+                0 if immediate else 10,
+                1 if immediate else 0,
+                batch_key,
+                f"cpu:{service}",
+                node_id,
+                json.dumps(item, sort_keys=True),
+                now,
+                now,
+            ),
+        )
 
     def work(
         self,
@@ -226,7 +306,14 @@ class InferenceQueue:
             lease_ttl_s=lease_ttl_s,
             heartbeat_interval_s=heartbeat_interval_s,
         )
-        return worker.run_once(node_id=node_id, batch_id=batch_id, batch_key=batch_key, limit=limit, concurrency=concurrency, on_result=on_result)
+        return worker.run_once(
+            node_id=node_id,
+            batch_id=batch_id,
+            batch_key=batch_key,
+            limit=limit,
+            concurrency=concurrency,
+            on_result=on_result,
+        )
 
     def claim_requests(
         self,
@@ -256,34 +343,20 @@ class InferenceQueue:
             for row in rows:
                 request_id = str(row["request_id"])
                 lease_id = f"{leased_by}:{uuid.uuid4().hex}"
-                updated = conn.execute(
-                    """
-                    update requests
-                    set state = 'running', lease_id = ?, leased_by = ?, lease_expires_at = ?,
-                        heartbeat_at = ?, attempt_count = attempt_count + 1,
-                        started_at = ?, updated_at = ?
-                    where request_id = ? and state = 'queued'
-                    """,
-                    (lease_id, leased_by, now + lease_ttl_s, now, now, now, request_id),
-                ).rowcount
+                updated = self._lease_row(
+                    conn,
+                    request_id=request_id,
+                    lease_id=lease_id,
+                    leased_by=leased_by,
+                    lease_ttl_s=lease_ttl_s,
+                    now=now,
+                )
                 if updated != 1:
                     continue
                 batch_ids.add(str(row["batch_id"]))
-                self._insert_event(conn, request_id, "started", "running", {"batch_id": row["batch_id"], "batch_key": row["batch_key"], "lease_id": lease_id, "leased_by": leased_by})
-                claims.append(
-                    QueueClaim(
-                        request_id=request_id,
-                        batch_id=str(row["batch_id"]),
-                        batch_key=str(row["batch_key"]),
-                        request_kind=str(row["request_kind"]),
-                        selected_profile_id=str(row["selected_profile_id"]),
-                        selected_node_id=str(row["selected_node_id"]) if row["selected_node_id"] else None,
-                        lease_id=lease_id,
-                        request=_row_request(row),
-                        service_name=str(row["service_name"]) if row["service_name"] else None,
-                        payload=json.loads(str(row["request_json"])),
-                    )
-                )
+                event = {"batch_id": row["batch_id"], "batch_key": row["batch_key"], "lease_id": lease_id, "leased_by": leased_by}
+                self._insert_event(conn, request_id, "started", "running", event)
+                claims.append(_row_claim(row, request_id=request_id, lease_id=lease_id))
             for batch_id_value in batch_ids:
                 self._refresh_batch_row(conn, batch_id_value)
             conn.commit()
@@ -294,7 +367,36 @@ class InferenceQueue:
         finally:
             conn.close()
 
-    def finish_request(self, *, request_id: str, lease_id: str, state: str, result: dict[str, Any], error: str | None = None) -> bool:
+    def _lease_row(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        request_id: str,
+        lease_id: str,
+        leased_by: str,
+        lease_ttl_s: int,
+        now: float,
+    ) -> int:
+        return conn.execute(
+            """
+            update requests
+            set state = 'running', lease_id = ?, leased_by = ?, lease_expires_at = ?,
+                heartbeat_at = ?, attempt_count = attempt_count + 1,
+                started_at = ?, updated_at = ?
+            where request_id = ? and state = 'queued'
+            """,
+            (lease_id, leased_by, now + lease_ttl_s, now, now, now, request_id),
+        ).rowcount
+
+    def finish_request(
+        self,
+        *,
+        request_id: str,
+        lease_id: str,
+        state: str,
+        result: dict[str, Any],
+        error: str | None = None,
+    ) -> bool:
         if state not in TERMINAL_STATES:
             raise ValueError(f"unsupported terminal state: {state}")
         now = time.time()
@@ -313,7 +415,10 @@ class InferenceQueue:
             if updated != 1:
                 conn.rollback()
                 return False
-            row = conn.execute("select batch_id, batch_key from requests where request_id = ?", (request_id,)).fetchone()
+            row = conn.execute(
+                "select batch_id, batch_key from requests where request_id = ?",
+                (request_id,),
+            ).fetchone()
             payload = {"batch_id": row["batch_id"], "batch_key": row["batch_key"]} if row is not None else {}
             self._insert_event(conn, request_id, state, state, payload)
             if row is not None:
@@ -362,41 +467,16 @@ class InferenceQueue:
             ).fetchall()
             batch_ids = set()
             for row in rows:
-                request_id = str(row["request_id"])
-                batch_ids.add(str(row["batch_id"]))
-                attempts = int(row["attempt_count"] or 0)
-                payload = {"batch_id": row["batch_id"], "batch_key": row["batch_key"], "lease_id": row["lease_id"], "attempt_count": attempts}
-                if attempts >= max_attempts:
-                    failure = {
-                        "format": "ds4-inference-failure-v1",
-                        "request_id": request_id,
-                        "status": "lease_expired",
-                        "error": f"lease expired after {attempts} attempts",
-                    }
-                    conn.execute(
-                        """
-                        update requests
-                        set state = 'failed', result_json = ?, error = ?, completed_at = ?, updated_at = ?,
-                            lease_id = null, leased_by = null, lease_expires_at = null, heartbeat_at = null
-                        where request_id = ? and state = 'running'
-                        """,
-                        (json.dumps(failure, sort_keys=True), failure["error"], now, now, request_id),
-                    )
-                    self._insert_event(conn, request_id, "lease_expired", "failed", payload)
-                    notices.append((request_id, failure))
-                    failed += 1
-                else:
-                    conn.execute(
-                        """
-                        update requests
-                        set state = 'queued', updated_at = ?,
-                            lease_id = null, leased_by = null, lease_expires_at = null, heartbeat_at = null
-                        where request_id = ? and state = 'running'
-                        """,
-                        (now, request_id),
-                    )
-                    self._insert_event(conn, request_id, "lease_expired", "queued", payload)
-                    requeued += 1
+                batch_id_value, outcome = self._expire_running_row(
+                    conn,
+                    row=row,
+                    max_attempts=max_attempts,
+                    now=now,
+                    notices=notices,
+                )
+                batch_ids.add(batch_id_value)
+                requeued += 1 if outcome == "queued" else 0
+                failed += 1 if outcome == "failed" else 0
             for batch_id_value in batch_ids:
                 self._refresh_batch_row(conn, batch_id_value)
             conn.commit()
@@ -407,7 +487,50 @@ class InferenceQueue:
             conn.close()
         for request_id, failure in notices:
             self._write_notice(request_id, "failed", failure)
-        return {"format": QUEUE_FORMAT, "requeued_count": requeued, "failed_count": failed, "state": "reaped" if requeued or failed else "idle"}
+        return {
+            "format": QUEUE_FORMAT,
+            "requeued_count": requeued,
+            "failed_count": failed,
+            "state": "reaped" if requeued or failed else "idle",
+        }
+
+    def _expire_running_row(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        row: sqlite3.Row,
+        max_attempts: int,
+        now: float,
+        notices: list[tuple[str, dict[str, Any]]],
+    ) -> tuple[str, str]:
+        request_id = str(row["request_id"])
+        attempts = int(row["attempt_count"] or 0)
+        payload = _lease_payload(row, attempts)
+        if attempts >= max_attempts:
+            failure = _lease_failure(request_id, attempts)
+            conn.execute(
+                """
+                update requests
+                set state = 'failed', result_json = ?, error = ?, completed_at = ?, updated_at = ?,
+                    lease_id = null, leased_by = null, lease_expires_at = null, heartbeat_at = null
+                where request_id = ? and state = 'running'
+                """,
+                (json.dumps(failure, sort_keys=True), failure["error"], now, now, request_id),
+            )
+            self._insert_event(conn, request_id, "lease_expired", "failed", payload)
+            notices.append((request_id, failure))
+            return str(row["batch_id"]), "failed"
+        conn.execute(
+            """
+            update requests
+            set state = 'queued', updated_at = ?,
+                lease_id = null, leased_by = null, lease_expires_at = null, heartbeat_at = null
+            where request_id = ? and state = 'running'
+            """,
+            (now, request_id),
+        )
+        self._insert_event(conn, request_id, "lease_expired", "queued", payload)
+        return str(row["batch_id"]), "queued"
 
     def status(self, *, request_id: str | None = None, batch_id: str | None = None) -> dict[str, Any]:
         with closing(self._connect()) as conn, conn:
@@ -422,10 +545,16 @@ class InferenceQueue:
                 if row is None:
                     return {"format": BATCH_STATUS_FORMAT, "batch_id": batch_id, "state": "unknown"}
                 return self._row_to_batch_status(row)
-            rows = conn.execute("select state, count(*) as count from requests group by state order by state").fetchall()
+            rows = conn.execute(
+                "select state, count(*) as count from requests group by state order by state"
+            ).fetchall()
             counts = {str(row["state"]): int(row["count"]) for row in rows}
             event = conn.execute("select max(event_id) as newest_event_id from events").fetchone()
-            return {"format": QUEUE_FORMAT, "state_counts": counts, "newest_event_id": int(event["newest_event_id"] or 0)}
+            return {
+                "format": QUEUE_FORMAT,
+                "state_counts": counts,
+                "newest_event_id": int(event["newest_event_id"] or 0),
+            }
 
     def poll(self, *, after_event_id: int = 0, limit: int = 100) -> dict[str, Any]:
         with closing(self._connect()) as conn:
@@ -471,65 +600,9 @@ class InferenceQueue:
         conn.execute(f"pragma busy_timeout = {busy_timeout_ms}")
         conn.execute("pragma journal_mode = wal")
         conn.execute("pragma synchronous = normal")
-        conn.execute(
-            """
-            create table if not exists batches(
-                batch_id text primary key,
-                state text not null default 'queued',
-                created_at real not null,
-                updated_at real not null,
-                request_count integer not null default 0,
-                queued_count integer not null default 0,
-                running_count integer not null default 0,
-                completed_count integer not null default 0,
-                failed_count integer not null default 0
-            )
-            """
-        )
-        conn.execute(
-            """
-            create table if not exists requests(
-                request_id text primary key,
-                batch_id text not null,
-                request_kind text not null default 'model',
-                service_name text,
-                state text not null,
-                priority integer not null,
-                immediate integer not null,
-                batch_key text not null,
-                selected_profile_id text not null,
-                selected_node_id text,
-                request_json text not null,
-                result_json text,
-                error text,
-                created_at real not null,
-                updated_at real not null,
-                started_at real,
-                completed_at real,
-                lease_id text,
-                leased_by text,
-                lease_expires_at real,
-                heartbeat_at real,
-                attempt_count integer not null default 0
-            )
-            """
-        )
+        for statement in QUEUE_SCHEMA_SQL:
+            conn.execute(statement)
         self._ensure_request_columns(conn)
-        conn.execute("create index if not exists idx_requests_state_node_key on requests(state, selected_node_id, batch_key, priority, created_at)")
-        conn.execute("create index if not exists idx_requests_lease on requests(state, lease_expires_at, lease_id)")
-        conn.execute("create index if not exists idx_requests_batch on requests(batch_id, state)")
-        conn.execute(
-            """
-            create table if not exists events(
-                event_id integer primary key autoincrement,
-                created_at real not null,
-                request_id text not null,
-                event_type text not null,
-                state text not null,
-                payload_json text not null
-            )
-            """
-        )
         return conn
 
     def _ensure_request_columns(self, conn: sqlite3.Connection) -> None:
@@ -547,7 +620,13 @@ class InferenceQueue:
             if name not in existing:
                 conn.execute(f"alter table requests add column {name} {spec}")
 
-    def _select_next_batch_key(self, conn: sqlite3.Connection, *, node_id: str | None, batch_id: str | None) -> str | None:
+    def _select_next_batch_key(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        node_id: str | None,
+        batch_id: str | None,
+    ) -> str | None:
         clauses = ["state = 'queued'"]
         params: list[Any] = []
         if node_id is not None:
@@ -568,7 +647,15 @@ class InferenceQueue:
         ).fetchone()
         return str(row["batch_key"]) if row is not None else None
 
-    def _select_work_rows(self, conn: sqlite3.Connection, *, node_id: str | None, batch_id: str | None, batch_key: str | None, limit: int) -> list[sqlite3.Row]:
+    def _select_work_rows(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        node_id: str | None,
+        batch_id: str | None,
+        batch_key: str | None,
+        limit: int,
+    ) -> list[sqlite3.Row]:
         clauses = ["state = 'queued'"]
         params: list[Any] = []
         if node_id is not None:
@@ -592,7 +679,10 @@ class InferenceQueue:
         ).fetchall()
 
     def _refresh_batch_row(self, conn: sqlite3.Connection, batch_id: str) -> None:
-        rows = conn.execute("select state, count(*) as count from requests where batch_id = ? group by state", (batch_id,)).fetchall()
+        rows = conn.execute(
+            "select state, count(*) as count from requests where batch_id = ? group by state",
+            (batch_id,),
+        ).fetchall()
         counts = {str(row["state"]): int(row["count"]) for row in rows}
         request_count = sum(counts.values())
         queued = counts.get("queued", 0)
@@ -610,7 +700,8 @@ class InferenceQueue:
         conn.execute(
             """
             update batches
-            set state = ?, updated_at = ?, request_count = ?, queued_count = ?, running_count = ?, completed_count = ?, failed_count = ?
+            set state = ?, updated_at = ?, request_count = ?, queued_count = ?,
+                running_count = ?, completed_count = ?, failed_count = ?
             where batch_id = ?
             """,
             (state, time.time(), request_count, queued, running, completed, failed, batch_id),
@@ -619,7 +710,14 @@ class InferenceQueue:
     def _queued_and_running_node_load(self) -> dict[str, int]:
         return queue_depths(self.db_path, request_kind="model")
 
-    def _insert_event(self, conn: sqlite3.Connection, request_id: str, event_type: str, state: str, payload: dict[str, Any]) -> None:
+    def _insert_event(
+        self,
+        conn: sqlite3.Connection,
+        request_id: str,
+        event_type: str,
+        state: str,
+        payload: dict[str, Any],
+    ) -> None:
         conn.execute(
             "insert into events(created_at, request_id, event_type, state, payload_json) values (?, ?, ?, ?, ?)",
             (time.time(), request_id, event_type, state, json.dumps(payload, sort_keys=True)),
@@ -632,19 +730,16 @@ class InferenceQueue:
             "state": state,
             "result": result,
         }
-        (self.notices_dir / f"{request_id}.json").write_text(json.dumps(notice, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        (self.notices_dir / f"{request_id}.json").write_text(
+            json.dumps(notice, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
     def _row_to_request_status(self, row: sqlite3.Row) -> dict[str, Any]:
-        return {
+        status = {
             "format": REQUEST_STATUS_FORMAT,
-            "request_id": str(row["request_id"]),
-            "batch_id": str(row["batch_id"]),
-            "request_kind": str(row["request_kind"]),
             "service_name": row["service_name"],
-            "state": str(row["state"]),
             "immediate": bool(row["immediate"]),
-            "batch_key": str(row["batch_key"]),
-            "selected_profile_id": str(row["selected_profile_id"]),
             "selected_node_id": row["selected_node_id"],
             "created_at": float(row["created_at"]),
             "updated_at": float(row["updated_at"]),
@@ -657,20 +752,18 @@ class InferenceQueue:
             "attempt_count": int(row["attempt_count"] or 0),
             "error": row["error"],
         }
+        status.update(_row_strings(row, "request_id", "batch_id", "request_kind", "state", "batch_key", "selected_profile_id"))
+        return status
 
     def _row_to_batch_status(self, row: sqlite3.Row) -> dict[str, Any]:
-        return {
+        status = {
             "format": BATCH_STATUS_FORMAT,
-            "batch_id": str(row["batch_id"]),
-            "state": str(row["state"]),
-            "request_count": int(row["request_count"]),
-            "queued_count": int(row["queued_count"]),
-            "running_count": int(row["running_count"]),
-            "completed_count": int(row["completed_count"]),
-            "failed_count": int(row["failed_count"]),
             "created_at": float(row["created_at"]),
             "updated_at": float(row["updated_at"]),
         }
+        status.update(_row_strings(row, "batch_id", "state"))
+        status.update(_row_ints(row, "request_count", "queued_count", "running_count", "completed_count", "failed_count"))
+        return status
 
     def _row_to_event(self, row: sqlite3.Row) -> dict[str, Any]:
         return {
@@ -700,7 +793,15 @@ def request_batch_key(request: InferenceRequest, profile: ModelProfile, assignme
 
 
 def cpu_batch_key(*, service: str, node_id: str | None, immediate: bool, timeout_s: float | None = None) -> str:
-    return "|".join([node_id or "unassigned", "cpu", service, _timeout_bucket(timeout_s), "immediate" if immediate else "queued"])
+    return "|".join(
+        [
+            node_id or "unassigned",
+            "cpu",
+            service,
+            _timeout_bucket(timeout_s),
+            "immediate" if immediate else "queued",
+        ]
+    )
 
 
 def queue_depths(db_path: str | Path, *, request_kind: str | None = None) -> dict[str, int]:
@@ -734,6 +835,78 @@ def _timeout_bucket(timeout_s: float | None) -> str:
     if timeout_s is None:
         return "timeout_default"
     return f"timeout_{max(1, int(float(timeout_s)))}s"
+
+
+def _validated_cpu_items(
+    service: str,
+    items: Iterable[dict[str, Any]],
+    timeout_s: float | None,
+) -> tuple[str, list[dict[str, Any]]]:
+    service = str(service)
+    item_list = [dict(item) for item in items]
+    if not item_list:
+        raise ValueError("cannot submit an empty CPU request set")
+    if timeout_s is not None and timeout_s <= 0:
+        raise ValueError("timeout_s must be positive")
+    from ds4_tools.cpu_batch import validate_cpu_submission
+    validate_cpu_submission(service, len(item_list))
+    return service, item_list
+
+
+def _cpu_request_rows(
+    service: str,
+    item_list: list[dict[str, Any]],
+    timeout_s: float | None,
+) -> Iterable[tuple[str, dict[str, Any]]]:
+    seen: set[str] = set()
+    for index, item in enumerate(item_list):
+        custom_id = str(item.get("custom_id") or item.get("request_id") or f"{service}-{index}")
+        request_id = safe_request_id(custom_id, index, seen)
+        item.setdefault("custom_id", request_id)
+        if timeout_s is not None:
+            item[CPU_QUEUE_TIMEOUT_KEY] = float(timeout_s)
+        yield request_id, item
+
+
+def _row_strings(row: sqlite3.Row, *names: str) -> dict[str, str]:
+    return {name: str(row[name]) for name in names}
+
+
+def _row_ints(row: sqlite3.Row, *names: str) -> dict[str, int]:
+    return {name: int(row[name]) for name in names}
+
+
+def _lease_payload(row: sqlite3.Row, attempts: int) -> dict[str, Any]:
+    return {
+        "batch_id": row["batch_id"],
+        "batch_key": row["batch_key"],
+        "lease_id": row["lease_id"],
+        "attempt_count": attempts,
+    }
+
+
+def _lease_failure(request_id: str, attempts: int) -> dict[str, Any]:
+    return {
+        "format": "ds4-inference-failure-v1",
+        "request_id": request_id,
+        "status": "lease_expired",
+        "error": f"lease expired after {attempts} attempts",
+    }
+
+
+def _row_claim(row: sqlite3.Row, *, request_id: str, lease_id: str) -> QueueClaim:
+    return QueueClaim(
+        request_id=request_id,
+        batch_id=str(row["batch_id"]),
+        batch_key=str(row["batch_key"]),
+        request_kind=str(row["request_kind"]),
+        selected_profile_id=str(row["selected_profile_id"]),
+        selected_node_id=str(row["selected_node_id"]) if row["selected_node_id"] else None,
+        lease_id=lease_id,
+        request=_row_request(row),
+        service_name=str(row["service_name"]) if row["service_name"] else None,
+        payload=json.loads(str(row["request_json"])),
+    )
 
 
 def _row_request(row: sqlite3.Row) -> InferenceRequest | None:
