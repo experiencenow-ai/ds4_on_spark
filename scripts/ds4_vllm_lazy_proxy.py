@@ -655,6 +655,8 @@ class LazyVllm:
         self.batch_default_concurrency = env_int("BATCH_DEFAULT_CONCURRENCY", 4)
         self.start_timeout = env_int("START_TIMEOUT", 1800)
         self.idle_timeout = env_int("IDLE_TIMEOUT", 1800)
+        self.resident_base_port = env_int("DS4_RESIDENT_BACKEND_BASE_PORT", self.port + 100)
+        self.resident_start = env_bool("DS4_RESIDENT_START", True)
         self.trust_remote_code = os.environ.get("TRUST_REMOTE_CODE", "1") != "0"
         self.extra_args = shlex.split(os.environ.get("VLLM_EXTRA_ARGS", ""))
         self.ds4_extra_args = shlex.split(os.environ.get("DS4_SERVER_EXTRA_ARGS", ""))
@@ -665,6 +667,8 @@ class LazyVllm:
         self.models.update(extra_model_dirs())
         self.aliases = unique_aliases(self.models)
         self.remote_models = remote_model_map(self.models)
+        self.resident_specs = self.load_resident_specs()
+        self.resident = {}
         self.cond = threading.Condition()
         self.current_model = None
         self.proc = None
@@ -674,6 +678,8 @@ class LazyVllm:
         self.active_requests = 0
         self.starting = False
         os.makedirs(self.log_dir, exist_ok=True)
+        if self.resident_start:
+            self.start_resident_models()
         threading.Thread(target=self.reaper, daemon=True).start()
 
     def resolve(self, model):
@@ -686,6 +692,15 @@ class LazyVllm:
 
     def remote_for(self, model):
         return(self.remote_models.get(model))
+
+    def resident_for(self, model):
+        rec = self.resident.get(model)
+        if rec is None:
+            return(None)
+        proc = rec.get("proc")
+        if proc is None or proc.poll() is not None:
+            raise VllmError("resident backend exited for %s: %s" % (model, self.tail_log(rec.get("log", ""))))
+        return({"base": "http://%s:%d" % (self.host, rec["port"]), "model": self.served_model(model)})
 
     def active(self):
         return(self.proc is not None and self.proc.poll() is None)
@@ -705,6 +720,8 @@ class LazyVllm:
                 "models": sorted(self.models),
                 "aliases": self.aliases,
                 "remote_models": self.remote_models,
+                "resident_specs": [{k: v for k, v in spec.items() if k != "rec"} for spec in self.resident_specs],
+                "resident_backends": self.resident_status(),
                 "model_backends": {model: self.backend_label(model) for model in sorted(self.models)},
                 "model_tuning": {model: self.effective_tuning(model, self.models[model]) for model in sorted(self.models)},
                 "gateway_defaults": self.gateway_defaults(),
@@ -714,15 +731,95 @@ class LazyVllm:
                 "args": self.current_args if self.active() else [],
             })
 
-    def open_log(self, model):
+    def log_file_path(self, model, port):
         safe = ("%s-%s" % (self.models[model].get("backend", "backend"), model)).replace("/", "_").replace(":", "_").replace(" ", "_")
-        self.log_path = os.path.join(self.log_dir, "%s-%d.log" % (safe, self.port))
+        return(os.path.join(self.log_dir, "%s-%d.log" % (safe, port)))
+
+    def open_log(self, model):
+        self.log_path = self.log_file_path(model, self.port)
         return(open(self.log_path, "ab", buffering=0))
 
     def backend_label(self, model):
+        if model in self.resident:
+            return("resident_" + self.models[model].get("backend", "vllm_lazy_hf"))
         if model in self.remote_models:
             return("vllm_remote")
         return(self.models[model].get("backend", "vllm_lazy_hf"))
+
+    def load_resident_specs(self):
+        raw_json = os.environ.get("DS4_RESIDENT_MODELS_JSON", "")
+        raw_models = os.environ.get("DS4_RESIDENT_MODELS", "")
+        if raw_json == "" and raw_models == "":
+            return([])
+        if raw_json != "":
+            items = json.loads(raw_json)
+        else:
+            items = [{"model": item.strip()} for item in raw_models.split(",") if item.strip()]
+        if not isinstance(items, list):
+            raise VllmError("DS4_RESIDENT_MODELS_JSON must be a list")
+        specs = []
+        used_ports = set()
+        next_port = self.resident_base_port
+        for item in items:
+            if isinstance(item, str):
+                item = {"model": item}
+            if not isinstance(item, dict):
+                raise VllmError("resident model spec must be a string or object")
+            model = self.resolve(str(item.get("model", "")))
+            port = item.get("port")
+            if port in (None, ""):
+                while next_port in used_ports:
+                    next_port += 1
+                port = next_port
+                next_port += 1
+            port = int(port)
+            if port == self.port or port in used_ports:
+                raise VllmError("resident backend port conflict for %s: %d" % (model, port))
+            used_ports.add(port)
+            spec = dict(item)
+            spec["model"] = model
+            spec["port"] = port
+            spec["rec"] = self.resident_rec(model, spec)
+            specs.append(spec)
+        return(specs)
+
+    def resident_rec(self, model, spec):
+        rec = dict(self.models[model])
+        if isinstance(spec.get("tuning"), dict):
+            rec["tuning"] = merge_dicts(rec.get("tuning", {}), spec["tuning"])
+        for key in (
+            "max_model_len",
+            "max_num_seqs",
+            "max_num_batched_tokens",
+            "gpu_memory_utilization",
+            "enable_chunked_prefill",
+            "enable_prefix_caching",
+            "async_scheduling",
+            "kv_cache_dtype",
+            "reasoning_parser",
+            "tool_call_parser",
+            "attention_backend",
+            "enable_auto_tool_choice",
+            "speculative_config",
+            "extra_args",
+        ):
+            if key in spec:
+                rec[key] = spec[key]
+        return(rec)
+
+    def resident_status(self):
+        out = {}
+        for model, rec in sorted(self.resident.items()):
+            proc = rec.get("proc")
+            out[model] = {
+                "active": proc is not None and proc.poll() is None,
+                "pid": proc.pid if proc is not None and proc.poll() is None else None,
+                "base": "http://%s:%d" % (self.host, rec["port"]),
+                "port": rec["port"],
+                "log": rec["log"],
+                "args": rec["args"],
+            }
+        return(out)
 
     def gateway_defaults(self):
         return({
@@ -918,7 +1015,9 @@ class LazyVllm:
             return(self.vllm_env())
         return(os.environ.copy())
 
-    def vllm_args(self, model, rec):
+    def vllm_args(self, model, rec, port=None):
+        if port is None:
+            port = self.port
         tuning = self.effective_tuning(model, rec)
         args = [
             os.path.join(self.vllm_home, "bin/python"),
@@ -930,7 +1029,7 @@ class LazyVllm:
             "--host",
             self.host,
             "--port",
-            str(self.port),
+            str(port),
         ]
         self.add_vllm_tuning_args(args, tuning)
         if self.trust_remote_code:
@@ -941,7 +1040,9 @@ class LazyVllm:
         args.extend(self.extra_args)
         return(args)
 
-    def ds4_server_args(self, rec):
+    def ds4_server_args(self, rec, port=None):
+        if port is None:
+            port = self.port
         server = expand_path(rec.get("server") or rec.get("binary") or self.ds4_server)
         args = [
             server,
@@ -950,7 +1051,7 @@ class LazyVllm:
             "--host",
             self.host,
             "--port",
-            str(self.port),
+            str(port),
             "--ctx",
             str(rec.get("ctx", self.gguf_ctx)),
             "--tokens",
@@ -967,7 +1068,9 @@ class LazyVllm:
         args.extend(self.ds4_extra_args)
         return(args)
 
-    def llama_server_args(self, rec):
+    def llama_server_args(self, rec, port=None):
+        if port is None:
+            port = self.port
         server = expand_path(rec.get("server") or rec.get("binary") or self.llama_server)
         args = [
             server,
@@ -980,7 +1083,7 @@ class LazyVllm:
             "--host",
             self.host,
             "--port",
-            str(self.port),
+            str(port),
             "--no-webui",
             "--cache-prompt",
             "--metrics",
@@ -995,14 +1098,15 @@ class LazyVllm:
         args.extend(self.llama_extra_args)
         return(args)
 
-    def args(self, model):
-        rec = self.models[model]
+    def args(self, model, rec=None, port=None):
+        if rec is None:
+            rec = self.models[model]
         backend = rec.get("backend", "vllm_lazy_hf")
         if backend == "ds4_server":
-            return(self.ds4_server_args(rec))
+            return(self.ds4_server_args(rec, port))
         if backend == "llama_server":
-            return(self.llama_server_args(rec))
-        return(self.vllm_args(model, rec))
+            return(self.llama_server_args(rec, port))
+        return(self.vllm_args(model, rec, port))
 
     def ready_path(self, rec):
         backend = rec.get("backend", "vllm_lazy_hf")
@@ -1016,14 +1120,17 @@ class LazyVllm:
 
     def wait_ready(self, model):
         rec = self.models[model]
+        self.wait_ready_proc(model, rec, self.proc, self.port, self.log_path)
+
+    def wait_ready_proc(self, model, rec, proc, port, log_path):
         ready_path = self.ready_path(rec)
         deadline = now() + self.start_timeout
         last_err = ""
         while now() < deadline:
-            if not self.active():
-                raise VllmError("backend exited during startup: %s" % self.tail_log())
+            if proc is None or proc.poll() is not None:
+                raise VllmError("backend exited during startup: %s" % self.tail_log(log_path))
             try:
-                conn = http.client.HTTPConnection(self.host, self.port, timeout=3)
+                conn = http.client.HTTPConnection(self.host, port, timeout=3)
                 conn.request("GET", ready_path)
                 resp = conn.getresponse()
                 resp.read()
@@ -1033,12 +1140,14 @@ class LazyVllm:
             except Exception as e:
                 last_err = str(e)
             time.sleep(2)
-        raise VllmError("timeout waiting for backend readiness: %s\n%s" % (last_err, self.tail_log()))
+        raise VllmError("timeout waiting for backend readiness: %s\n%s" % (last_err, self.tail_log(log_path)))
 
-    def tail_log(self):
-        if not self.log_path or not os.path.exists(self.log_path):
+    def tail_log(self, path=None):
+        if path is None:
+            path = self.log_path
+        if not path or not os.path.exists(path):
             return("")
-        with open(self.log_path, "rb") as f:
+        with open(path, "rb") as f:
             f.seek(0, os.SEEK_END)
             size = f.tell()
             f.seek(max(0, size - 12000), os.SEEK_SET)
@@ -1124,6 +1233,32 @@ class LazyVllm:
             with self.cond:
                 self.starting = False
                 self.cond.notify_all()
+
+    def start_resident_models(self):
+        for spec in self.resident_specs:
+            model = spec["model"]
+            port = spec["port"]
+            rec = spec["rec"]
+            log_path = self.log_file_path(model, port)
+            log = open(log_path, "ab", buffering=0)
+            args = self.args(model, rec=rec, port=port)
+            proc = subprocess.Popen(
+                args,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                env=self.env(rec),
+                preexec_fn=os.setsid,
+                close_fds=True,
+            )
+            self.resident[model] = {"proc": proc, "port": port, "args": args, "log": log_path}
+            try:
+                self.wait_ready_proc(model, rec, proc, port, log_path)
+            except Exception:
+                try:
+                    os.killpg(proc.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                raise
 
     def reaper(self):
         while True:
@@ -1411,7 +1546,7 @@ class Handler(BaseHTTPRequestHandler):
             if timeout <= 0:
                 raise VllmError("batch timeout_s must be > 0")
             model = self.batch_resolved_model(payload, items)
-            if STATE.remote_for(model) is None:
+            if STATE.resident_for(model) is None and STATE.remote_for(model) is None:
                 STATE.ensure(model)
             batch_id = "batch-%d" % int(now() * 1000)
             results = [None] * len(items)
@@ -1448,7 +1583,9 @@ class Handler(BaseHTTPRequestHandler):
                 model = STATE.resolve(raw_model)
                 if not model:
                     raise VllmError("no active model for GET proxy request")
-                remote = STATE.remote_for(model)
+                remote = STATE.resident_for(model)
+                if remote is None:
+                    remote = STATE.remote_for(model)
                 if remote is not None:
                     body = self.rewrite_model(body, remote.get("model", model))
                 else:

@@ -90,6 +90,37 @@ class Ds4VllmLazyProxyTest(unittest.TestCase):
             self.assertEqual(json.loads(args[args.index("--speculative-config") + 1])["method"], "dflash")
             self.assertEqual(args[args.index("--attention-backend") + 1], "flash_attn")
 
+    def test_resident_models_use_dedicated_ports_and_tuning(self):
+        with tempfile.TemporaryDirectory() as td:
+            hf = os.path.join(td, "hf")
+            add_hf_model(hf, "Qwen/Qwen3.6-27B-FP8", {"model_type": "qwen3", "max_position_embeddings": 262144})
+            add_hf_model(hf, "Qwen/Qwen3.6-35B-A3B-FP8", {"model_type": "qwen3", "max_position_embeddings": 262144})
+            resident = [
+                {"model": "Qwen/Qwen3.6-27B-FP8", "port": 18100, "tuning": {"gpu_memory_utilization": "0.44", "max_num_seqs": "32"}},
+                {"model": "Qwen/Qwen3.6-35B-A3B-FP8", "port": 18101, "tuning": {"gpu_memory_utilization": "0.28", "max_num_seqs": "64"}},
+            ]
+            module = load_proxy({
+                "MODELS_ROOT": hf,
+                "GGUF_MODELS_ROOT": os.path.join(td, "gguf"),
+                "DEEPSEEK_V4_REMOTE_BASE": "",
+                "VLLM_HOME": "/opt/vllm",
+                "PYHDR_HOME": os.path.join(td, "pyhdr"),
+                "LOG_DIR": os.path.join(td, "logs"),
+                "DS4_RESIDENT_MODELS_JSON": json.dumps(resident),
+                "DS4_RESIDENT_START": "0",
+            })
+            state = module.STATE
+            self.assertEqual([spec["model"] for spec in state.resident_specs], ["Qwen/Qwen3.6-27B-FP8", "Qwen/Qwen3.6-35B-A3B-FP8"])
+            self.assertEqual([spec["port"] for spec in state.resident_specs], [18100, 18101])
+            args0 = state.args("Qwen/Qwen3.6-27B-FP8", rec=state.resident_specs[0]["rec"], port=18100)
+            args1 = state.args("Qwen/Qwen3.6-35B-A3B-FP8", rec=state.resident_specs[1]["rec"], port=18101)
+            self.assertEqual(args0[args0.index("--port") + 1], "18100")
+            self.assertEqual(args1[args1.index("--port") + 1], "18101")
+            self.assertEqual(args0[args0.index("--gpu-memory-utilization") + 1], "0.44")
+            self.assertEqual(args1[args1.index("--gpu-memory-utilization") + 1], "0.28")
+            self.assertEqual(args0[args0.index("--max-num-seqs") + 1], "32")
+            self.assertEqual(args1[args1.index("--max-num-seqs") + 1], "64")
+
     def test_local_dflash_drafter_is_auto_attached(self):
         with tempfile.TemporaryDirectory() as td:
             hf = os.path.join(td, "hf")

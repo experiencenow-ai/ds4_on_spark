@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -15,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 VALIDATION_TASKS = ROOT / "profiles" / "validation" / "xhigh_live_validation_tasks.json"
+RESIDENT_ENV_SCRIPT = ROOT / "scripts" / "print_resident_gateway_env.py"
 
 
 def make_request(request_id: str, *, capability: str, job_class: str, chat: bool = False, immediate: bool = False) -> InferenceRequest:
@@ -39,8 +42,8 @@ class StaticSparkTopologyTests(unittest.TestCase):
     def test_capacity_reflects_static_allocation(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
         capacity = topology.estimate_capacity_by_profile()
-        self.assertEqual(capacity["qwen3_6_27b_fp8_efficient_v1"], 5)
-        self.assertEqual(capacity["qwen3_6_35b_a3b_fp8_fastest_v1"], 5)
+        self.assertEqual(capacity["qwen3_6_27b_fp8_efficient_v1"], 4)
+        self.assertEqual(capacity["qwen3_6_35b_a3b_fp8_fastest_v1"], 4)
         self.assertEqual(capacity["dsv4_vllm_mtp_smartest_v1"], 1)
         self.assertEqual(capacity["dsv4_antirez_smart_v1"], 1)
 
@@ -50,24 +53,25 @@ class StaticSparkTopologyTests(unittest.TestCase):
         profile = registry.resolve(capability="efficient", chat=False, job_class="atom_edit")
         load: dict[str, int] = {}
         nodes: list[str] = []
-        for _ in range(5):
+        for _ in range(4):
             assignment = topology.assign_profile(profile, immediate=False, current_load=load)
             load[assignment.node_id] = load.get(assignment.node_id, 0) + 1
             nodes.append(assignment.node_id)
-        self.assertEqual(sorted(nodes), ["spark0", "spark1", "spark2", "spark3", "spark7"])
+        self.assertEqual(sorted(nodes), ["spark0", "spark1", "spark2", "spark3"])
 
     def test_immediate_efficient_request_stays_on_qwen_lanes(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         topology = SparkTopology.load(TOPOLOGY)
         profile = registry.resolve(capability="efficient", chat=False, job_class="atom_edit")
         assignment = topology.assign_profile(profile, immediate=True, current_load={})
-        self.assertIn(assignment.node_id, {"spark0", "spark1", "spark2", "spark3", "spark7"})
+        self.assertIn(assignment.node_id, {"spark0", "spark1", "spark2", "spark3"})
         self.assertEqual(assignment.reason, "resident_profile")
 
     def test_vllm_chat_routes_to_dsv4_static_lanes(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         topology = SparkTopology.load(TOPOLOGY)
         profile = registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
+        self.assertEqual(profile.model_id, "deepseek-v4-flash")
         assignment = topology.assign_profile(profile, immediate=False, current_load={})
         self.assertEqual(assignment.node_id, "spark4+spark5")
         self.assertEqual(assignment.node_ids, ("spark4", "spark5"))
@@ -102,11 +106,15 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(assignment.node_id, "spark6")
         self.assertEqual(assignment.reason, "resident_profile_immediate")
 
-    def test_static_topology_has_no_dynamic_ejection_lane(self) -> None:
+    def test_static_topology_has_no_production_ejection_lane(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
-        self.assertFalse(topology.routing_policy.get("allow_dynamic_load_for_unmatched_profiles"))
-        self.assertNotIn("experimental_node_id", topology.routing_policy)
-        self.assertTrue(all(not node.dynamic_load for node in topology.nodes))
+        self.assertTrue(topology.routing_policy.get("allow_dynamic_load_for_unmatched_profiles"))
+        self.assertEqual(topology.routing_policy.get("experimental_node_id"), "spark7")
+        production_nodes = [node for node in topology.nodes if "production" in node.roles]
+        self.assertTrue(all(not node.dynamic_load for node in production_nodes))
+        spark7 = [node for node in topology.nodes if node.node_id == "spark7"][0]
+        self.assertTrue(spark7.dynamic_load)
+        self.assertEqual(spark7.resident_profiles, ())
 
     def test_xhigh_live_validation_manifest_lists_required_checks(self) -> None:
         manifest = json.loads(VALIDATION_TASKS.read_text(encoding="utf-8"))
@@ -124,9 +132,16 @@ class StaticSparkTopologyTests(unittest.TestCase):
         )
         qwen_task = manifest["tasks"][0]
         self.assertEqual(qwen_task["runner"], "vllm")
-        self.assertEqual(qwen_task["target_nodes"], ["spark0", "spark1", "spark2", "spark3", "spark7"])
+        self.assertEqual(qwen_task["target_nodes"], ["spark0", "spark1", "spark2", "spark3"])
         self.assertIn("qwen3_6_27b_fp8_efficient_v1", qwen_task["profiles"])
         self.assertIn("qwen3_6_35b_a3b_fp8_fastest_v1", qwen_task["profiles"])
+
+    def test_resident_gateway_env_excludes_spark7_experimental(self) -> None:
+        spark0 = subprocess.run([sys.executable, str(RESIDENT_ENV_SCRIPT), "--node", "spark0"], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        spark7 = subprocess.run([sys.executable, str(RESIDENT_ENV_SCRIPT), "--node", "spark7"], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        self.assertIn("Qwen/Qwen3.6-27B-FP8", spark0.stdout)
+        self.assertIn("Qwen/Qwen3.6-35B-A3B-FP8", spark0.stdout)
+        self.assertIn("DS4_RESIDENT_MODELS_JSON=[]", spark7.stdout)
 
 
 if __name__ == "__main__":

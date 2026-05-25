@@ -58,7 +58,7 @@ class VllmChatModel:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ds4-spark-chat")
     parser.add_argument("--base-url", default=os.environ.get("DS4_VLLM_MTP_BASE_URL") or os.environ.get("DS4_VLLM_BASE_URL") or "http://spark4:8000")
-    parser.add_argument("--model", default=os.environ.get("DS4_VLLM_MTP_MODEL") or "deepseek-v4")
+    parser.add_argument("--model", default=os.environ.get("DS4_VLLM_MTP_MODEL") or "deepseek-v4-flash")
     parser.add_argument("--api-key", default=os.environ.get("DS4_VLLM_API_KEY", ""))
     parser.add_argument("--history", default=str(Path.home() / ".ds4_spark_chat_history.json"))
     parser.add_argument("--registry", default="tools/registry.jsonl")

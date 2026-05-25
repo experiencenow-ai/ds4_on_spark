@@ -8,10 +8,27 @@ The machine-readable task list is:
 profiles/validation/xhigh_live_validation_tasks.json
 ```
 
+## Mac Hostname Setup
+
+The SSH aliases already know the Spark addresses, but ordinary Mac HTTP clients do not use SSH config. If `http://spark4:8000` does not resolve from Mac Studio, generate `/etc/hosts` entries from the current SSH aliases:
+
+```bash
+python3 scripts/print_spark_hosts.py
+```
+
+To install them on the Mac:
+
+```bash
+python3 scripts/print_spark_hosts.py | sudo tee -a /etc/hosts
+sudo dscacheutil -flushcache
+```
+
+Some lanes may still require SSH execution or an SSH tunnel if their model server is bound to `127.0.0.1` on the Spark. The hostname fix handles name resolution; it does not change remote bind addresses or firewall policy.
+
 ## Static Allocation Under Test
 
 ```text
-spark0, spark1, spark2, spark3, spark7
+spark0, spark1, spark2, spark3
   resident Qwen lanes
   profiles: qwen3_6_27b_fp8_efficient_v1, qwen3_6_35b_a3b_fp8_fastest_v1
 
@@ -22,9 +39,13 @@ spark4 + spark5
 spark6
   antirez/support lane
   profile: dsv4_antirez_smart_v1
+
+spark7
+  experimental on-demand lane
+  resident profiles: none
 ```
 
-There is no dynamic model ejection code in this plan. The small Qwen profile stays resident even when idle.
+There is no production model ejection code in this plan. The Qwen defaults stay resident on spark0-3 after startup; spark7 is the only on-demand experimental lane.
 
 ## Shared Request Files
 
@@ -43,6 +64,8 @@ DSV4 vLLM/MTP request file:
 {"format":"ds4-inference-request-v1","request_id":"dsv4-mtp-chat-smoke","capability":"smartest","chat":true,"immediate":false,"job_class":"tool_chat","max_output_tokens":128,"thinking_budget_tokens":256,"temperature":0,"input":{"messages":[{"role":"user","content":"In one sentence, say the DSV4 MTP lane is reachable."}]},"output_contract":{"format":"text"}}
 ```
 
+The live vLLM endpoint observed on 2026-05-25 advertises model id `deepseek-v4-flash`; the DSV4 profile must match that exact id.
+
 Antirez request file:
 
 ```jsonl
@@ -53,7 +76,7 @@ Antirez request file:
 
 ### 1. Qwen vLLM Resident Lanes
 
-Run on each Qwen host: `spark0`, `spark1`, `spark2`, `spark3`, and `spark7`.
+Run on each Qwen host: `spark0`, `spark1`, `spark2`, and `spark3`.
 
 ```bash
 ssh spark0 'cd /path/to/ds4_on_spark/v2 && DS4_VLLM_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests /tmp/qwen_requests.jsonl --out /tmp/ds4-v2-live/spark0-qwen-vllm --runner vllm --runner-timeout-s 600 --run'

@@ -8,6 +8,9 @@ models through non-vLLM backends.
 
 - `vllm_lazy_hf`: discovers HF-style model dirs under `MODELS_ROOT`
   (default `~/models/hf`) and starts `vllm serve` on first use.
+- resident `vllm_lazy_hf`: when `DS4_RESIDENT_MODELS_JSON` is set, starts
+  one dedicated backend process per listed model during gateway startup and
+  routes those models without lazy switching.
 - `vllm_remote`: forwards selected models to a remote OpenAI-compatible service,
   for example the Spark4 DeepSeek V4 endpoint.
 - `ds4_server`: discovers GGUFs under `GGUF_MODELS_ROOT` (default
@@ -84,6 +87,24 @@ DS4_GATEWAY_TUNING_JSON='{
 The same JSON may be put in a file and passed as `DS4_GATEWAY_TUNING_FILE`.
 `/ds4/status` reports the effective `model_tuning` and active backend args so
 benchmark results are tied to the actual runtime flags.
+
+## Resident Startup Models
+
+Production Qwen lanes should not pay first-request model load latency after a
+restart. Use `DS4_RESIDENT_MODELS_JSON` to pin default models on dedicated
+backend ports at gateway startup:
+
+```sh
+DS4_RESIDENT_MODELS_JSON='[
+  {"model":"Qwen/Qwen3.6-27B-FP8","port":18100,"tuning":{"gpu_memory_utilization":"0.44","max_num_seqs":"32","max_num_batched_tokens":"16384"}},
+  {"model":"Qwen/Qwen3.6-35B-A3B-FP8","port":18101,"tuning":{"gpu_memory_utilization":"0.28","max_num_seqs":"64","max_num_batched_tokens":"16384"}}
+]' WAIT=1 $HOME/bin/ds4_vllm_lazy_proxy.sh
+```
+
+The frontend still exposes one OpenAI-compatible endpoint on `:8000`; resident
+models are routed to their pinned backends, while non-resident models continue
+to use the lazy backend. Spark7 should leave `DS4_RESIDENT_MODELS_JSON=[]` so it
+remains the experimental on-demand lane.
 
 ## Benchmark All Models
 

@@ -13,22 +13,22 @@ The production Spark pool is intentionally static. Centaur and DS4 services shou
 | spark4 | DSV4 vLLM/MTP grouped lane half | `dsv4_vllm_mtp_smartest_v1` |
 | spark5 | DSV4 vLLM/MTP grouped lane half | `dsv4_vllm_mtp_smartest_v1` |
 | spark6 | Antirez/support/urgent lane | `dsv4_antirez_smart_v1` |
-| spark7 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1`, `qwen3_6_35b_a3b_fp8_fastest_v1` |
+| spark7 | Experimental on-demand lane | none |
 
 This gives the service a normal production view of:
 
-- 5 Qwen lanes for `efficient` / `fastest` work;
+- 4 Qwen lanes for `efficient` / `fastest` work;
 - 1 DSV4 vLLM/MTP grouped lane for `smartest` chat/tool/reasoning work, consuming both spark4 and spark5;
 - 1 antirez/support lane for `smart` completion and urgent support work;
-- no dynamic production model ejection path.
+- 1 experimental on-demand lane on spark7.
 
-No Qwen profile is resident on spark6. Spark6 is reserved for antirez/support and does not have enough headroom for the Qwen resident pair.
+No Qwen profile is resident on spark6 or spark7. Spark6 is reserved for antirez/support. Spark7 is intentionally experimental and may lazy-load models for probes without becoming a production resident lane.
 
 ## Policy
 
 The inference scheduler owns node assignment. Centaur requests a capability and job class; it does not target a Spark directly.
 
-Normal queued requests prefer resident production lanes. Immediate requests prefer a reserved lane only when that lane has the requested resident profile. Efficient Qwen requests therefore remain on spark0-3 and spark7; smart antirez requests may use spark6. Dynamic loading is disabled in this production topology.
+Normal queued requests prefer resident production lanes. Immediate requests prefer a reserved lane only when that lane has the requested resident profile. Efficient Qwen requests therefore remain on spark0-3; smart antirez requests may use spark6. Dynamic loading is allowed only for unmatched experimental requests routed to spark7, not for production model ejection.
 
 The topology is stored in:
 

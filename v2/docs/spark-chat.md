@@ -8,11 +8,14 @@ Example:
 
 ```bash
 export DS4_VLLM_MTP_BASE_URL=http://spark4:8000
+export DS4_VLLM_MTP_MODEL=deepseek-v4-flash
 PYTHONPATH=src python3 -m ds4_chat.cli \
   --registry tools/registry.jsonl \
   --history ~/.ds4_spark_chat_history.json \
   --allow-spark7-tools
 ```
+
+If `spark4` does not resolve from Mac Studio, run `python3 scripts/print_spark_hosts.py` and install the generated entries into `/etc/hosts`.
 
 Single question mode:
 

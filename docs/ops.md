@@ -34,14 +34,14 @@ As of the 2026-05-23 rollout, Spark0, Spark1, Spark2, Spark3, Spark6, and Spark7
 
 | Node | Lazy endpoint | Backend | Notes |
 |---|---|---|---|
-| spark0 | `http://127.0.0.1:8000/v1` | `127.0.0.1:18000` | 27 model entries, idle when `active=false` |
-| spark1 | `http://127.0.0.1:8000/v1` | `127.0.0.1:18000` | 27 model entries, idle when `active=false` |
-| spark2 | `http://127.0.0.1:8000/v1` | `127.0.0.1:18000` | 27 model entries, idle when `active=false` |
-| spark3 | `http://127.0.0.1:8000/v1` | `127.0.0.1:18000` | 27 model entries, idle when `active=false` |
+| spark0 | `http://127.0.0.1:8000/v1` | resident `18100+18101`, lazy `18000` | Qwen defaults pinned at startup |
+| spark1 | `http://127.0.0.1:8000/v1` | resident `18100+18101`, lazy `18000` | Qwen defaults pinned at startup |
+| spark2 | `http://127.0.0.1:8000/v1` | resident `18100+18101`, lazy `18000` | Qwen defaults pinned at startup |
+| spark3 | `http://127.0.0.1:8000/v1` | resident `18100+18101`, lazy `18000` | Qwen defaults pinned at startup |
 | spark4 | `http://127.0.0.1:8010/v1` | `127.0.0.1:18100` | `:8000` remains the two-node DeepSeek service |
 | spark5 | `http://127.0.0.1:8010/v1` | `127.0.0.1:18100` | `:8000` remains the two-node DeepSeek headless rank |
 | spark6 | `http://127.0.0.1:8000/v1` | `127.0.0.1:18000` | 27 model entries, idle when `active=false` |
-| spark7 | `http://127.0.0.1:8000/v1` | `127.0.0.1:18000` | 27 model entries, idle when `active=false` |
+| spark7 | `http://127.0.0.1:8000/v1` | `127.0.0.1:18000` | experimental on-demand, no resident defaults |
 
 The scanner treats Hugging Face layout models as runnable when they have `config.json`, `tokenizer_config.json`, and weights under `~/models/hf`. It also includes Mistral-native layout models with `params.json`, `tokenizer_config.json`, and consolidated safetensors by launching vLLM with `--config-format mistral --tokenizer-mode mistral --load-format mistral`. This is why `mistralai/Mistral-Small-4-119B-2603-NVFP4` appears even though it does not have an HF `config.json`.
 
@@ -64,6 +64,18 @@ Start the standard single-node lazy endpoint:
 ```sh
 ssh sparkN 'IDLE_TIMEOUT=1800 FRONT_PORT=8000 BACKEND_PORT=18000 WAIT=1 ~/bin/ds4_vllm_lazy_proxy.sh'
 ```
+
+Generate a startup env file for the production Qwen lanes:
+
+```sh
+cd /path/to/ds4_on_spark/v2
+python3 scripts/print_resident_gateway_env.py --node spark0 > /tmp/model-gateway.env
+```
+
+Install the user startup service on spark0-3 with the generated env file and
+`deploy/systemd-user/ds4-model-gateway.service`. Spark7 should use
+`deploy/config/model-gateway-spark7-experimental.env.example` so it stays
+on-demand.
 
 Start the side-port lazy endpoint on Spark4/Spark5 while preserving DeepSeek on `:8000`:
 
