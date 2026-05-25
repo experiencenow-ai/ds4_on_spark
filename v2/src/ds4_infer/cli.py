@@ -49,6 +49,28 @@ def main(argv: list[str] | None = None) -> int:
     queue_work.add_argument("--node-id")
     queue_work.add_argument("--batch-key")
     queue_work.add_argument("--limit", type=int, default=1)
+    queue_work.add_argument("--warm-prefixes", action="store_true")
+    queue_work.add_argument("--warm-min-group-size", type=int, default=2)
+    queue_work.add_argument("--warm-max-output-tokens", type=int, default=1)
+
+    queue_warm = sub.add_parser("queue-warm-prefixes")
+    queue_warm.add_argument("--queue-dir", required=True)
+    queue_warm.add_argument("--profiles-dir", required=True)
+    queue_warm.add_argument("--runner", choices=["fake", "command", "vllm", "antirez", "auto", "spark"], default="fake")
+    queue_warm.add_argument("--runner-timeout-s", type=int, default=300)
+    queue_warm.add_argument("--command", nargs="*")
+    queue_warm.add_argument("--node-id")
+    queue_warm.add_argument("--batch-id")
+    queue_warm.add_argument("--batch-key")
+    queue_warm.add_argument("--min-group-size", type=int, default=2)
+    queue_warm.add_argument("--max-output-tokens", type=int, default=1)
+    queue_warm.add_argument("--force", action="store_true")
+
+    queue_prefix_status = sub.add_parser("queue-prefix-status")
+    queue_prefix_status.add_argument("--queue-dir", required=True)
+    queue_prefix_status.add_argument("--skeleton-hash")
+    queue_prefix_status.add_argument("--node-id")
+    queue_prefix_status.add_argument("--profile-id")
 
     queue_status = sub.add_parser("queue-status")
     queue_status.add_argument("--queue-dir", required=True)
@@ -109,7 +131,19 @@ def main(argv: list[str] | None = None) -> int:
         queue = InferenceQueue(args.queue_dir)
         registry = ProfileRegistry.load(args.profiles_dir)
         runner = _make_runner(args.runner, args.command or [], args.runner_timeout_s)
-        print(json.dumps(queue.work(registry=registry, runner=runner, node_id=args.node_id, batch_key=args.batch_key, limit=args.limit), indent=2, sort_keys=True))
+        print(json.dumps(queue.work(registry=registry, runner=runner, node_id=args.node_id, batch_key=args.batch_key, limit=args.limit, warm_prefixes=args.warm_prefixes, warm_min_group_size=args.warm_min_group_size, warm_max_output_tokens=args.warm_max_output_tokens), indent=2, sort_keys=True))
+        return 0
+
+    if args.cmd == "queue-warm-prefixes":
+        queue = InferenceQueue(args.queue_dir)
+        registry = ProfileRegistry.load(args.profiles_dir)
+        runner = _make_runner(args.runner, args.command or [], args.runner_timeout_s)
+        print(json.dumps(queue.warm_prefixes(registry=registry, runner=runner, node_id=args.node_id, batch_id=args.batch_id, batch_key=args.batch_key, min_group_size=args.min_group_size, max_output_tokens=args.max_output_tokens, force=args.force), indent=2, sort_keys=True))
+        return 0
+
+    if args.cmd == "queue-prefix-status":
+        queue = InferenceQueue(args.queue_dir)
+        print(json.dumps(queue.prefix_warm_status(skeleton_hash=args.skeleton_hash, node_id=args.node_id, profile_id=args.profile_id), indent=2, sort_keys=True))
         return 0
 
     if args.cmd == "queue-status":

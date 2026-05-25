@@ -8,7 +8,7 @@ import unittest
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.queue import InferenceQueue, request_batch_key
 from ds4_infer.runners import FakeRunner
-from ds4_infer.schemas import InferenceRequest
+from ds4_infer.schemas import InferenceRequest, make_result
 from ds4_infer.topology import SparkTopology
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,7 +29,9 @@ def make_request(request_id: str, *, capability: str = "efficient", immediate: b
             "thinking_budget_tokens": 0,
             "temperature": 0,
             "input": {
+                "shared_prefix": "repo skeleton\noutput contract\n",
                 "shared_prefix_hash": "prefix-a",
+                "skeleton_hash": "prefix-a",
                 "target_atom_id": f"atom:{request_id}",
                 "source_atom_hash": "h",
                 "suffix": "def f():\n    return 1\n",
@@ -99,6 +101,51 @@ class InferenceQueueTests(unittest.TestCase):
         self.assertNotEqual(small_key, large_key)
         self.assertIn("out_0_256", small_key)
         self.assertIn("out_769_2048", large_key)
+
+    def test_prefix_warm_groups_shared_prefix_on_same_lane(self) -> None:
+        class WarmRunner:
+            def __init__(self) -> None:
+                self.calls: list[tuple[InferenceRequest, str | None]] = []
+
+            def run_one_on_node(self, request: InferenceRequest, profile, node_id: str | None) -> dict:
+                self.calls.append((request, node_id))
+                return make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text="warm")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            requests = [make_request(f"r{i}") for i in range(5)]
+            queue.submit_requests(
+                requests=requests,
+                registry=ProfileRegistry.load(PROFILES),
+                topology=SparkTopology.load(TOPOLOGY),
+                batch_id="batch-a",
+            )
+            runner = WarmRunner()
+            report = queue.warm_prefixes(registry=ProfileRegistry.load(PROFILES), runner=runner, node_id="spark0", min_group_size=2)
+            self.assertEqual(report["warmed_count"], 1)
+            self.assertEqual(report["groups"][0]["node_id"], "spark0")
+            self.assertEqual(report["groups"][0]["skeleton_hash"], "prefix-a")
+            self.assertEqual(runner.calls[0][1], "spark0")
+            self.assertEqual(runner.calls[0][0].max_output_tokens, 1)
+            self.assertEqual(runner.calls[0][0].input["shared_prefix"], "repo skeleton\noutput contract\n")
+            self.assertNotIn("target_atom_id", runner.calls[0][0].input)
+            status = queue.prefix_warm_status(skeleton_hash="prefix-a", node_id="spark0")
+            self.assertEqual(status["statuses"][0]["state"], "warm")
+
+    def test_prefix_warm_skips_already_warm_group(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            queue.submit_requests(
+                requests=[make_request(f"r{i}") for i in range(5)],
+                registry=ProfileRegistry.load(PROFILES),
+                topology=SparkTopology.load(TOPOLOGY),
+                batch_id="batch-a",
+            )
+            first = queue.warm_prefixes(registry=ProfileRegistry.load(PROFILES), runner=FakeRunner(), node_id="spark0", min_group_size=2)
+            second = queue.warm_prefixes(registry=ProfileRegistry.load(PROFILES), runner=FakeRunner(), node_id="spark0", min_group_size=2)
+            self.assertEqual(first["warmed_count"], 1)
+            self.assertEqual(second["warmed_count"], 0)
+            self.assertEqual(second["skipped_count"], 1)
 
 
 if __name__ == "__main__":

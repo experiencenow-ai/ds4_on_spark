@@ -79,3 +79,55 @@ Every completed or failed request also writes:
 ```
 
 Centaur can either poll events or watch completion notices.
+
+## Prefix cache warming
+
+For lattice or LongMem batches, put the stable text first:
+
+```json
+{
+  "input": {
+    "skeleton_hash": "sha256:...",
+    "shared_prefix": "repo skeleton\nrules\noutput contract\n",
+    "suffix": "target atom or one question"
+  }
+}
+```
+
+Then warm groups before normal work:
+
+```bash
+PYTHONPATH=src python3 -m ds4_infer.cli queue-warm-prefixes \
+  --queue-dir /tmp/ds4_queue \
+  --profiles-dir profiles/models \
+  --runner spark \
+  --node-id spark0 \
+  --min-group-size 2 \
+  --max-output-tokens 1
+```
+
+Workers can also warm just before claiming requests:
+
+```bash
+PYTHONPATH=src python3 -m ds4_infer.cli queue-work \
+  --queue-dir /tmp/ds4_queue \
+  --profiles-dir profiles/models \
+  --runner spark \
+  --node-id spark0 \
+  --warm-prefixes \
+  --limit 128
+```
+
+This sends one tiny synthetic request per `(node, profile, chat mode,
+skeleton_hash, shared_prefix)` group. The shared prefix is byte-identical to the
+real request prefix, so vLLM Automatic Prefix Caching can reuse prefill work.
+The queue records best-effort status in `prefix_warms`; it cannot prove vLLM has
+not evicted the blocks later.
+
+Status:
+
+```bash
+PYTHONPATH=src python3 -m ds4_infer.cli queue-prefix-status \
+  --queue-dir /tmp/ds4_queue \
+  --skeleton-hash sha256:...
+```

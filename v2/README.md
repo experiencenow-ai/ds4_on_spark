@@ -77,6 +77,23 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-poll \
 
 The queue internally groups requests by model/profile, Spark node, chat mode, job class, input/output/thinking buckets, and shared prefix hash. Centaur does not need to know batch-size folklore.
 
+For Centaur lattice and LongMem batches, workers can prewarm vLLM Automatic
+Prefix Caching for repeated skeletons:
+
+```bash
+PYTHONPATH=src python3 -m ds4_infer.cli queue-work \
+  --queue-dir /tmp/ds4_queue \
+  --profiles-dir profiles/models \
+  --runner spark \
+  --node-id spark0 \
+  --warm-prefixes \
+  --limit 128
+```
+
+This is best-effort cache warming, not raw KV export/import: DS4 sends one tiny
+request per shared-prefix group on the same resident lane, then processes the
+real requests with byte-identical `shared_prefix` text.
+
 `--runner spark` executes the model request on the selected Spark over SSH,
 using that Spark's local `http://127.0.0.1:8000` unified/OpenAI-compatible API.
 It tries `/ds4/batches` first and falls back to `/v1/chat/completions` or
