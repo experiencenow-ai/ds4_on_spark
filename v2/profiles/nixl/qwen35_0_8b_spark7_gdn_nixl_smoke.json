@@ -66,6 +66,7 @@
   "pythonpath": "/home/spark7/ds4_on_spark/v2/src",
   "extra_env": {
     "PATH": "/home/spark7/standard-runtimes/vllm-main-gdn-nixl/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "CPATH": "/home/spark7/standard-runtimes/python3.12-dev-extract/usr/include:/home/spark7/standard-runtimes/python3.12-dev-extract/usr/include/python3.12",
     "VLLM_SSM_CONV_STATE_LAYOUT": "DS"
   }
 }
