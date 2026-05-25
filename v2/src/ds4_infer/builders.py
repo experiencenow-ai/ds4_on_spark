@@ -139,20 +139,28 @@ def chat_request(messages: list[dict], registry: ProfileRegistry, model_alias: s
 
 
 def apply_thinking_fields(item: dict[str, Any], profile: ModelProfile, *, chat: bool, thinking_budget_tokens: int) -> None:
-    apply_thinking_fields_for_model(item, model_id=profile.model_id, supports_thinking=profile.supports_thinking, chat=chat, thinking_budget_tokens=thinking_budget_tokens)
+    key = profile.routing.get("chat_template_thinking_key")
+    apply_thinking_fields_for_model(item, model_id=profile.model_id, supports_thinking=profile.supports_thinking, chat=chat, thinking_budget_tokens=thinking_budget_tokens, chat_template_thinking_key=str(key) if key else None)
 
 
-def apply_thinking_fields_for_model(item: dict[str, Any], *, model_id: str, supports_thinking: bool, chat: bool, thinking_budget_tokens: int) -> None:
+def apply_thinking_fields_for_model(item: dict[str, Any], *, model_id: str, supports_thinking: bool, chat: bool, thinking_budget_tokens: int, chat_template_thinking_key: str | None = None) -> None:
     if not supports_thinking:
         return
+    thinking_enabled = thinking_budget_tokens > 0
     if thinking_budget_tokens > 0:
         item["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget_tokens}
         item["thinking_budget_tokens"] = thinking_budget_tokens
         item["thinking_token_budget"] = thinking_budget_tokens
     else:
         item["thinking"] = {"type": "disabled"}
-    if chat and "qwen" in model_id.lower():
-        item["chat_template_kwargs"] = {"enable_thinking": thinking_budget_tokens > 0}
+    if chat:
+        key = chat_template_thinking_key or default_chat_template_thinking_key(model_id)
+        if key:
+            item["chat_template_kwargs"] = {key: thinking_enabled}
+
+
+def default_chat_template_thinking_key(model_id: str) -> str | None:
+    return "enable_thinking" if "qwen" in model_id.lower() else None
 
 
 def model_batch_item(request: InferenceRequest, profile: ModelProfile) -> dict[str, Any]:

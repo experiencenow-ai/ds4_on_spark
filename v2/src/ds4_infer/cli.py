@@ -40,6 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     queue_submit_cpu.add_argument("--items", required=True)
     queue_submit_cpu.add_argument("--batch-id")
     queue_submit_cpu.add_argument("--node-id")
+    queue_submit_cpu.add_argument("--timeout-s", type=float)
     queue_submit_cpu.add_argument("--immediate", action="store_true")
 
     queue_work = sub.add_parser("queue-work")
@@ -96,7 +97,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "queue-submit-cpu":
         queue = InferenceQueue(args.queue_dir)
         items = _load_jsonl(args.items)
-        print(json.dumps(queue.submit_cpu_requests(service=args.service, items=items, batch_id=args.batch_id, immediate=args.immediate, node_id=args.node_id), indent=2, sort_keys=True))
+        print(json.dumps(queue.submit_cpu_requests(service=args.service, items=items, batch_id=args.batch_id, immediate=args.immediate, node_id=args.node_id, timeout_s=args.timeout_s), indent=2, sort_keys=True))
         return 0
 
     if args.cmd in {"queue-work", "queue-worker"}:

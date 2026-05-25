@@ -5,7 +5,7 @@ import socket
 from typing import Any, Callable
 
 from .profiles import ProfileRegistry
-from .queue import QUEUE_FORMAT, InferenceQueue, QueueClaim
+from .queue import CPU_QUEUE_TIMEOUT_KEY, QUEUE_FORMAT, InferenceQueue, QueueClaim
 from .runners import Runner
 
 _CPU_SERVICE: Any | None = None
@@ -163,7 +163,8 @@ class BatchWorker:
         service = claims[0].service_name or ""
         if self.cpu_service is None:
             self.cpu_service = _default_cpu_service()
-        payload = {"service": service, "items": [claim.payload or {} for claim in claims], "concurrency": concurrency}
+        items, timeout_s = _cpu_items_and_timeout(claims, self.lease_ttl_s)
+        payload = {"service": service, "items": items, "concurrency": concurrency, "timeout_s": timeout_s}
         try:
             batch = self.cpu_service.run_batch(payload)
             rows = batch.get("results", []) if isinstance(batch, dict) else []
@@ -185,6 +186,18 @@ def _record_claims(groups: dict[str, dict[str, int]], claims: list[QueueClaim]) 
 
 def _claims_use_batch_runner(runner: Runner, claims: list[QueueClaim]) -> bool:
     return bool(claims and claims[0].request_kind == "cpu")
+
+
+def _cpu_items_and_timeout(claims: list[QueueClaim], default_timeout_s: int) -> tuple[list[dict[str, Any]], float]:
+    items: list[dict[str, Any]] = []
+    timeouts: list[float] = []
+    for claim in claims:
+        item = dict(claim.payload or {})
+        timeout = item.pop(CPU_QUEUE_TIMEOUT_KEY, None)
+        if timeout is not None:
+            timeouts.append(float(timeout))
+        items.append(item)
+    return items, max(timeouts) if timeouts else float(default_timeout_s)
 
 
 def _default_cpu_service() -> Any:

@@ -15,6 +15,9 @@ class CpuServiceError(Exception):
     pass
 
 
+CPU_SERVICE_NAMES = ("json_validate", "regex_match", "sha256", "text_metrics", "diff_stats", "command")
+
+
 def _env_int(name: str, default: int) -> int:
     value = os.environ.get(name)
     return default if value in (None, "") else int(value)
@@ -40,6 +43,18 @@ def _text_payload(item: dict[str, Any], max_bytes: int) -> str:
     return text
 
 
+def validate_cpu_submission(service: str, item_count: int, *, commands: dict[str, Any] | None = None) -> None:
+    if service not in CPU_SERVICE_NAMES:
+        raise CpuServiceError(f"unknown CPU service: {service}")
+    max_items = _env_int("CPU_SERVICE_MAX_ITEMS", 1024)
+    if item_count > max_items:
+        raise CpuServiceError(f"CPU batch item count {item_count} exceeds CPU_SERVICE_MAX_ITEMS={max_items}")
+    if service == "command":
+        configured = commands if commands is not None else _env_json("CPU_SERVICE_COMMANDS_JSON", {})
+        if not configured:
+            raise CpuServiceError("CPU command service has no allowlisted commands")
+
+
 class CpuBatchService:
     def __init__(self, *, commands: dict[str, Any] | None = None) -> None:
         cores = os.cpu_count() or 4
@@ -58,14 +73,7 @@ class CpuBatchService:
         self.completed = 0
         self.failed = 0
         self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=self.workers, thread_name_prefix="ds4-cpu")
-        self.services = {
-            "json_validate": self.service_json_validate,
-            "regex_match": self.service_regex_match,
-            "sha256": self.service_sha256,
-            "text_metrics": self.service_text_metrics,
-            "diff_stats": self.service_diff_stats,
-            "command": self.service_command,
-        }
+        self.services = {name: getattr(self, f"service_{name}") for name in CPU_SERVICE_NAMES}
 
     def status(self) -> dict[str, Any]:
         with self.lock:

@@ -1,17 +1,21 @@
 from __future__ import annotations
 
+from contextlib import closing
 import json
 from pathlib import Path
 import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 from ds4_infer.profiles import ProfileRegistry
-from ds4_infer.queue import InferenceQueue, request_batch_key
+from ds4_infer.queue import CPU_QUEUE_TIMEOUT_KEY, InferenceQueue, request_batch_key
 from ds4_infer.runners import FakeRunner
 from ds4_infer.schemas import InferenceRequest, make_result
 from ds4_infer.topology import SparkTopology
+from ds4_infer.worker import BatchWorker
+from ds4_tools.cpu_batch import CpuServiceError
 
 ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "profiles" / "models"
@@ -64,6 +68,15 @@ class BatchCapableDelayedRunner:
     def run_many_on_node(self, requests, profile, node_id, *, concurrency=1):
         self.batch_calls.append([request.request_id for request in requests])
         return {request.request_id: make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=f"batched {request.request_id}") for request in requests}
+
+
+class CpuSpyService:
+    def __init__(self) -> None:
+        self.payload: dict | None = None
+
+    def run_batch(self, payload: dict) -> dict:
+        self.payload = payload
+        return {"results": [{"ok": True, "response": {"ok": True}} for _ in payload["items"]]}
 
 
 def wait_for_notice(root: Path, request_id: str, timeout_s: float = 1.0) -> bool:
@@ -255,6 +268,36 @@ class InferenceQueueTests(unittest.TestCase):
             self.assertEqual(collected["results"][0]["result"]["format"], "ds4-cpu-service-result-v1")
             self.assertEqual(collected["results"][0]["result"]["output"]["response"]["words"], 2)
             self.assertTrue((root / "notices" / "cpu-a.json").exists())
+
+    def test_cpu_submit_validates_service_and_item_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            with self.assertRaisesRegex(CpuServiceError, "unknown CPU service"):
+                queue.submit_cpu_requests(service="missing", items=[{"custom_id": "x"}])
+            with patch.dict("os.environ", {"CPU_SERVICE_MAX_ITEMS": "1"}):
+                with self.assertRaisesRegex(CpuServiceError, "exceeds CPU_SERVICE_MAX_ITEMS"):
+                    queue.submit_cpu_requests(service="text_metrics", items=[{"custom_id": "a"}, {"custom_id": "b"}])
+
+    def test_cpu_queue_timeout_reaches_service_without_leaking_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            queue.submit_cpu_requests(service="text_metrics", items=[{"custom_id": "cpu-a", "text": "one"}], batch_id="cpu-batch", timeout_s=12)
+            service = CpuSpyService()
+            worker = BatchWorker(queue=queue, registry=ProfileRegistry.load(PROFILES), runner=FakeRunner(), cpu_service=service, lease_ttl_s=99)
+            worked = worker.run_once(limit=1, concurrency=1)
+            self.assertEqual(worked["completed_count"], 1)
+            self.assertIsNotNone(service.payload)
+            assert service.payload is not None
+            self.assertEqual(service.payload["timeout_s"], 12.0)
+            self.assertNotIn(CPU_QUEUE_TIMEOUT_KEY, service.payload["items"][0])
+
+    def test_queue_sets_busy_timeout_for_multi_worker_sqlite(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict("os.environ", {"DS4_QUEUE_BUSY_TIMEOUT_MS": "1234"}):
+                queue = InferenceQueue(tmp)
+                with closing(queue._connect()) as conn:
+                    row = conn.execute("pragma busy_timeout").fetchone()
+            self.assertEqual(int(row[0]), 1234)
 
     def test_expired_running_lease_requeues_then_fails_after_attempt_budget(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

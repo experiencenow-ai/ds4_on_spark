@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import closing
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import sqlite3
 import time
@@ -20,6 +21,7 @@ REQUEST_STATUS_FORMAT = "ds4-inference-request-status-v1"
 REQUEST_NOTICE_FORMAT = "ds4-inference-completion-notice-v1"
 BATCH_STATUS_FORMAT = "ds4-inference-batch-status-v1"
 TERMINAL_STATES = {"completed", "failed"}
+CPU_QUEUE_TIMEOUT_KEY = "__ds4_queue_timeout_s"
 
 
 @dataclass(frozen=True)
@@ -147,16 +149,21 @@ class InferenceQueue:
         batch_id: str | None = None,
         immediate: bool = False,
         node_id: str | None = None,
+        timeout_s: float | None = None,
     ) -> dict[str, Any]:
         item_list = [dict(item) for item in items]
         if not item_list:
             raise ValueError("cannot submit an empty CPU request set")
         batch_id = batch_id or new_id("cpu-batch")
         service = str(service)
+        if timeout_s is not None and timeout_s <= 0:
+            raise ValueError("timeout_s must be positive")
+        from ds4_tools.cpu_batch import validate_cpu_submission
+        validate_cpu_submission(service, len(item_list))
         seen: set[str] = set()
         now = time.time()
         request_ids: list[str] = []
-        batch_key = cpu_batch_key(service=service, node_id=node_id, immediate=immediate)
+        batch_key = cpu_batch_key(service=service, node_id=node_id, immediate=immediate, timeout_s=timeout_s)
         with closing(self._connect()) as conn, conn:
             conn.execute(
                 "insert into batches(batch_id, created_at, updated_at) values (?, ?, ?)",
@@ -165,6 +172,8 @@ class InferenceQueue:
             for index, item in enumerate(item_list):
                 request_id = safe_request_id(str(item.get("custom_id") or item.get("request_id") or f"{service}-{index}"), index, seen)
                 item.setdefault("custom_id", request_id)
+                if timeout_s is not None:
+                    item[CPU_QUEUE_TIMEOUT_KEY] = float(timeout_s)
                 conn.execute(
                     """
                     insert into requests(
@@ -456,8 +465,10 @@ class InferenceQueue:
             return {"format": QUEUE_FORMAT, "batch_id": batch_id, "results": results}
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        busy_timeout_ms = _env_int("DS4_QUEUE_BUSY_TIMEOUT_MS", 5000)
+        conn = sqlite3.connect(self.db_path, timeout=max(0.001, busy_timeout_ms / 1000.0))
         conn.row_factory = sqlite3.Row
+        conn.execute(f"pragma busy_timeout = {busy_timeout_ms}")
         conn.execute("pragma journal_mode = wal")
         conn.execute("pragma synchronous = normal")
         conn.execute(
@@ -688,8 +699,8 @@ def request_batch_key(request: InferenceRequest, profile: ModelProfile, assignme
     )
 
 
-def cpu_batch_key(*, service: str, node_id: str | None, immediate: bool) -> str:
-    return "|".join([node_id or "unassigned", "cpu", service, "immediate" if immediate else "queued"])
+def cpu_batch_key(*, service: str, node_id: str | None, immediate: bool, timeout_s: float | None = None) -> str:
+    return "|".join([node_id or "unassigned", "cpu", service, _timeout_bucket(timeout_s), "immediate" if immediate else "queued"])
 
 
 def queue_depths(db_path: str | Path, *, request_kind: str | None = None) -> dict[str, int]:
@@ -712,6 +723,17 @@ def queue_depths(db_path: str | Path, *, request_kind: str | None = None) -> dic
             tuple(params),
         ).fetchall()
     return {str(node_id): int(count) for node_id, count in rows}
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    return default if value in (None, "") else int(value)
+
+
+def _timeout_bucket(timeout_s: float | None) -> str:
+    if timeout_s is None:
+        return "timeout_default"
+    return f"timeout_{max(1, int(float(timeout_s)))}s"
 
 
 def _row_request(row: sqlite3.Row) -> InferenceRequest | None:

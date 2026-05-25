@@ -104,7 +104,7 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         payload = json.loads(calls[0][1]["input"])
         self.assertEqual(payload["batch_payload"]["model"], "deepseek-ai/DeepSeek-V4-Flash")
         self.assertEqual(payload["batch_payload"]["items"][0]["thinking"], {"type": "disabled"})
-        self.assertNotIn("chat_template_kwargs", payload["batch_payload"]["items"][0])
+        self.assertEqual(payload["batch_payload"]["items"][0]["chat_template_kwargs"], {"thinking": False})
         self.assertNotIn("openai_endpoint", payload)
 
     def test_spark_http_runner_batches_multiple_requests_in_one_gateway_call(self) -> None:
@@ -196,6 +196,30 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(item["thinking"], {"type": "enabled", "budget_tokens": 100})
         self.assertEqual(item["thinking_token_budget"], 100)
         self.assertEqual(item["chat_template_kwargs"], {"enable_thinking": True})
+
+    def test_spark_http_runner_uses_profile_declared_deepseek_template_key(self) -> None:
+        calls = []
+
+        class Done:
+            returncode = 0
+            stdout = json.dumps({"choices": [{"message": {"role": "assistant", "content": "ok"}}]})
+            stderr = ""
+
+        def runner(command, **kwargs):
+            calls.append(kwargs)
+            return Done()
+
+        profile = ProfileRegistry.load(PROFILES).get("dsv4_vllm_mtp_smartest_v1")
+        raw = make_request(chat=True).raw
+        raw["max_output_tokens"] = 64
+        raw["thinking_budget_tokens"] = 100
+        SparkHttpRunner(timeout_s=30, command_runner=runner).run_one_on_node(InferenceRequest.from_json(raw), profile, "spark4+spark5")
+        payload = json.loads(calls[0]["input"])
+        item = payload["batch_payload"]["items"][0]
+        self.assertEqual(item["max_tokens"], 164)
+        self.assertEqual(item["thinking"], {"type": "enabled", "budget_tokens": 100})
+        self.assertEqual(item["thinking_token_budget"], 100)
+        self.assertEqual(item["chat_template_kwargs"], {"thinking": True})
 
     def test_spark_http_runner_can_map_group_to_ingress_node(self) -> None:
         calls = []
