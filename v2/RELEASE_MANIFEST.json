@@ -1,0 +1,458 @@
+{
+  "file_count": 90,
+  "files": [
+    {
+      "bytes": 322,
+      "path": ".github/workflows/test.yml",
+      "sha256": "910cc7e8dccfb9f8c0ecd261601622bc9a09069296d41a9e7818f308bf5a53c4"
+    },
+    {
+      "bytes": 87,
+      "path": ".gitignore",
+      "sha256": "497ac43ce3d619c5e710d6e43af26310cce574b58ceb9316ead3ad8a6e27d5c4"
+    },
+    {
+      "bytes": 709,
+      "path": "ARCHIVE_NOTICE.md",
+      "sha256": "80a6661fbf5b79da5b5f9840f2e269c6d3054cdd694a641f1bfd847496ee006f"
+    },
+    {
+      "bytes": 5176,
+      "path": "README.md",
+      "sha256": "d2b821a972d7f2dacad843b7124155bf34d82e432f1669dc6a9841834ed7c5fb"
+    },
+    {
+      "bytes": 2463,
+      "path": "RELEASE_NOTES.md",
+      "sha256": "f83bd10d26b8d219ccda630c6fa8498837a9e471118a820e534b7e03d56eff9f"
+    },
+    {
+      "bytes": 886,
+      "path": "docs/architecture.md",
+      "sha256": "4e29da69c8606a7c7a7661838f04238302613510b15cda2a31a55461decdc488"
+    },
+    {
+      "bytes": 1956,
+      "path": "docs/inference-queue.md",
+      "sha256": "7157599ebffe1bfba619e1e1aa28629e492bf5a09fa062750a01c03099458b14"
+    },
+    {
+      "bytes": 965,
+      "path": "docs/llm-runners.md",
+      "sha256": "8760e38d358b42edbb27d3d8e57bc21c2583dce1c817f4c7d7a06c14fb87be80"
+    },
+    {
+      "bytes": 605,
+      "path": "docs/local-git-decision.md",
+      "sha256": "2315d54ce1f1b9f7d73b5a6c7d93fddcc5498732c0deb82f8b521e25361acbe8"
+    },
+    {
+      "bytes": 1035,
+      "path": "docs/spark-chat.md",
+      "sha256": "1195051fe2bfe0057837bb838bb58c519ef0b081e15ed8ea7d3da6b8cc8c95ba"
+    },
+    {
+      "bytes": 1663,
+      "path": "docs/spark-transfer.md",
+      "sha256": "05a1ad600e05784a32005b629b275acbb9c3e1050f7b2926c7ed2cff5fe6de2e"
+    },
+    {
+      "bytes": 3148,
+      "path": "docs/static-spark-topology.md",
+      "sha256": "d9954b014bdcc26eae0ac2a141562340da400a8661956d1ce5812c29d8b0943e"
+    },
+    {
+      "bytes": 938,
+      "path": "docs/web-tools.md",
+      "sha256": "6ac225ebac7a031fafef2fcd45012d463edc7e3a3b8d7b09bc23a1caa3da5946"
+    },
+    {
+      "bytes": 491,
+      "path": "profiles/models/dsv4_antirez_smart.json",
+      "sha256": "51bf23ba5d94b8682505fcbefd6f2f01f41b5291de63b0233a322cb5aa04c3b0"
+    },
+    {
+      "bytes": 567,
+      "path": "profiles/models/dsv4_vllm_mtp_smartest.json",
+      "sha256": "5a73ec73eac3bda64b6ccd489443b16e10ae5d423d72fefde15c0cfedd1803bb"
+    },
+    {
+      "bytes": 567,
+      "path": "profiles/models/qwen3_6_27b_fp8_efficient.json",
+      "sha256": "62e958695c5c3b9bb07f5670f3f202dd71771bb40e3aca11c423c2638e4da6f6"
+    },
+    {
+      "bytes": 574,
+      "path": "profiles/models/qwen3_6_35b_a3b_fp8_fastest.json",
+      "sha256": "02d5ddb6b3b4a22b3665631ca4944098f66bf6f7afd8ec9c784c97b9c8bf1dc2"
+    },
+    {
+      "bytes": 248,
+      "path": "profiles/routing/default_capabilities.json",
+      "sha256": "d09fa40a3c830528c485c020975f758270abf09ff240168e6aa3bd2207232853"
+    },
+    {
+      "bytes": 3081,
+      "path": "profiles/topology/static_sparks.json",
+      "sha256": "0cb4a13f125d6648ac1b5d2945c57fb07871f5247f1e93bff12f43c8d55675c7"
+    },
+    {
+      "bytes": 1248,
+      "path": "profiles/transfer/spark_200g.json",
+      "sha256": "0e7e2155d1208b7f12cbf308ff97d95f992181eee4c8af043121a57b798e6c60"
+    },
+    {
+      "bytes": 636,
+      "path": "pyproject.toml",
+      "sha256": "058898bedb4491473779b9df63a1d42fe1154577643d2767264962d7970e6bfe"
+    },
+    {
+      "bytes": 153,
+      "path": "scripts/run_selftest.sh",
+      "sha256": "233c162367af46611cbed3912c8d604d9160bdeedc44c8d411d7d7a15b2b2e96"
+    },
+    {
+      "bytes": 53,
+      "path": "src/ds4_agent/__init__.py",
+      "sha256": "30ddd2c05f2f2cd2b4ae7d68aff6b6f1ee8307c6cbb186884c6efaf108ff9fd3"
+    },
+    {
+      "bytes": 233,
+      "path": "src/ds4_agent/__pycache__/__init__.cpython-313.pyc",
+      "sha256": "f0f7c42f4a5ba5da3949f8f1dd768dd1d16d10b7e7db2ed296299855627d792f"
+    },
+    {
+      "bytes": 2411,
+      "path": "src/ds4_agent/__pycache__/cli.cpython-313.pyc",
+      "sha256": "ca6651768bed6eefef4dbe8f561b8c6794b932564869f4e6c79568ff0a4444b3"
+    },
+    {
+      "bytes": 5047,
+      "path": "src/ds4_agent/__pycache__/loop.cpython-313.pyc",
+      "sha256": "dd20a6d2e64be7c3f5b4b4b7cfdc36593fac1bf6e4d86950372db568135e06a8"
+    },
+    {
+      "bytes": 3882,
+      "path": "src/ds4_agent/__pycache__/tool_calls.cpython-313.pyc",
+      "sha256": "9513c6dc5a69a95ff09b578fe516be62ece3e9d9484244f92f35cf6548ac0252"
+    },
+    {
+      "bytes": 1223,
+      "path": "src/ds4_agent/cli.py",
+      "sha256": "a80cab3d64094cd039ebfa52fa9e063eec9485a8d02593aae4f550d06e09de91"
+    },
+    {
+      "bytes": 3229,
+      "path": "src/ds4_agent/loop.py",
+      "sha256": "9c6330da05db91ae0459ed85c753f28e0a72a14ef6c1601cd6afde8eb7e3a61d"
+    },
+    {
+      "bytes": 2340,
+      "path": "src/ds4_agent/tool_calls.py",
+      "sha256": "fe4efc72b65b943779e7c31083e800bd901aa29de6e6d374fa63e8fce7bed3db"
+    },
+    {
+      "bytes": 63,
+      "path": "src/ds4_calibrate/__init__.py",
+      "sha256": "63dc72611089528d5759c1db36a6bfc9db6111c7f540058f2b638fd3935d83fb"
+    },
+    {
+      "bytes": 247,
+      "path": "src/ds4_calibrate/__pycache__/__init__.cpython-313.pyc",
+      "sha256": "32b60a4b97561d1919e22b6e278eb0ed89fa9603f292c903de7ae4da40268a51"
+    },
+    {
+      "bytes": 1972,
+      "path": "src/ds4_calibrate/__pycache__/cli.cpython-313.pyc",
+      "sha256": "4742aa432811bfe1d67101b374a670b7ebac883e232501eced57f97118e3bfdb"
+    },
+    {
+      "bytes": 2835,
+      "path": "src/ds4_calibrate/__pycache__/plan.cpython-313.pyc",
+      "sha256": "bd88f8c502ce343ef45be6d3dada42eff21e6e283b2ee4b858a57a51e8133d50"
+    },
+    {
+      "bytes": 941,
+      "path": "src/ds4_calibrate/cli.py",
+      "sha256": "95103ca6c6766f04899064ad817f8698e4bb72d5864ae4db17ac8857c44468a2"
+    },
+    {
+      "bytes": 1517,
+      "path": "src/ds4_calibrate/plan.py",
+      "sha256": "20b063c5045b857ef8ff2a75bb15294661627ba4adf41996b0697e9c58d747be"
+    },
+    {
+      "bytes": 64,
+      "path": "src/ds4_chat/__init__.py",
+      "sha256": "4884b44730553e4712342d35828043b3545535091bad407cb5e63742480854eb"
+    },
+    {
+      "bytes": 243,
+      "path": "src/ds4_chat/__pycache__/__init__.cpython-313.pyc",
+      "sha256": "b178997e24fa4ff8af639aefe805d4b7bd0a4a7b46b7a7052cb3d508943b9fab"
+    },
+    {
+      "bytes": 11456,
+      "path": "src/ds4_chat/__pycache__/cli.cpython-313.pyc",
+      "sha256": "efdd7b2add55eec32896a37e84a98707b9a232d19af7a77763af6a3d7c369b5b"
+    },
+    {
+      "bytes": 7948,
+      "path": "src/ds4_chat/cli.py",
+      "sha256": "9706fb8475d4740dbc0e905157c8ec8672f631e3a1cd327e959c008f4477be85"
+    },
+    {
+      "bytes": 39,
+      "path": "src/ds4_infer/__init__.py",
+      "sha256": "7f6356cf00841c7e125de7794af0021f37349baa4832c6c56ba9ef688aaaabf0"
+    },
+    {
+      "bytes": 219,
+      "path": "src/ds4_infer/__pycache__/__init__.cpython-313.pyc",
+      "sha256": "2b1c8329d3795a8f943e0f488bfc9a48c3ffdaeae138cdff830d3a9ccc50bad6"
+    },
+    {
+      "bytes": 8462,
+      "path": "src/ds4_infer/__pycache__/cli.cpython-313.pyc",
+      "sha256": "86b08077f2fbfdc180c9b76ef892d89016eaff584f25cd1adc115207d926d914"
+    },
+    {
+      "bytes": 8473,
+      "path": "src/ds4_infer/__pycache__/profiles.cpython-313.pyc",
+      "sha256": "587857e4ac049db6ca82f7f0c0bd5854c0bee8241ca642906e7f2e32ae8fd7bc"
+    },
+    {
+      "bytes": 25687,
+      "path": "src/ds4_infer/__pycache__/queue.cpython-313.pyc",
+      "sha256": "0f1cd97a17ed095c24356d8e9941a3bc3858f7d6f86634297d035bcd0f302e56"
+    },
+    {
+      "bytes": 20713,
+      "path": "src/ds4_infer/__pycache__/runners.cpython-313.pyc",
+      "sha256": "66974314589cc3b4dafd3bb7f86707ccd2c0b5e50ee17703dbef0e22165b67f1"
+    },
+    {
+      "bytes": 3339,
+      "path": "src/ds4_infer/__pycache__/schemas.cpython-313.pyc",
+      "sha256": "bc3be847b896a5378e26a26d2b61d9fc73e73b860033a143c014ea016ea45524"
+    },
+    {
+      "bytes": 4982,
+      "path": "src/ds4_infer/__pycache__/service.cpython-313.pyc",
+      "sha256": "9baf0ea6fedcffaa969506861f7ecf5a142bd317a055e3390a12ce87fb6db235"
+    },
+    {
+      "bytes": 13249,
+      "path": "src/ds4_infer/__pycache__/topology.cpython-313.pyc",
+      "sha256": "80d557f75806583a8b15fe9d5b37771be2fbfe53b515d6226c8d646dcb77716d"
+    },
+    {
+      "bytes": 6023,
+      "path": "src/ds4_infer/cli.py",
+      "sha256": "f3beab82be4f9a1aa5c8c7c21e07ebff35cc7bad69c6d650e59cfa9fa8a74fa9"
+    },
+    {
+      "bytes": 5487,
+      "path": "src/ds4_infer/profiles.py",
+      "sha256": "4eba6c6b124859a056065aa31e7a1bc45cfd8706ab947848695a2b16bbdae3da"
+    },
+    {
+      "bytes": 20916,
+      "path": "src/ds4_infer/queue.py",
+      "sha256": "213b6df587846179206ba925be48aa58694c76ef7fb4bc1bbd1a62c174754668"
+    },
+    {
+      "bytes": 12531,
+      "path": "src/ds4_infer/runners.py",
+      "sha256": "de2cda7faa8cfc38981944c1ae3d2ad760d23972d5bc6058c250f6c2d90ef1c2"
+    },
+    {
+      "bytes": 2589,
+      "path": "src/ds4_infer/schemas.py",
+      "sha256": "c06d55b330a66f8d8bd180ab802913090fe162f2e52935570f95dbb0bbca87cd"
+    },
+    {
+      "bytes": 3575,
+      "path": "src/ds4_infer/service.py",
+      "sha256": "fe8a8760c8401221b41d9b6334b4bd2f0bd4414f52f3b52b115fa27fb9ad7bcc"
+    },
+    {
+      "bytes": 8633,
+      "path": "src/ds4_infer/topology.py",
+      "sha256": "d30098f4271bb1a3862226cdd0395652d922d2bf5f806bc0746a58fcc6807318"
+    },
+    {
+      "bytes": 57,
+      "path": "src/ds4_tools/__init__.py",
+      "sha256": "db7f6763676eabbb74a6b9401b7027adf37f35dd26f642f73e923cf688cb1d1e"
+    },
+    {
+      "bytes": 237,
+      "path": "src/ds4_tools/__pycache__/__init__.cpython-313.pyc",
+      "sha256": "4cd889e4f8f74e814469ee52ee9074de22ef312f28936d1384c5b9625097d428"
+    },
+    {
+      "bytes": 15951,
+      "path": "src/ds4_tools/__pycache__/builtin.cpython-313.pyc",
+      "sha256": "6560776d5bffb9be81a311c47c672b07c6acfd119459f8bbc1d5898592684d04"
+    },
+    {
+      "bytes": 2574,
+      "path": "src/ds4_tools/__pycache__/cli.cpython-313.pyc",
+      "sha256": "0e6bf7b4fbcc664d73a74793d9d68df40553b7bf98dc727bcf4dbd4345d93783"
+    },
+    {
+      "bytes": 13705,
+      "path": "src/ds4_tools/__pycache__/registry.cpython-313.pyc",
+      "sha256": "7f910802f4c2da4d8840b4c5614650bda5535660d1e646d6ac332ff1379d1621"
+    },
+    {
+      "bytes": 9436,
+      "path": "src/ds4_tools/builtin.py",
+      "sha256": "f06a99d9e41e729abc4d434e90cfceb1398ac6c4e4bedabebc159d91c6485769"
+    },
+    {
+      "bytes": 1395,
+      "path": "src/ds4_tools/cli.py",
+      "sha256": "369f841c7368d7dcb5a6a2e420b4d7ed771633add64adea2044766b5af887c21"
+    },
+    {
+      "bytes": 7630,
+      "path": "src/ds4_tools/registry.py",
+      "sha256": "93c3eec1dd809abe0c9a7b75851adefc6059f98ea380715fd2f10f17f67840fe"
+    },
+    {
+      "bytes": 0,
+      "path": "src/ds4_transfer/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 175,
+      "path": "src/ds4_transfer/__pycache__/__init__.cpython-313.pyc",
+      "sha256": "301996953fb28aefc968b1aa8013ea6df84c8894d465f818caf454537aea5f91"
+    },
+    {
+      "bytes": 2351,
+      "path": "src/ds4_transfer/__pycache__/cli.cpython-313.pyc",
+      "sha256": "9d9f1fdf6c8df429ce2a66aeb0040aefa7ca6916e67bad90f8e0f4cd970bb42a"
+    },
+    {
+      "bytes": 12796,
+      "path": "src/ds4_transfer/__pycache__/service.cpython-313.pyc",
+      "sha256": "7d83ed3ffc743096d1037c94518b8497c1c7df4dc6f2a0441d9f3509baf7d483"
+    },
+    {
+      "bytes": 1270,
+      "path": "src/ds4_transfer/cli.py",
+      "sha256": "baa64b5c9355fe0c135b5f810a0805417fc9010a294cb34726e36ef20e923f2e"
+    },
+    {
+      "bytes": 8324,
+      "path": "src/ds4_transfer/service.py",
+      "sha256": "71c704fc51abbceb593c837431accf8d0ce2b58d6009cc52f72be3118be3639e"
+    },
+    {
+      "bytes": 4202,
+      "path": "tests/__pycache__/test_agent_loop.cpython-313.pyc",
+      "sha256": "e00628174e6455fd8d2ba223abe958cf77b4b142bfe27a78202136d56c1f8993"
+    },
+    {
+      "bytes": 1478,
+      "path": "tests/__pycache__/test_calibration_plan.cpython-313.pyc",
+      "sha256": "27a14c387a0734fe4ef535bb459addb76bd67d33335579bf7dd9e81578a60f66"
+    },
+    {
+      "bytes": 5189,
+      "path": "tests/__pycache__/test_infer_contract.cpython-313.pyc",
+      "sha256": "6a7ac070322d532216021ed8ed596db749751e3302168df996bd76ed643ab654"
+    },
+    {
+      "bytes": 7584,
+      "path": "tests/__pycache__/test_inference_queue.cpython-313.pyc",
+      "sha256": "1f9e538f2c54ca9e51f6fb9e22e2ef0e630942d09b7623b4e74e7232b5348aa3"
+    },
+    {
+      "bytes": 12517,
+      "path": "tests/__pycache__/test_llm_runners_web_chat.cpython-313.pyc",
+      "sha256": "2ca0e3e681c0c7499f598c96bce1e89f21004f90a26a0122d8a2253f56e11595"
+    },
+    {
+      "bytes": 7892,
+      "path": "tests/__pycache__/test_static_spark_topology.cpython-313.pyc",
+      "sha256": "88ee41b2e78a4f704ddb4af59c5583795dbed549fa3ed57ad1658a0908cb5c8f"
+    },
+    {
+      "bytes": 3462,
+      "path": "tests/__pycache__/test_tool_lattice.cpython-313.pyc",
+      "sha256": "abf88e814e9d14456a92ea549880ec56ffc1b0bb33c15e12440db479feb144e6"
+    },
+    {
+      "bytes": 3698,
+      "path": "tests/__pycache__/test_transfer_plan.cpython-313.pyc",
+      "sha256": "0fb9a4bb64a8cd4cb2b145bf26be20dd24bdfb6356eeed33128de9a42e4a4be3"
+    },
+    {
+      "bytes": 227,
+      "path": "tests/fixtures/fake_tool_agent_responses.jsonl",
+      "sha256": "59993bd5bd0288f65f823712d75a607bf5a47cd2f5e03b5059de6a6bb38cd993"
+    },
+    {
+      "bytes": 3604,
+      "path": "tests/test_agent_loop.py",
+      "sha256": "8002741224f1db6cb4e4ef5c4437df69afe4f43a8715224f130a9f257043cdf8"
+    },
+    {
+      "bytes": 605,
+      "path": "tests/test_calibration_plan.py",
+      "sha256": "ed2608a98ac6a7ab9e27a3576bdb835d45143a5c071257ade9bee184c1e6e103"
+    },
+    {
+      "bytes": 3229,
+      "path": "tests/test_infer_contract.py",
+      "sha256": "8350ce465e4b90ed8fd608fb8d50d0acade33d505337603cf7fddfb4099b9e41"
+    },
+    {
+      "bytes": 4994,
+      "path": "tests/test_inference_queue.py",
+      "sha256": "a38f698a27eaa7da52231ec15d94d2b57a6b0920f776a274b510298e15b1f932"
+    },
+    {
+      "bytes": 6730,
+      "path": "tests/test_llm_runners_web_chat.py",
+      "sha256": "cd6c23b73676a4dfa41d09afa159ebdedd1fc610900a9b12432c732699ec203f"
+    },
+    {
+      "bytes": 5111,
+      "path": "tests/test_static_spark_topology.py",
+      "sha256": "712f9e976eb9699b756ccaff0b8711018c4e76e938579ca29edcc69676055ea2"
+    },
+    {
+      "bytes": 0,
+      "path": "tests/test_static_spark_topology.py.tmp",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 1577,
+      "path": "tests/test_tool_lattice.py",
+      "sha256": "de2986dc4e6ba4256bd26dd1ba4929c5f02f424f1d7149b104ff5284430cd093"
+    },
+    {
+      "bytes": 2539,
+      "path": "tests/test_transfer_plan.py",
+      "sha256": "a47d4612356b2cbd1cca62e34cc4da18f65777ba1847c97493fdac804aa9bec8"
+    },
+    {
+      "bytes": 203,
+      "path": "tools/bash/echo_json.sh",
+      "sha256": "f32dbdb430c71597e92287e10adeb1a898d5e5f6414d3fc5fbb136f9ce767f70"
+    },
+    {
+      "bytes": 5410,
+      "path": "tools/registry.jsonl",
+      "sha256": "8139a9e4b5620e162d60ac974e553f54aba6f82ed59948d81b39c8d5172c0c28"
+    }
+  ],
+  "format": "ds4-release-manifest-v1",
+  "release": "ds4_on_spark_v2_mtp_runner_web_chat_release",
+  "summary": "Grouped DSV4/vLLM/MTP topology, live vLLM/antirez runners, Playwright web tool, spark7-capable chat CLI."
+}

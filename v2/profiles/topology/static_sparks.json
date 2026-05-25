@@ -1,0 +1,134 @@
+{
+  "format": "ds4-spark-topology-v1",
+  "topology_id": "static_sparks_2026_05_25_v3",
+  "description": "Static Spark allocation: Qwen lanes on spark0-3, one DSV4/vLLM/MTP grouped lane consuming spark4+spark5, antirez/support on spark6, experiments on spark7.",
+  "nodes": [
+    {
+      "node_id": "spark0",
+      "roles": [
+        "qwen_static",
+        "production"
+      ],
+      "resident_profiles": [
+        "qwen3_6_27b_fp8_efficient_v1",
+        "qwen3_6_35b_a3b_fp8_fastest_v1"
+      ],
+      "default_capacity": 1,
+      "immediate_reserved": false,
+      "dynamic_load": false
+    },
+    {
+      "node_id": "spark1",
+      "roles": [
+        "qwen_static",
+        "production"
+      ],
+      "resident_profiles": [
+        "qwen3_6_27b_fp8_efficient_v1",
+        "qwen3_6_35b_a3b_fp8_fastest_v1"
+      ],
+      "default_capacity": 1,
+      "immediate_reserved": false,
+      "dynamic_load": false
+    },
+    {
+      "node_id": "spark2",
+      "roles": [
+        "qwen_static",
+        "production"
+      ],
+      "resident_profiles": [
+        "qwen3_6_27b_fp8_efficient_v1",
+        "qwen3_6_35b_a3b_fp8_fastest_v1"
+      ],
+      "default_capacity": 1,
+      "immediate_reserved": false,
+      "dynamic_load": false
+    },
+    {
+      "node_id": "spark3",
+      "roles": [
+        "qwen_static",
+        "production"
+      ],
+      "resident_profiles": [
+        "qwen3_6_27b_fp8_efficient_v1",
+        "qwen3_6_35b_a3b_fp8_fastest_v1"
+      ],
+      "default_capacity": 1,
+      "immediate_reserved": false,
+      "dynamic_load": false
+    },
+    {
+      "node_id": "spark4",
+      "roles": [
+        "dsv4_vllm_static",
+        "production",
+        "chat_mtp"
+      ],
+      "resident_profiles": [
+        "dsv4_vllm_mtp_smartest_v1"
+      ],
+      "default_capacity": 1,
+      "immediate_reserved": false,
+      "dynamic_load": false
+    },
+    {
+      "node_id": "spark5",
+      "roles": [
+        "dsv4_vllm_static",
+        "production",
+        "chat_mtp"
+      ],
+      "resident_profiles": [
+        "dsv4_vllm_mtp_smartest_v1"
+      ],
+      "default_capacity": 1,
+      "immediate_reserved": false,
+      "dynamic_load": false
+    },
+    {
+      "node_id": "spark6",
+      "roles": [
+        "support",
+        "antirez",
+        "urgent"
+      ],
+      "resident_profiles": [
+        "dsv4_antirez_smart_v1"
+      ],
+      "default_capacity": 1,
+      "immediate_reserved": true,
+      "dynamic_load": false
+    },
+    {
+      "node_id": "spark7",
+      "roles": [
+        "experiment",
+        "dynamic_load"
+      ],
+      "resident_profiles": [],
+      "default_capacity": 1,
+      "immediate_reserved": false,
+      "dynamic_load": true
+    }
+  ],
+  "routing_policy": {
+    "normal_requests_prefer_roles": [
+      "production"
+    ],
+    "immediate_requests_prefer_roles": [
+      "urgent",
+      "support",
+      "production"
+    ],
+    "allow_dynamic_load_for_unmatched_profiles": false,
+    "experimental_node_id": "spark7",
+    "profile_node_groups": {
+      "dsv4_vllm_mtp_smartest_v1": [
+        "spark4",
+        "spark5"
+      ]
+    }
+  }
+}
