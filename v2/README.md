@@ -51,6 +51,11 @@ Production Sparks should run `ds4-infer startup-models` after reboot. The
 command warms only the resident profiles assigned to that Spark by topology;
 spark7 stays on demand.
 
+Spark7 NIXL/GDN experiments are generated explicitly from
+`profiles/nixl/qwen35_0_8b_spark7_gdn_nixl_smoke.json` and
+`profiles/vllm_builds/vllm_main_after_gdn_nixl_41869.json`; see
+`docs/nixl-spark7-experiments.md`.
+
 ## Inference queue
 
 Centaur submits individual requests and can poll either a request, a batch, or an event stream:

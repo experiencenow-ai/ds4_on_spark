@@ -1,0 +1,75 @@
+{
+  "format": "ds4-nixl-deployment-v1",
+  "deployment_id": "qwen27_spark7_gdn_nixl_experimental_v1",
+  "profile_id": "qwen3_6_27b_fp8_gdn_nixl_experimental_v1",
+  "connector_backends": [
+    "UCX"
+  ],
+  "ucx_tls": "all",
+  "ucx_net_devices": "all",
+  "kv_load_failure_policy": "fail",
+  "kv_buffer_device": "cuda",
+  "use_enforce_eager": true,
+  "enable_cross_layers_blocks": false,
+  "prefiller": {
+    "instance_id": "qwen27-prefiller-spark7",
+    "role": "prefiller",
+    "spark_node": "spark7",
+    "host": "127.0.0.1",
+    "http_port": 19100,
+    "side_channel_port": 16600,
+    "model_id": "/home/spark7/models/hf/Qwen/Qwen3.6-27B-FP8",
+    "tensor_parallel_size": 1,
+    "cuda_visible_devices": null,
+    "extra_args": [
+      "--served-model-name",
+      "Qwen/Qwen3.6-27B-FP8",
+      "--trust-remote-code",
+      "--no-async-scheduling",
+      "--no-disable-hybrid-kv-cache-manager",
+      "--block-size",
+      "128",
+      "--max-model-len",
+      "8192",
+      "--gpu-memory-utilization",
+      "0.46"
+    ]
+  },
+  "decoder": {
+    "instance_id": "qwen27-decoder-spark7",
+    "role": "decoder",
+    "spark_node": "spark7",
+    "host": "127.0.0.1",
+    "http_port": 19200,
+    "side_channel_port": 16601,
+    "model_id": "/home/spark7/models/hf/Qwen/Qwen3.6-27B-FP8",
+    "tensor_parallel_size": 1,
+    "cuda_visible_devices": null,
+    "extra_args": [
+      "--served-model-name",
+      "Qwen/Qwen3.6-27B-FP8",
+      "--trust-remote-code",
+      "--no-async-scheduling",
+      "--no-disable-hybrid-kv-cache-manager",
+      "--block-size",
+      "128",
+      "--max-model-len",
+      "8192",
+      "--gpu-memory-utilization",
+      "0.46"
+    ]
+  },
+  "proxy": {
+    "host": "127.0.0.1",
+    "port": 19192,
+    "module": "ds4_nixl.proxy"
+  },
+  "vllm_bin": "/home/spark7/standard-runtimes/vllm-main-gdn-nixl/venv/bin/vllm",
+  "python_bin": "/home/spark7/standard-runtimes/vllm-main-gdn-nixl/venv/bin/python",
+  "working_directory": "/home/spark7/ds4_on_spark",
+  "pythonpath": "/home/spark7/ds4_on_spark/v2/src",
+  "extra_env": {
+    "PATH": "/home/spark7/standard-runtimes/vllm-main-gdn-nixl/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "VLLM_SSM_CONV_STATE_LAYOUT": "DS"
+  }
+}
