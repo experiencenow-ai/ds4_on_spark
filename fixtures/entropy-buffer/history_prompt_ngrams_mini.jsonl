@@ -1,2 +1,0 @@
-{"type":"task_run","run_id":"baseline-20260511-spark0","task_id":"math.h1","task_family":"math","prompt_template_id":"plain.v1","model_id":"m0","prompt":"alpha beta gamma","output":"{}"}
-{"type":"task_run","run_id":"baseline-20260511-spark0","task_id":"math.h2","task_family":"math","prompt_template_id":"plain.v1","model_id":"m0","prompt":"alpha beta gamma delta","output":"{}"}

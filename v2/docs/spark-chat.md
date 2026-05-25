@@ -1,26 +1,30 @@
 # Spark chat CLI
 
-`ds4-spark-chat` is a simple local chat interface for the DSV4/vLLM/MTP lane.
+`ds4-spark-chat` is a simple local chat interface for the DS4 Spark lanes.
 
-It intentionally brute-forces the full chat history as OpenAI-compatible chat messages. This is enough for Mac Studio usage and keeps the first version easy to debug.
+It keeps full chat history on the Mac Studio, then submits each turn through
+the v2 queue. The model call itself runs on the selected Spark through
+`--runner spark`.
 
 Example:
 
 ```bash
-export DS4_VLLM_MTP_BASE_URL=http://spark4:8000
-PYTHONPATH=src python3 -m ds4_chat.cli \
-  --registry tools/registry.jsonl \
-  --history ~/.ds4_spark_chat_history.json \
-  --allow-spark7-tools
+PYTHONPATH=src python3 -m ds4_chat.cli -m ds4v
+PYTHONPATH=src python3 -m ds4_chat.cli -m qwen
+PYTHONPATH=src python3 -m ds4_chat.cli -m ds4a
 ```
 
 Single question mode:
 
 ```bash
 PYTHONPATH=src python3 -m ds4_chat.cli \
+  -m ds4v \
   --allow-spark7-tools \
   --ask 'Check the planned Spark status command and explain what you would run.'
 ```
+
+`--mode direct-vllm` keeps the old direct OpenAI-compatible behavior for
+debugging a single endpoint, but queue mode is the default production path.
 
 Tools available by default:
 

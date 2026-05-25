@@ -1,7 +1,7 @@
 {
   "format": "ds4-model-profile-v1",
   "profile_id": "dsv4_vllm_mtp_smartest_v1",
-  "model_id": "deepseek-v4",
+  "model_id": "deepseek-v4-flash",
   "backend": "vllm_mtp",
   "capability_classes": ["smart", "smartest"],
   "supported_job_classes": ["atom_edit", "analysis", "debug", "cluster_synthesis", "tool_chat"],

@@ -8,8 +8,9 @@ from pathlib import Path
 import unittest
 
 from ds4_chat.cli import VllmChatModel
+from ds4_chat.cli import QueueChatModel
 from ds4_infer.profiles import ProfileRegistry
-from ds4_infer.runners import OpenAICompatibleRunner, request_messages, request_prompt
+from ds4_infer.runners import OpenAICompatibleRunner, SparkHttpRunner, request_messages, request_prompt
 from ds4_infer.schemas import InferenceRequest
 from ds4_tools.builtin import spark7_run_command, web_fetch
 from ds4_tools.registry import ToolRegistry
@@ -97,6 +98,43 @@ class LlmRunnersWebChatTests(unittest.TestCase):
             ])
         self.assertEqual(message["role"], "assistant")
         self.assertEqual(message["content"], "chat reply")
+
+    def test_queue_chat_model_can_use_fake_runner_with_model_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            model = QueueChatModel(
+                queue_dir=str(Path(temp_dir) / "queue"),
+                profiles_dir=str(PROFILES),
+                topology=str(ROOT / "profiles" / "topology" / "static_sparks.json"),
+                model_alias="qwen",
+                runner="fake",
+                timeout_s=30,
+                max_tokens=16,
+                temperature=0.0,
+            )
+            message = model.next_message([{"role": "user", "content": "hello"}])
+        self.assertEqual(message["role"], "assistant")
+        self.assertIn("fake response", message["content"])
+
+    def test_spark_http_runner_uses_selected_node_over_ssh(self) -> None:
+        calls = []
+
+        class Done:
+            returncode = 0
+            stdout = json.dumps({"choices": [{"message": {"role": "assistant", "content": "ok"}}], "usage": {"total_tokens": 1}})
+            stderr = ""
+
+        def runner(command, **kwargs):
+            calls.append((command, kwargs))
+            return Done()
+
+        profile = ProfileRegistry.load(PROFILES).get("dsv4_vllm_mtp_smartest_v1")
+        request = make_request(chat=True)
+        result = SparkHttpRunner(timeout_s=30, command_runner=runner).run_one_on_node(request, profile, "spark4+spark5")
+        self.assertEqual(result["output"]["text"], "ok")
+        self.assertEqual(calls[0][0][5], "spark4")
+        payload = json.loads(calls[0][1]["input"])
+        self.assertTrue(payload["batch_first"])
+        self.assertEqual(payload["batch_payload"]["model"], "deepseek-v4-flash")
 
 
 class _local_html_server:

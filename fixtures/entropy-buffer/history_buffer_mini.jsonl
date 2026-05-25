@@ -1,1 +1,0 @@
-{"type":"task_run","run_id":"hist-buffer-mini","task_id":"buf.task.001","task_family":"buf","prompt_template_id":"plain.v1","model_id":"m0","prompt":"Say hi.","output":"hi","buffer_id":"entropy.v1","buffer_item_id":"entropy.v1:buf.task.001:plain.v1"}

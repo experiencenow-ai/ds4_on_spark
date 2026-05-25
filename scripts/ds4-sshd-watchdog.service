@@ -1,7 +1,0 @@
-[Unit]
-Description=DS4 SSH banner watchdog
-After=network.target ssh.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/sbin/ds4-sshd-watchdog

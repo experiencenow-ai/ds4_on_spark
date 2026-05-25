@@ -1,9 +1,0 @@
-# Example: extend start/stop timeouts for model loading / slow init.
-#
-# Install as:
-#   ~/.config/systemd/user/ds4@.service.d/20-timeouts.conf
-
-[Service]
-TimeoutStartSec=300
-TimeoutStopSec=120
-
