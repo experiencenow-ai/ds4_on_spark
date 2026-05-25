@@ -315,6 +315,14 @@ def extract_completion_like_text(data: dict[str, Any]) -> str:
     return json.dumps(data, sort_keys=True)
 
 
+def make_runner(kind: str, *, timeout_s: int) -> Any:
+    if kind == "fake":
+        return FakeRunner()
+    if kind == "auto":
+        return AutoRunner(timeout_s=timeout_s)
+    return SparkHttpRunner(timeout_s=timeout_s)
+
+
 def _openai_payload(request: InferenceRequest, profile: ModelProfile) -> dict[str, Any]:
     if request.chat:
         payload: dict[str, Any] = {"model": profile.model_id, "messages": request_messages(request), "temperature": request.temperature, "max_tokens": request.max_output_tokens}

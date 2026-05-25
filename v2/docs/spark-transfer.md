@@ -54,4 +54,9 @@ The topology allowlists root paths per Spark. Requests outside the allowlist are
 - The source Spark initiates transfer.
 - Paths must be absolute and allowlisted.
 - Controller never expands arbitrary shell.
-- The first method is rsync because it is already good for incremental artifacts. Future transfer methods can add tar-streaming or parallel file-list shards behind the same request schema.
+- The Mac Studio is control plane only. It should start the job and collect status, not carry model payload bytes.
+- For initial bulk payloads, avoid Mac-local `scp` or controller-local `rsync`. They hairpin through the controller and miss the Spark fabric.
+- Healthy Spark-to-Spark transfer plans should show the source Spark talking directly to the destination Spark host on the 200G fabric.
+- Use rsync for metadata-safe deltas, small updates, and final verification. For first-copy multi-hundred-GB payloads, prefer future chunked/native engines behind the same request schema.
+- If a rail fails, isolate the bad rail and fall back to the healthy rail or hop-by-hop adjacent links instead of routing through the controller.
+- The first method is rsync because it is already good for incremental artifacts. Future transfer methods can add tar-streaming, parallel file-list shards, or native chunk copy behind the same request schema.

@@ -98,6 +98,10 @@ Tools are invoked by stable IDs, not rediscovered shell commands:
 ```text
 tool:ds4.json.validate
 tool:ds4.sha256
+tool:ds4.regex.match
+tool:ds4.diff.stats
+tool:ds4.cpu.services
+tool:ds4.cpu.batch
 tool:repo.tests.echo_contract
 tool:web.fetch
 tool:spark.status
@@ -106,7 +110,7 @@ tool:spark.transfer.plan
 tool:spark.transfer.run
 ```
 
-Bash-backed tools use fixed argv, schema validation, timeouts, output caps, and no `shell=True`.
+Bash-backed tools use fixed argv, schema validation, timeouts, output caps, and no `shell=True`. CPU service batches use a bounded process-wide pool; allowlisted commands come only from `CPU_SERVICE_COMMANDS_JSON`.
 
 ## Spark transfer
 
@@ -133,3 +137,7 @@ Live runner adapters now exist for OpenAI-compatible vLLM, vLLM/MTP, and antirez
 `ds4-spark-chat -m ds4v` is a simple Mac Studio-friendly chat CLI that keeps
 full history locally but runs inference on the selected Spark. See
 `docs/spark-chat.md` and `docs/spark-queue-runbook.md`.
+
+Gateway, transfer, and audit extraction notes live in
+`docs/model-gateway-operational-notes.md`, `docs/spark-transfer.md`, and
+`docs/audit-handoff.md`.

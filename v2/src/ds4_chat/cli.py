@@ -11,7 +11,7 @@ from urllib import error, request as urlrequest
 from ds4_agent.loop import run_agent_loop
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.queue import InferenceQueue
-from ds4_infer.runners import AutoRunner, FakeRunner, SparkHttpRunner
+from ds4_infer.runners import make_runner
 from ds4_infer.schemas import InferenceRequest
 from ds4_infer.topology import SparkTopology
 from ds4_tools.registry import ToolRegistry
@@ -74,7 +74,7 @@ class QueueChatModel:
         self.registry = ProfileRegistry.load(profiles_dir)
         self.topology = SparkTopology.load(topology)
         self.model_alias = model_alias
-        self.runner = _make_queue_runner(runner, timeout_s)
+        self.runner = make_runner(runner, timeout_s=timeout_s)
         self.max_tokens = max_tokens
         self.temperature = temperature
 
@@ -218,14 +218,6 @@ def _json_safe_messages(messages: list[dict]) -> list[dict]:
 
 def _transcript(messages: list[dict]) -> str:
     return "\n".join(f"{message.get('role','user')}: {message.get('content','')}" for message in messages)
-
-
-def _make_queue_runner(kind: str, timeout_s: int):
-    if kind == "fake":
-        return FakeRunner()
-    if kind == "auto":
-        return AutoRunner(timeout_s=timeout_s)
-    return SparkHttpRunner(timeout_s=timeout_s)
 
 
 def _chat_job_class(supported: tuple[str, ...], chat: bool) -> str:

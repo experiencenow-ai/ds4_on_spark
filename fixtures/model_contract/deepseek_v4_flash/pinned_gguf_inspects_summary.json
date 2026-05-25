@@ -1,0 +1,417 @@
+{
+  "generated_at_utc": "2026-05-13T00:42:19Z",
+  "items": [
+    {
+      "artifact_type": "gguf.url",
+      "doc_path": "docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json",
+      "ds4_mtp_sidecar_contract": null,
+      "mtp_contract": null,
+      "mtp_keys_sha256": null,
+      "mtp_layer_ids": [],
+      "mtp_namespace": {
+        "expected_complete": false,
+        "expected_layer_ids": [
+          0
+        ],
+        "has_mtp0": false,
+        "missing_expected_layer_ids": [
+          0
+        ],
+        "present_layer_ids": [],
+        "present_prefixes": []
+      },
+      "mtp_present": false,
+      "mtp_preservation": {
+        "expected_mtp_keys_sha256": null,
+        "mtp_keys_sha256_match_official": null,
+        "preserves": false,
+        "reasons_sample": [
+          "no mtp.* tensors present"
+        ],
+        "status": "absent"
+      },
+      "mtp_tensor_count": 0,
+      "mtp_trust": {
+        "expected_mtp_keys_sha256": null,
+        "mtp_keys_sha256_match_official": null,
+        "reasons_sample": [
+          "no mtp.* tensors present"
+        ],
+        "status": "absent",
+        "trusted": false
+      },
+      "path": "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF/resolve/6c6d74ce4efd3e1045c15e5823d75e62b6e4ba1d/DeepSeek-V4-Flash-Q4_K_M.gguf",
+      "quantization_contract": {
+        "dense_fp8_like": false,
+        "expected": {
+          "dense_dtype": "fp8",
+          "expert_dtype": "fp4",
+          "scale_fmt": "ue8m0"
+        },
+        "expert_fp4_like": false,
+        "notes_sample": [
+          "expected Flash experts fp4; artifact expert primary type is 'Q4_K' (likely re-quantized or non-native conversion)",
+          "expected Flash trunk fp8; artifact shows no FP8 tensor evidence (dense primary type is 'F32')",
+          "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
+        ],
+        "observed": {
+          "dense_fp8_evidence": {
+            "checked": true,
+            "fp8_categories": [],
+            "fp8_present": false,
+            "fp8_types": []
+          },
+          "dense_primary_type": "F32",
+          "expert_primary_type": "Q4_K"
+        },
+        "status": "mismatch"
+      },
+      "tensor_key_namespace_guess": "llama.cpp",
+      "topology_contract": {
+        "block_count_ok": true,
+        "mismatch_count": 0,
+        "mismatches_sample": []
+      },
+      "weight_keys_sha256": "77fa28612383dbd157f5a765749ead1665240ce21c78d8b30479a19e5958802a"
+    },
+    {
+      "artifact_type": "gguf.url",
+      "doc_path": "docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json",
+      "ds4_mtp_sidecar_contract": null,
+      "mtp_contract": null,
+      "mtp_keys_sha256": null,
+      "mtp_layer_ids": [],
+      "mtp_namespace": {
+        "expected_complete": false,
+        "expected_layer_ids": [
+          0
+        ],
+        "has_mtp0": false,
+        "missing_expected_layer_ids": [
+          0
+        ],
+        "present_layer_ids": [],
+        "present_prefixes": []
+      },
+      "mtp_present": false,
+      "mtp_preservation": {
+        "expected_mtp_keys_sha256": null,
+        "mtp_keys_sha256_match_official": null,
+        "preserves": false,
+        "reasons_sample": [
+          "no mtp.* tensors present"
+        ],
+        "status": "absent"
+      },
+      "mtp_tensor_count": 0,
+      "mtp_trust": {
+        "expected_mtp_keys_sha256": null,
+        "mtp_keys_sha256_match_official": null,
+        "reasons_sample": [
+          "no mtp.* tensors present"
+        ],
+        "status": "absent",
+        "trusted": false
+      },
+      "path": "https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF/resolve/0b34e0b629c706396002496e795e9f910f7bf69f/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "quantization_contract": {
+        "dense_fp8_like": true,
+        "expected": {
+          "dense_dtype": "fp8",
+          "expert_dtype": "fp4",
+          "scale_fmt": "ue8m0"
+        },
+        "expert_fp4_like": true,
+        "notes_sample": [
+          "dense_fp8_like inferred from FP8 tensors present in key categories; dense_primary may be F32 due to scales/routers",
+          "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
+        ],
+        "observed": {
+          "dense_fp8_evidence": {
+            "checked": true,
+            "fp8_categories": [
+              "attn",
+              "shared_expert_packed"
+            ],
+            "fp8_present": true,
+            "fp8_types": [
+              "F8_E4M3_B128"
+            ]
+          },
+          "dense_primary_type": "F32",
+          "expert_primary_type": "MXFP4"
+        },
+        "status": "native_like"
+      },
+      "tensor_key_namespace_guess": "llama.cpp",
+      "topology_contract": {
+        "block_count_ok": true,
+        "mismatch_count": 0,
+        "mismatches_sample": []
+      },
+      "weight_keys_sha256": "77fa28612383dbd157f5a765749ead1665240ce21c78d8b30479a19e5958802a"
+    },
+    {
+      "artifact_type": "gguf.url",
+      "doc_path": "docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2.json",
+      "ds4_mtp_sidecar_contract": null,
+      "mtp_contract": null,
+      "mtp_keys_sha256": null,
+      "mtp_layer_ids": [],
+      "mtp_namespace": {
+        "expected_complete": false,
+        "expected_layer_ids": [
+          0
+        ],
+        "has_mtp0": false,
+        "missing_expected_layer_ids": [
+          0
+        ],
+        "present_layer_ids": [],
+        "present_prefixes": []
+      },
+      "mtp_present": false,
+      "mtp_preservation": {
+        "expected_mtp_keys_sha256": null,
+        "mtp_keys_sha256_match_official": null,
+        "preserves": false,
+        "reasons_sample": [
+          "no mtp.* tensors present"
+        ],
+        "status": "absent"
+      },
+      "mtp_tensor_count": 0,
+      "mtp_trust": {
+        "expected_mtp_keys_sha256": null,
+        "mtp_keys_sha256_match_official": null,
+        "reasons_sample": [
+          "no mtp.* tensors present"
+        ],
+        "status": "absent",
+        "trusted": false
+      },
+      "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/3274cdc42be178f7384211c7463565dccfc444d7/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+      "quantization_contract": {
+        "dense_fp8_like": false,
+        "expected": {
+          "dense_dtype": "fp8",
+          "expert_dtype": "fp4",
+          "scale_fmt": "ue8m0"
+        },
+        "expert_fp4_like": false,
+        "notes_sample": [
+          "expected Flash experts fp4; artifact expert primary type is 'IQ2_XXS' (likely re-quantized or non-native conversion)",
+          "expected Flash trunk fp8; artifact shows no FP8 tensor evidence (dense primary type is 'F32')",
+          "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
+        ],
+        "observed": {
+          "dense_fp8_evidence": {
+            "checked": true,
+            "fp8_categories": [],
+            "fp8_present": false,
+            "fp8_types": []
+          },
+          "dense_primary_type": "F32",
+          "expert_primary_type": "IQ2_XXS"
+        },
+        "status": "mismatch"
+      },
+      "tensor_key_namespace_guess": "llama.cpp",
+      "topology_contract": {
+        "block_count_ok": true,
+        "mismatch_count": 0,
+        "mismatches_sample": []
+      },
+      "weight_keys_sha256": "0d7226bd7c13c2cfa43a16a04b4b9a69b9b0940df4c859030e1de0e74c5c5ddc"
+    },
+    {
+      "artifact_type": "gguf.url",
+      "doc_path": "docs/gguf-inspect-antirez-3274cdc-mtp-sidecar.json",
+      "ds4_mtp_sidecar_contract": {
+        "complete": true,
+        "expected_general_architecture": "deepseek4_mtp_support",
+        "expected_tensor_count": 32,
+        "general_architecture": "deepseek4_mtp_support",
+        "missing_expected_count": 0,
+        "unexpected_present_count": 0
+      },
+      "mtp_contract": {
+        "complete": false,
+        "forbidden_present_count": 0,
+        "missing_required_count": 1568
+      },
+      "mtp_keys_sha256": "d43eff0361b0ce12511f7df069f9f8dec932f75e1a8c5429f8be3fc94f84b06f",
+      "mtp_layer_ids": [
+        0
+      ],
+      "mtp_namespace": {
+        "expected_complete": true,
+        "expected_layer_ids": [
+          0
+        ],
+        "has_mtp0": true,
+        "missing_expected_layer_ids": [],
+        "present_layer_ids": [
+          0
+        ],
+        "present_prefixes": [
+          "mtp.0."
+        ]
+      },
+      "mtp_present": true,
+      "mtp_preservation": {
+        "expected_mtp_keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
+        "mtp_keys_sha256_match_official": false,
+        "preserves": false,
+        "reasons_sample": [
+          "mtp_contract.complete != true",
+          "mtp keys appear DS4-sidecar-formatted (GGUF) rather than upstream DeepSeek safetensors schema"
+        ],
+        "status": "incomplete"
+      },
+      "mtp_tensor_count": 32,
+      "mtp_trust": {
+        "expected_mtp_keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
+        "mtp_keys_sha256_match_official": false,
+        "reasons_sample": [
+          "mtp_contract.complete != true",
+          "mtp keys appear DS4-sidecar-formatted (GGUF) rather than upstream DeepSeek safetensors schema",
+          "mtp_keys_sha256 != official mtp checkpoint fingerprint"
+        ],
+        "status": "incomplete",
+        "trusted": false
+      },
+      "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/3274cdc42be178f7384211c7463565dccfc444d7/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+      "quantization_contract": {
+        "dense_fp8_like": false,
+        "expected": {
+          "dense_dtype": "fp8",
+          "expert_dtype": "fp4",
+          "scale_fmt": "ue8m0"
+        },
+        "expert_fp4_like": null,
+        "notes_sample": [
+          "expected Flash trunk fp8; artifact shows no FP8 tensor evidence (dense primary type is 'F32')",
+          "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
+        ],
+        "observed": {
+          "dense_fp8_evidence": {
+            "checked": true,
+            "fp8_categories": [],
+            "fp8_present": false,
+            "fp8_types": []
+          },
+          "dense_primary_type": "F32",
+          "expert_primary_type": null
+        },
+        "status": "mismatch"
+      },
+      "tensor_key_namespace_guess": "ds4-mtp-sidecar",
+      "topology_contract": {
+        "block_count_ok": null,
+        "mismatch_count": 0,
+        "mismatches_sample": []
+      },
+      "weight_keys_sha256": "d43eff0361b0ce12511f7df069f9f8dec932f75e1a8c5429f8be3fc94f84b06f"
+    },
+    {
+      "artifact_set": true,
+      "doc_path": "docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2-mtp-set.json",
+      "ds4_mtp_sidecar_complete": true,
+      "ds4_mtp_sidecar_present": true,
+      "mtp_contract": {
+        "complete": false,
+        "forbidden_present_count": 0,
+        "missing_required_count": 1568
+      },
+      "mtp_keys_union_sha256": "d43eff0361b0ce12511f7df069f9f8dec932f75e1a8c5429f8be3fc94f84b06f",
+      "mtp_layer_ids": [
+        0
+      ],
+      "mtp_namespace": {
+        "expected_complete": true,
+        "expected_layer_ids": [
+          0
+        ],
+        "has_mtp0": true,
+        "missing_expected_layer_ids": [],
+        "present_layer_ids": [
+          0
+        ],
+        "present_prefixes": [
+          "mtp.0."
+        ]
+      },
+      "mtp_present": true,
+      "mtp_preservation": {
+        "expected_mtp_keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
+        "mtp_keys_sha256_match_official": false,
+        "preserves": false,
+        "reasons_sample": [
+          "mtp_contract.complete != true",
+          "mtp keys appear DS4-sidecar-formatted (GGUF) rather than upstream DeepSeek safetensors schema"
+        ],
+        "status": "incomplete"
+      },
+      "mtp_tensor_count": 32,
+      "mtp_tensor_type_counts": {
+        "F32": 19,
+        "Q4_K": 3,
+        "Q8_0": 10
+      },
+      "mtp_trust": {
+        "expected_mtp_keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
+        "mtp_keys_sha256_match_official": false,
+        "reasons_sample": [
+          "mtp_contract.complete != true",
+          "mtp keys appear DS4-sidecar-formatted (GGUF) rather than upstream DeepSeek safetensors schema",
+          "mtp_keys_sha256 != official mtp checkpoint fingerprint"
+        ],
+        "status": "incomplete",
+        "trusted": false
+      },
+      "paths": [
+        "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/3274cdc42be178f7384211c7463565dccfc444d7/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+        "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/3274cdc42be178f7384211c7463565dccfc444d7/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf"
+      ],
+      "quantization_contract": {
+        "dense_fp8_like": false,
+        "expected": {
+          "dense_dtype": "fp8",
+          "expert_dtype": "fp4",
+          "scale_fmt": "ue8m0"
+        },
+        "expert_fp4_like": false,
+        "notes_sample": [
+          "expected Flash experts fp4; artifact expert primary type is 'IQ2_XXS' (likely re-quantized or non-native conversion)",
+          "expected Flash trunk fp8; artifact shows no FP8 tensor evidence (dense primary type is 'F32')",
+          "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
+        ],
+        "observed": {
+          "dense_fp8_evidence": {
+            "checked": true,
+            "fp8_categories": [],
+            "fp8_present": false,
+            "fp8_types": []
+          },
+          "dense_primary_type": "F32",
+          "expert_primary_type": "IQ2_XXS"
+        },
+        "status": "mismatch"
+      },
+      "topology_contract": {
+        "block_count_ok": true,
+        "mismatch_count": 0,
+        "mismatches_sample": []
+      },
+      "weight_keys_union_sha256": "82aaaf7e23a219b3f9975619823341f1a87c34e7d92abab4170e1e038bf3fb6d"
+    }
+  ],
+  "pinned_docs": [
+    "gguf-inspect-preyazz-6c6d74c-q4-k-m.json",
+    "gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json",
+    "gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2.json",
+    "gguf-inspect-antirez-3274cdc-mtp-sidecar.json",
+    "gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2-mtp-set.json"
+  ]
+}

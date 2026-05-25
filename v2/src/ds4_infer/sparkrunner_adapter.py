@@ -9,7 +9,7 @@ from typing import Any
 
 from .profiles import ProfileRegistry
 from .queue import InferenceQueue
-from .runners import AutoRunner, FakeRunner, SparkHttpRunner
+from .runners import make_runner
 from .schemas import InferenceRequest
 from .topology import SparkTopology
 
@@ -31,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     requests = [_to_request(record, args.model, registry, idx) for idx, record in enumerate(records)]
     batch_id = args.batch_id or f"sparkrunner-{int(time.time() * 1000)}"
     queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id=batch_id)
-    runner = _runner(args.runner, args.timeout_s)
+    runner = make_runner(args.runner, timeout_s=args.timeout_s)
     while True:
         queue.work(registry=registry, runner=runner, limit=max(1, args.work_limit))
         status = queue.status(batch_id=batch_id)
@@ -119,14 +119,6 @@ def _write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for record in records:
             handle.write(json.dumps(record, sort_keys=True) + "\n")
-
-
-def _runner(kind: str, timeout_s: int):
-    if kind == "fake":
-        return FakeRunner()
-    if kind == "auto":
-        return AutoRunner(timeout_s=timeout_s)
-    return SparkHttpRunner(timeout_s=timeout_s)
 
 
 def _messages_text(messages: list[Any]) -> str:

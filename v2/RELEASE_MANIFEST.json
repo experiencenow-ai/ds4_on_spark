@@ -1,5 +1,5 @@
 {
-  "file_count": 61,
+  "file_count": 67,
   "files": [
     {
       "bytes": 709,
@@ -12,9 +12,9 @@
       "sha256": "0f5d77da16dd782308999fbb09519e0cc6c80bd179e9e50f2d36107acca65805"
     },
     {
-      "bytes": 5730,
+      "bytes": 6083,
       "path": "README.md",
-      "sha256": "928cf76d8a048e9752249321b76711dedeceb63b1cfd9f1cc9786d91021552de"
+      "sha256": "f4861d4f7233fe00fe4bf31418c6f69e8ef020da722bfe897f9e6fa578975309"
     },
     {
       "bytes": 2463,
@@ -27,14 +27,19 @@
       "sha256": "4e29da69c8606a7c7a7661838f04238302613510b15cda2a31a55461decdc488"
     },
     {
+      "bytes": 2042,
+      "path": "docs/audit-handoff.md",
+      "sha256": "b7995ec014dc648c199c14eb5df260b22da523c07aa8df4032dd6958c849b683"
+    },
+    {
       "bytes": 1956,
       "path": "docs/inference-queue.md",
       "sha256": "7157599ebffe1bfba619e1e1aa28629e492bf5a09fa062750a01c03099458b14"
     },
     {
-      "bytes": 864,
+      "bytes": 1126,
       "path": "docs/legacy-reconciliation.md",
-      "sha256": "8adf29176fdd664c879049ac4057c61104c76796a002d3f48b6d1747fa3eae8f"
+      "sha256": "5d07ed70644734581c4e92da0fc65aad31303a261a74c4487f2546440e3ac23e"
     },
     {
       "bytes": 965,
@@ -47,6 +52,11 @@
       "sha256": "2315d54ce1f1b9f7d73b5a6c7d93fddcc5498732c0deb82f8b521e25361acbe8"
     },
     {
+      "bytes": 2812,
+      "path": "docs/model-gateway-operational-notes.md",
+      "sha256": "2e2102fc23e4c79050dc7ebbc27d215eb3aa31bf3bd3d40ee79392ac13e1de3d"
+    },
+    {
       "bytes": 1141,
       "path": "docs/spark-chat.md",
       "sha256": "e86359a6a33c21eba7a4a2cfd0116c6691781b5a8f6764afa69bcfd926072bb1"
@@ -57,9 +67,9 @@
       "sha256": "07c0e6207fe96d0b8d5510c1f8c07173ec1f46e52ad4225613d9e53879b3d04a"
     },
     {
-      "bytes": 1663,
+      "bytes": 2411,
       "path": "docs/spark-transfer.md",
-      "sha256": "05a1ad600e05784a32005b629b275acbb9c3e1050f7b2926c7ed2cff5fe6de2e"
+      "sha256": "f15c5a661c36c4e8a8c05c3548d0754584cdabcbe97fa4c4e38713b067a19c87"
     },
     {
       "bytes": 3148,
@@ -112,9 +122,19 @@
       "sha256": "ad996d10a5c7a6e1e9f829720f0149f0a117f40995a72bf646f11fe5f13fbae6"
     },
     {
+      "bytes": 510,
+      "path": "scripts/run_centaur_audit.sh",
+      "sha256": "7d4ad8c0992330f7f1d2668a2b776cc83a910d00e4c50d26d53e0bf697b0a037"
+    },
+    {
       "bytes": 153,
       "path": "scripts/run_selftest.sh",
       "sha256": "233c162367af46611cbed3912c8d604d9160bdeedc44c8d411d7d7a15b2b2e96"
+    },
+    {
+      "bytes": 6703,
+      "path": "scripts/score_repo_complexity.py",
+      "sha256": "5b2c890f9cfa813303ac8edfe5739f82aca30bd5292077d5dd1cbd017d4c655b"
     },
     {
       "bytes": 195,
@@ -162,9 +182,9 @@
       "sha256": "4884b44730553e4712342d35828043b3545535091bad407cb5e63742480854eb"
     },
     {
-      "bytes": 12220,
+      "bytes": 11973,
       "path": "src/ds4_chat/cli.py",
-      "sha256": "f2051cfb9d46ba06b7e0d22666823f4b9b9bcbd1499bbf3449d00bdc31411579"
+      "sha256": "87b634888648f4022c8ebf1493f1b3adf92d38c0f1ca07ec13d7a039d665e960"
     },
     {
       "bytes": 39,
@@ -187,9 +207,9 @@
       "sha256": "07551f658f2579d6457f9a1819a85831f85ed80921c78654ab23a173f4823709"
     },
     {
-      "bytes": 17684,
+      "bytes": 17909,
       "path": "src/ds4_infer/runners.py",
-      "sha256": "ff129907d916b972907dca63d16e43d8b4dfc8a0ed1d4374b771191a7c2108f5"
+      "sha256": "713e976603cf2386b66ed4e7810584e0455b2ea27ea52af77ed692f0b641d5fd"
     },
     {
       "bytes": 2589,
@@ -202,9 +222,9 @@
       "sha256": "fe8a8760c8401221b41d9b6334b4bd2f0bd4414f52f3b52b115fa27fb9ad7bcc"
     },
     {
-      "bytes": 6877,
+      "bytes": 6652,
       "path": "src/ds4_infer/sparkrunner_adapter.py",
-      "sha256": "c50bf8c5c56d7e4f895241337a8dd7ca734cef0a48775a09550bea0611e3ce5e"
+      "sha256": "4d9ea46243dab2ede345a3a90c929150c7bd5c24ba8166e6c5f4b991ced72c46"
     },
     {
       "bytes": 8633,
@@ -217,9 +237,9 @@
       "sha256": "db7f6763676eabbb74a6b9401b7027adf37f35dd26f642f73e923cf688cb1d1e"
     },
     {
-      "bytes": 9436,
+      "bytes": 9955,
       "path": "src/ds4_tools/builtin.py",
-      "sha256": "f06a99d9e41e729abc4d434e90cfceb1398ac6c4e4bedabebc159d91c6485769"
+      "sha256": "291ef9ba59c06e309567a636d562fcd99b5d662e6da25aeddea322b83a0aa310"
     },
     {
       "bytes": 1395,
@@ -227,9 +247,14 @@
       "sha256": "369f841c7368d7dcb5a6a2e420b4d7ed771633add64adea2044766b5af887c21"
     },
     {
-      "bytes": 7630,
+      "bytes": 12081,
+      "path": "src/ds4_tools/cpu_batch.py",
+      "sha256": "f80e50493793c8360f6fecc3dbeb626b8f2ffdfffac93fc53ecf44704b7bfa0a"
+    },
+    {
+      "bytes": 8183,
       "path": "src/ds4_tools/registry.py",
-      "sha256": "93c3eec1dd809abe0c9a7b75851adefc6059f98ea380715fd2f10f17f67840fe"
+      "sha256": "0de5f43d9ebea9f274cc7d393ae9f22251ab02e582f55b2197e65435002d9b6c"
     },
     {
       "bytes": 0,
@@ -260,6 +285,11 @@
       "bytes": 605,
       "path": "tests/test_calibration_plan.py",
       "sha256": "ed2608a98ac6a7ab9e27a3576bdb835d45143a5c071257ade9bee184c1e6e103"
+    },
+    {
+      "bytes": 2690,
+      "path": "tests/test_cpu_batch.py",
+      "sha256": "805cb84c524f67192ffa9d66d129991107a47f71822907224f282e9463880d47"
     },
     {
       "bytes": 3229,
@@ -302,10 +332,9 @@
       "sha256": "f32dbdb430c71597e92287e10adeb1a898d5e5f6414d3fc5fbb136f9ce767f70"
     },
     {
-      "bytes": 5410,
+      "bytes": 7673,
       "path": "tools/registry.jsonl",
-      "sha256": "8139a9e4b5620e162d60ac974e553f54aba6f82ed59948d81b39c8d5172c0c28"
+      "sha256": "fc2a0709d861b9cab12fa92ddcca0081c82a91278d98135d4e3d5b5ac8c05ef2"
     }
-  ],
-  "format": "ds4-on-spark-v2-release-manifest-v1"
+  ]
 }
