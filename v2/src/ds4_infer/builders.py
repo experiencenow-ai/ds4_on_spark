@@ -71,7 +71,10 @@ def json_safe_messages(messages: list[dict]) -> list[dict]:
     for message in messages:
         if not isinstance(message, dict):
             continue
-        safe_message: dict[str, Any] = {"role": str(message.get("role", "user")), "content": str(message.get("content", ""))}
+        safe_message: dict[str, Any] = {
+            "role": str(message.get("role", "user")),
+            "content": str(message.get("content", "")),
+        }
         for key in ("tool_call_id", "name", "tool_calls"):
             if key in message:
                 safe_message[key] = message[key] if key == "tool_calls" else str(message[key])
@@ -84,20 +87,33 @@ def transcript(messages: list[dict]) -> str:
 
 
 def preferred_job_class(supported: tuple[str, ...], chat: bool) -> str:
-    preferred = ("tool_chat", "analysis", "summary", "atom_edit") if chat else ("atom_edit", "analysis", "summary", "triage")
+    preferred = (
+        ("tool_chat", "analysis", "summary", "atom_edit")
+        if chat
+        else ("atom_edit", "analysis", "summary", "triage")
+    )
     for job_class in preferred:
         if job_class in supported:
             return job_class
     return supported[0]
 
 
-def sparkrunner_request(record: dict[str, Any], model: str, registry: ProfileRegistry, index: int, seen: set[str] | None = None) -> InferenceRequest:
+def sparkrunner_request(
+    record: dict[str, Any],
+    model: str,
+    registry: ProfileRegistry,
+    index: int,
+    seen: set[str] | None = None,
+) -> InferenceRequest:
     profile = registry.get(resolve_model_alias(model))
     custom_id = str(record.get("custom_id") or record.get("request_id") or f"request-{index}")
     messages = record.get("messages")
     raw_messages = messages if isinstance(messages, list) else []
     chat = bool(profile.supports_chat and raw_messages)
-    prompt = str(record.get("prompt") or "\n".join(str(message.get("content", "")) for message in raw_messages if isinstance(message, dict)))
+    prompt = str(
+        record.get("prompt")
+        or "\n".join(str(message.get("content", "")) for message in raw_messages if isinstance(message, dict))
+    )
     return InferenceRequest.from_json(
         {
             "format": "ds4-inference-request-v1",
@@ -116,7 +132,13 @@ def sparkrunner_request(record: dict[str, Any], model: str, registry: ProfileReg
     )
 
 
-def chat_request(messages: list[dict], registry: ProfileRegistry, model_alias: str, max_tokens: int, temperature: float) -> InferenceRequest:
+def chat_request(
+    messages: list[dict],
+    registry: ProfileRegistry,
+    model_alias: str,
+    max_tokens: int,
+    temperature: float,
+) -> InferenceRequest:
     profile = registry.get(resolve_model_alias(model_alias))
     safe = json_safe_messages(messages)
     chat = bool(profile.supports_chat)
@@ -138,26 +160,59 @@ def chat_request(messages: list[dict], registry: ProfileRegistry, model_alias: s
     )
 
 
-def apply_thinking_fields(item: dict[str, Any], profile: ModelProfile, *, chat: bool, thinking_budget_tokens: int) -> None:
-    apply_thinking_fields_for_model(item, model_id=profile.model_id, supports_thinking=profile.supports_thinking, chat=chat, thinking_budget_tokens=thinking_budget_tokens)
+def apply_thinking_fields(
+    item: dict[str, Any],
+    profile: ModelProfile,
+    *,
+    chat: bool,
+    thinking_budget_tokens: int,
+) -> None:
+    key = profile.routing.get("chat_template_thinking_key")
+    apply_thinking_fields_for_model(
+        item,
+        model_id=profile.model_id,
+        supports_thinking=profile.supports_thinking,
+        chat=chat,
+        thinking_budget_tokens=thinking_budget_tokens,
+        chat_template_thinking_key=str(key) if key else None,
+    )
 
 
-def apply_thinking_fields_for_model(item: dict[str, Any], *, model_id: str, supports_thinking: bool, chat: bool, thinking_budget_tokens: int) -> None:
+def apply_thinking_fields_for_model(
+    item: dict[str, Any],
+    *,
+    model_id: str,
+    supports_thinking: bool,
+    chat: bool,
+    thinking_budget_tokens: int,
+    chat_template_thinking_key: str | None = None,
+) -> None:
     if not supports_thinking:
         return
+    thinking_enabled = thinking_budget_tokens > 0
     if thinking_budget_tokens > 0:
         item["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget_tokens}
         item["thinking_budget_tokens"] = thinking_budget_tokens
         item["thinking_token_budget"] = thinking_budget_tokens
     else:
         item["thinking"] = {"type": "disabled"}
-    if chat and "qwen" in model_id.lower():
-        item["chat_template_kwargs"] = {"enable_thinking": thinking_budget_tokens > 0}
+    if chat:
+        key = chat_template_thinking_key or default_chat_template_thinking_key(model_id)
+        if key:
+            item["chat_template_kwargs"] = {key: thinking_enabled}
+
+
+def default_chat_template_thinking_key(model_id: str) -> str | None:
+    return "enable_thinking" if "qwen" in model_id.lower() else None
 
 
 def model_batch_item(request: InferenceRequest, profile: ModelProfile) -> dict[str, Any]:
     max_tokens = request.max_output_tokens + request.thinking_budget_tokens
-    item: dict[str, Any] = {"custom_id": request.request_id, "max_tokens": max_tokens, "temperature": request.temperature}
+    item: dict[str, Any] = {
+        "custom_id": request.request_id,
+        "max_tokens": max_tokens,
+        "temperature": request.temperature,
+    }
     apply_thinking_fields(item, profile, chat=request.chat, thinking_budget_tokens=request.thinking_budget_tokens)
     if request.chat:
         item["messages"] = request_messages(request)
@@ -166,9 +221,21 @@ def model_batch_item(request: InferenceRequest, profile: ModelProfile) -> dict[s
     return item
 
 
-def model_batch_payload(requests: list[InferenceRequest], profile: ModelProfile, *, timeout_s: int, concurrency: int) -> dict[str, Any]:
+def model_batch_payload(
+    requests: list[InferenceRequest],
+    profile: ModelProfile,
+    *,
+    timeout_s: int,
+    concurrency: int,
+) -> dict[str, Any]:
     if not requests:
         raise ValueError("model batch requires at least one request")
     items = [model_batch_item(request, profile) for request in requests]
     max_tokens = max(int(item.get("max_tokens", 1)) for item in items)
-    return {"model": profile.model_id, "items": items, "concurrency": max(1, concurrency), "timeout_s": timeout_s, "max_tokens": max_tokens}
+    return {
+        "model": profile.model_id,
+        "items": items,
+        "concurrency": max(1, concurrency),
+        "timeout_s": timeout_s,
+        "max_tokens": max_tokens,
+    }

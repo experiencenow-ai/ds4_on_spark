@@ -20,5 +20,5 @@
     "latency_rank": 1.0,
     "measurement_notes": "Qwen27 headline throughput is aggregate batched decode, not per-request decode. Keep efficient workers near 16-32 running sequences per Spark for throughput-sensitive queues."
   },
-  "routing": {"default_for": ["efficient"], "rank": 100}
+  "routing": {"default_for": ["efficient"], "rank": 100, "chat_template_thinking_key": "enable_thinking"}
 }

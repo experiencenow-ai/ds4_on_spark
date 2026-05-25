@@ -32,6 +32,9 @@ DEFAULT_INCLUDE_PATTERNS = [
     "README.md",
     "AGENTS.md",
 ]
+DEFAULT_EXCLUDE_PATTERNS = [
+    ".centaur-audit/**",
+]
 GATED_METRICS = (
     "score",
     "max_function_lines",
@@ -68,7 +71,14 @@ def _metric_value(record: dict[str, Any], key: str) -> float:
 
 def _build_scan(root: Path, limit: int, full: bool, product_scope: str) -> dict[str, Any]:
     profile = build_complexity_profile()
-    scan = scan_complexity(root, limit=limit, full=full, product_scope=product_scope, include_patterns=DEFAULT_INCLUDE_PATTERNS)
+    scan = scan_complexity(
+        root,
+        limit=limit,
+        full=full,
+        product_scope=product_scope,
+        include_patterns=DEFAULT_INCLUDE_PATTERNS,
+        exclude_patterns=DEFAULT_EXCLUDE_PATTERNS,
+    )
     return {
         "format": FORMAT,
         "status": "success",
@@ -77,6 +87,7 @@ def _build_scan(root: Path, limit: int, full: bool, product_scope: str) -> dict[
         "profile_direction": profile.get("direction"),
         "root": str(root),
         "include_patterns": DEFAULT_INCLUDE_PATTERNS,
+        "exclude_patterns": DEFAULT_EXCLUDE_PATTERNS,
         "scan": compact_complexity_scan(scan),
     }
 

@@ -15,6 +15,9 @@ class CpuServiceError(Exception):
     pass
 
 
+CPU_SERVICE_NAMES = ("json_validate", "regex_match", "sha256", "text_metrics", "diff_stats", "command")
+
+
 def _env_int(name: str, default: int) -> int:
     value = os.environ.get(name)
     return default if value in (None, "") else int(value)
@@ -40,6 +43,18 @@ def _text_payload(item: dict[str, Any], max_bytes: int) -> str:
     return text
 
 
+def validate_cpu_submission(service: str, item_count: int, *, commands: dict[str, Any] | None = None) -> None:
+    if service not in CPU_SERVICE_NAMES:
+        raise CpuServiceError(f"unknown CPU service: {service}")
+    max_items = _env_int("CPU_SERVICE_MAX_ITEMS", 1024)
+    if item_count > max_items:
+        raise CpuServiceError(f"CPU batch item count {item_count} exceeds CPU_SERVICE_MAX_ITEMS={max_items}")
+    if service == "command":
+        configured = commands if commands is not None else _env_json("CPU_SERVICE_COMMANDS_JSON", {})
+        if not configured:
+            raise CpuServiceError("CPU command service has no allowlisted commands")
+
+
 class CpuBatchService:
     def __init__(self, *, commands: dict[str, Any] | None = None) -> None:
         cores = os.cpu_count() or 4
@@ -47,7 +62,11 @@ class CpuBatchService:
         self.workers = max(1, _env_int("CPU_SERVICE_WORKERS", default_workers))
         self.max_items = _env_int("CPU_SERVICE_MAX_ITEMS", 1024)
         self.max_concurrency = max(1, _env_int("CPU_SERVICE_MAX_CONCURRENCY", self.workers))
-        self.default_concurrency = min(self.max_concurrency, max(1, _env_int("CPU_SERVICE_DEFAULT_CONCURRENCY", min(4, self.max_concurrency))))
+        default_concurrency = _env_int(
+            "CPU_SERVICE_DEFAULT_CONCURRENCY",
+            min(4, self.max_concurrency),
+        )
+        self.default_concurrency = min(self.max_concurrency, max(1, default_concurrency))
         self.max_text_bytes = _env_int("CPU_SERVICE_MAX_TEXT_BYTES", 1024 * 1024)
         self.command_timeout = float(os.environ.get("CPU_SERVICE_COMMAND_TIMEOUT", "120"))
         self.command_output_bytes = _env_int("CPU_SERVICE_COMMAND_OUTPUT_BYTES", 65536)
@@ -58,14 +77,7 @@ class CpuBatchService:
         self.completed = 0
         self.failed = 0
         self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=self.workers, thread_name_prefix="ds4-cpu")
-        self.services = {
-            "json_validate": self.service_json_validate,
-            "regex_match": self.service_regex_match,
-            "sha256": self.service_sha256,
-            "text_metrics": self.service_text_metrics,
-            "diff_stats": self.service_diff_stats,
-            "command": self.service_command,
-        }
+        self.services = {name: getattr(self, f"service_{name}") for name in CPU_SERVICE_NAMES}
 
     def status(self) -> dict[str, Any]:
         with self.lock:
@@ -80,7 +92,12 @@ class CpuBatchService:
                 "default_concurrency": self.default_concurrency,
                 "max_text_bytes": self.max_text_bytes,
             }
-        return {"object": "ds4.cpu_services", "queue": queue, "services": sorted(self.services), "configured_commands": sorted(self.commands)}
+        return {
+            "object": "ds4.cpu_services",
+            "queue": queue,
+            "services": sorted(self.services),
+            "configured_commands": sorted(self.commands),
+        }
 
     def normalize_batch(self, payload: dict[str, Any]) -> tuple[str, list[Any], int, float]:
         service = str(payload.get("service", ""))
@@ -93,7 +110,9 @@ class CpuBatchService:
             raise CpuServiceError(f"CPU batch item count {len(items)} exceeds CPU_SERVICE_MAX_ITEMS={self.max_items}")
         concurrency = int(payload.get("concurrency", self.default_concurrency))
         if concurrency < 1 or concurrency > self.max_concurrency:
-            raise CpuServiceError(f"CPU batch concurrency {concurrency} exceeds allowed range 1..{self.max_concurrency}")
+            raise CpuServiceError(
+                f"CPU batch concurrency {concurrency} exceeds allowed range 1..{self.max_concurrency}"
+            )
         return service, items, concurrency, float(payload.get("timeout_s", 300))
 
     def run_batch(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -117,7 +136,15 @@ class CpuBatchService:
                     results[index] = {"index": index, "service": service, "ok": False, "error": "CPU batch timeout"}
         final = [result for result in results if result is not None]
         failed = sum(1 for result in final if not result.get("ok"))
-        return {"ok": failed == 0, "object": "ds4.cpu_batch", "service": service, "count": len(final), "failed": failed, "duration_s": round(time.time() - started, 6), "results": final}
+        return {
+            "ok": failed == 0,
+            "object": "ds4.cpu_batch",
+            "service": service,
+            "count": len(final),
+            "failed": failed,
+            "duration_s": round(time.time() - started, 6),
+            "results": final,
+        }
 
     def _run_one(self, service: str, index: int, item: Any, sem: threading.Semaphore) -> tuple[int, dict[str, Any]]:
         custom_id = item.get("custom_id") if isinstance(item, dict) else None
@@ -154,8 +181,15 @@ class CpuBatchService:
             except Exception as exc:
                 return {"valid": False, "error": str(exc)}
         required = item.get("required_keys") or []
-        missing = list(required) if required and not isinstance(obj, dict) else [key for key in required if key not in obj]
-        return {"valid": len(missing) == 0, "type": type(obj).__name__, "keys": sorted(obj) if isinstance(obj, dict) else [], "missing_keys": missing}
+        missing = list(required) if required and not isinstance(obj, dict) else [
+            key for key in required if key not in obj
+        ]
+        return {
+            "valid": len(missing) == 0,
+            "type": type(obj).__name__,
+            "keys": sorted(obj) if isinstance(obj, dict) else [],
+            "missing_keys": missing,
+        }
 
     def service_regex_match(self, item: dict[str, Any]) -> dict[str, Any]:
         text = _text_payload(item, self.max_text_bytes)
@@ -176,7 +210,14 @@ class CpuBatchService:
         matches = [regex.fullmatch(text)] if item.get("fullmatch") else list(regex.finditer(text))
         matches = [match for match in matches if match is not None]
         limit = int(item.get("limit", 16))
-        return {"matched": len(matches) != 0, "count": len(matches), "matches": [{"span": list(match.span()), "text": match.group(0), "groups": list(match.groups())} for match in matches[:limit]]}
+        return {
+            "matched": len(matches) != 0,
+            "count": len(matches),
+            "matches": [
+                {"span": list(match.span()), "text": match.group(0), "groups": list(match.groups())}
+                for match in matches[:limit]
+            ],
+        }
 
     def service_sha256(self, item: dict[str, Any]) -> dict[str, Any]:
         raw = _text_payload(item, self.max_text_bytes).encode("utf-8")
@@ -185,7 +226,15 @@ class CpuBatchService:
     def service_text_metrics(self, item: dict[str, Any]) -> dict[str, Any]:
         text = _text_payload(item, self.max_text_bytes)
         raw = text.encode("utf-8")
-        return {"bytes": len(raw), "chars": len(text), "lines": 0 if text == "" else text.count("\n") + (0 if text.endswith("\n") else 1), "words": len(re.findall(r"\S+", text)), "approx_tokens": max(1, (len(raw) + 3) // 4) if raw else 0, "sha256": hashlib.sha256(raw).hexdigest()}
+        line_count = 0 if text == "" else text.count("\n") + (0 if text.endswith("\n") else 1)
+        return {
+            "bytes": len(raw),
+            "chars": len(text),
+            "lines": line_count,
+            "words": len(re.findall(r"\S+", text)),
+            "approx_tokens": max(1, (len(raw) + 3) // 4) if raw else 0,
+            "sha256": hashlib.sha256(raw).hexdigest(),
+        }
 
     def service_diff_stats(self, item: dict[str, Any]) -> dict[str, Any]:
         files: set[str] = set()
@@ -206,7 +255,15 @@ class CpuBatchService:
                 additions += 1
             elif line.startswith("-"):
                 deletions += 1
-        return {"files": sorted(files), "file_count": len(files), "additions": additions, "deletions": deletions, "changed_lines": additions + deletions, "hunks": hunks, "contains_evolve_block": "EVOLVE-BLOCK" in text}
+        return {
+            "files": sorted(files),
+            "file_count": len(files),
+            "additions": additions,
+            "deletions": deletions,
+            "changed_lines": additions + deletions,
+            "hunks": hunks,
+            "contains_evolve_block": "EVOLVE-BLOCK" in text,
+        }
 
     def service_command(self, item: dict[str, Any]) -> dict[str, Any]:
         name = str(item.get("name") or item.get("command") or "")
@@ -227,7 +284,29 @@ class CpuBatchService:
         env.update({str(key): str(value) for key, value in (spec.get("env") or {}).items()})
         timeout = min(float(item.get("timeout_s", spec.get("timeout_s", self.command_timeout))), self.command_timeout)
         try:
-            proc = subprocess.run(argv, input=stdin, cwd=str(spec.get("cwd", os.getcwd())), env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout, check=False)
-            return {"_ok": proc.returncode == 0, "name": name, "returncode": proc.returncode, "stdout": _safe_text(proc.stdout)[-self.command_output_bytes:], "stderr": _safe_text(proc.stderr)[-self.command_output_bytes:]}
+            proc = subprocess.run(
+                argv,
+                input=stdin,
+                cwd=str(spec.get("cwd", os.getcwd())),
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=timeout,
+                check=False,
+            )
+            return {
+                "_ok": proc.returncode == 0,
+                "name": name,
+                "returncode": proc.returncode,
+                "stdout": _safe_text(proc.stdout)[-self.command_output_bytes:],
+                "stderr": _safe_text(proc.stderr)[-self.command_output_bytes:],
+            }
         except subprocess.TimeoutExpired as exc:
-            return {"_ok": False, "name": name, "timeout_s": timeout, "stdout": _safe_text(exc.stdout)[-self.command_output_bytes:], "stderr": _safe_text(exc.stderr)[-self.command_output_bytes:]}
+            return {
+                "_ok": False,
+                "name": name,
+                "timeout_s": timeout,
+                "stdout": _safe_text(exc.stdout)[-self.command_output_bytes:],
+                "stderr": _safe_text(exc.stderr)[-self.command_output_bytes:],
+            }
