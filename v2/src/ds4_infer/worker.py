@@ -35,6 +35,7 @@ class BatchWorker:
         self,
         *,
         node_id: str | None = None,
+        batch_id: str | None = None,
         batch_key: str | None = None,
         limit: int = 1,
         concurrency: int = 1,
@@ -53,14 +54,14 @@ class BatchWorker:
             nonlocal active_batch_key, claimed
             if wanted < 1 or claimed >= limit:
                 return []
-            claims = self.queue.claim_requests(node_id=node_id, batch_key=active_batch_key, limit=min(wanted, (limit - claimed)), leased_by=self.worker_id, lease_ttl_s=self.lease_ttl_s)
+            claims = self.queue.claim_requests(node_id=node_id, batch_id=batch_id, batch_key=active_batch_key, limit=min(wanted, (limit - claimed)), leased_by=self.worker_id, lease_ttl_s=self.lease_ttl_s)
             if claims and active_batch_key is None:
                 active_batch_key = claims[0].batch_key
             _record_claims(groups, claims)
             claimed += len(claims)
             return claims
 
-        initial_claims = claim_more(limit if hasattr(self.runner, "run_many_on_node") else concurrency)
+        initial_claims = claim_more(concurrency)
         if not initial_claims:
             return _summary(0, 0, 0, 0, groups, reap)
         if initial_claims[0].request_kind == "cpu" and claimed < limit:
@@ -183,7 +184,7 @@ def _record_claims(groups: dict[str, dict[str, int]], claims: list[QueueClaim]) 
 
 
 def _claims_use_batch_runner(runner: Runner, claims: list[QueueClaim]) -> bool:
-    return bool(claims and (claims[0].request_kind == "cpu" or hasattr(runner, "run_many_on_node")))
+    return bool(claims and claims[0].request_kind == "cpu")
 
 
 def _default_cpu_service() -> Any:

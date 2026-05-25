@@ -35,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
         queue.work(
             registry=registry,
             runner=runner,
+            batch_id=batch_id,
             limit=max(1, args.work_limit),
             concurrency=max(1, args.concurrency),
             on_result=lambda claim, result: _append_response(response_path, record_by_request_id, args.model, args.response_format, claim.request_id, result),
