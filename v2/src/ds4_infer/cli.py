@@ -105,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
         runner = _make_runner(args.runner, args.command or [], args.runner_timeout_s)
         iterations = 0
         while True:
-            result = queue.work(registry=registry, runner=runner, node_id=args.node_id, batch_key=args.batch_key, limit=args.limit, concurrency=args.concurrency, worker_id=args.worker_id, lease_ttl_s=args.lease_ttl_s, heartbeat_interval_s=args.heartbeat_interval_s)
+            result = queue.work(registry=registry, runner=runner, node_id=args.node_id, batch_id=args.batch_id, batch_key=args.batch_key, limit=args.limit, concurrency=args.concurrency, worker_id=args.worker_id, lease_ttl_s=args.lease_ttl_s, heartbeat_interval_s=args.heartbeat_interval_s)
             print(json.dumps(result, sort_keys=True), flush=True)
             iterations += 1
             if not args.loop or (args.max_iterations > 0 and iterations >= args.max_iterations):
@@ -144,6 +144,7 @@ def _add_queue_worker_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--runner-timeout-s", type=int, default=300)
     parser.add_argument("--command", nargs="*")
     parser.add_argument("--node-id")
+    parser.add_argument("--batch-id")
     parser.add_argument("--batch-key")
     parser.add_argument("--limit", type=int, default=1)
     parser.add_argument("--concurrency", type=int, default=1)

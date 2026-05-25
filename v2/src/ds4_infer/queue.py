@@ -198,6 +198,7 @@ class InferenceQueue:
         registry: ProfileRegistry,
         runner: Runner,
         node_id: str | None = None,
+        batch_id: str | None = None,
         batch_key: str | None = None,
         limit: int = 1,
         concurrency: int = 1,
@@ -216,12 +217,13 @@ class InferenceQueue:
             lease_ttl_s=lease_ttl_s,
             heartbeat_interval_s=heartbeat_interval_s,
         )
-        return worker.run_once(node_id=node_id, batch_key=batch_key, limit=limit, concurrency=concurrency, on_result=on_result)
+        return worker.run_once(node_id=node_id, batch_id=batch_id, batch_key=batch_key, limit=limit, concurrency=concurrency, on_result=on_result)
 
     def claim_requests(
         self,
         *,
         node_id: str | None = None,
+        batch_id: str | None = None,
         batch_key: str | None = None,
         limit: int = 1,
         leased_by: str,
@@ -236,11 +238,11 @@ class InferenceQueue:
         claims: list[QueueClaim] = []
         try:
             conn.execute("begin immediate")
-            selected_key = batch_key or self._select_next_batch_key(conn, node_id=node_id)
+            selected_key = batch_key or self._select_next_batch_key(conn, node_id=node_id, batch_id=batch_id)
             if selected_key is None:
                 conn.commit()
                 return []
-            rows = self._select_work_rows(conn, node_id=node_id, batch_key=selected_key, limit=limit)
+            rows = self._select_work_rows(conn, node_id=node_id, batch_id=batch_id, batch_key=selected_key, limit=limit)
             batch_ids = set()
             for row in rows:
                 request_id = str(row["request_id"])
@@ -534,12 +536,15 @@ class InferenceQueue:
             if name not in existing:
                 conn.execute(f"alter table requests add column {name} {spec}")
 
-    def _select_next_batch_key(self, conn: sqlite3.Connection, *, node_id: str | None) -> str | None:
+    def _select_next_batch_key(self, conn: sqlite3.Connection, *, node_id: str | None, batch_id: str | None) -> str | None:
         clauses = ["state = 'queued'"]
         params: list[Any] = []
         if node_id is not None:
             clauses.append("selected_node_id = ?")
             params.append(node_id)
+        if batch_id is not None:
+            clauses.append("batch_id = ?")
+            params.append(batch_id)
         row = conn.execute(
             f"""
             select batch_key
@@ -552,12 +557,15 @@ class InferenceQueue:
         ).fetchone()
         return str(row["batch_key"]) if row is not None else None
 
-    def _select_work_rows(self, conn: sqlite3.Connection, *, node_id: str | None, batch_key: str | None, limit: int) -> list[sqlite3.Row]:
+    def _select_work_rows(self, conn: sqlite3.Connection, *, node_id: str | None, batch_id: str | None, batch_key: str | None, limit: int) -> list[sqlite3.Row]:
         clauses = ["state = 'queued'"]
         params: list[Any] = []
         if node_id is not None:
             clauses.append("selected_node_id = ?")
             params.append(node_id)
+        if batch_id is not None:
+            clauses.append("batch_id = ?")
+            params.append(batch_id)
         if batch_key is not None:
             clauses.append("batch_key = ?")
             params.append(batch_key)

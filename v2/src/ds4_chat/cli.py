@@ -40,7 +40,7 @@ class QueueChatModel:
         request = self._request(messages)
         batch_id = "chat-" + request.request_id
         self.queue.submit_requests(requests=[request], registry=self.registry, topology=self.topology, batch_id=batch_id)
-        self.queue.work(registry=self.registry, runner=self.runner, limit=1)
+        self.queue.work(registry=self.registry, runner=self.runner, batch_id=batch_id, limit=1)
         collected = self.queue.collect(request_id=request.request_id)
         result = collected.get("result", {}) if isinstance(collected, dict) else {}
         output = result.get("output", {}) if isinstance(result, dict) else {}
