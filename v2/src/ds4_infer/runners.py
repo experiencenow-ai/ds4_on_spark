@@ -207,12 +207,14 @@ class AntirezRunner:
     def __init__(self, *, base_url: str | None = None, timeout_s: int = 300) -> None:
         self.base_url = (base_url or os.environ.get("DS4_ANTIREZ_BASE_URL") or "http://127.0.0.1:8080").rstrip("/")
         self.timeout_s = timeout_s
+        self.completion_endpoint = os.environ.get("DS4_ANTIREZ_COMPLETION_ENDPOINT", "/completion")
+        self.fallback_completion_endpoint = os.environ.get("DS4_ANTIREZ_FALLBACK_COMPLETION_ENDPOINT", "/v1/completions")
 
     def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
         started = time.time()
         try:
             payload = {"model": profile.model_id, "prompt": request_prompt(request), "temperature": request.temperature, "max_tokens": request.max_output_tokens, "n_predict": request.max_output_tokens, "stream": False}
-            data = self._post_json("/completion", payload)
+            data = self._post_completion(payload)
             text = extract_completion_like_text(data)
             result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
             result["usage"].update(_usage_from_response(data))
@@ -222,6 +224,19 @@ class AntirezRunner:
             result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": str(exc)}, sort_keys=True), status="transport_failed")
             result["transport"] = {"base_url": self.base_url, "duration_s": round(time.time() - started, 6), "error": str(exc)}
             return result
+
+    def _post_completion(self, payload: dict[str, Any]) -> dict[str, Any]:
+        endpoints = [self.completion_endpoint]
+        if self.fallback_completion_endpoint not in endpoints:
+            endpoints.append(self.fallback_completion_endpoint)
+        last_exc: Exception | None = None
+        for endpoint in endpoints:
+            try:
+                return self._post_json(endpoint, payload)
+            except Exception as exc:
+                last_exc = exc
+        assert last_exc is not None
+        raise last_exc
 
     def _post_json(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         body = json.dumps(payload).encode("utf-8")
@@ -297,7 +312,7 @@ def extract_openai_completion_text(data: dict[str, Any]) -> str:
     if isinstance(choices, list) and choices:
         text = choices[0].get("text") if isinstance(choices[0], dict) else None
         if text is not None:
-            return str(text)
+            return strip_visible_thinking(str(text))
     return extract_completion_like_text(data)
 
 
@@ -305,14 +320,21 @@ def extract_completion_like_text(data: dict[str, Any]) -> str:
     for key in ("content", "response", "text", "completion", "generated_text"):
         value = data.get(key)
         if isinstance(value, str):
-            return value
+            return strip_visible_thinking(value)
     choices = data.get("choices")
     if isinstance(choices, list) and choices and isinstance(choices[0], dict):
         for key in ("text", "content"):
             value = choices[0].get(key)
             if isinstance(value, str):
-                return value
+                return strip_visible_thinking(value)
     return json.dumps(data, sort_keys=True)
+
+
+def strip_visible_thinking(text: str) -> str:
+    marker = "</think>"
+    if marker not in text:
+        return text
+    return text.split(marker, 1)[1].lstrip()
 
 
 def make_runner(kind: str, *, timeout_s: int) -> Any:

@@ -52,6 +52,15 @@ Spark0-3 warm both Qwen profiles, spark4 warms the grouped DSV4 vLLM/MTP lane,
 spark5 records itself as the secondary half of that group, spark6 warms the
 antirez profile, and spark7 is a clean no-op because it is on demand.
 
+Spark6's live antirez `ds4-server` is on `127.0.0.1:18000`, so set:
+
+```bash
+export DS4_STARTUP_BASE_URL=http://127.0.0.1:18000
+```
+
+before running startup warmup there. Other production lanes use the default
+`127.0.0.1:8000` gateway.
+
 The user service template is in:
 
 ```text

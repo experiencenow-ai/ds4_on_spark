@@ -28,7 +28,7 @@
       "target_nodes": ["spark6"],
       "profiles": ["dsv4_antirez_smart_v1"],
       "purpose": "Prove --runner antirez works against the spark6 antirez/support lane.",
-      "command_template": "ssh spark6 'cd {repo}/v2 && DS4_ANTIREZ_BASE_URL=http://127.0.0.1:8080 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests {requests_jsonl} --out {out_dir}/spark6-antirez --runner antirez --runner-timeout-s 1200 --run'",
+      "command_template": "ssh spark6 'cd {repo}/v2 && DS4_ANTIREZ_BASE_URL=http://127.0.0.1:18000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests {requests_jsonl} --out {out_dir}/spark6-antirez --runner antirez --runner-timeout-s 1200 --run'",
       "acceptance": ["smart completion request completes", "selected profile is dsv4_antirez_smart_v1", "response is non-empty", "capture antirez endpoint/version if available"]
     },
     {

@@ -116,10 +116,11 @@ Acceptance:
 
 ### 3. Spark6 Antirez Runner
 
-Run on spark6 so `127.0.0.1:8080` is the local antirez endpoint.
+Run on spark6 so `127.0.0.1:18000` is the local antirez `ds4-server`
+endpoint.
 
 ```bash
-ssh spark6 'cd /path/to/ds4_on_spark/v2 && DS4_ANTIREZ_BASE_URL=http://127.0.0.1:8080 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests /tmp/antirez_requests.jsonl --out /tmp/ds4-v2-live/spark6-antirez --runner antirez --runner-timeout-s 1200 --run'
+ssh spark6 'cd /path/to/ds4_on_spark/v2 && DS4_ANTIREZ_BASE_URL=http://127.0.0.1:18000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests /tmp/antirez_requests.jsonl --out /tmp/ds4-v2-live/spark6-antirez --runner antirez --runner-timeout-s 1200 --run'
 ```
 
 Acceptance:

@@ -37,10 +37,21 @@ def warm_startup_models(*, plan: dict[str, Any], base_url: str, timeout_s: int, 
         if item.get("action") not in {"warm", "group_primary_warm"}:
             results.append({"profile_id": item.get("profile_id"), "action": item.get("action"), "status": "skipped"})
             continue
-        endpoint = str(item["endpoint"])
         payload = dict(item["payload"])
+        endpoints = [str(item["endpoint"])]
+        endpoints.extend(str(endpoint) for endpoint in item.get("fallback_endpoints", []) if endpoint not in endpoints)
         try:
-            response = poster(base_url.rstrip("/") + endpoint, payload, timeout_s)
+            response = None
+            last_exc: Exception | None = None
+            for endpoint in endpoints:
+                try:
+                    response = poster(base_url.rstrip("/") + endpoint, payload, timeout_s)
+                    break
+                except Exception as exc:
+                    last_exc = exc
+            if response is None:
+                assert last_exc is not None
+                raise last_exc
             results.append({"profile_id": item["profile_id"], "action": item["action"], "status": "completed", "response_keys": sorted(response)[:8]})
         except Exception as exc:
             results.append({"profile_id": item["profile_id"], "action": item["action"], "status": "failed", "error": str(exc)[-1000:]})
@@ -65,7 +76,9 @@ def post_json(url: str, payload: dict[str, Any], timeout_s: int) -> dict[str, An
 
 def _warm_item(profile: ModelProfile, action: str) -> dict[str, Any]:
     endpoint, payload = _warm_request(profile)
-    return {
+    payload = dict(payload)
+    fallback_endpoints = payload.pop("fallback_endpoints", [])
+    item = {
         "profile_id": profile.profile_id,
         "model_id": profile.model_id,
         "backend": profile.backend,
@@ -73,11 +86,14 @@ def _warm_item(profile: ModelProfile, action: str) -> dict[str, Any]:
         "endpoint": endpoint,
         "payload": payload,
     }
+    if fallback_endpoints:
+        item["fallback_endpoints"] = fallback_endpoints
+    return item
 
 
 def _warm_request(profile: ModelProfile) -> tuple[str, dict[str, Any]]:
     if profile.backend == "antirez":
-        return "/completion", {"model": profile.model_id, "prompt": "warmup", "n_predict": 1, "max_tokens": 1, "stream": False}
+        return "/v1/completions", {"model": profile.model_id, "prompt": "warmup", "n_predict": 1, "max_tokens": 1, "stream": False, "fallback_endpoints": ["/completion"]}
     if profile.supports_chat:
         return "/v1/chat/completions", {"model": profile.model_id, "messages": [{"role": "user", "content": "warmup"}], "max_tokens": 1, "temperature": 0}
     return "/v1/completions", {"model": profile.model_id, "prompt": "warmup", "max_tokens": 1, "temperature": 0}

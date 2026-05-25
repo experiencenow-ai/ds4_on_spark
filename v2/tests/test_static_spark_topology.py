@@ -145,7 +145,8 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual([item["model_id"] for item in spark0["items"]], ["Qwen/Qwen3.6-27B-FP8", "Qwen/Qwen3.6-35B-A3B-FP8"])
         self.assertEqual(spark4["items"][0]["action"], "group_primary_warm")
         self.assertEqual(spark5["items"], [{"profile_id": "dsv4_vllm_mtp_smartest_v1", "action": "group_secondary", "primary_node": "spark4"}])
-        self.assertEqual(spark6["items"][0]["endpoint"], "/completion")
+        self.assertEqual(spark6["items"][0]["endpoint"], "/v1/completions")
+        self.assertEqual(spark6["items"][0]["fallback_endpoints"], ["/completion"])
         self.assertEqual(spark7["items"], [])
 
     def test_startup_warm_posts_only_executable_items(self) -> None:
@@ -163,6 +164,22 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(result["warm_count"], 2)
         self.assertEqual(calls[0], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-27B-FP8"))
         self.assertEqual(calls[1], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-35B-A3B-FP8"))
+
+    def test_startup_warm_falls_back_for_antirez_endpoint_shapes(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        topology = SparkTopology.load(TOPOLOGY)
+        plan = startup_plan(topology=topology, registry=registry, node_id="spark6")
+        calls: list[str] = []
+
+        def poster(url: str, payload: dict, timeout_s: int) -> dict:
+            calls.append(url)
+            if url.endswith("/v1/completions"):
+                raise RuntimeError("not exposed here")
+            return {"ok": True}
+
+        result = warm_startup_models(plan=plan, base_url="http://spark.local:18000", timeout_s=3, poster=poster)
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(calls, ["http://spark.local:18000/v1/completions", "http://spark.local:18000/completion"])
 
 
 if __name__ == "__main__":

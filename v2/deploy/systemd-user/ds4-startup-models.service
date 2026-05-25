@@ -8,6 +8,7 @@ WorkingDirectory=%h/ds4_on_spark/v2
 Environment=PYTHONPATH=%h/ds4_on_spark/v2/src
 Environment=DS4_NODE_ID=%H
 Environment=DS4_STARTUP_BASE_URL=http://127.0.0.1:8000
+EnvironmentFile=-%h/.config/ds4/startup-models.env
 ExecStart=/usr/bin/env python3 -m ds4_infer.cli startup-models --profiles-dir profiles/models --topology profiles/topology/static_sparks.json --node-id ${DS4_NODE_ID} --base-url ${DS4_STARTUP_BASE_URL}
 RemainAfterExit=yes
 
