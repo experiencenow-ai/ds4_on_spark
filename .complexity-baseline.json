@@ -12,7 +12,7 @@
   "profile_direction": "lower_is_better",
   "profile_id": "locality_modularity_state_dry_v5",
   "profile_source": "centaur.centaur_complexity",
-  "root": "/private/tmp/ds4-track1-coord",
+  "root": "/home/claude/ds4_on_spark",
   "scan": {
     "architecture_findings": [
       {
@@ -24,7 +24,7 @@
         "function_count": 183,
         "kind": "file_architecture",
         "line_count": 5117,
-        "line_share": 0.0074,
+        "line_share": 0.0073,
         "relative_path": "tests/scheduler_sim_test.py",
         "score": 1095.45,
         "severity": "warning",
@@ -79,7 +79,7 @@
         "function_count": 15,
         "kind": "file_architecture",
         "line_count": 1917,
-        "line_share": 0.0028,
+        "line_share": 0.0027,
         "relative_path": "scripts/model_contract_verify_deepseek_v4_flash.py",
         "score": 91.7,
         "severity": "warning",
@@ -95,6 +95,20 @@
         "line_share": 0.0026,
         "relative_path": "scripts/entropy_buffer_metrics.py",
         "score": 80.1,
+        "severity": "warning",
+        "suggested_action": "split stable command families, report shaping, parser construction, and ledger helpers into separate modules"
+      },
+      {
+        "flags": [
+          "large_file_over_1000_lines",
+          "many_functions_in_one_file"
+        ],
+        "function_count": 93,
+        "kind": "file_architecture",
+        "line_count": 1524,
+        "line_share": 0.0022,
+        "relative_path": "scripts/ds4_vllm_lazy_proxy.py",
+        "score": 71.9,
         "severity": "warning",
         "suggested_action": "split stable command families, report shaping, parser construction, and ledger helpers into separate modules"
       },
@@ -136,19 +150,6 @@
         "score": 3.4,
         "severity": "warning",
         "suggested_action": "split stable command families, report shaping, parser construction, and ledger helpers into separate modules"
-      },
-      {
-        "flags": [
-          "large_file_over_1000_lines"
-        ],
-        "function_count": 1,
-        "kind": "file_architecture",
-        "line_count": 1007,
-        "line_share": 0.0014,
-        "relative_path": "scripts/cuda_probe_nvcc_minimal_spark0.sh",
-        "score": 0.7,
-        "severity": "warning",
-        "suggested_action": "split stable command families, report shaping, parser construction, and ledger helpers into separate modules"
       }
     ],
     "artifact_dir_exclusions": {
@@ -163,7 +164,7 @@
         "max_function_lines": 1755,
         "max_locals": 321,
         "max_parameters": 23,
-        "score": 837844.493
+        "score": 840187.461
       },
       "module": {
         "api_boundary_violation_count": 0,
@@ -174,36 +175,36 @@
         "leaked_public_value_count": 0,
         "max_public_parameter_count": 17,
         "missing_declared_api_count": 0,
-        "public_api_count": 2035,
-        "public_concurrency_api_count": 8,
-        "public_parameter_count": 2343,
-        "public_value_count": 555,
-        "score": 6726.639
+        "public_api_count": 2150,
+        "public_concurrency_api_count": 9,
+        "public_parameter_count": 2471,
+        "public_value_count": 569,
+        "score": 7299.789
       },
       "project": {
-        "file_count": 956,
-        "repeated_normalized_blocks": 561991,
-        "score": 990568411.677,
-        "total_line_count": 695374
+        "file_count": 972,
+        "repeated_normalized_blocks": 562138,
+        "score": 990582381.957,
+        "total_line_count": 699173
       }
     },
     "components": {
-      "branching": 75154.0,
-      "comment_balance": 1529.19,
-      "compressed_load": 5429.313,
-      "duplication": 41790582.0,
-      "file_architecture": 1873.15,
-      "function_size": 618272.493,
-      "function_state": 142410.0,
-      "line_shape": 948752499.674,
+      "branching": 77086.0,
+      "comment_balance": 1602.84,
+      "compressed_load": 5470.413,
+      "duplication": 41802748.0,
+      "file_architecture": 1945.05,
+      "function_size": 618331.461,
+      "function_state": 142642.0,
+      "line_shape": 948753205.204,
       "module_boundary": 261.989,
-      "module_interface": 4591.5,
-      "naming_noise": 18371.5,
-      "nesting": 2008.0
+      "module_interface": 5092.75,
+      "naming_noise": 19355.5,
+      "nesting": 2128.0
     },
     "concurrency_module_count": 3,
-    "concurrency_touchpoint_count": 11,
-    "cross_module_call_count": 277,
+    "concurrency_touchpoint_count": 16,
+    "cross_module_call_count": 269,
     "direction": "lower_is_better",
     "duplication_findings": [
       {
@@ -813,7 +814,7 @@
         "suggested_action": "extract the repeated command/report/parser pattern into one shared builder"
       }
     ],
-    "excluded_file_count": 295,
+    "excluded_file_count": 359,
     "excluded_path_samples": [
       {
         "path": ".git/",
@@ -828,27 +829,35 @@
         "reason": "artifact_dir:__pycache__"
       },
       {
-        "path": "scripts/_lib/__pycache__/",
-        "reason": "artifact_dir:__pycache__"
-      },
-      {
-        "path": "scripts/_lib/mtp_builders/__pycache__/",
-        "reason": "artifact_dir:__pycache__"
-      },
-      {
-        "path": "sim/__pycache__/",
-        "reason": "artifact_dir:__pycache__"
-      },
-      {
-        "path": "sim/pipeline/__pycache__/",
-        "reason": "artifact_dir:__pycache__"
-      },
-      {
-        "path": "sim/scheduler/__pycache__/",
-        "reason": "artifact_dir:__pycache__"
-      },
-      {
         "path": "tests/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
+        "path": "v2/src/ds4_agent/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
+        "path": "v2/src/ds4_calibrate/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
+        "path": "v2/src/ds4_chat/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
+        "path": "v2/src/ds4_infer/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
+        "path": "v2/src/ds4_tools/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
+        "path": "v2/src/ds4_transfer/__pycache__/",
+        "reason": "artifact_dir:__pycache__"
+      },
+      {
+        "path": "v2/tests/__pycache__/",
         "reason": "artifact_dir:__pycache__"
       },
       {
@@ -906,27 +915,19 @@
       {
         "path": "cmake/ds4_cuda.cmake",
         "reason": "not_explicitly_included"
-      },
-      {
-        "path": "cmake/ds4_install_consumer_cxx_test.cmake",
-        "reason": "not_explicitly_included"
-      },
-      {
-        "path": "cmake/ds4_install_consumer_test.cmake",
-        "reason": "not_explicitly_included"
       }
     ],
     "excluded_paths_truncated": true,
-    "file_count": 956,
+    "file_count": 972,
     "files_over_10000_lines": 6,
-    "files_over_1000_lines": 49,
+    "files_over_1000_lines": 50,
     "files_over_250_functions": 0,
     "files_over_3000_lines": 22,
     "format": "centaur-complexity-scan-v1",
     "functions_over_100": 69,
-    "functions_over_50": 240,
-    "included_file_count": 956,
-    "largest_file_line_share": 0.3845,
+    "functions_over_50": 245,
+    "included_file_count": 972,
+    "largest_file_line_share": 0.3824,
     "limit": 25,
     "max_exit_point_count": 26,
     "max_file_function_count": 183,
@@ -1032,6 +1033,24 @@
       {
         "declared_public_api_count": 0,
         "flags": [
+          "side_effect_heavy_public_api"
+        ],
+        "kind": "module_interface",
+        "leaked_public_name_count": 0,
+        "missing_declared_api_count": 0,
+        "mutable_global_count": 0,
+        "public_api_count": 24,
+        "public_concurrency_api_count": 0,
+        "public_side_effect_api_count": 12,
+        "relative_path": "scripts/spark_node_telemetry_monitor.py",
+        "score": 114.0,
+        "severity": "warning",
+        "suggested_action": "reduce the preserved API, isolate side effects, and keep concurrency behind one narrow boundary",
+        "uses_declared_public_api": false
+      },
+      {
+        "declared_public_api_count": 0,
+        "flags": [
           "wide_public_api"
         ],
         "kind": "module_interface",
@@ -1092,6 +1111,24 @@
         "leaked_public_name_count": 0,
         "missing_declared_api_count": 0,
         "mutable_global_count": 0,
+        "public_api_count": 31,
+        "public_concurrency_api_count": 0,
+        "public_side_effect_api_count": 5,
+        "relative_path": "scripts/ds4_vllm_lazy_proxy.py",
+        "score": 91.75,
+        "severity": "warning",
+        "suggested_action": "reduce the preserved API, isolate side effects, and keep concurrency behind one narrow boundary",
+        "uses_declared_public_api": false
+      },
+      {
+        "declared_public_api_count": 0,
+        "flags": [
+          "module_interface_pressure"
+        ],
+        "kind": "module_interface",
+        "leaked_public_name_count": 0,
+        "missing_declared_api_count": 0,
+        "mutable_global_count": 0,
         "public_api_count": 25,
         "public_concurrency_api_count": 0,
         "public_side_effect_api_count": 6,
@@ -1118,63 +1155,27 @@
         "severity": "warning",
         "suggested_action": "reduce the preserved API, isolate side effects, and keep concurrency behind one narrow boundary",
         "uses_declared_public_api": false
-      },
-      {
-        "declared_public_api_count": 0,
-        "flags": [
-          "module_interface_pressure"
-        ],
-        "kind": "module_interface",
-        "leaked_public_name_count": 0,
-        "missing_declared_api_count": 0,
-        "mutable_global_count": 0,
-        "public_api_count": 31,
-        "public_concurrency_api_count": 0,
-        "public_side_effect_api_count": 5,
-        "relative_path": "scripts/qualify_small_model.py",
-        "score": 80.5,
-        "severity": "warning",
-        "suggested_action": "reduce the preserved API, isolate side effects, and keep concurrency behind one narrow boundary",
-        "uses_declared_public_api": false
-      },
-      {
-        "declared_public_api_count": 0,
-        "flags": [
-          "module_interface_pressure"
-        ],
-        "kind": "module_interface",
-        "leaked_public_name_count": 0,
-        "missing_declared_api_count": 0,
-        "mutable_global_count": 0,
-        "public_api_count": 18,
-        "public_concurrency_api_count": 1,
-        "public_side_effect_api_count": 6,
-        "relative_path": "scripts/benchmark_openai_chat_stream.py",
-        "score": 75.0,
-        "severity": "warning",
-        "suggested_action": "reduce the preserved API, isolate side effects, and keep concurrency behind one narrow boundary",
-        "uses_declared_public_api": false
       }
     ],
     "module_leaked_public_name_count": 0,
     "module_leaked_public_value_count": 0,
     "module_max_public_parameter_count": 17,
     "module_missing_declared_api_count": 0,
-    "module_mutable_global_count": 9,
-    "module_public_api_count": 2035,
-    "module_public_concurrency_api_count": 8,
-    "module_public_parameter_count": 2343,
-    "module_public_side_effect_api_count": 319,
-    "module_public_value_count": 555,
-    "module_side_effect_domain_count": 14,
-    "module_visible_value_count": 555,
-    "path": "/private/tmp/ds4-track1-coord",
+    "module_mutable_global_count": 18,
+    "module_public_api_count": 2150,
+    "module_public_concurrency_api_count": 9,
+    "module_public_parameter_count": 2471,
+    "module_public_side_effect_api_count": 363,
+    "module_public_value_count": 569,
+    "module_side_effect_domain_count": 15,
+    "module_visible_value_count": 569,
+    "path": "/home/claude/ds4_on_spark",
     "product_scope_mode": "ignore_aware",
     "profile_id": "locality_modularity_state_dry_v5",
-    "project_module_complexity_score": 939.017,
-    "repeated_normalized_blocks": 561991,
-    "score": 991412982.809,
-    "side_effect_function_count": 580,
+    "project_module_complexity_score": 941.117,
+    "repeated_normalized_blocks": 562138,
+    "score": 991429869.207,
+    "side_effect_function_count": 634,
     "status": "success",
     "top_files": [
       {
@@ -1339,7 +1340,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/pipeline_quality/lane-d-pp1-redo-20260521T0412Z.jsonl",
+        "path": "/home/claude/ds4_on_spark/fixtures/pipeline_quality/lane-d-pp1-redo-20260521T0412Z.jsonl",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 2089863,
@@ -1517,7 +1518,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/pipeline_quality/vllm-mxfp4-tp2-ds4-eval-20260523T0315Z.jsonl",
+        "path": "/home/claude/ds4_on_spark/fixtures/pipeline_quality/vllm-mxfp4-tp2-ds4-eval-20260523T0315Z.jsonl",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 1735352,
@@ -1606,7 +1607,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/variable_max_output_tokens_result.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/variable_max_output_tokens_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 165323,
@@ -1695,7 +1696,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_multi_prefix_constrained_request.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/live_smoke_multi_prefix_constrained_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 154048,
@@ -1784,7 +1785,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_b512_constrained_1tok_request.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/live_smoke_b512_constrained_1tok_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 153021,
@@ -1873,7 +1874,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_b512_constrained_4tok_request.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/live_smoke_b512_constrained_4tok_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 153021,
@@ -1962,7 +1963,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/b512_full_vocab_result.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/b512_full_vocab_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 150574,
@@ -2051,7 +2052,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/mixed_output_modes_result.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/mixed_output_modes_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 150476,
@@ -2140,7 +2141,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/b512_constrained_numeric_result.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/b512_constrained_numeric_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 149575,
@@ -2229,7 +2230,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_mixed_output_modes_request.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/live_smoke_mixed_output_modes_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 144698,
@@ -2318,7 +2319,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/variable_max_output_tokens_request.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/variable_max_output_tokens_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 141322,
@@ -2407,7 +2408,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/b512_constrained_numeric_request.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/b512_constrained_numeric_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 141192,
@@ -2496,7 +2497,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/mixed_output_modes_request.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/mixed_output_modes_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 135682,
@@ -2585,7 +2586,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_b512_full_vocab_1tok_request.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/live_smoke_b512_full_vocab_1tok_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 119740,
@@ -2674,7 +2675,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/b512_full_vocab_request.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/b512_full_vocab_request.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 107903,
@@ -2763,7 +2764,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_mixed_output_modes_result.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/live_smoke_mixed_output_modes_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 90648,
@@ -2852,7 +2853,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_multi_prefix_constrained_result.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/live_smoke_multi_prefix_constrained_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 90531,
@@ -2941,7 +2942,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_b512_constrained_1tok_result.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/live_smoke_b512_constrained_1tok_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 90461,
@@ -3030,7 +3031,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_b512_constrained_4tok_result.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/live_smoke_b512_constrained_4tok_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 90461,
@@ -3119,7 +3120,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/batch_generate/live_smoke_b512_full_vocab_1tok_result.example.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/batch_generate/live_smoke_b512_full_vocab_1tok_result.example.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 90431,
@@ -3297,7 +3298,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/model_contract/deepseek_v4_flash/tokenizer.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/tokenizer.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 6367146,
@@ -3475,7 +3476,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/model_contract/deepseek_v4_flash/checkpoint_keys.txt",
+        "path": "/home/claude/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/checkpoint_keys.txt",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 2396264,
@@ -3653,7 +3654,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/pipeline_quality/vllm-mxfp4-tp2-ds4-eval-20260523T0315Z.trace.txt",
+        "path": "/home/claude/ds4_on_spark/fixtures/pipeline_quality/vllm-mxfp4-tp2-ds4-eval-20260523T0315Z.trace.txt",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 1614799,
@@ -3754,7 +3755,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/model_contract/deepseek_v4_flash/model.safetensors.index.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/model_contract/deepseek_v4_flash/model.safetensors.index.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 5371381,
@@ -3932,7 +3933,7 @@
         "module_side_effect_function_count": 0,
         "module_uses_declared_public_api": false,
         "module_visible_value_count": 0,
-        "path": "/private/tmp/ds4-track1-coord/fixtures/vllm_config_tuning/ds4_vllm_spark45_safe_c256_piecewise_no_mtp_long_outputs_20260521.raw.json",
+        "path": "/home/claude/ds4_on_spark/fixtures/vllm_config_tuning/ds4_vllm_spark45_safe_c256_piecewise_no_mtp_long_outputs_20260521.raw.json",
         "project_module_complexity_score": 0.0,
         "public_api_function_count": 0,
         "raw_size_bytes": 437796,
@@ -3949,7 +3950,7 @@
         "vague_identifier_count": 0
       }
     ],
-    "total_line_count": 695374,
+    "total_line_count": 699173,
     "version": 1
   },
   "status": "success"

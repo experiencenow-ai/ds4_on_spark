@@ -1,0 +1,14 @@
+{
+  "format": "ds4-model-profile-v1",
+  "profile_id": "dsv4_antirez_smart_v1",
+  "model_id": "deepseek-v4",
+  "backend": "antirez",
+  "capability_classes": ["smart"],
+  "supported_job_classes": ["atom_edit", "analysis", "debug", "cluster_synthesis"],
+  "supports_chat": false,
+  "supports_completion": true,
+  "production_eligible": true,
+  "quality": {"status": "requires current calibration"},
+  "performance": {"latency_rank": 2.0},
+  "routing": {"default_for": ["smart"], "rank": 100}
+}
