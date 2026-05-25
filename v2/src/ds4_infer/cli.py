@@ -6,7 +6,7 @@ import sys
 
 from .profiles import ProfileRegistry
 from .queue import InferenceQueue
-from .runners import AntirezRunner, AutoRunner, CommandRunner, FakeRunner, VllmOpenAIRunner
+from .runners import AntirezRunner, AutoRunner, CommandRunner, FakeRunner, SparkHttpRunner, VllmOpenAIRunner
 from .service import load_requests_jsonl, run_requests
 from .topology import SparkTopology
 
@@ -26,7 +26,7 @@ def main(argv: list[str] | None = None) -> int:
     submit.add_argument("--profiles-dir", required=True)
     submit.add_argument("--requests", required=True)
     submit.add_argument("--out", required=True)
-    submit.add_argument("--runner", choices=["fake", "command", "vllm", "antirez", "auto"], default="fake")
+    submit.add_argument("--runner", choices=["fake", "command", "vllm", "antirez", "auto", "spark"], default="fake")
     submit.add_argument("--runner-timeout-s", type=int, default=300)
     submit.add_argument("--topology")
     submit.add_argument("--command", nargs="*")
@@ -42,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     queue_work = sub.add_parser("queue-work")
     queue_work.add_argument("--queue-dir", required=True)
     queue_work.add_argument("--profiles-dir", required=True)
-    queue_work.add_argument("--runner", choices=["fake", "command", "vllm", "antirez", "auto"], default="fake")
+    queue_work.add_argument("--runner", choices=["fake", "command", "vllm", "antirez", "auto", "spark"], default="fake")
     queue_work.add_argument("--runner-timeout-s", type=int, default=300)
     queue_work.add_argument("--command", nargs="*")
     queue_work.add_argument("--node-id")
@@ -132,6 +132,8 @@ def _make_runner(kind: str, command: list[str], timeout_s: int):
         return AntirezRunner(timeout_s=timeout_s)
     if kind == "auto":
         return AutoRunner(timeout_s=timeout_s)
+    if kind == "spark":
+        return SparkHttpRunner(timeout_s=timeout_s)
     raise ValueError(f"unknown runner: {kind}")
 
 

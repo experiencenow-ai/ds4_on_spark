@@ -149,7 +149,10 @@ class InferenceQueue:
                 request = InferenceRequest.from_json(json.loads(str(row["request_json"])))
                 try:
                     profile = registry.get(str(row["selected_profile_id"]))
-                    result = runner.run_one(request, profile)
+                    if hasattr(runner, "run_one_on_node"):
+                        result = runner.run_one_on_node(request, profile, str(row["selected_node_id"]) if row["selected_node_id"] else None)
+                    else:
+                        result = runner.run_one(request, profile)
                     if row["selected_node_id"]:
                         result["selected_node"] = {"node_id": str(row["selected_node_id"])}
                     result["batch_key"] = str(row["batch_key"])
@@ -159,6 +162,13 @@ class InferenceQueue:
                     else:
                         failed += 1
                     self._finish_request(conn, request_id, state, result, None if state == "completed" else str(result.get("status", "failed")))
+                    batch_key_value = str(row["batch_key"])
+                    group = groups.setdefault(batch_key_value, {"claimed_count": 0, "completed_count": 0, "failed_count": 0})
+                    group["claimed_count"] += 1
+                    if state == "completed":
+                        group["completed_count"] += 1
+                    else:
+                        group["failed_count"] += 1
                 except Exception as exc:
                     failed += 1
                     failure = {
@@ -168,9 +178,10 @@ class InferenceQueue:
                         "error": str(exc),
                     }
                     self._finish_request(conn, request_id, "failed", failure, str(exc))
-                batch_key_value = str(row["batch_key"])
-                group = groups.setdefault(batch_key_value, {"claimed_count": 0, "completed_count": 0, "failed_count": 0})
-                group["claimed_count"] += 1
+                    batch_key_value = str(row["batch_key"])
+                    group = groups.setdefault(batch_key_value, {"claimed_count": 0, "completed_count": 0, "failed_count": 0})
+                    group["claimed_count"] += 1
+                    group["failed_count"] += 1
             for batch_id in {str(row["batch_id"]) for row in rows}:
                 self._refresh_batch_row(conn, batch_id)
         # derive group completions after loop so failure/completion counts are accurate

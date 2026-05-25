@@ -1,4 +1,0 @@
-{"type":"meta","meta":{"note":"Mini before/after corpora for entropy buffer diff tool tests.","schema":"entropy-buffer.v1"}}
-{"type":"task_run","run_id":"baseline-before","task_id":"math.add.001","task_family":"math","prompt_template_id":"plain.v1","model_id":"mA","prompt":"Add 1+1. Answer with a single integer.","output":"2","answer":"2","buffer_id":"entropy.v1","buffer_item_id":"entropy.v1:math.add.001:plain.v1","input_tokens":10,"output_tokens":1,"wall_ms":10}
-{"type":"task_run","run_id":"baseline-before","task_id":"math.add.002","task_family":"math","prompt_template_id":"plain.v1","model_id":"mA","prompt":"Add 1+2. Answer with a single integer.","output":"3","answer":"3","buffer_id":"entropy.v1","buffer_item_id":"entropy.v1:math.add.002:plain.v1","input_tokens":10,"output_tokens":1,"wall_ms":10}
-

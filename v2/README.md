@@ -62,7 +62,7 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-submit \
 PYTHONPATH=src python3 -m ds4_infer.cli queue-work \
   --queue-dir /tmp/ds4_queue \
   --profiles-dir profiles/models \
-  --runner fake \
+  --runner spark \
   --node-id spark0 \
   --limit 16
 
@@ -73,6 +73,24 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-poll \
 
 The queue internally groups requests by model/profile, Spark node, chat mode, job class, input/output/thinking buckets, and shared prefix hash. Centaur does not need to know batch-size folklore.
 
+`--runner spark` executes the model request on the selected Spark over SSH,
+using that Spark's local `http://127.0.0.1:8000` unified/OpenAI-compatible API.
+It tries `/ds4/batches` first and falls back to `/v1/chat/completions` or
+`/v1/completions` when only vLLM is exposed.
+
+SparkRunner-compatible batches now use the queue path:
+
+```bash
+v2/scripts/sparkrunner_queue_adapter.sh \
+  --input requests.jsonl \
+  --output responses.jsonl \
+  --model ds4v
+```
+
+For direct Centaur diamond queue integration, use
+`--response-format inference` to write raw `ds4-inference-result-v1` JSONL
+instead of the SparkRunner response contract.
+
 ## Tool lattice
 
 Tools are invoked by stable IDs, not rediscovered shell commands:
@@ -80,6 +98,10 @@ Tools are invoked by stable IDs, not rediscovered shell commands:
 ```text
 tool:ds4.json.validate
 tool:ds4.sha256
+tool:ds4.regex.match
+tool:ds4.diff.stats
+tool:ds4.cpu.services
+tool:ds4.cpu.batch
 tool:repo.tests.echo_contract
 tool:web.fetch
 tool:spark.status
@@ -88,7 +110,7 @@ tool:spark.transfer.plan
 tool:spark.transfer.run
 ```
 
-Bash-backed tools use fixed argv, schema validation, timeouts, output caps, and no `shell=True`.
+Bash-backed tools use fixed argv, schema validation, timeouts, output caps, and no `shell=True`. CPU service batches use a bounded process-wide pool; allowlisted commands come only from `CPU_SERVICE_COMMANDS_JSON`.
 
 ## Spark transfer
 
@@ -112,4 +134,10 @@ Live runner adapters now exist for OpenAI-compatible vLLM, vLLM/MTP, and antirez
 
 `tool:web.fetch` provides rendered-page access through Playwright when installed, with a plain HTML fallback for simple pages. See `docs/web-tools.md`.
 
-`ds4-spark-chat` is a simple Mac Studio-friendly chat CLI against the resident vLLM/MTP lane. It keeps the full chat history as prompt context and can use Spark tools, including spark7 command execution only when launched with `--allow-spark7-tools`. See `docs/spark-chat.md`.
+`ds4-spark-chat -m ds4v` is a simple Mac Studio-friendly chat CLI that keeps
+full history locally but runs inference on the selected Spark. See
+`docs/spark-chat.md` and `docs/spark-queue-runbook.md`.
+
+Gateway, transfer, and audit extraction notes live in
+`docs/model-gateway-operational-notes.md`, `docs/spark-transfer.md`, and
+`docs/audit-handoff.md`.

@@ -1,4 +1,0 @@
-{"type":"task_run","run_id":"baseline-20260512-filter0","task_id":"math.add.001","task_family":"math","prompt_template_id":"plain.v1","model_id":"m_ok","prompt":"Add 1+1.","output":"Final answer: 2"}
-{"type":"task_run","run_id":"baseline-20260512-filter0","task_id":"format.refusal.001","task_family":"format","prompt_template_id":"plain.v1","model_id":"m_bad","prompt":"Return JSON only.","output":"As an AI language model, I cannot comply."}
-{"type":"task_run","run_id":"baseline-20260512-filter0","task_id":"empty.out.001","task_family":"misc","prompt_template_id":"plain.v1","model_id":"m_empty","prompt":"Say something.","output":""}
-{"type":"judge_pair","judge_id":"judge.v1","item_id":"math.add.001|plain.v1|a=m_ok|b=m_bad","task_id":"math.add.001","task_family":"math","prompt_template_id":"plain.v1","a_model_id":"m_ok","b_model_id":"m_bad","label":"a"}

@@ -8,6 +8,11 @@ import subprocess
 from typing import Any
 from urllib import request as urlrequest
 
+from .cpu_batch import CpuBatchService
+
+
+CPU = CpuBatchService()
+
 
 def json_validate(arguments: dict[str, Any]) -> dict[str, Any]:
     text = str(arguments.get("text", ""))
@@ -27,6 +32,22 @@ def text_metrics(arguments: dict[str, Any]) -> dict[str, Any]:
     text = str(arguments.get("text", ""))
     lines = text.splitlines()
     return {"ok": True, "bytes_utf8": len(text.encode("utf-8")), "characters": len(text), "lines": len(lines), "nonempty_lines": sum(1 for line in lines if line.strip())}
+
+
+def regex_match(arguments: dict[str, Any]) -> dict[str, Any]:
+    return {"ok": True, **CPU.service_regex_match(arguments)}
+
+
+def diff_stats(arguments: dict[str, Any]) -> dict[str, Any]:
+    return {"ok": True, **CPU.service_diff_stats(arguments)}
+
+
+def cpu_services(arguments: dict[str, Any]) -> dict[str, Any]:
+    return {"ok": True, **CPU.status()}
+
+
+def cpu_batch(arguments: dict[str, Any]) -> dict[str, Any]:
+    return CPU.run_batch(arguments)
 
 
 def web_fetch(arguments: dict[str, Any]) -> dict[str, Any]:

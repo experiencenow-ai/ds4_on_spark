@@ -1,5 +1,0 @@
-{"type":"meta","meta":{"note":"Mini conditional-entropy fixture for task_family vs prompt_template_id.","schema":"entropy-buffer.conditional_entropy.v1"}}
-{"type":"task_run","task_id":"cond.task.001","task_family":"fam1","prompt_template_id":"t1","model_id":"m1","prompt":"p1","output":"o1"}
-{"type":"task_run","task_id":"cond.task.002","task_family":"fam1","prompt_template_id":"t2","model_id":"m1","prompt":"p2","output":"o2"}
-{"type":"task_run","task_id":"cond.task.003","task_family":"fam2","prompt_template_id":"t1","model_id":"m1","prompt":"p3","output":"o3"}
-{"type":"task_run","task_id":"cond.task.004","task_family":"fam2","prompt_template_id":"t1","model_id":"m1","prompt":"p4","output":"o4"}

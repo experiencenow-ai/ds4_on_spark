@@ -1,43 +1,7 @@
 {
-  "duplicate_function_hashes": [
-    "1784249c64",
-    "23835e7538",
-    "32f2369df9",
-    "43b54a7335",
-    "4c9d58eab4",
-    "527d3d2293",
-    "6c33bf6f07",
-    "6e9bd338d8",
-    "70637e7aa8",
-    "73710bbe6d",
-    "75cd0968b5",
-    "7b96226fd4",
-    "7ef396b33c",
-    "831a28be60",
-    "964a89e32c",
-    "afbd7c8beb",
-    "bd0a299c64"
-  ],
-  "duplicate_function_counts": {
-    "7ef396b33c": 2,
-    "6c33bf6f07": 3,
-    "bd0a299c64": 2,
-    "527d3d2293": 2,
-    "23835e7538": 2,
-    "831a28be60": 2,
-    "4c9d58eab4": 2,
-    "75cd0968b5": 2,
-    "1784249c64": 2,
-    "afbd7c8beb": 3,
-    "73710bbe6d": 2,
-    "964a89e32c": 4,
-    "7b96226fd4": 2,
-    "6e9bd338d8": 4,
-    "70637e7aa8": 9,
-    "32f2369df9": 3,
-    "43b54a7335": 2
-  },
+  "duplicate_function_counts": {},
+  "duplicate_function_hashes": [],
   "probe_docs": [],
-  "similarity_threshold": null,
-  "similarity_function_pairs": []
+  "similarity_function_pairs": [],
+  "similarity_threshold": null
 }

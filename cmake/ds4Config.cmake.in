@@ -1,9 +1,0 @@
-@PACKAGE_INIT@
-
-include(CMakeFindDependencyMacro)
-
-if(@DS4_PACKAGE_HAS_CUDA@)
-	find_dependency(CUDAToolkit)
-endif()
-
-include("${CMAKE_CURRENT_LIST_DIR}/ds4Targets.cmake")
