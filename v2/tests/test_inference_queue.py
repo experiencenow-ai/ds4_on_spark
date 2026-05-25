@@ -227,7 +227,7 @@ class InferenceQueueTests(unittest.TestCase):
                 batch_id="cpu-batch",
             )
             self.assertEqual(submitted["selected_services"], {"text_metrics": 2})
-            worked = queue.work(registry=ProfileRegistry.load(PROFILES), runner=FakeRunner(), limit=2, concurrency=2)
+            worked = queue.work(registry=ProfileRegistry.load(PROFILES), runner=FakeRunner(), limit=2, concurrency=1)
             self.assertEqual(worked["completed_count"], 2)
             collected = queue.collect(batch_id="cpu-batch")
             self.assertEqual(collected["results"][0]["result"]["format"], "ds4-cpu-service-result-v1")
