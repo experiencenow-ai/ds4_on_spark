@@ -21,7 +21,7 @@ BATCH_STATUS_FORMAT = "ds4-inference-batch-status-v1"
 PREFIX_GROUP_FORMAT = "ds4-prefix-group-v1"
 PREFIX_WARM_REPORT_FORMAT = "ds4-prefix-warm-report-v1"
 PREFIX_WARM_STATUS_FORMAT = "ds4-prefix-warm-status-v1"
-TERMINAL_STATES = {"completed", "failed"}
+TERMINAL_STATES = {"completed", "failed", "cancelled"}
 
 
 @dataclass(frozen=True)
@@ -321,6 +321,64 @@ class InferenceQueue:
             event = conn.execute("select max(event_id) as newest_event_id from events").fetchone()
             return {"format": QUEUE_FORMAT, "state_counts": counts, "newest_event_id": int(event["newest_event_id"] or 0)}
 
+    def cancel(self, *, request_id: str | None = None, batch_id: str | None = None, reason: str = "cancelled by operator") -> dict[str, Any]:
+        if (request_id is None) == (batch_id is None):
+            raise ValueError("exactly one of request_id or batch_id is required")
+        now = time.time()
+        cancelled: list[str] = []
+        skipped: dict[str, int] = {}
+        with self._connection() as conn:
+            if request_id is not None:
+                rows = conn.execute("select * from requests where request_id = ?", (request_id,)).fetchall()
+            else:
+                rows = conn.execute("select * from requests where batch_id = ? order by request_id", (batch_id,)).fetchall()
+            if not rows:
+                return {
+                    "format": QUEUE_FORMAT,
+                    "state": "unknown",
+                    "request_id": request_id,
+                    "batch_id": batch_id,
+                    "cancelled_count": 0,
+                    "cancelled_request_ids": [],
+                    "skipped_state_counts": {},
+                }
+            touched_batches = {str(row["batch_id"]) for row in rows}
+            for row in rows:
+                state = str(row["state"])
+                rid = str(row["request_id"])
+                if state != "queued":
+                    skipped[state] = skipped.get(state, 0) + 1
+                    continue
+                result = {
+                    "format": "ds4-inference-cancelled-v1",
+                    "request_id": rid,
+                    "status": "cancelled",
+                    "reason": reason,
+                }
+                updated = conn.execute(
+                    """
+                    update requests
+                    set state = 'cancelled', result_json = ?, error = ?, completed_at = ?, updated_at = ?
+                    where request_id = ? and state = 'queued'
+                    """,
+                    (json.dumps(result, sort_keys=True), reason, now, now, rid),
+                ).rowcount
+                if updated == 1:
+                    cancelled.append(rid)
+                    self._insert_event(conn, rid, "cancelled", "cancelled", {"batch_id": str(row["batch_id"]), "reason": reason})
+                    self._write_notice(rid, "cancelled", result)
+            for touched_batch in touched_batches:
+                self._refresh_batch_row(conn, touched_batch)
+        return {
+            "format": QUEUE_FORMAT,
+            "state": "cancelled" if cancelled else "unchanged",
+            "request_id": request_id,
+            "batch_id": batch_id,
+            "cancelled_count": len(cancelled),
+            "cancelled_request_ids": cancelled,
+            "skipped_state_counts": skipped,
+        }
+
     def poll(self, *, after_event_id: int = 0, limit: int = 100) -> dict[str, Any]:
         with self._connection() as conn:
             rows = conn.execute(
@@ -374,7 +432,8 @@ class InferenceQueue:
                 queued_count integer not null default 0,
                 running_count integer not null default 0,
                 completed_count integer not null default 0,
-                failed_count integer not null default 0
+                failed_count integer not null default 0,
+                cancelled_count integer not null default 0
             )
             """
         )
@@ -432,6 +491,9 @@ class InferenceQueue:
             )
             """
         )
+        batch_columns = {str(row["name"]) for row in conn.execute("pragma table_info(batches)").fetchall()}
+        if "cancelled_count" not in batch_columns:
+            conn.execute("alter table batches add column cancelled_count integer not null default 0")
         return conn
 
     @contextmanager
@@ -486,10 +548,18 @@ class InferenceQueue:
         running = counts.get("running", 0)
         completed = counts.get("completed", 0)
         failed = counts.get("failed", 0)
+        cancelled = counts.get("cancelled", 0)
         if request_count == 0:
             state = "unknown"
-        elif completed + failed == request_count:
-            state = "completed" if failed == 0 else "completed_with_failures"
+        elif cancelled == request_count:
+            state = "cancelled"
+        elif completed + failed + cancelled == request_count:
+            if failed:
+                state = "completed_with_failures"
+            elif cancelled:
+                state = "completed_with_cancelled"
+            else:
+                state = "completed"
         elif running:
             state = "running"
         else:
@@ -497,10 +567,10 @@ class InferenceQueue:
         conn.execute(
             """
             update batches
-            set state = ?, updated_at = ?, request_count = ?, queued_count = ?, running_count = ?, completed_count = ?, failed_count = ?
+            set state = ?, updated_at = ?, request_count = ?, queued_count = ?, running_count = ?, completed_count = ?, failed_count = ?, cancelled_count = ?
             where batch_id = ?
             """,
-            (state, time.time(), request_count, queued, running, completed, failed, batch_id),
+            (state, time.time(), request_count, queued, running, completed, failed, cancelled, batch_id),
         )
 
     def _queued_and_running_node_load(self) -> dict[str, int]:
@@ -668,6 +738,7 @@ class InferenceQueue:
             "running_count": int(row["running_count"]),
             "completed_count": int(row["completed_count"]),
             "failed_count": int(row["failed_count"]),
+            "cancelled_count": int(row["cancelled_count"]),
             "created_at": float(row["created_at"]),
             "updated_at": float(row["updated_at"]),
         }

@@ -72,7 +72,32 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-poll \
   --after-event-id 0
 ```
 
-Every completed or failed request also writes:
+## Cancel
+
+Queued requests can be cancelled before a worker claims them:
+
+```bash
+PYTHONPATH=src python3 -m ds4_infer.cli queue-cancel \
+  --queue-dir /tmp/ds4_queue \
+  --request-id req-001 \
+  --reason 'superseded by a newer run'
+```
+
+To cancel the remaining queued work in a batch:
+
+```bash
+PYTHONPATH=src python3 -m ds4_infer.cli queue-cancel \
+  --queue-dir /tmp/ds4_queue \
+  --batch-id centaur-run-001
+```
+
+Cancellation is deliberately conservative. It only marks requests still in
+`queued` state as `cancelled`, writes a completion notice, and records a
+`cancelled` event. Requests already `running`, `completed`, `failed`, or
+`cancelled` are reported in `skipped_state_counts`; the queue does not pretend
+to abort an in-flight model call.
+
+Every completed, failed, or cancelled request also writes:
 
 ```text
 /tmp/ds4_queue/notices/<request_id>.json

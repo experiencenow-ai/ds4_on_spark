@@ -77,6 +77,12 @@ def main(argv: list[str] | None = None) -> int:
     queue_status.add_argument("--request-id")
     queue_status.add_argument("--batch-id")
 
+    queue_cancel = sub.add_parser("queue-cancel")
+    queue_cancel.add_argument("--queue-dir", required=True)
+    queue_cancel.add_argument("--request-id")
+    queue_cancel.add_argument("--batch-id")
+    queue_cancel.add_argument("--reason", default="cancelled by operator")
+
     queue_poll = sub.add_parser("queue-poll")
     queue_poll.add_argument("--queue-dir", required=True)
     queue_poll.add_argument("--after-event-id", type=int, default=0)
@@ -149,6 +155,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "queue-status":
         queue = InferenceQueue(args.queue_dir)
         print(json.dumps(queue.status(request_id=args.request_id, batch_id=args.batch_id), indent=2, sort_keys=True))
+        return 0
+
+    if args.cmd == "queue-cancel":
+        queue = InferenceQueue(args.queue_dir)
+        print(json.dumps(queue.cancel(request_id=args.request_id, batch_id=args.batch_id, reason=args.reason), indent=2, sort_keys=True))
         return 0
 
     if args.cmd == "queue-poll":

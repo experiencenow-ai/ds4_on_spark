@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     while True:
         queue.work(registry=registry, runner=runner, limit=max(1, args.work_limit))
         status = queue.status(batch_id=batch_id)
-        if status.get("state") in {"completed", "completed_with_failures"}:
+        if status.get("state") in {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled"}:
             break
         if time.time() > args.deadline:
             raise TimeoutError(f"batch {batch_id} did not complete before timeout")

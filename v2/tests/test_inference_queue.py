@@ -75,6 +75,50 @@ class InferenceQueueTests(unittest.TestCase):
             self.assertEqual(notice["state"], "completed")
             self.assertIn("centaur-atom-edit-v1", notice["result"]["output"]["text"])
 
+    def test_cancel_queued_request_prevents_worker_claim_and_writes_notice(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            queue.submit_requests(
+                requests=[make_request("r0"), make_request("r1")],
+                registry=ProfileRegistry.load(PROFILES),
+                topology=SparkTopology.load(TOPOLOGY),
+                batch_id="batch-a",
+            )
+            cancelled = queue.cancel(request_id="r0", reason="operator test")
+            self.assertEqual(cancelled["state"], "cancelled")
+            self.assertEqual(cancelled["cancelled_request_ids"], ["r0"])
+            self.assertEqual(queue.status(request_id="r0")["state"], "cancelled")
+            self.assertEqual(queue.status(batch_id="batch-a")["cancelled_count"], 1)
+            self.assertEqual(queue.status(batch_id="batch-a")["queued_count"], 1)
+            notice = json.loads((Path(tmp) / "notices" / "r0.json").read_text())
+            self.assertEqual(notice["state"], "cancelled")
+            self.assertEqual(notice["result"]["reason"], "operator test")
+
+            worked = queue.work(registry=ProfileRegistry.load(PROFILES), runner=FakeRunner(), limit=10)
+            self.assertEqual(worked["claimed_count"], 1)
+            self.assertEqual(queue.status(request_id="r1")["state"], "completed")
+            self.assertEqual(queue.status(batch_id="batch-a")["state"], "completed_with_cancelled")
+
+    def test_cancel_batch_only_cancels_queued_requests(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            queue.submit_requests(
+                requests=[make_request("r0"), make_request("r1")],
+                registry=ProfileRegistry.load(PROFILES),
+                topology=SparkTopology.load(TOPOLOGY),
+                batch_id="batch-a",
+            )
+            queue.work(registry=ProfileRegistry.load(PROFILES), runner=FakeRunner(), node_id="spark0", limit=1)
+            cancelled = queue.cancel(batch_id="batch-a", reason="stop remaining")
+            self.assertEqual(cancelled["cancelled_request_ids"], ["r1"])
+            self.assertEqual(cancelled["skipped_state_counts"], {"completed": 1})
+            self.assertEqual(queue.status(request_id="r0")["state"], "completed")
+            self.assertEqual(queue.status(request_id="r1")["state"], "cancelled")
+            batch_status = queue.status(batch_id="batch-a")
+            self.assertEqual(batch_status["state"], "completed_with_cancelled")
+            self.assertEqual(batch_status["completed_count"], 1)
+            self.assertEqual(batch_status["cancelled_count"], 1)
+
     def test_poll_returns_completion_events_after_last_seen_id(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             queue = InferenceQueue(tmp)
