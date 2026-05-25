@@ -2,7 +2,8 @@
 
 DS4 treats NIXL as a Spark-side vLLM capability. Centaur and the DS4 queue still send normal OpenAI-compatible inference requests; the proxy fans each request through a prefiller and decoder and carries `kv_transfer_params` between them.
 
-The first experimental lane is pinned-only Qwen 27B on spark7:
+The stable packaged profile is pinned-only Qwen 27B on spark7, using the vLLM
+runtime that was already installed during the first live attempt:
 
 ```bash
 PYTHONPATH=v2/src python3 -m ds4_nixl.cli plan \
@@ -39,6 +40,19 @@ NotImplementedError: 3-read conv transfer only supports Mamba2 models, got mamba
 ```
 
 Keep this lane pinned-only until either the Spark runtime supports NIXL transfer for the Qwen3.6 GDN/Mamba path, or the experimental lane is moved to a NIXL-compatible model.
+
+The next step is the spark7 GDN experiment bundle in
+`docs/nixl-spark7-experiments.md`. That bundle uses an experimental vLLM main
+checkout containing the GDN NIXL support merged in vLLM PR #41869, proves a
+small `Qwen/Qwen3.5-0.8B` GDN smoke first, then tries the heavy Qwen27 profile
+only if the small smoke passes:
+
+```bash
+PYTHONPATH=v2/src python3 -m ds4_nixl.cli write-spark7-experiment \
+  --deployment v2/profiles/nixl/qwen35_0_8b_spark7_gdn_nixl_smoke.json \
+  --vllm-build v2/profiles/vllm_builds/vllm_main_after_gdn_nixl_41869.json \
+  --output-dir /tmp/ds4_nixl_gdn_smoke
+```
 
 Use the lane only by pinning the profile:
 
