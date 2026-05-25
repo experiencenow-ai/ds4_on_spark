@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import json
+import os
+import shlex
+import subprocess
 import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
-from ds4_chat.cli import VllmChatModel
 from ds4_chat.cli import QueueChatModel
 from ds4_infer.profiles import ProfileRegistry
-from ds4_infer.runners import OpenAICompatibleRunner, SparkHttpRunner, request_messages, request_prompt
+from ds4_infer.runners import SparkHttpRunner, extract_openai_completion_text, request_messages, request_prompt
 from ds4_infer.schemas import InferenceRequest
 from ds4_tools.builtin import spark7_run_command, web_fetch
 from ds4_tools.registry import ToolRegistry
@@ -38,31 +41,7 @@ def make_request(*, chat: bool) -> InferenceRequest:
     )
 
 
-class CapturingRunner(OpenAICompatibleRunner):
-    def __init__(self) -> None:
-        super().__init__(base_url="http://unused")
-        self.calls: list[tuple[str, dict]] = []
-
-    def _post_json(self, endpoint: str, payload: dict) -> dict:
-        self.calls.append((endpoint, payload))
-        if endpoint.endswith("/chat/completions"):
-            return {"choices": [{"message": {"role": "assistant", "content": "chat ok"}}], "usage": {"total_tokens": 3}}
-        return {"choices": [{"text": "completion ok"}], "usage": {"total_tokens": 2}}
-
-
 class LlmRunnersWebChatTests(unittest.TestCase):
-    def test_openai_runner_uses_chat_and_completion_endpoints(self) -> None:
-        registry = ProfileRegistry.load(PROFILES)
-        runner = CapturingRunner()
-        chat_profile = registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
-        completion_profile = registry.resolve(capability="smart", chat=False, job_class="atom_edit")
-        chat_result = runner.run_one(make_request(chat=True), chat_profile)
-        completion_result = runner.run_one(make_request(chat=False), completion_profile)
-        self.assertEqual(chat_result["output"]["text"], "chat ok")
-        self.assertEqual(completion_result["output"]["text"], "completion ok")
-        self.assertEqual(runner.calls[0][0], "/v1/chat/completions")
-        self.assertEqual(runner.calls[1][0], "/v1/completions")
-
     def test_prompt_and_message_builders_use_shared_prefix_and_suffix(self) -> None:
         request = make_request(chat=False)
         self.assertIn("system rules", request_prompt(request))
@@ -89,16 +68,6 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(result["mode"], "text")
         self.assertIn("Hello JS fallback", result["text"])
 
-    def test_vllm_chat_model_keeps_full_history_shape(self) -> None:
-        with _chat_server() as url:
-            model = VllmChatModel(base_url=url, model="m")
-            message = model.next_message([
-                {"role": "system", "content": "system"},
-                {"role": "user", "content": "hello"},
-            ])
-        self.assertEqual(message["role"], "assistant")
-        self.assertEqual(message["content"], "chat reply")
-
     def test_queue_chat_model_can_use_fake_runner_with_model_alias(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             model = QueueChatModel(
@@ -120,7 +89,7 @@ class LlmRunnersWebChatTests(unittest.TestCase):
 
         class Done:
             returncode = 0
-            stdout = json.dumps({"choices": [{"message": {"role": "assistant", "content": "ok"}}], "usage": {"total_tokens": 1}})
+            stdout = json.dumps({"results": [{"custom_id": "r", "ok": True, "response": {"choices": [{"message": {"role": "assistant", "content": "ok"}}], "usage": {"total_tokens": 1}}}]})
             stderr = ""
 
         def runner(command, **kwargs):
@@ -131,10 +100,136 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         request = make_request(chat=True)
         result = SparkHttpRunner(timeout_s=30, command_runner=runner).run_one_on_node(request, profile, "spark4+spark5")
         self.assertEqual(result["output"]["text"], "ok")
-        self.assertEqual(calls[0][0][5], "spark4")
+        self.assertEqual(calls[0][0][5], "spark5")
         payload = json.loads(calls[0][1]["input"])
-        self.assertTrue(payload["batch_first"])
-        self.assertEqual(payload["batch_payload"]["model"], "deepseek-v4-flash")
+        self.assertEqual(payload["batch_payload"]["model"], "deepseek-ai/DeepSeek-V4-Flash")
+        self.assertEqual(payload["batch_payload"]["items"][0]["thinking"], {"type": "disabled"})
+        self.assertNotIn("chat_template_kwargs", payload["batch_payload"]["items"][0])
+        self.assertNotIn("openai_endpoint", payload)
+
+    def test_spark_http_runner_batches_multiple_requests_in_one_gateway_call(self) -> None:
+        calls = []
+
+        class Done:
+            returncode = 0
+            stdout = json.dumps(
+                {
+                    "results": [
+                        {"custom_id": "r", "ok": True, "response": {"choices": [{"message": {"content": "one"}}]}},
+                        {"custom_id": "r2", "ok": True, "response": {"choices": [{"message": {"content": "two"}}]}},
+                    ]
+                }
+            )
+            stderr = ""
+
+        def runner(command, **kwargs):
+            calls.append((command, kwargs))
+            return Done()
+
+        profile = ProfileRegistry.load(PROFILES).get("dsv4_vllm_mtp_smartest_v1")
+        first = make_request(chat=True)
+        raw = make_request(chat=True).raw
+        raw["request_id"] = "r2"
+        results = SparkHttpRunner(timeout_s=30, command_runner=runner).run_many_on_node([first, InferenceRequest.from_json(raw)], profile, "spark4+spark5", concurrency=2)
+        payload = json.loads(calls[0][1]["input"])
+        self.assertEqual(len(payload["batch_payload"]["items"]), 2)
+        self.assertEqual(payload["batch_payload"]["concurrency"], 2)
+        self.assertEqual(results["r"]["output"]["text"], "one")
+        self.assertEqual(results["r2"]["output"]["text"], "two")
+
+    def test_spark_http_runner_fails_closed_without_selected_node(self) -> None:
+        calls = []
+
+        def runner(command, **kwargs):
+            calls.append(command)
+            raise AssertionError("runner should not be called without a node")
+
+        profile = ProfileRegistry.load(PROFILES).get("dsv4_vllm_mtp_smartest_v1")
+        result = SparkHttpRunner(timeout_s=30, command_runner=runner).run_one(make_request(chat=True), profile)
+        self.assertEqual(result["status"], "transport_failed")
+        self.assertIn("requires selected node_id", result["transport"]["error"])
+        self.assertEqual(calls, [])
+
+    def test_spark_http_runner_disables_qwen_thinking_with_chat_template_kwargs(self) -> None:
+        calls = []
+
+        class Done:
+            returncode = 0
+            stdout = json.dumps({"choices": [{"message": {"role": "assistant", "content": "ok"}}]})
+            stderr = ""
+
+        def runner(command, **kwargs):
+            calls.append(kwargs)
+            return Done()
+
+        profile = ProfileRegistry.load(PROFILES).get("qwen3_6_27b_fp8_efficient_v1")
+        raw = make_request(chat=True).raw
+        raw["capability"] = "efficient"
+        raw["job_class"] = "summary"
+        SparkHttpRunner(timeout_s=30, command_runner=runner).run_one_on_node(InferenceRequest.from_json(raw), profile, "spark0")
+        item = json.loads(calls[0]["input"])["batch_payload"]["items"][0]
+        self.assertEqual(item["thinking"], {"type": "disabled"})
+        self.assertEqual(item["chat_template_kwargs"], {"enable_thinking": False})
+
+    def test_spark_http_runner_adds_thinking_budget_to_generation_cap(self) -> None:
+        calls = []
+
+        class Done:
+            returncode = 0
+            stdout = json.dumps({"choices": [{"message": {"role": "assistant", "content": "ok"}}]})
+            stderr = ""
+
+        def runner(command, **kwargs):
+            calls.append(kwargs)
+            return Done()
+
+        profile = ProfileRegistry.load(PROFILES).get("qwen3_6_27b_fp8_efficient_v1")
+        raw = make_request(chat=True).raw
+        raw["capability"] = "efficient"
+        raw["job_class"] = "summary"
+        raw["max_output_tokens"] = 64
+        raw["thinking_budget_tokens"] = 100
+        SparkHttpRunner(timeout_s=30, command_runner=runner).run_one_on_node(InferenceRequest.from_json(raw), profile, "spark0")
+        payload = json.loads(calls[0]["input"])
+        item = payload["batch_payload"]["items"][0]
+        self.assertEqual(item["max_tokens"], 164)
+        self.assertEqual(item["thinking"], {"type": "enabled", "budget_tokens": 100})
+        self.assertEqual(item["thinking_token_budget"], 100)
+        self.assertEqual(item["chat_template_kwargs"], {"enable_thinking": True})
+
+    def test_spark_http_runner_can_map_group_to_ingress_node(self) -> None:
+        calls = []
+
+        class Done:
+            returncode = 0
+            stdout = json.dumps({"choices": [{"message": {"role": "assistant", "content": "ok"}}]})
+            stderr = ""
+
+        def runner(command, **kwargs):
+            calls.append(command)
+            return Done()
+
+        profile = ProfileRegistry.load(PROFILES).get("dsv4_vllm_mtp_smartest_v1")
+        with patch.dict(os.environ, {"DS4_SPARK_NODE_MAP_JSON": json.dumps({"spark4+spark5": "spark5"})}):
+            SparkHttpRunner(command_runner=runner).run_one_on_node(make_request(chat=True), profile, "spark4+spark5")
+        self.assertEqual(calls[0][5], "spark5")
+
+    def test_spark_http_runner_rejects_failed_ds4_batch_item(self) -> None:
+        with _local_json_server({"results": [{"ok": False, "status": 500, "response": {"error": "backend down"}}]}) as url:
+            def runner(command, **kwargs):
+                argv = shlex.split(command[-1])
+                env = os.environ.copy()
+                env["DS4_SPARK_HTTP_BASE_URL"] = url
+                return subprocess.run(argv, input=kwargs["input"], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, timeout=10, check=False)
+
+            profile = ProfileRegistry.load(PROFILES).get("qwen3_6_27b_fp8_efficient_v1")
+            result = SparkHttpRunner(timeout_s=5, command_runner=runner).run_one_on_node(make_request(chat=True), profile, "spark0")
+        self.assertEqual(result["status"], "transport_failed")
+        self.assertIn("backend down", result["transport"]["error"])
+
+    def test_completion_extractor_accepts_chat_shaped_response(self) -> None:
+        data = {"choices": [{"message": {"content": "dsv4 antirez ok", "reasoning_content": "hidden"}}]}
+        self.assertEqual(extract_openai_completion_text(data), "dsv4 antirez ok")
 
 
 class _local_html_server:
@@ -163,33 +258,41 @@ class _local_html_server:
     def __exit__(self, exc_type, exc, tb) -> None:
         assert self.httpd is not None
         self.httpd.shutdown()
+        self.httpd.server_close()
         if self.thread is not None:
             self.thread.join(timeout=1)
 
 
-class _chat_server:
+class _local_json_server:
+    def __init__(self, response: dict) -> None:
+        self.response = json.dumps(response).encode("utf-8")
+        self.httpd: HTTPServer | None = None
+        self.thread: threading.Thread | None = None
+
     def __enter__(self) -> str:
+        response = self.response
+
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self) -> None:
-                length = int(self.headers.get("content-length", "0"))
-                payload = json.loads(self.rfile.read(length).decode("utf-8"))
-                assert len(payload["messages"]) == 2
-                body = json.dumps({"choices": [{"message": {"role": "assistant", "content": "chat reply"}}]}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(response)))
                 self.end_headers()
-                self.wfile.write(body)
+                self.wfile.write(response)
             def log_message(self, format: str, *args) -> None:
                 return
 
         self.httpd = HTTPServer(("127.0.0.1", 0), Handler)
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self.thread.start()
-        return f"http://127.0.0.1:{self.httpd.server_port}"
+        return f"http://127.0.0.1:{self.httpd.server_port}/"
 
     def __exit__(self, exc_type, exc, tb) -> None:
+        assert self.httpd is not None
         self.httpd.shutdown()
-        self.thread.join(timeout=1)
+        self.httpd.server_close()
+        if self.thread is not None:
+            self.thread.join(timeout=1)
 
 
 if __name__ == "__main__":

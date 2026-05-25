@@ -7,8 +7,18 @@
   "supported_job_classes": ["atom_edit", "summary", "json_repair", "triage"],
   "supports_chat": true,
   "supports_completion": true,
+  "supports_thinking": true,
   "production_eligible": true,
   "quality": {"ds4_eval_correct": 76, "ds4_eval_total": 92, "ds4_eval_accuracy": 0.826},
-  "performance": {"measured_output_tps": 128.0, "latency_rank": 1.0},
+  "performance": {
+    "prefill_prompt_tok_s": 7660.0,
+    "single_stream_decode_tok_s": 8.0,
+    "aggregate_decode_tok_s_at_16": 98.7,
+    "aggregate_decode_tok_s_at_32": 187.0,
+    "measured_output_tps": 98.7,
+    "long_single_request_latency_class": "slow",
+    "latency_rank": 1.0,
+    "measurement_notes": "Qwen27 headline throughput is aggregate batched decode, not per-request decode. Keep efficient workers near 16-32 running sequences per Spark for throughput-sensitive queues."
+  },
   "routing": {"default_for": ["efficient"], "rank": 100}
 }
