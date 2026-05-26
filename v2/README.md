@@ -40,9 +40,8 @@ Initial default intent:
 
 The production Spark allocation is fixed in `profiles/topology/static_sparks.json`:
 
-- spark0-3 host resident Qwen lanes;
+- spark0-3 and spark6 host resident Qwen lanes;
 - spark4+spark5 jointly host one DSV4 vLLM/MTP lane because that profile consumes both Sparks;
-- spark6 is antirez/support only, with no Qwen resident profiles;
 - spark7 is the only dynamic experiment lane.
 
 This keeps Centaur-facing requests capability-based instead of Spark/backend-specific. See `docs/static-spark-topology.md`.
@@ -53,7 +52,12 @@ spark7 stays on demand.
 
 KV cache is optional launch plumbing, not a separate model variant. The normal
 DSV4 profile references `profiles/kv_cache/dsv4_spark45_lmcache.json` when
-external KV reuse is desired. See `docs/kv-cache.md`.
+external KV reuse is desired. The live vLLM prefix-cache proof on Qwen27 showed
+30k prompt tokens drop from 46.19s cold to 0.286s warm when the prefix was
+token-identical. DSV4 advertises a 1,048,576-token model limit and the current
+spark4+spark5 service exposes roughly 3.2M aggregate KV-token slots, so 1M
+contexts are a rare scheduled mode, not a default batch shape. See
+`docs/kv-cache.md`.
 
 ## Inference queue
 

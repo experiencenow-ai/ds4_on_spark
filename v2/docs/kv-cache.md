@@ -22,6 +22,33 @@ Centaur still sends normal DS4 inference requests. The queue groups lattice
 requests by `shared_prefix_hash`, and `queue-warm-prefixes` can seed a skeleton
 prefix before the real atom suffixes arrive.
 
+## What is proven
+
+The prefix-cache mechanism is live-proven on the experimental spark7 Qwen27
+lane:
+
+```text
+model: Qwen/Qwen3.6-27B-FP8
+prompt: 30,029 tokens
+cold request: 46.190s
+warm same-prefix request: 0.286s
+warm request prompt tokens from local cache: 29,792
+warm request newly computed prompt tokens: 237
+```
+
+This proves the useful part of the design: when the long prefix is
+token-identical, vLLM reuses cached KV and computes only the uncached suffix.
+DSV4 has to be measured on the shared spark4+spark5 production lane, so use
+vLLM counters rather than wallclock when other users are active:
+
+```text
+vllm:prefix_cache_queries_total
+vllm:prefix_cache_hits_total
+vllm:prompt_tokens_by_source_total{source="local_compute"}
+vllm:prompt_tokens_by_source_total{source="local_cache_hit"}
+vllm:prompt_tokens_by_source_total{source="external_kv_transfer"}
+```
+
 ## DSV4 LMCache launch
 
 Plan:
@@ -69,6 +96,53 @@ configuration docs call out `LMCACHE_CONFIG_FILE` for YAML/JSON config and
 
 The deployment references `dsv4_vllm_mtp_smartest_v1`; there is no separate
 LMCache model profile.
+
+## Limits and scheduling constraints
+
+There are three different limits:
+
+```text
+model limit:        what the model/tokenizer says it can address
+serve limit:        the vLLM --max-model-len chosen for this service launch
+aggregate KV pool:  total live/cached KV-token slots available in the service
+```
+
+Live observations from the current Sparks:
+
+```text
+Qwen27/Qwen35 model_max_length: 262,144 tokens
+Qwen27 spark7 service launch:  --max-model-len 32,768
+Qwen27 spark7 KV pool:         about 733,866 tokens
+
+DSV4 max_position_embeddings:  1,048,576 tokens
+DSV4 spark4+spark5 launch:     --max-model-len 200,000
+DSV4 spark4+spark5 KV pool:    12,568 blocks * 256 = about 3,217,408 tokens
+```
+
+Raising `--max-model-len` does not allocate that many KV tokens for every
+request. vLLM allocates from the service KV pool as requests run. The cost is
+concurrency and cache residency:
+
+```text
+Qwen at 32k:   about 22 full-context requests in the observed spark7 pool
+Qwen at 262k:  about 2.8 full-context requests in that same pool
+DSV4 at 200k:  about 16 full-context requests in the observed spark4+spark5 pool
+DSV4 at 1M:    about 3 full-context requests in that same pool
+```
+
+The operational rule is therefore:
+
+```text
+small/normal requests: keep them short and highly batched
+shared long prefixes: group by shared_prefix_hash and warm once per lane
+rare 1M DSV4 contexts: schedule deliberately; do not mix casually with bulk queue traffic
+external KV cache: use it to preserve high-value prefixes beyond normal vLLM residency
+```
+
+The `shared_prefix` must be byte/token-identical. Put repo skeletons,
+instructions, tool schemas, and LongMem documents before the variable suffix.
+Changing whitespace, chat template arguments, model profile, adapter, or
+thinking mode can defeat cache hits.
 
 ## Why not raw blobs
 

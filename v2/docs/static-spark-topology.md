@@ -12,17 +12,18 @@ The production Spark pool is intentionally static. Centaur and DS4 services shou
 | spark3 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1`, `qwen3_6_35b_a3b_fp8_fastest_v1` |
 | spark4 | DSV4 vLLM grouped lane half | `dsv4_vllm_mtp_smartest_v1` |
 | spark5 | DSV4 vLLM grouped lane half | `dsv4_vllm_mtp_smartest_v1` |
-| spark6 | Antirez/support/urgent lane | `dsv4_antirez_smart_v1` |
+| spark6 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1`, `qwen3_6_35b_a3b_fp8_fastest_v1` |
 | spark7 | Experimental on-demand lane | none |
 
 This gives the service a normal production view of:
 
-- 4 Qwen lanes for `efficient` / `fastest` work;
+- 5 Qwen lanes for `efficient` / `fastest` work;
 - 1 DSV4 vLLM grouped lane for `smartest` chat/tool/reasoning work, consuming both spark4 and spark5;
-- 1 antirez/support lane for `smart` completion and urgent support work;
 - 1 experimental on-demand lane on spark7.
 
-No Qwen profile is resident on spark6 or spark7. Spark6 is reserved for antirez/support. Spark7 is intentionally experimental and may lazy-load models for probes without becoming a production resident lane.
+No model is dynamically ejected from production Sparks. Spark6 is now a normal
+Qwen resident lane. Spark7 is intentionally experimental and may lazy-load
+models for probes without becoming a production resident lane.
 
 KV-cache experiments should use `ds4_kvcache` deployment files. They do not add
 resident profiles to the topology.
@@ -31,7 +32,11 @@ resident profiles to the topology.
 
 The inference scheduler owns node assignment. Centaur requests a capability and job class; it does not target a Spark directly.
 
-Normal queued requests prefer resident production lanes. Immediate requests prefer a reserved lane only when that lane has the requested resident profile. Efficient Qwen requests therefore remain on spark0-3; smart antirez requests may use spark6. Dynamic loading is allowed only for unmatched experimental requests routed to spark7, not for production model ejection.
+Normal queued requests prefer resident production lanes. Efficient Qwen requests
+therefore spread across spark0-3 and spark6. `smart`/`smartest` DSV4 requests
+use the spark4+spark5 grouped vLLM lane unless explicitly pinned to a legacy
+non-production profile. Dynamic loading is allowed only for unmatched
+experimental requests routed to spark7, not for production model ejection.
 
 Qwen capacity planning uses aggregate batched decode. Single-stream Qwen27
 decode is about 8 generated tok/s on this Spark shape, while 16-32 running
@@ -57,18 +62,10 @@ PYTHONPATH=src python3 -m ds4_infer.cli startup-models \
 ```
 
 The command reads this topology and warms only that node's resident profiles.
-Spark0-3 warm both Qwen profiles, spark4 warms the deployed grouped DSV4 vLLM
-lane, spark5 records itself as the secondary half of that group, spark6 warms
-the antirez profile, and spark7 is a clean no-op because it is on demand.
-
-Spark6's live antirez `ds4-server` is on `127.0.0.1:18000`, so set:
-
-```bash
-export DS4_STARTUP_BASE_URL=http://127.0.0.1:18000
-```
-
-before running startup warmup there. Other production lanes use the default
-`127.0.0.1:8000` gateway.
+Spark0-3 and spark6 warm both Qwen profiles, spark4 warms the deployed grouped
+DSV4 vLLM lane, spark5 records itself as the secondary half of that group, and
+spark7 is a clean no-op because it is on demand. Production lanes use the
+default `127.0.0.1:8000` gateway.
 
 The user service template is in:
 

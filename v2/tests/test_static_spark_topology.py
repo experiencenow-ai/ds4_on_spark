@@ -40,10 +40,10 @@ class StaticSparkTopologyTests(unittest.TestCase):
     def test_capacity_reflects_static_allocation(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
         capacity = topology.estimate_capacity_by_profile()
-        self.assertEqual(capacity["qwen3_6_27b_fp8_efficient_v1"], 4)
-        self.assertEqual(capacity["qwen3_6_35b_a3b_fp8_fastest_v1"], 4)
+        self.assertEqual(capacity["qwen3_6_27b_fp8_efficient_v1"], 5)
+        self.assertEqual(capacity["qwen3_6_35b_a3b_fp8_fastest_v1"], 5)
         self.assertEqual(capacity["dsv4_vllm_mtp_smartest_v1"], 1)
-        self.assertEqual(capacity["dsv4_antirez_smart_v1"], 1)
+        self.assertNotIn("dsv4_antirez_smart_v1", capacity)
 
     def test_qwen_requests_spread_across_qwen_lanes_only(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
@@ -51,18 +51,18 @@ class StaticSparkTopologyTests(unittest.TestCase):
         profile = registry.resolve(capability="efficient", chat=False, job_class="atom_edit")
         load: dict[str, int] = {}
         nodes: list[str] = []
-        for _ in range(4):
+        for _ in range(5):
             assignment = topology.assign_profile(profile, immediate=False, current_load=load)
             load[assignment.node_id] = load.get(assignment.node_id, 0) + 1
             nodes.append(assignment.node_id)
-        self.assertEqual(sorted(nodes), ["spark0", "spark1", "spark2", "spark3"])
+        self.assertEqual(sorted(nodes), ["spark0", "spark1", "spark2", "spark3", "spark6"])
 
     def test_immediate_efficient_request_stays_on_qwen_lanes(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         topology = SparkTopology.load(TOPOLOGY)
         profile = registry.resolve(capability="efficient", chat=False, job_class="atom_edit")
         assignment = topology.assign_profile(profile, immediate=True, current_load={})
-        self.assertIn(assignment.node_id, {"spark0", "spark1", "spark2", "spark3"})
+        self.assertIn(assignment.node_id, {"spark0", "spark1", "spark2", "spark3", "spark6"})
         self.assertEqual(assignment.reason, "resident_profile")
 
     def test_vllm_chat_routes_to_dsv4_static_lanes(self) -> None:
@@ -88,7 +88,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
                 out_dir=tmp,
                 topology=SparkTopology.load(TOPOLOGY),
             )
-            self.assertEqual(manifest["topology_id"], "static_sparks_2026_05_26_v7")
+            self.assertEqual(manifest["topology_id"], "static_sparks_2026_05_26_v8")
             self.assertEqual(manifest["selected_nodes"]["spark0"], 1)
             self.assertEqual(manifest["selected_nodes"]["spark5"], 1)
             responses = [json.loads(line) for line in (Path(tmp) / "responses.jsonl").read_text().splitlines()]
@@ -96,13 +96,15 @@ class StaticSparkTopologyTests(unittest.TestCase):
             self.assertEqual(responses[1]["selected_node"]["node_id"], "spark5")
             self.assertEqual(responses[1]["selected_node"]["node_ids"], ["spark4", "spark5"])
 
-    def test_immediate_smart_request_uses_antirez_support_lane(self) -> None:
+    def test_smart_completion_routes_to_dsv4_group_lane(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         topology = SparkTopology.load(TOPOLOGY)
         profile = registry.resolve(capability="smart", chat=False, job_class="atom_edit")
         assignment = topology.assign_profile(profile, immediate=True, current_load={})
-        self.assertEqual(assignment.node_id, "spark6")
-        self.assertEqual(assignment.reason, "resident_profile_immediate")
+        self.assertEqual(profile.profile_id, "dsv4_vllm_mtp_smartest_v1")
+        self.assertEqual(assignment.node_id, "spark5")
+        self.assertEqual(assignment.node_ids, ("spark4", "spark5"))
+        self.assertEqual(assignment.reason, "resident_profile_group")
 
     def test_static_topology_has_no_production_ejection_lane(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
@@ -123,7 +125,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
             [
                 "xhv-001-qwen-vllm-resident-lanes",
                 "xhv-002-dsv4-vllm-mtp-spark45",
-                "xhv-003-antirez-spark6",
+                "xhv-003-spark6-qwen-vllm",
                 "xhv-004-mac-studio-ds4-spark-chat",
                 "xhv-005-web-tool-playwright-host",
                 "xhv-006-dsv4-vllm-lmcache-spark45",
@@ -131,7 +133,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         )
         qwen_task = manifest["tasks"][0]
         self.assertEqual(qwen_task["runner"], "vllm")
-        self.assertEqual(qwen_task["target_nodes"], ["spark0", "spark1", "spark2", "spark3"])
+        self.assertEqual(qwen_task["target_nodes"], ["spark0", "spark1", "spark2", "spark3", "spark6"])
         self.assertIn("qwen3_6_27b_fp8_efficient_v1", qwen_task["profiles"])
         self.assertIn("qwen3_6_35b_a3b_fp8_fastest_v1", qwen_task["profiles"])
 
@@ -152,8 +154,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
                 {"profile_id": "dsv4_vllm_mtp_smartest_v1", "action": "group_secondary", "primary_node": "spark4"},
             ],
         )
-        self.assertEqual(spark6["items"][0]["endpoint"], "/v1/completions")
-        self.assertEqual(spark6["items"][0]["fallback_endpoints"], ["/completion"])
+        self.assertEqual([item["model_id"] for item in spark6["items"]], ["Qwen/Qwen3.6-27B-FP8", "Qwen/Qwen3.6-35B-A3B-FP8"])
         self.assertEqual(spark7["items"], [])
 
     def test_startup_warm_posts_only_executable_items(self) -> None:
@@ -172,21 +173,20 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(calls[0], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-27B-FP8"))
         self.assertEqual(calls[1], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-35B-A3B-FP8"))
 
-    def test_startup_warm_falls_back_for_antirez_endpoint_shapes(self) -> None:
+    def test_startup_warm_posts_to_spark6_qwen_lane(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         topology = SparkTopology.load(TOPOLOGY)
         plan = startup_plan(topology=topology, registry=registry, node_id="spark6")
-        calls: list[str] = []
+        calls: list[tuple[str, str]] = []
 
         def poster(url: str, payload: dict, timeout_s: int) -> dict:
-            calls.append(url)
-            if url.endswith("/v1/completions"):
-                raise RuntimeError("not exposed here")
+            calls.append((url, payload["model"]))
             return {"ok": True}
 
-        result = warm_startup_models(plan=plan, base_url="http://spark.local:18000", timeout_s=3, poster=poster)
+        result = warm_startup_models(plan=plan, base_url="http://spark.local:8000", timeout_s=3, poster=poster)
         self.assertEqual(result["status"], "completed")
-        self.assertEqual(calls, ["http://spark.local:18000/v1/completions", "http://spark.local:18000/completion"])
+        self.assertEqual(calls[0], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-27B-FP8"))
+        self.assertEqual(calls[1], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-35B-A3B-FP8"))
 
 
 if __name__ == "__main__":

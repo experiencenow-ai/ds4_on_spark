@@ -7,11 +7,11 @@
     {
       "task_id": "xhv-001-qwen-vllm-resident-lanes",
       "runner": "vllm",
-      "target_nodes": ["spark0", "spark1", "spark2", "spark3"],
+      "target_nodes": ["spark0", "spark1", "spark2", "spark3", "spark6"],
       "profiles": ["qwen3_6_27b_fp8_efficient_v1", "qwen3_6_35b_a3b_fp8_fastest_v1"],
       "purpose": "Prove --runner vllm works against each resident Qwen lane with both static Qwen profiles loaded.",
       "command_template": "ssh {node} 'cd {repo}/v2 && DS4_VLLM_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests {requests_jsonl} --out {out_dir}/{node}-qwen-vllm --runner vllm --runner-timeout-s 600 --run'",
-      "acceptance": ["all target nodes return completed_count=2", "each result status is completed", "selected profiles include both Qwen profile ids", "capture /v1/models and runner output"]
+      "acceptance": ["all target nodes return completed_count=2", "each result status is completed", "selected profiles include both Qwen profile ids", "capture /v1/models and runner output", "spark6 is included as the fifth Qwen production lane"]
     },
     {
       "task_id": "xhv-002-dsv4-vllm-mtp-spark45",
@@ -23,13 +23,13 @@
       "acceptance": ["request using capability=smartest and chat=true completes", "selected node is spark4+spark5", "transport base_url is the MTP endpoint", "record prompt/completion token usage when endpoint returns it"]
     },
     {
-      "task_id": "xhv-003-antirez-spark6",
-      "runner": "antirez",
+      "task_id": "xhv-003-spark6-qwen-vllm",
+      "runner": "vllm",
       "target_nodes": ["spark6"],
-      "profiles": ["dsv4_antirez_smart_v1"],
-      "purpose": "Prove --runner antirez works against the spark6 antirez/support lane.",
-      "command_template": "ssh spark6 'cd {repo}/v2 && DS4_ANTIREZ_BASE_URL=http://127.0.0.1:18000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests {requests_jsonl} --out {out_dir}/spark6-antirez --runner antirez --runner-timeout-s 1200 --run'",
-      "acceptance": ["smart completion request completes", "selected profile is dsv4_antirez_smart_v1", "response is non-empty", "capture antirez endpoint/version if available"]
+      "profiles": ["qwen3_6_27b_fp8_efficient_v1", "qwen3_6_35b_a3b_fp8_fastest_v1"],
+      "purpose": "Prove --runner vllm works against spark6 after converting it from antirez/support into the fifth resident Qwen lane.",
+      "command_template": "ssh spark6 'cd {repo}/v2 && DS4_VLLM_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests {requests_jsonl} --out {out_dir}/spark6-qwen-vllm --runner vllm --runner-timeout-s 600 --run'",
+      "acceptance": ["completed_count=2", "selected profiles include both Qwen profile ids", "response records are non-empty", "capture /v1/models and runner output"]
     },
     {
       "task_id": "xhv-004-mac-studio-ds4-spark-chat",

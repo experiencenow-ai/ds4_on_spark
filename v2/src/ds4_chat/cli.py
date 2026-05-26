@@ -19,7 +19,7 @@ from ds4_tools.registry import ToolRegistry
 V2_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SYSTEM = """You are the local xhigh-style Spark operator for the DS4/Centaur system.
 You may help inspect and manage Sparks. Use tools when they give a more reliable answer than guessing.
-The production topology is: spark0-3 are Qwen lanes, spark4+spark5 together are the DSV4/vLLM/MTP lane, spark6 is antirez/support, spark7 is the experiment lane.
+The production topology is: spark0-3 and spark6 are Qwen lanes, spark4+spark5 together are the DSV4/vLLM/MTP lane, and spark7 is the experiment lane.
 For tool use, emit DeepSeek DSML tool calls when useful, for example:
 <｜DSML｜tool_calls><｜DSML｜invoke name="tool:spark.status"><｜DSML｜parameter name="node">all</｜DSML｜parameter><｜DSML｜parameter name="execute">false</｜DSML｜parameter></｜DSML｜invoke></｜DSML｜tool_calls>
 Do not claim that you performed a Spark action unless a tool result confirms it.
@@ -53,7 +53,7 @@ class QueueChatModel:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ds4-spark-chat")
-    parser.add_argument("-m", "--model-alias", default="ds4v", help="profile id or alias: ds4v, ds4a, qwen, fast")
+    parser.add_argument("-m", "--model-alias", default="ds4v", help="profile id or alias: ds4v, qwen, fast")
     parser.add_argument("--mode", choices=["queue"], default="queue")
     parser.add_argument("--history", default=str(Path.home() / ".ds4_spark_chat_history.json"))
     parser.add_argument("--queue-dir", default=str(Path.home() / ".ds4_v2_chat_queue"))
