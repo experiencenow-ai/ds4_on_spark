@@ -30,7 +30,14 @@ baseline comparison policy here. The code-rot gate is Centaur's
 
 ```bash
 CENTAUR_REPO=/private/tmp/centaur-v2-main-latest \
-  python3 v2/scripts/score_repo_complexity.py gate-pr --root "$PWD" --base-ref origin/main
+  python3 v2/scripts/score_repo_complexity.py gate-pr \
+  --root "$PWD" \
+  --base-ref origin/main \
+  --output /tmp/ds4_complexity_gate.json
+
+python3 v2/scripts/render_complexity_cost.py \
+  /tmp/ds4_complexity_gate.json \
+  --output /tmp/ds4_complexity_cost.md
 
 PYTHONPATH=/private/tmp/centaur-v2-main-latest \
   python3 -m v2.audit.repo_code_rot \
@@ -47,6 +54,8 @@ gates only on shape regressions such as oversized functions/files and new
 over-50-line functions. The static baseline gate remains available as
 `gate-baseline` for explicit baseline maintenance, but CI uses base-ref
 comparisons for both PRs and pushes. `gate` is a safe alias for `gate-pr`.
+The gate JSON includes a `cost` block, and CI renders that cost into both the
+job summary and an upserted PR comment.
 
 `v2/scripts/run_centaur_audit.sh` runs the PR-delta complexity gate, code-rot
 gate, and the v2 unit tests for local smoke coverage. Override
@@ -58,7 +67,8 @@ gate, and the v2 unit tests for local smoke coverage. Override
 into `.centaur-audit` and runs:
 
 ```bash
-CENTAUR_REPO="$PWD/.centaur-audit" python3 v2/scripts/score_repo_complexity.py gate-pr --root "$PWD" --base-ref "$BASE_SHA_OR_BEFORE_SHA"
+CENTAUR_REPO="$PWD/.centaur-audit" python3 v2/scripts/score_repo_complexity.py gate-pr --root "$PWD" --base-ref "$BASE_SHA_OR_BEFORE_SHA" --output .centaur-complexity-gate.json
+python3 v2/scripts/render_complexity_cost.py .centaur-complexity-gate.json --output .centaur-complexity-cost.md
 PYTHONPATH="$PWD/.centaur-audit" python3 -m v2.audit.repo_code_rot --root "$PWD" --include-dir v2/src --include-dir v2/scripts --docs-dir v2/docs
 PYTHONPATH="$PWD/v2/src" python3 -m unittest discover -s v2/tests -v
 ```
