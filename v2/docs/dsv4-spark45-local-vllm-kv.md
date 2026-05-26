@@ -104,9 +104,17 @@ The critical launch settings are:
 --enable-prefix-caching
 --kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-6}
 --kv-offloading-backend native
+VLLM_USE_SIMPLE_KV_OFFLOAD=1
 --no-disable-hybrid-kv-cache-manager
 --enforce-eager
 ```
+
+Do not lower `--max-model-len` to save RAM. The observed HMA launch can expose
+1M context because DSV4's model-native compressed/sliding KV layout keeps the
+GPU pool around two full 1M requests. If the node is under host-memory pressure,
+reduce avoidable host allocations first: use SimpleCPUOffload, lower
+`DS4_DSV4_KV_OFFLOAD_SIZE`, disable nonessential services, and keep swap as a
+survival rail.
 
 `DS4_DSV4_KV_OFFLOAD_SIZE` is GiB of CPU KV offload buffer summed across TP
 ranks. The conservative default is `6`, which is `3 GiB` on spark4 and `3 GiB`
@@ -115,6 +123,12 @@ much host-memory pressure for a fragile node. Use `4` total (`2 GiB` per node)
 as a recovery setting if sshd or the API becomes unresponsive during startup.
 Smaller pools still provide useful prefix-cache benefit; they just retain fewer
 offloaded blocks before vLLM has to evict or recompute.
+
+Keep `VLLM_USE_SIMPLE_KV_OFFLOAD=1`. Without it, vLLM's native backend can
+select the generic `OffloadingConnector`, whose PyTorch pinned CPU allocations
+may round up and whose persistent SimpleCPUOffload store hooks are not active.
+The Simple connector still uses DSV4 HMA and the same `--kv-offloading-size`
+budget, but it registers exact CPU tensors for DMA and keeps disk reload lazy.
 
 Keep `--block-size 256`. Changing it to 64 breaks DSV4 KV group planning. The
 DSV4 offload support patch makes native offload use the DSV4 group hash size
@@ -177,6 +191,7 @@ The live path uses vLLM native KV offload plus the DS4 persistent
 SimpleCPUOffload store:
 
 ```bash
+export VLLM_USE_SIMPLE_KV_OFFLOAD=1
 export VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT=/var/tmp/ds4_hma_store/dsv4/simple_cpu_offload
 export VLLM_SIMPLE_KV_OFFLOAD_PERSIST_STRICT=1
 ```
@@ -201,6 +216,10 @@ For the live disk-backed mode, use node-sticky routing to the same spark4/5
 service and reuse the same prefix. vLLM computes block hashes for the prefix,
 checks the persistent SimpleCPUOffload store, and materializes matching CPU
 offload blocks lazily.
+
+Startup should say `SimpleCPUOffloadConnector`, not plain `OffloadingConnector`.
+If the log says `OffloadingConnector`, the persistent store environment is not
+driving the connector that actually owns the CPU KV pool.
 
 Do not expect every short request to create useful disk KV. Blocks are persisted
 when vLLM actually offloads completed KV blocks from GPU to CPU. Long repeated

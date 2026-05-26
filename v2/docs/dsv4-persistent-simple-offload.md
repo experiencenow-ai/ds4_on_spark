@@ -100,6 +100,7 @@ The key launch flags are:
 --kv-cache-dtype fp8
 --kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-6}
 --kv-offloading-backend native
+VLLM_USE_SIMPLE_KV_OFFLOAD=1
 ```
 
 The first verified run used `DS4_DSV4_KV_OFFLOAD_SIZE=16`, but that allocates
@@ -107,6 +108,11 @@ The first verified run used `DS4_DSV4_KV_OFFLOAD_SIZE=16`, but that allocates
 recovery boots on memory-sensitive nodes; it still keeps a useful CPU KV pool,
 just with fewer retained blocks. Swap can help keep the OS reachable during
 pressure, but it is not part of the KV capacity plan.
+
+`VLLM_USE_SIMPLE_KV_OFFLOAD=1` is required for this persistent path. Without it,
+vLLM may select the generic native `OffloadingConnector`; that connector can
+serve live CPU offload but it does not own the SimpleCPUOffload persistence hooks
+and can waste host RAM through rounded pinned allocations.
 
 The persistent store must be the same absolute path on spark4 and spark5, and
 that path must be mounted into both containers. The wrapper does this when

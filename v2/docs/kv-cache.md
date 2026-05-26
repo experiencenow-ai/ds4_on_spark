@@ -65,6 +65,7 @@ The production recipe in `recipes/deepseek-v4-flash-spark45.yaml` uses:
 --no-disable-hybrid-kv-cache-manager
 --kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-6}
 --kv-offloading-backend native
+VLLM_USE_SIMPLE_KV_OFFLOAD=1
 ```
 
 The verified 2026-05-26 launch reported:
@@ -90,6 +91,11 @@ and avoids the bad full-KV fallback. Durable restart persistence is handled by
 the native-offload runtime mod in `docs/dsv4-persistent-simple-offload.md`,
 which extends vLLM's HMA-aware `SimpleCPUOffloadConnector` instead of replacing
 it with LMCache.
+
+The `VLLM_USE_SIMPLE_KV_OFFLOAD=1` environment variable is required. Otherwise
+the same native backend can select the generic `OffloadingConnector`; that path
+does not activate the SimpleCPUOffload persistent store and may spend extra host
+RAM through rounded pinned allocations.
 
 Proper DSV4 KV use is:
 
