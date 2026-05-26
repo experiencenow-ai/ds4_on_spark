@@ -176,6 +176,54 @@ allowlisted_runtime_present()
 	return 1
 }
 
+runtime_age_seconds()
+{
+	best=""
+	now="$(date +%s)"
+	if command -v docker >/dev/null 2>&1
+	then
+		for name in $(docker ps --format '{{.Names}}' 2>/dev/null | grep -E '^(vllm_deepseek_v4_flash|vllm_|ds4_vllm_|centaur_vllm_)' || true)
+		do
+			started="$(docker inspect -f '{{.State.StartedAt}}' "$name" 2>/dev/null || true)"
+			start_s="$(date -d "$started" +%s 2>/dev/null || echo '')"
+			case "$start_s" in
+			''|*[!0-9]*)
+				continue
+				;;
+			esac
+			age=$((now - start_s))
+			if [ "$age" -ge 0 ] && { [ "$best" = "" ] || [ "$age" -lt "$best" ]; }
+			then
+				best="$age"
+			fi
+		done
+	fi
+	for pid in $(pgrep -f '/usr/local/bin/vllm serve|/usr/bin/python3 /usr/local/bin/vllm serve|vllm serve /models/|VLLM::' 2>/dev/null || true)
+	do
+		case "$pid" in
+		''|*[!0-9]*)
+			continue
+			;;
+		esac
+		age="$(ps -o etimes= -p "$pid" 2>/dev/null | tr -dc '0-9')"
+		case "$age" in
+		''|*[!0-9]*)
+			continue
+			;;
+		esac
+		if [ "$best" = "" ] || [ "$age" -lt "$best" ]
+		then
+			best="$age"
+		fi
+	done
+	if [ "$best" != "" ]
+	then
+		printf '%s\n' "$best"
+		return 0
+	fi
+	return 1
+}
+
 runtime_load_grace_active()
 {
 	now="$(date +%s)"
@@ -187,6 +235,22 @@ runtime_load_grace_active()
 	if ! allowlisted_runtime_present
 	then
 		rm -f "$RUNTIME_LOAD_FILE" 2>/dev/null || true
+		return 1
+	fi
+	runtime_age="$(runtime_age_seconds 2>/dev/null || echo '')"
+	case "$runtime_age" in
+	''|*[!0-9]*)
+		runtime_age=""
+		;;
+	esac
+	if [ "$runtime_age" != "" ]
+	then
+		if [ "$runtime_age" -lt "$RUNTIME_LOAD_GRACE_SECONDS" ]
+		then
+			log "runtime load grace active runtime_age=${runtime_age}s limit=${RUNTIME_LOAD_GRACE_SECONDS}s; deferring heavy runtime kill"
+			return 0
+		fi
+		log "runtime load grace expired runtime_age=${runtime_age}s limit=${RUNTIME_LOAD_GRACE_SECONDS}s"
 		return 1
 	fi
 	if [ ! -r "$RUNTIME_LOAD_FILE" ]
