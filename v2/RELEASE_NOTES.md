@@ -54,7 +54,7 @@ Result: 85 tests passed.
 - Added `tool:spark.status`, `tool:spark7.command.run`, and transfer tool entries in the lattice registry.
 - Added `ds4-spark-chat`, a simple CLI chat interface for the resident vLLM/MTP lane with optional spark7 tool access.
 - Added `docs/xhigh-live-validation.md` and `profiles/validation/xhigh_live_validation_tasks.json` for the required live v2 runner checks.
-- Added `docs/kv-cache.md` and `profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json` as optional HMA/native CPU KV-offload plumbing for the existing DSV4 profile.
+- Added `docs/kv-cache.md`, the source-built local DSV4 launch recipe, and `profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json` as HMA/native CPU KV-offload plumbing for the existing DSV4 profile.
 - Documented live prefix-cache behavior: a spark7 Qwen27 30k-token prompt dropped from 46.190s cold to 0.286s warm, with 29,792 prompt tokens served from local cache.
 - Documented context limits: Qwen tokenizer limit is 262,144 tokens; DSV4 model limit is 1,048,576 tokens; current DSV4 service exposes 2,088,846 GPU KV-token slots.
 

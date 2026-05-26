@@ -306,6 +306,9 @@ Docker-backed service:
 ```bash
 ssh spark4 systemctl --user stop ds4-dsv4-local-head.service
 ssh spark5 systemctl --user stop ds4-dsv4-local-worker.service
-ssh spark4 systemctl --user start ds4-dsv4-vllm.service
+ssh spark4 systemctl --user start ds4-dsv4-docker-legacy.service
 ssh spark4 curl -fsS http://127.0.0.1:8000/v1/models
 ```
+
+`ds4-dsv4-vllm.service` is now a compatibility name for the source-built local
+head service, not the Docker recipe.

@@ -1,24 +1,38 @@
 # DSV4 Persistent Native HMA Offload
 
-DSV4 persistent KV is implemented as a reversible vLLM runtime mod on top of
-vLLM's native `SimpleCPUOffloadConnector`. This is deliberately not an LMCache
-launch. The live DSV4 path already stores the correct HMA KV block tensors in
-native CPU offload; the mod makes that CPU offload pool durable across vLLM
+DSV4 persistent KV is implemented on top of vLLM's native
+`SimpleCPUOffloadConnector`. This is deliberately not an LMCache launch. The
+live DSV4 path already stores the correct HMA KV block tensors in native CPU
+offload; the DS4 patch makes that CPU offload pool durable across vLLM
 restarts.
+
+Current production target:
+
+```text
+launch script: scripts/ds4_dsv4_spark45_local_vllm.sh
+systemd units: ds4-dsv4-local-worker.service, ds4-dsv4-local-head.service
+vLLM fork:     https://github.com/experiencenow-ai/vllm
+vLLM commit:   75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
+```
+
+The earlier Docker runtime mod remains in `runtime_mods/` as the historical
+proof and rollback substrate. Do not use it to recreate the current
+source-built local runtime.
 
 ## What Is Patched
 
-The Spark recipe wrapper can install:
+The source-built fork carries the same SimpleCPUOffload persistence seams in
+vLLM source. The legacy Spark Docker recipe wrapper can still install:
 
 ```text
 v2/runtime_mods/dsv4_persistent_simple_offload
 ```
 
-This is real vLLM code patching, packaged as a launch-time runtime mod so it is
-easy to revert and does not permanently mutate the base image. `run.sh` executes
-`patch_vllm.py` inside each DSV4 container. The patcher copies
-`persistent_disk.py` into the installed vLLM package and edits these vLLM files
-inside the temporary Docker container:
+This was real vLLM code patching, packaged as a launch-time runtime mod so the
+first proof run was easy to revert and did not permanently mutate the base
+image. `run.sh` executes `patch_vllm.py` inside each DSV4 container. The patcher
+copies `persistent_disk.py` into the installed vLLM package and edits these
+vLLM files inside the temporary Docker container:
 
 ```text
 vllm/v1/simple_kv_offload/metadata.py
@@ -77,8 +91,9 @@ invariants together:
 model:                         deepseek-ai/DeepSeek-V4-Flash
 served model:                  deepseek-v4-flash
 nodes:                         spark4 + spark5 as one no-Ray TP=2 service
-vLLM ref:                      dda4668b59567416f86956cfe7bbc1eab371a61e
-image:                         vllm-node-dsv4-lmcache-rankfix
+historical proof vLLM ref:     dda4668b59567416f86956cfe7bbc1eab371a61e
+current source vLLM ref:       75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
+runtime:                       ~/ds4-vllm-local-75358b5
 max_model_len:                 1048576
 block_size:                    256
 hybrid KV manager:             enabled
@@ -87,7 +102,7 @@ KV cache dtype:                fp8
 KV offload backend:            native
 KV offload size:               8 GiB total default, 4 GiB per TP rank
 KV connector:                  SimpleCPUOffloadConnector
-persistent runtime mod:        ds4-dsv4-persistent-simple-offload
+persistent implementation:     source-built SimpleCPUOffload persistence
 PYTHONHASHSEED:                0
 ```
 
@@ -116,8 +131,8 @@ vLLM may select the generic native `OffloadingConnector`; that connector can
 serve live CPU offload but it does not own the SimpleCPUOffload persistence hooks
 and can waste host RAM through rounded pinned allocations.
 
-The persistent store must be the same absolute path on spark4 and spark5, and
-that path must be mounted into both containers. The wrapper does this when
+The persistent store must be the same absolute path on spark4 and spark5. The
+local launch script exports it as `VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT` when
 `DS4_DSV4_PERSIST_STORE` is set. Use a model/topology-specific store path; do
 not share one store across different vLLM commits, TP layouts, model revisions,
 block sizes, or cache dtypes.
@@ -141,7 +156,7 @@ can change token hashes and miss the cache.
 
 Operational flow:
 
-1. Start DSV4 with the golden recipe and a persistent store.
+1. Start DSV4 with the golden local launch and a persistent store.
 2. Send one warm request containing the full shared prefix.
 3. Send follow-up requests with the exact same prefix and only suffix changes.
 4. Keep those requests sticky to the same DSV4 service lane.
@@ -187,19 +202,21 @@ DS4_DSV4_PYTHONHASHSEED=0
 Then restart the normal DSV4 service:
 
 ```bash
-systemctl --user restart ds4-dsv4-vllm.service
+ssh spark5 systemctl --user restart ds4-dsv4-local-worker.service
+ssh spark4 systemctl --user restart ds4-dsv4-local-head.service
 ```
 
-The wrapper mounts the same absolute store path into both containers, adds the
-container env vars, copies the runtime mod into the Spark recipe runner, and
-adds it to the installed recipe for that launch.
+The local launch script exports the persistent store into vLLM as
+`VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT` on both Spark ranks. Use the same
+absolute path on spark4 and spark5.
 
 Quick read-only checks after launch:
 
 ```bash
-curl -sS http://127.0.0.1:8000/v1/models
-docker logs --tail 200 vllm_deepseek_v4_flash
-find "$DS4_DSV4_PERSIST_STORE" -type f | wc -l
+ssh spark4 curl -fsS http://127.0.0.1:8000/v1/models
+ssh spark4 journalctl --user -u ds4-dsv4-local-head.service -n 200 --no-pager
+ssh spark5 journalctl --user -u ds4-dsv4-local-worker.service -n 200 --no-pager
+ssh spark4 find "$DS4_DSV4_PERSIST_STORE" -type f
 ```
 
 ## Revert
@@ -207,12 +224,13 @@ find "$DS4_DSV4_PERSIST_STORE" -type f | wc -l
 Remove or comment out `DS4_DSV4_PERSIST_STORE` and restart:
 
 ```bash
-systemctl --user restart ds4-dsv4-vllm.service
+ssh spark5 systemctl --user restart ds4-dsv4-local-worker.service
+ssh spark4 systemctl --user restart ds4-dsv4-local-head.service
 ```
 
-The containers are launched with `--rm`. Restarting without the persistent
-store env returns to the unmodified image and the normal native CPU offload
-path. The disk store may be left in place or removed separately.
+Restarting without the persistent store env keeps normal native CPU offload but
+disables durable disk reload. The disk store may be left in place or removed
+separately.
 
 ## Required Hash Stability
 
@@ -226,7 +244,8 @@ Use the same prefix before and after a restart:
 
 1. Warm a deterministic long prefix through `deepseek-v4-flash`.
 2. Confirm the store contains worker block files and `scheduler_index.json`.
-3. Restart `ds4-dsv4-vllm.service` with the same store.
+3. Restart `ds4-dsv4-local-worker.service` and `ds4-dsv4-local-head.service`
+   with the same store.
 4. Re-run the same prefix.
 5. Confirm startup logs report restored persistent CPU blocks.
 6. Confirm TTFT or prefill work is lower than a cold prefix.
@@ -248,8 +267,8 @@ spark4 store files after replay:        1266
 spark5 store files after replay:        1265
 ```
 
-The working replay was launched through the normal spark4+spark5 no-Ray DSV4
-recipe with:
+The original proof replay was launched through the legacy spark4+spark5 no-Ray
+Docker recipe with:
 
 ```bash
 DS4_DSV4_RECIPE_SOURCE=/tmp/ds4_dsv4_persistent_trial/v2/recipes/deepseek-v4-flash-spark45.yaml

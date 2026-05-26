@@ -1,5 +1,5 @@
 {
-  "file_count": 104,
+  "file_count": 110,
   "files": [
     {
       "bytes": 709,
@@ -12,19 +12,34 @@
       "sha256": "0f5d77da16dd782308999fbb09519e0cc6c80bd179e9e50f2d36107acca65805"
     },
     {
-      "bytes": 8312,
+      "bytes": 8389,
       "path": "README.md",
-      "sha256": "427b98ddc4cc4f14eb1090e4ee84ed10b717b1059e2ef583881b1d1ed0c19c79"
+      "sha256": "b64f33a5ad05685ca6f2bca124341c73d0245aa61adfa04b950704428bbce407"
     },
     {
-      "bytes": 4240,
+      "bytes": 4275,
       "path": "RELEASE_NOTES.md",
-      "sha256": "7eb05392ec67608d65158a73f0e87b749a7c6fd82777b626e662750046adbddb"
+      "sha256": "359901697d40fe59a52d62e1cc0973fc88d88fd4ae24253cceb20af526b239a2"
     },
     {
-      "bytes": 530,
+      "bytes": 574,
+      "path": "deploy/systemd-user/ds4-dsv4-docker-legacy.service",
+      "sha256": "13f57c5d0f325e21c093c8661aefb64bbda14c793c50fc8cc239891f7ec1b1e6"
+    },
+    {
+      "bytes": 529,
+      "path": "deploy/systemd-user/ds4-dsv4-local-head.service",
+      "sha256": "745a69cef7db42c902a38e1bc5103a2f778ef1d19846fbf7067dc7f35394cdfd"
+    },
+    {
+      "bytes": 501,
+      "path": "deploy/systemd-user/ds4-dsv4-local-worker.service",
+      "sha256": "d42873f129dcf3faadd9d475093d6544742e170211fa0b13c264d1c7cf6df864"
+    },
+    {
+      "bytes": 535,
       "path": "deploy/systemd-user/ds4-dsv4-vllm.service",
-      "sha256": "d0a9fa907aee5bdfd12fa51e161f54e8a7529415eb5d8383327160a7e0ce27b0"
+      "sha256": "2e9c8fe26a26ea514527655de29e8c4ec545674f5d7b43e4da567f31c9e6b23e"
     },
     {
       "bytes": 695,
@@ -57,14 +72,24 @@
       "sha256": "ddbc31642ecda68af2eea7919b45ebb6f3455574ccc50af7808d6ff616266d94"
     },
     {
+      "bytes": 10689,
+      "path": "docs/dsv4-persistent-simple-offload.md",
+      "sha256": "5f98eeda8f8c76087f481bd8f819df69a3f1eb83f9f3755625d32e5f27526997"
+    },
+    {
+      "bytes": 10915,
+      "path": "docs/dsv4-spark45-local-vllm-kv.md",
+      "sha256": "dc746293934f5e2792e1f587d3794ad742bc188b2f2623ac290036f4ff860ae2"
+    },
+    {
       "bytes": 6018,
       "path": "docs/inference-queue.md",
       "sha256": "fa1eb36c2546e2f625bd0a83653a1018cb249a92eb73367e1881ae79ea5b9546"
     },
     {
-      "bytes": 6640,
+      "bytes": 8681,
       "path": "docs/kv-cache.md",
-      "sha256": "6fd992918b0de46023468be50a4c1107026d6c5766b3c041416f11941a75b146"
+      "sha256": "18881faeca889f20426d0f455616218615aad68fc05b136350284f3ab16be51c"
     },
     {
       "bytes": 1126,
@@ -82,9 +107,9 @@
       "sha256": "2315d54ce1f1b9f7d73b5a6c7d93fddcc5498732c0deb82f8b521e25361acbe8"
     },
     {
-      "bytes": 4505,
+      "bytes": 4768,
       "path": "docs/model-gateway-operational-notes.md",
-      "sha256": "f5e7f77fb7eb06d144860abcc42b198029cf5b4a25f86ae1fc983661ba1633bf"
+      "sha256": "3b3c7a37c4928d510bc2faea3a453c2405b8c772b1327d97301319fe700d05e1"
     },
     {
       "bytes": 1302,
@@ -102,9 +127,9 @@
       "sha256": "f15c5a661c36c4e8a8c05c3548d0754584cdabcbe97fa4c4e38713b067a19c87"
     },
     {
-      "bytes": 8998,
+      "bytes": 9155,
       "path": "docs/static-spark-topology.md",
-      "sha256": "c4f0dc29aec8bd4e04a7391b55f65245cb350ef1e25ce8875cc64f3a12be96c2"
+      "sha256": "13b94943e09f230f2f20e831aefa522a470a21c4de1a874feb6652dab5ea2fb2"
     },
     {
       "bytes": 938,
@@ -122,9 +147,9 @@
       "sha256": "fe8ae6dd2a566ed3ab43defa197e5b031729446484fa40664833446e34ae0a2f"
     },
     {
-      "bytes": 1999,
+      "bytes": 2172,
       "path": "profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json",
-      "sha256": "4cfc52521260ce6793a35d466176584f99f77dd677208169dab496c89ebc51e4"
+      "sha256": "e806ca760ddcd0856cedf9284cfbdfb5a6b8df10b5cff76ebfd0782417d82e9f"
     },
     {
       "bytes": 572,
@@ -167,9 +192,9 @@
       "sha256": "0e7e2155d1208b7f12cbf308ff97d95f992181eee4c8af043121a57b798e6c60"
     },
     {
-      "bytes": 6665,
+      "bytes": 6663,
       "path": "profiles/validation/xhigh_live_validation_tasks.json",
-      "sha256": "bd5ee15a9978520e63c40e8531ca8562b8811f4b16502b18d06e509746f31a5c"
+      "sha256": "43d47c49e29cb9a47d15f5f75104b5f8439f14aa8ab90e4edfad3ffb0dcaabb2"
     },
     {
       "bytes": 763,
@@ -177,14 +202,19 @@
       "sha256": "b5b92c72283b2b822c2cc60ffd115b2ed67531be03341cf566f51d712a8ed8a5"
     },
     {
-      "bytes": 2466,
+      "bytes": 2675,
       "path": "recipes/deepseek-v4-flash-spark45.yaml",
-      "sha256": "bcc7f1d11a13020a3c9e3913e0995bf349fc232efee6616c7e4cb13c4ae924cc"
+      "sha256": "df7b5c73898527ab9b2c6b77d1f8e303712e245c1dfa5ba87493924005aa0e49"
     },
     {
-      "bytes": 2954,
+      "bytes": 4850,
       "path": "scripts/ds4_dsv4_recipe_spark45.sh",
-      "sha256": "2a1700a224722e07fd07448b66a9e61d197f55c5f2c512b81e672c7e55a981f4"
+      "sha256": "2af3bf1174c24d20afa2f3f5cd16225294edde0ddbd147749ad7966a782086af"
+    },
+    {
+      "bytes": 3456,
+      "path": "scripts/ds4_dsv4_spark45_local_vllm.sh",
+      "sha256": "16729e4deefd96b580eadc44ab0cedb6a2236037d2c7cbd3d2b81c7f3da8dec9"
     },
     {
       "bytes": 23970,
@@ -372,9 +402,9 @@
       "sha256": "6e77abdf08bb0861f1dee01617d04f5d7b5c79e90c817cdbec3258c0a1797810"
     },
     {
-      "bytes": 11161,
+      "bytes": 11634,
       "path": "src/ds4_kvcache/service.py",
-      "sha256": "42361f6c5ef191f7713fd984d4676e0238ce98e9324f0d07fef914920d2f7b75"
+      "sha256": "d78df0f4a56d2f99f24bc19e4aaa69f0690fe28a657fe85f811145fc6e56ba3a"
     },
     {
       "bytes": 57,
@@ -437,9 +467,9 @@
       "sha256": "805cb84c524f67192ffa9d66d129991107a47f71822907224f282e9463880d47"
     },
     {
-      "bytes": 3072,
+      "bytes": 6324,
       "path": "tests/test_dsv4_recipe_launch.py",
-      "sha256": "8cf7f60f4bc1cfc53e57064f15a7f1d0e12d82527e64fc6d3a5217cd9320c3c2"
+      "sha256": "7b79a27a2a4ff787c408fcbc966023202ffc833b5ec3aaed9f5b323646e84feb"
     },
     {
       "bytes": 6328,
@@ -457,9 +487,9 @@
       "sha256": "3628b8111d70d6239b529d819b191f1dec0d4f7da250c438ef97259ed2d5111c"
     },
     {
-      "bytes": 4758,
+      "bytes": 5602,
       "path": "tests/test_kvcache_planning.py",
-      "sha256": "3b7e62e7f56befef13a71c215ff7db1d006d63e6ce47aaa41741326f4043b86b"
+      "sha256": "331db0d3dc63deb0cb077d2dea4b55941f1b4b05eb1cced77c681583a2060e48"
     },
     {
       "bytes": 14269,

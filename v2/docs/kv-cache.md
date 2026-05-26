@@ -51,13 +51,25 @@ vllm:prompt_tokens_by_source_total{source="external_kv_transfer"}
 
 ## DSV4 vLLM cache launch
 
-Use the service-backed recipe:
+Use the source-built local vLLM services:
 
 ```bash
-systemctl --user start ds4-dsv4-vllm.service
+ssh spark5 systemctl --user start ds4-dsv4-local-worker.service
+ssh spark4 systemctl --user start ds4-dsv4-local-head.service
 ```
 
-The production recipe in `recipes/deepseek-v4-flash-spark45.yaml` uses:
+The compatibility `ds4-dsv4-vllm.service` on spark4 launches the same local
+head script. `ds4-dsv4-docker-legacy.service` is rollback-only.
+
+The production launch body is
+`scripts/ds4_dsv4_spark45_local_vllm.sh`, built from:
+
+```text
+https://github.com/experiencenow-ai/vllm
+75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
+```
+
+It uses:
 
 ```text
 --max-model-len 1048576
@@ -114,8 +126,8 @@ reload CPU offload blocks after restart, but it still keys those blocks by vLLM
 block hashes. A reused LongMem prefix must be byte/token-identical across warm
 and replay requests.
 
-Do not use `LMCacheConnectorV1Dynamic` for production DSV4 long context in the
-current image. Live introspection showed its classes do not implement
+Do not use `LMCacheConnectorV1Dynamic` for production DSV4 long context. Live
+introspection showed its classes do not implement
 `SupportsHMA`, and the launch log showed that adding it turns off the hybrid KV
 cache manager. The result was only 49,152 GPU KV tokens and a 45,056-token
 request cap.

@@ -30,40 +30,47 @@ resident profiles to the topology.
 
 ## DSV4 Launch Rule
 
-The spark4+spark5 DSV4 lane must use the no-Ray dual-Spark recipe path with
-vLLM's hybrid KV cache manager enabled. This is not an interchangeable
-implementation detail. Each Spark has one GPU, and the working MTP result was
-produced by vLLM's multi-node `mp` backend with explicit node ranks, not by Ray
-placement groups.
+The spark4+spark5 DSV4 lane must use the source-built, host-local vLLM runtime
+with vLLM's hybrid KV cache manager enabled. This is not an interchangeable
+implementation detail. Each Spark has one GPU, and the working MTP result uses
+explicit multi-node ranks, not Ray placement groups.
 
-Use the service wrapper:
+Canonical launch path:
+
+```text
+spark5: deploy/systemd-user/ds4-dsv4-local-worker.service
+  -> scripts/ds4_dsv4_spark45_local_vllm.sh worker
+
+spark4: deploy/systemd-user/ds4-dsv4-local-head.service
+  -> scripts/ds4_dsv4_spark45_local_vllm.sh head
+```
+
+The compatibility unit `ds4-dsv4-vllm.service` also launches the same
+source-built spark4 head script. The old Docker service has been moved to
+`ds4-dsv4-docker-legacy.service` and is rollback-only.
+
+Start worker first, then head:
 
 ```bash
-systemctl --user start ds4-dsv4-vllm.service
+ssh spark5 systemctl --user start ds4-dsv4-local-worker.service
+ssh spark4 systemctl --user start ds4-dsv4-local-head.service
 ```
 
-The service launches:
+The runtime must come from the local vLLM fork:
 
 ```text
-v2/scripts/ds4_dsv4_recipe_spark45.sh
-  -> spark-vllm-docker PR 219
-  -> v2/recipes/deepseek-v4-flash-spark45.yaml
-  -> run-recipe.sh ... -t vllm-node-dsv4-lmcache-rankfix --no-ray --no-cache-dirs -d
+vLLM fork:   https://github.com/experiencenow-ai/vllm
+vLLM commit: 75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
+runtime:     ~/ds4-vllm-local-75358b5
+symlink:     ~/ds4-vllm-local
 ```
 
-The recipe runner must use the old working runtime lineage:
+That source commit includes the DSV4 loader, upstream DSV4 native KV offload,
+and the DS4 persistent SimpleCPUOffload/cache-ref API. Do not recreate the
+service by copying Python files out of the old
+`vllm-node-dsv4-lmcache-rankfix` image.
 
-```text
-spark-vllm-docker: https://github.com/eugr/spark-vllm-docker.git
-runner ref:        refs/pull/219/head
-runner commit:     7a3249e3b4826233972c147a4fe2c6f791227a0b
-vLLM fork:         https://github.com/jasl/vllm.git
-vLLM commit:       dda4668b59567416f86956cfe7bbc1eab371a61e
-recipe source:     https://github.com/tonyd2wild/deepseek-v4-flash-dual-spark-recipe
-recipe commit:     84387a446ae42ca1c98ca912c8136642043ea9c6
-```
-
-The working serving command shape is:
+The required serving command shape is:
 
 ```text
 TP=2, PP=1, EP enabled
@@ -77,15 +84,9 @@ hybrid KV cache manager enabled
 SimpleCPUOffloadConnector via --kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8} --kv-offloading-backend native
 VLLM_USE_SIMPLE_KV_OFFLOAD=1
 NCCL_IB_DISABLE=1, NCCL/Gloo/TP sockets pinned to enP7s7
-FULL_AND_PIECEWISE CUDA graphs
-distributed_executor_backend=mp
+--enforce-eager
 node ranks: spark4 rank 0, spark5 rank 1 --headless
 ```
-
-The `vllm-node-dsv4-lmcache-rankfix` image is the currently verified image for
-this exact shape because it also carries the one-GPU-per-node rank fix. LMCache
-libraries may be present in that image, but the production DSV4 launch must not
-enable `LMCacheConnectorV1Dynamic`.
 
 `LMCacheConnectorV1Dynamic` turns off vLLM's hybrid KV cache manager in this
 runtime. That makes DSV4 compressed/sliding cache groups behave like ordinary
@@ -100,7 +101,7 @@ The live verified launch on 2026-05-26 exposed:
 API endpoint:       http://10.20.0.14:8000/v1
 served model name:  deepseek-v4-flash
 max_model_len:      1048576
-container image:    vllm-node-dsv4-lmcache-rankfix
+runtime target:     experiencenow-ai/vllm@75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
 HMA:                enabled (disable_hybrid_kv_cache_manager=False)
 KV connector:       SimpleCPUOffloadConnector
 CPU KV offload:     8 GiB total default, 4 GiB per TP rank
@@ -119,17 +120,8 @@ GPU KV cache size:  49,152 tokens
 max_model_len:      45,056
 ```
 
-This is the recipe command shape that the service wrapper adapts with the
-rank-fixed image:
-
-```bash
-DOTENV_CONTAINER_NAME=vllm_deepseek_v4_flash \
-  ./run-recipe.sh recipes/deepseek-v4-flash-spark45.yaml \
-    -t vllm-node-dsv4-lmcache-rankfix --no-ray --no-cache-dirs -d
-```
-
 Do not replace this with a Ray vLLM service unless a new benchmark proves the
-Ray path reaches API readiness and matches the recipe-backed lane.
+Ray path reaches API readiness and matches the source-built local lane.
 
 Do not "simplify" the DSV4 lane by disabling MTP. MTP was present in the
 working config. If a future smoke test needs a smaller shape, record it as a
@@ -144,20 +136,30 @@ that already sees the compressed/sliding groups. The current reversible path is
 `SimpleCPUOffloadConnector` CPU block pool instead of flattening DSV4 through
 LMCache.
 
+The legacy Docker artifacts remain only for rollback and historical comparison:
+
+```text
+deploy/systemd-user/ds4-dsv4-docker-legacy.service
+scripts/ds4_dsv4_recipe_spark45.sh
+recipes/deepseek-v4-flash-spark45.yaml
+```
+
+Do not use those artifacts to recreate the current source-built DSV4 lane.
+
 Latest recovery status after the bad Ray launch attempt:
 
 ```text
 checked_at: 2026-05-26 14:28 KST
 spark4: rebooted, up 8 minutes, GPU clear
-spark4 ds4-dsv4-vllm.service: installed, enabled, inactive
+spark4 legacy ds4-dsv4-vllm.service at that time: installed, enabled, inactive
 spark4 ds4-dsv4-ray-head.service: disabled, inactive
 spark5: GPU clear
 spark5 ds4-dsv4-ray-worker.service: disabled, inactive
 spark4 local port 8000: closed because DSV4 is not currently running
 ```
 
-This means the cluster is clean for a recipe-backed DSV4 start, and the broken
-Ray DSV4 services are no longer part of the startup path.
+This means the cluster was clean for a source-built local DSV4 start, and the
+broken Ray DSV4 services were no longer part of the startup path.
 
 ## Policy
 

@@ -2,7 +2,7 @@
 Description=DS4 DSV4 local vLLM head service on spark4
 After=network-online.target
 Wants=network-online.target
-Conflicts=ds4-dsv4-local-head.service
+Conflicts=ds4-dsv4-vllm.service
 StartLimitIntervalSec=1800
 StartLimitBurst=2
 

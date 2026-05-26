@@ -6,26 +6,53 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class Dsv4RecipeLaunchTests(unittest.TestCase):
-    def test_dsv4_recipe_preserves_known_good_no_ray_mtp_shape(self) -> None:
+    def test_local_source_launch_preserves_known_good_no_ray_mtp_shape(self) -> None:
+        script = (ROOT / "scripts" / "ds4_dsv4_spark45_local_vllm.sh").read_text()
+        self.assertIn("75358b5ef269050fbbf0d34a1e9772d8c56ac7c7", script)
+        self.assertIn("kv_offload_size=\"${DS4_DSV4_KV_OFFLOAD_SIZE:-8}\"", script)
+        self.assertIn("VLLM_USE_SIMPLE_KV_OFFLOAD", script)
+        self.assertIn("VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT", script)
+        self.assertIn("--max-model-len 1048576", script)
+        self.assertIn("--max-num-seqs 2", script)
+        self.assertIn("--max-num-batched-tokens 8192", script)
+        self.assertIn("--block-size 256", script)
+        self.assertIn("--kv-cache-dtype fp8", script)
+        self.assertIn("--enable-prefix-caching", script)
+        self.assertIn("--no-disable-hybrid-kv-cache-manager", script)
+        self.assertIn("--kv-offloading-size \"$kv_offload_size\"", script)
+        self.assertIn("--kv-offloading-backend native", script)
+        self.assertIn("--enforce-eager", script)
+        self.assertIn("--nnodes 2", script)
+        self.assertIn("--node-rank \"$node_rank\"", script)
+        self.assertIn("--headless", script)
+        self.assertIn("deepseek_mtp", script)
+        self.assertIn("NCCL_IB_DISABLE=1", script)
+        self.assertNotIn("--kv-transfer-config", script)
+        self.assertNotIn("LMCacheConnectorV1Dynamic", script)
+        self.assertNotIn("LMCACHE_USE_EXPERIMENTAL", script)
+
+    def test_local_systemd_units_launch_source_built_scripts(self) -> None:
+        head = (ROOT / "deploy" / "systemd-user" / "ds4-dsv4-local-head.service").read_text()
+        worker = (ROOT / "deploy" / "systemd-user" / "ds4-dsv4-local-worker.service").read_text()
+        compat = (ROOT / "deploy" / "systemd-user" / "ds4-dsv4-vllm.service").read_text()
+        self.assertIn("ds4_dsv4_spark45_local_vllm.sh head", head)
+        self.assertIn("ds4_dsv4_spark45_local_vllm.sh worker", worker)
+        self.assertIn("ds4_dsv4_spark45_local_vllm.sh head", compat)
+        self.assertNotIn("ds4_dsv4_recipe_spark45.sh start", compat)
+
+    def test_legacy_docker_recipe_is_quarantined(self) -> None:
         recipe = (ROOT / "recipes" / "deepseek-v4-flash-spark45.yaml").read_text()
-        self.assertIn("--distributed-executor-backend mp", recipe)
-        self.assertIn("deepseek_mtp", recipe)
-        self.assertIn("num_speculative_tokens", recipe)
-        self.assertIn("max_model_len: 1048576", recipe)
-        self.assertIn("max_num_seqs: 2", recipe)
-        self.assertIn("dda4668b59567416f86956cfe7bbc1eab371a61e", recipe)
+        service = (ROOT / "deploy" / "systemd-user" / "ds4-dsv4-docker-legacy.service").read_text()
+        self.assertIn("LEGACY Docker fallback recipe", recipe)
         self.assertIn("vllm-node-dsv4-lmcache-rankfix", recipe)
-        self.assertIn("VLLM_USE_SIMPLE_KV_OFFLOAD", recipe)
-        self.assertIn("--no-disable-hybrid-kv-cache-manager", recipe)
-        self.assertIn("--kv-offloading-size 16", recipe)
-        self.assertIn("--kv-offloading-backend native", recipe)
-        self.assertIn('NCCL_IB_DISABLE: "1"', recipe)
-        self.assertNotIn("--kv-transfer-config", recipe)
-        self.assertNotIn("LMCacheConnectorV1Dynamic", recipe)
-        self.assertNotIn("LMCACHE_USE_EXPERIMENTAL", recipe)
+        self.assertIn("--kv-offloading-size 8", recipe)
+        self.assertIn("--enforce-eager", recipe)
+        self.assertIn("ds4_dsv4_recipe_spark45.sh start", service)
+        self.assertNotIn("--kv-offloading-size 16", recipe)
 
     def test_service_wrapper_uses_pinned_recipe_runner(self) -> None:
         script = (ROOT / "scripts" / "ds4_dsv4_recipe_spark45.sh").read_text()
+        self.assertIn("legacy Docker recipe path", script)
         self.assertIn("refs/remotes/origin/pr/219", script)
         self.assertIn("+refs/pull/219/head:refs/remotes/origin/pr/219", script)
         self.assertIn("vllm-node-dsv4-lmcache-rankfix", script)
@@ -74,7 +101,8 @@ class Dsv4RecipeLaunchTests(unittest.TestCase):
 
     def test_topology_doc_warns_against_ray_and_no_mtp_regressions(self) -> None:
         doc = (ROOT / "docs" / "static-spark-topology.md").read_text()
-        self.assertIn("distributed_executor_backend=mp", doc)
+        self.assertIn("experiencenow-ai/vllm", doc)
+        self.assertIn("75358b5ef269050fbbf0d34a1e9772d8c56ac7c7", doc)
         self.assertIn("SimpleCPUOffloadConnector", doc)
         self.assertIn("LMCacheConnectorV1Dynamic", doc)
         self.assertIn("turns off vLLM's hybrid KV cache manager", doc)
