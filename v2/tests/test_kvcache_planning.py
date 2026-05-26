@@ -11,11 +11,11 @@ from ds4_tools.registry import ToolRegistry
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "dsv4_spark45_lmcache.json"
+DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "dsv4_spark45_hma_cpu_offload.json"
 
 
 class KvCachePlanningTests(unittest.TestCase):
-    def test_lmcache_plan_is_single_vllm_instance(self) -> None:
+    def test_hma_offload_plan_is_single_vllm_instance(self) -> None:
         deployment = KvCacheDeployment.load(DEPLOYMENT)
         plan = plan_deployment(deployment)
 
@@ -28,19 +28,31 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["listen_base_url"], "http://0.0.0.0:8000")
         self.assertEqual(plan["openai_base_url"], "http://spark4:8000")
         self.assertIn("--kv-transfer-config", plan["vllm"]["argv"])
+        self.assertIn("--no-disable-hybrid-kv-cache-manager", plan["vllm"]["argv"])
+        self.assertNotIn("LMCacheConnectorV1Dynamic", plan["vllm"]["command"])
         self.assertNotIn("prefiller", plan)
         self.assertNotIn("decoder", plan)
         self.assertNotIn("proxy", plan)
 
-    def test_lmcache_uses_dynamic_connector_and_disk_config(self) -> None:
+    def test_hma_offload_uses_supported_connector(self) -> None:
         deployment = KvCacheDeployment.load(DEPLOYMENT)
         config = kv_transfer_config(deployment.connector)
 
-        self.assertEqual(config["kv_connector"], "LMCacheConnectorV1Dynamic")
+        self.assertEqual(config["kv_connector"], "OffloadingConnector")
         self.assertEqual(config["kv_role"], "kv_both")
-        self.assertEqual(config["kv_connector_module_path"], "lmcache.integration.vllm.lmcache_connector_v1")
-        self.assertEqual(deployment.extra_env["LMCACHE_USE_EXPERIMENTAL"], "True")
-        self.assertTrue(deployment.extra_env["LMCACHE_CONFIG_FILE"].endswith("lmcache_dsv4_spark45.yaml"))
+        self.assertEqual(config["kv_connector_extra_config"]["spec_name"], "CPUOffloadingSpec")
+        self.assertEqual(config["kv_connector_extra_config"]["cpu_bytes_to_use"], "17179869184")
+        self.assertNotIn("kv_connector_module_path", config)
+        self.assertNotIn("LMCACHE_USE_EXPERIMENTAL", deployment.extra_env)
+
+    def test_dsv4_lmcache_dynamic_is_rejected_until_hma_supported(self) -> None:
+        deployment = json.loads(DEPLOYMENT.read_text())
+        deployment["connector"] = {
+            "connector_id": "lmcache_dynamic",
+            "kv_role": "kv_both",
+        }
+        with self.assertRaisesRegex(ValueError, "SupportsHMA"):
+            KvCacheDeployment.from_json(deployment)
 
     def test_write_launch_scripts(self) -> None:
         deployment = KvCacheDeployment.load(DEPLOYMENT)
@@ -50,9 +62,10 @@ class KvCachePlanningTests(unittest.TestCase):
             start = Path(manifest["scripts"]["start_vllm"])
             self.assertTrue(install.exists())
             self.assertTrue(start.exists())
-            self.assertIn("pip install --upgrade lmcache", install.read_text())
-            self.assertIn("mkdir -p /mnt/nvme/ds4-lmcache/dsv4-spark45", install.read_text())
-            self.assertIn("LMCacheConnectorV1Dynamic", start.read_text())
+            self.assertIn("no connector packages requested", install.read_text())
+            self.assertIn("OffloadingConnector", start.read_text())
+            self.assertIn("--no-disable-hybrid-kv-cache-manager", start.read_text())
+            self.assertNotIn("LMCacheConnectorV1Dynamic", start.read_text())
             self.assertTrue((Path(tmp) / "kv_cache_launch_manifest.json").exists())
 
     def test_kv_cache_is_optional_on_existing_profiles(self) -> None:
@@ -62,7 +75,7 @@ class KvCachePlanningTests(unittest.TestCase):
 
         self.assertEqual(dsv4.backend, "vllm_mtp")
         self.assertEqual(qwen.backend, "vllm")
-        self.assertEqual(dsv4.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/dsv4_spark45_lmcache.json"])
+        self.assertEqual(dsv4.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json"])
         self.assertNotIn("optional_kv_cache_deployments", qwen.routing)
         self.assertEqual(registry.resolve(capability="smartest", chat=True, job_class="tool_chat").profile_id, dsv4.profile_id)
 

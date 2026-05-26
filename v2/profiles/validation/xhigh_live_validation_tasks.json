@@ -50,13 +50,13 @@
       "acceptance": ["install succeeds when rendered access is needed", "tool:web.fetch returns ok=true", "mode is rendered", "fallback text mode remains available without Playwright"]
     },
     {
-      "task_id": "xhv-006-dsv4-vllm-lmcache-spark45",
+      "task_id": "xhv-006-dsv4-vllm-hma-kvoffload-spark45",
       "runner": "vllm",
       "target_nodes": ["spark4", "spark5"],
       "profiles": ["dsv4_vllm_mtp_smartest_v1"],
-      "purpose": "Prove the normal DSV4 vLLM profile can be launched with LMCache and reuse a warmed shared_prefix without adding a second DSV4 instance.",
-      "command_template": "cd {repo}/v2 && PYTHONPATH=src python3 -m ds4_kvcache.cli write-scripts --deployment profiles/kv_cache/dsv4_spark45_lmcache.json --output-dir /tmp/ds4_lmcache_dsv4 && /tmp/ds4_lmcache_dsv4/00_install_kv_cache_deps.sh && echo 'start /tmp/ds4_lmcache_dsv4/start_vllm_cache.sh under the Spark vLLM service supervisor before running queue-warm-prefixes'",
-      "acceptance": ["LMCache imports in the vLLM runtime", "one DSV4 vLLM server owns both KV load and save", "queue-warm-prefixes records a completed warm for a long shared_prefix", "second same-prefix request has materially lower TTFT/prefill time than cold", "no prefiller/decoder/proxy split is started"]
+      "purpose": "Prove the normal DSV4 vLLM profile can be launched with HMA enabled and external CPU KV offload without adding a second DSV4 instance.",
+      "command_template": "cd {repo}/v2 && PYTHONPATH=src python3 -m ds4_kvcache.cli write-scripts --deployment profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json --output-dir /tmp/ds4_hma_kvoffload_dsv4 && /tmp/ds4_hma_kvoffload_dsv4/00_install_kv_cache_deps.sh && echo 'start /tmp/ds4_hma_kvoffload_dsv4/start_vllm_cache.sh under the Spark vLLM service supervisor before running queue-warm-prefixes'",
+      "acceptance": ["vLLM starts with HMA enabled", "startup logs do not say hybrid KV cache manager is disabled", "one DSV4 vLLM server owns both KV load and save", "queue-warm-prefixes records a completed warm for a long shared_prefix", "second same-prefix request has materially lower TTFT/prefill time than cold", "no prefiller/decoder/proxy split is started"]
     }
   ]
 }

@@ -75,10 +75,12 @@ The DeepSeek V4 Flash path also carried parser/backend details:
 - DeepSeek V4 Flash on spark4+spark5 used no-Ray multi-node vLLM, not Ray:
   `--distributed-executor-backend mp` plus `--nnodes`, `--node-rank`, and
   `--headless` for the worker rank. Keep that shape for the production DSV4
-  MTP lane. The currently verified launch also requires the LMCache dynamic KV
-  connector, the `vllm-node-dsv4-lmcache-rankfix` image, and `max_model_len`
-  capped at 45056 because larger contexts failed vLLM's live GPU KV sizing
-  checks on spark4/spark5.
+  MTP lane. The currently verified launch keeps vLLM's hybrid KV cache manager
+  enabled, uses `max_model_len=1048576`, and adds native CPU KV offload with
+  `--kv-offloading-size 16 --kv-offloading-backend native`. Do not add
+  `LMCacheConnectorV1Dynamic` to this lane unless a live probe proves the
+  connector implements HMA support; in the current image it disables the DSV4
+  compressed KV layout and collapses useful context back to about 45k tokens.
 - DFlash drafter discovery under `DS4_DFLASH_ROOT`.
 - DFlash speculative config: `method=dflash`, `num_speculative_tokens=15`,
   FlashAttention backend, max seqs 16, GPU utilization 0.85.

@@ -112,7 +112,7 @@ def transfer_run(arguments: dict[str, Any]) -> dict[str, Any]:
 
 def kvcache_plan(arguments: dict[str, Any]) -> dict[str, Any]:
     from ds4_kvcache.service import KvCacheDeployment, plan_deployment
-    deployment = KvCacheDeployment.load(Path(str(arguments.get("deployment", "profiles/kv_cache/dsv4_spark45_lmcache.json"))))
+    deployment = KvCacheDeployment.load(Path(str(arguments.get("deployment", "profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json"))))
     return {"ok": True, "plan": plan_deployment(deployment)}
 
 
