@@ -283,6 +283,13 @@ control plane:
   fresh record with `ssh_exec_ok=false` means the target is writable but SSH
   command execution is degraded; stale or missing records mean no peer has been
   able to update the target for the watchdog window.
+- Persistent peer control: the heartbeat also keeps OpenSSH ControlMaster
+  sessions warm and records `control_exec_ok` separately from the fresh SSH
+  probe. If the persistent control path still works but a fresh SSH login fails,
+  `spark0` uses that already-open path to run the target's narrow sudo
+  watchdog command (`/usr/local/sbin/ds4-sshd-watchdog --force`) with a
+  cooldown. This is an additional actuator; fresh-login failure is still kept as
+  the external health signal.
 - Peer SSH auth: deployment creates a per-node Ed25519 key if needed and
   installs the provided nodes' public keys into each other node's
   `authorized_keys`, preserving existing keys. The heartbeat uses concrete 10G

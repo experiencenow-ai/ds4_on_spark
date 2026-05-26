@@ -17,6 +17,8 @@ from typing import Any
 
 DEFAULT_PEERS = ",".join("spark%d" % i for i in range(8))
 DEFAULT_REMOTE_DIR = ".ds4-rescue/peer-heartbeats"
+DEFAULT_CONTROL_DIR = ".ds4-rescue/ssh-control"
+DEFAULT_RESCUE_STATE_DIR = ".ds4-rescue/remote-rescue-state"
 
 
 def safe_name(value: str) -> str:
@@ -52,6 +54,16 @@ def ssh_base(timeout: float) -> list[str]:
     ])
 
 
+def control_options(control_dir: str, persist_seconds: int) -> list[str]:
+    if persist_seconds <= 0:
+        return([])
+    return([
+        "-o","ControlMaster=auto",
+        "-o","ControlPersist=%ds" % persist_seconds,
+        "-o","ControlPath=%s/ds4-peer-%%C" % control_dir.rstrip("/"),
+    ])
+
+
 def ssh_exec(peer: str, timeout: float) -> dict[str,Any]:
     cmd = ssh_base(timeout) + [peer,"printf ds4-peer-ok"]
     result = run_cmd(cmd,timeout + 2.0)
@@ -59,7 +71,57 @@ def ssh_exec(peer: str, timeout: float) -> dict[str,Any]:
     return(result)
 
 
-def write_record(peer: str, observer: str, remote_dir: str, record: dict[str,Any], timeout: float) -> dict[str,Any]:
+def ssh_control_exec(peer: str, timeout: float, control_dir: str, persist_seconds: int) -> dict[str,Any]:
+    if persist_seconds <= 0:
+        return({"ok":False,"disabled":True})
+    Path(control_dir).expanduser().mkdir(parents=True,exist_ok=True)
+    cmd = ssh_base(timeout) + control_options(control_dir,persist_seconds) + [peer,"printf ds4-peer-control-ok"]
+    result = run_cmd(cmd,timeout + 2.0)
+    result["ok"] = result.get("rc") == 0 and "ds4-peer-control-ok" in str(result.get("stdout",""))
+    return(result)
+
+
+def should_attempt_remote_rescue(observer: str, owner: str, ssh_result: dict[str,Any], control_result: dict[str,Any]) -> bool:
+    if owner == "" or observer != safe_name(owner):
+        return(False)
+    return(bool(control_result.get("ok",False)) and not bool(ssh_result.get("ok",False)))
+
+
+def remote_rescue_state_path(state_dir: str, peer: str) -> Path:
+    return(Path(state_dir).expanduser() / ("%s.json" % safe_name(peer)))
+
+
+def remote_rescue_in_cooldown(path: Path, now: float, cooldown_seconds: int) -> bool:
+    if cooldown_seconds <= 0 or not path.exists():
+        return(False)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        attempted_at = float(data.get("attempted_at_unix",0))
+    except Exception:
+        return(False)
+    return((now - attempted_at) < cooldown_seconds)
+
+
+def trigger_remote_rescue(peer: str, observer: str, target: str, timeout: float, control_dir: str, persist_seconds: int, state_dir: str, cooldown_seconds: int) -> dict[str,Any]:
+    now = time.time()
+    path = remote_rescue_state_path(state_dir,target)
+    path.parent.mkdir(parents=True,exist_ok=True)
+    if remote_rescue_in_cooldown(path,now,cooldown_seconds):
+        return({"ok":False,"skipped":"cooldown","state_path":str(path)})
+    cmd = ssh_base(timeout) + control_options(control_dir,persist_seconds) + [peer,"sudo -n /usr/local/sbin/ds4-sshd-watchdog --force"]
+    result = run_cmd(cmd,timeout + 35.0)
+    result["ok"] = result.get("rc") == 0
+    path.write_text(json.dumps({
+        "observer": observer,
+        "target": target,
+        "attempted_at_unix": int(now),
+        "ok": bool(result.get("ok",False)),
+        "rc": result.get("rc"),
+    },sort_keys=True) + "\n",encoding="utf-8")
+    return(result)
+
+
+def write_record(peer: str, observer: str, remote_dir: str, record: dict[str,Any], timeout: float, control_dir: str, persist_seconds: int) -> dict[str,Any]:
     name = safe_name(observer)
     remote_tmp = "%s/%s.json.tmp" % (remote_dir.rstrip("/"),name)
     remote_final = "%s/%s.json" % (remote_dir.rstrip("/"),name)
@@ -76,9 +138,7 @@ def write_record(peer: str, observer: str, remote_dir: str, record: dict[str,Any
             "-o","ConnectTimeout=%s" % max(1,int(timeout)),
             "-o","StrictHostKeyChecking=no",
             "-o","UserKnownHostsFile=/dev/null",
-            "-b","-",
-            peer,
-        ]
+        ] + control_options(control_dir,persist_seconds) + ["-b","-",peer]
         result = run_cmd(cmd,timeout + 2.0,batch)
         result["ok"] = result.get("rc") == 0
         result["remote_path"] = remote_final
@@ -90,19 +150,30 @@ def write_record(peer: str, observer: str, remote_dir: str, record: dict[str,Any
             pass
 
 
-def build_record(observer: str, target: str, ssh_result: dict[str,Any]) -> dict[str,Any]:
+def build_record(observer: str, target: str, ssh_result: dict[str,Any], control_result: dict[str,Any] | None = None, rescue_result: dict[str,Any] | None = None) -> dict[str,Any]:
     now = time.time()
+    control_result = control_result or {}
+    rescue_result = rescue_result or {}
     return({
         "schema": "ds4.peer_ssh_observation.v1",
         "observer": observer,
         "target": target,
         "checked_at_unix": int(now),
         "checked_at_iso": dt.datetime.fromtimestamp(now,dt.timezone.utc).isoformat(),
+        "probe_mode": "fresh_ssh_plus_persistent_control",
         "ssh_exec_ok": bool(ssh_result.get("ok",False)),
         "ssh_rc": ssh_result.get("rc"),
         "ssh_seconds": ssh_result.get("seconds"),
         "ssh_error": ssh_result.get("error",""),
         "ssh_stderr": str(ssh_result.get("stderr",""))[-500:],
+        "control_exec_ok": bool(control_result.get("ok",False)),
+        "control_rc": control_result.get("rc"),
+        "control_seconds": control_result.get("seconds"),
+        "control_error": control_result.get("error",""),
+        "control_stderr": str(control_result.get("stderr",""))[-500:],
+        "remote_rescue_attempted": "argv" in rescue_result,
+        "remote_rescue_ok": bool(rescue_result.get("ok",False)),
+        "remote_rescue_skipped": rescue_result.get("skipped",""),
     })
 
 
@@ -135,6 +206,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--peers", default=DEFAULT_PEERS)
     p.add_argument("--remote-dir", default=DEFAULT_REMOTE_DIR)
     p.add_argument("--timeout", type=float, default=5.0)
+    p.add_argument("--control-dir", default=DEFAULT_CONTROL_DIR)
+    p.add_argument("--control-persist-seconds", type=int, default=600)
+    p.add_argument("--remote-rescue-owner", default="spark0")
+    p.add_argument("--remote-rescue-state-dir", default=DEFAULT_RESCUE_STATE_DIR)
+    p.add_argument("--remote-rescue-cooldown-seconds", type=int, default=300)
     return(p.parse_args())
 
 
@@ -143,15 +219,24 @@ def main() -> int:
     observer = safe_name(args.node)
     results = []
     for peer,target in parse_peers(args.peers,observer):
+        control_result = ssh_control_exec(target,args.timeout,args.control_dir,args.control_persist_seconds)
         ssh_result = ssh_exec(target,args.timeout)
-        record = build_record(observer,peer,ssh_result)
-        write_result = write_record(target,observer,args.remote_dir,record,args.timeout)
+        rescue_result: dict[str,Any] = {}
+        if should_attempt_remote_rescue(observer,args.remote_rescue_owner,ssh_result,control_result):
+            rescue_result = trigger_remote_rescue(target,observer,peer,args.timeout,args.control_dir,args.control_persist_seconds,args.remote_rescue_state_dir,args.remote_rescue_cooldown_seconds)
+        record = build_record(observer,peer,ssh_result,control_result,rescue_result)
+        write_result = write_record(target,observer,args.remote_dir,record,args.timeout,args.control_dir,args.control_persist_seconds)
         results.append({
             "peer": peer,
             "target": target,
+            "control_exec_ok": bool(control_result.get("ok",False)),
             "ssh_exec_ok": bool(ssh_result.get("ok",False)),
+            "remote_rescue_ok": bool(rescue_result.get("ok",False)),
+            "remote_rescue_skipped": rescue_result.get("skipped",""),
             "write_ok": bool(write_result.get("ok",False)),
+            "control_error": control_result.get("error","") or control_result.get("stderr",""),
             "ssh_error": ssh_result.get("error","") or ssh_result.get("stderr",""),
+            "remote_rescue_error": rescue_result.get("error","") or rescue_result.get("stderr",""),
             "write_error": write_result.get("error","") or write_result.get("stderr",""),
         })
     print(json.dumps({"schema":"ds4.peer_ssh_heartbeat.run.v1","observer":observer,"results":results},sort_keys=True),flush=True)

@@ -27,15 +27,25 @@ class Ds4PeerSshHeartbeatTest(unittest.TestCase):
         mod = load_module()
         self.assertEqual(mod.parse_peers("spark6=spark6@10.20.0.16", "spark0"), [("spark6", "spark6@10.20.0.16")])
 
-    def test_build_record_carries_failed_ssh_status(self) -> None:
+    def test_build_record_carries_fresh_and_control_status(self) -> None:
         mod = load_module()
-        rec = mod.build_record("spark0", "spark6", {"ok": False, "rc": 255, "stderr": "banner timeout", "seconds": 5.1})
+        rec = mod.build_record("spark0", "spark6", {"ok": False, "rc": 255, "stderr": "banner timeout", "seconds": 5.1}, {"ok": True, "rc": 0, "seconds": 0.2})
         self.assertEqual(rec["schema"], "ds4.peer_ssh_observation.v1")
         self.assertEqual(rec["observer"], "spark0")
         self.assertEqual(rec["target"], "spark6")
+        self.assertEqual(rec["probe_mode"], "fresh_ssh_plus_persistent_control")
         self.assertFalse(rec["ssh_exec_ok"])
+        self.assertTrue(rec["control_exec_ok"])
+        self.assertFalse(rec["remote_rescue_attempted"])
         self.assertEqual(rec["ssh_rc"], 255)
         self.assertIn("banner timeout", rec["ssh_stderr"])
+
+    def test_remote_rescue_requires_owner_control_and_failed_fresh_probe(self) -> None:
+        mod = load_module()
+        self.assertTrue(mod.should_attempt_remote_rescue("spark0", "spark0", {"ok": False}, {"ok": True}))
+        self.assertFalse(mod.should_attempt_remote_rescue("spark1", "spark0", {"ok": False}, {"ok": True}))
+        self.assertFalse(mod.should_attempt_remote_rescue("spark0", "spark0", {"ok": True}, {"ok": True}))
+        self.assertFalse(mod.should_attempt_remote_rescue("spark0", "spark0", {"ok": False}, {"ok": False}))
 
 
 if __name__ == "__main__":
