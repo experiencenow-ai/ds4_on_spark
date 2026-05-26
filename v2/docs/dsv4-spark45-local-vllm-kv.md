@@ -4,7 +4,8 @@ This is the live-verified local install recipe for DeepSeek V4 Flash on
 spark4/spark5. It replaces the earlier Docker-backed service with a host-local
 vLLM runtime and keeps native DSV4 KV offload enabled.
 
-Verified live on 2026-05-26:
+The host-local service was first verified live on 2026-05-26 with the same
+launch shape below:
 
 - spark4: `ds4-dsv4-local-head.service` active
 - spark5: `ds4-dsv4-local-worker.service` active
@@ -14,47 +15,68 @@ Verified live on 2026-05-26:
 - `/health` and `/v1/models`: 200 OK
 - `/v1/chat/completions`: 200 OK
 
-## Local Runtime
+The durable source target in this document replaces the emergency image-copy
+runtime patch used during that first proof run. After rebuilding from the pinned
+vLLM commit, re-run the validation commands at the end of this file before
+marking the source-built runtime healthy.
+
+## Source-Controlled Local Runtime
 
 Runtime paths:
 
 ```text
-/home/spark4/ds4-vllm-local-8c4e588
-/home/spark5/ds4-vllm-local-8c4e588
-/home/spark4/ds4-vllm-local -> ds4-vllm-local-8c4e588
-/home/spark5/ds4-vllm-local -> ds4-vllm-local-8c4e588
+/home/spark4/ds4-vllm-local-75358b5
+/home/spark5/ds4-vllm-local-75358b5
+/home/spark4/ds4-vllm-local -> ds4-vllm-local-75358b5
+/home/spark5/ds4-vllm-local -> ds4-vllm-local-75358b5
 ```
 
-The runtime is based on the local vLLM fork commit:
+The durable runtime must be built or installed from the local vLLM fork commit:
 
 ```text
-8c4e588f5efd45f9a119be54a82652d70be5d197
+https://github.com/experiencenow-ai/vllm
+75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
 ```
 
-The working runtime also needs upstream vLLM's DSV4 KV offload support from:
+That commit includes the DS4 persistent SimpleCPUOffload API commits,
+request-side `cache_ref` plumbing, upstream vLLM's DSV4 native KV offload
+support, and the source-controlled DeepSeek V4 loader package under:
 
 ```text
+vllm/models/deepseek_v4/
+```
+
+Important source commits in that history:
+
+```text
+8c4e588f5efd45f9a119be54a82652d70be5d197 Pass request cache refs to offload cache API
 357fddf [kv_offload]: Add DSv4 support (#43142)
 ```
 
-Copy these files from that vLLM tree into the host runtime on both nodes:
+Do not copy Python files out of `vllm-node-dsv4-lmcache-rankfix` for the durable
+local install. That image-copy path was only a rescue step to prove the local
+service could run without Docker. A production local install must be reproduced
+from the pinned vLLM source commit above.
 
-```text
-vllm/v1/kv_offload/base.py
-vllm/distributed/kv_transfer/kv_connector/v1/offloading/scheduler.py
-vllm/distributed/kv_transfer/kv_connector/v1/offloading/worker.py
+Build/install the runtime on both spark4 and spark5 into a new host-local
+prefix, then atomically move the `ds4-vllm-local` symlink after the install
+succeeds:
+
+```bash
+git clone https://github.com/experiencenow-ai/vllm.git ~/src/vllm-dsv4-75358b5
+cd ~/src/vllm-dsv4-75358b5
+git checkout 75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
+python3.12 -m venv ~/ds4-vllm-local-75358b5
+export CUDA_HOME=/usr/local/cuda
+export TORCH_CUDA_ARCH_LIST=12.1a
+export CPATH="$HOME/standard-runtimes/python3.12-dev-extract/usr/include:$HOME/standard-runtimes/python3.12-dev-extract/usr/include/python3.12:${CPATH:-}"
+~/ds4-vllm-local-75358b5/bin/python -m pip install -U pip wheel setuptools
+~/ds4-vllm-local-75358b5/bin/python -m pip install -e .
+ln -sfn ~/ds4-vllm-local-75358b5 ~/ds4-vllm-local
 ```
 
-The DeepSeek model rankfix used by the previous working container is still
-required. Copy these from the known-good `vllm-node-dsv4-lmcache-rankfix` image:
-
-```text
-vllm/model_executor/models/deepseek_v4.py
-vllm/model_executor/models/deepseek_v4_mtp.py
-```
-
-Do not replace `mxfp4.py` with the image version in this local runtime; the
-image copy imports symbols that are not present in this runtime.
+Keep the previous runtime directory intact until the new source-built service
+passes `/health`, `/v1/models`, and a small `/v1/chat/completions` probe.
 
 ## Launch
 

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Durable source runtime:
+# https://github.com/experiencenow-ai/vllm
+# 75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
+
 role="${1:-}"
 if [ "$role" != "head" ] && [ "$role" != "worker" ]; then
 	echo "usage: $0 head|worker" >&2
