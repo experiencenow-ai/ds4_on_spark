@@ -8,6 +8,9 @@ LOCK_DIR=$STATE_DIR/sshd-watchdog.lock
 LOCK_PID_FILE=$LOCK_DIR/pid
 REBOOT_AFTER="${DS4_WATCHDOG_REBOOT_AFTER:-3}"
 LOCK_STALE_REBOOT_SECONDS="${DS4_WATCHDOG_LOCK_STALE_REBOOT_SECONDS:-600}"
+RESTART_SSH_TIMEOUT_SECONDS="${DS4_WATCHDOG_RESTART_SSH_TIMEOUT_SECONDS:-20}"
+KILL_RUNTIME_TIMEOUT_SECONDS="${DS4_WATCHDOG_KILL_RUNTIME_TIMEOUT_SECONDS:-45}"
+SYSRQ_REBOOT="${DS4_WATCHDOG_SYSRQ_REBOOT:-1}"
 TOP_MEM_COUNT="${DS4_WATCHDOG_KILL_TOP_MEM_COUNT:-16}"
 MIN_KILL_RSS_KB="${DS4_WATCHDOG_MIN_KILL_RSS_KB:-262144}"
 KILL_GPU_PROCS="${DS4_WATCHDOG_KILL_GPU_PROCS:-1}"
@@ -38,6 +41,34 @@ log()
 	else
 		echo "$LOGTAG: $*" >&2
 	fi
+}
+
+run_bounded_child()
+{
+	label="$1"
+	seconds="$2"
+	shift 2
+	case "$seconds" in
+	''|*[!0-9]*)
+		seconds=30
+		;;
+	esac
+	( "$@" ) &
+	pid="$!"
+	elapsed=0
+	while kill -0 "$pid" 2>/dev/null
+	do
+		if [ "$elapsed" -ge "$seconds" ]
+		then
+			log "$label child pid=$pid exceeded ${seconds}s; killing child and continuing watchdog parent"
+			kill -9 "$pid" >/dev/null 2>&1 || true
+			return 124
+		fi
+		sleep 1
+		elapsed=$((elapsed + 1))
+	done
+	wait "$pid"
+	return $?
 }
 
 probe_ssh()
@@ -457,7 +488,19 @@ maybe_reboot()
 		return 0
 	fi
 	log "watchdog still failing after $failures failures; rebooting by watchdog policy"
-	systemctl reboot --force
+	request_reboot
+}
+
+request_reboot()
+{
+	log "scheduling asynchronous reboot attempts"
+	(systemctl --no-block reboot --force >/dev/null 2>&1 || true) &
+	(sleep 20; reboot -f >/dev/null 2>&1 || true) &
+	if [ "$SYSRQ_REBOOT" = "1" ]
+	then
+		(sleep 40; echo b > /proc/sysrq-trigger 2>/dev/null || true) &
+	fi
+	return 0
 }
 
 lock_age_seconds()
@@ -492,7 +535,7 @@ handle_lock_busy()
 		if [ "$LOCK_STALE_REBOOT_SECONDS" != "0" ] && [ "$age" -ge "$LOCK_STALE_REBOOT_SECONDS" ]
 		then
 			log "previous watchdog pid=$pid still active after ${age}s; rebooting by stale-lock policy"
-			systemctl reboot --force
+			request_reboot
 		fi
 		log "previous watchdog run still active pid=$pid age=${age}s; skipping"
 		return 1
@@ -506,7 +549,7 @@ run_rescue()
 {
 	reason="$1"
 	log "$reason; restarting ssh"
-	restart_ssh || true
+	run_bounded_child restart_ssh "$RESTART_SSH_TIMEOUT_SECONDS" restart_ssh || true
 	sleep 2
 	if probe_ssh
 	then
@@ -521,9 +564,9 @@ run_rescue()
 		return 1
 	fi
 	log "SSH banner still failing after restart; escalating to runtime and memory-hog kill"
-	kill_heavy_runtimes
+	run_bounded_child kill_heavy_runtimes "$KILL_RUNTIME_TIMEOUT_SECONDS" kill_heavy_runtimes || true
 	sleep 5
-	restart_ssh || true
+	run_bounded_child restart_ssh "$RESTART_SSH_TIMEOUT_SECONDS" restart_ssh || true
 	sleep 2
 	if probe_ssh
 	then
@@ -541,15 +584,15 @@ run_peer_rescue()
 {
 	reason="$1"
 	log "$reason; external peer health failed; restarting ssh"
-	restart_ssh || true
+	run_bounded_child restart_ssh "$RESTART_SSH_TIMEOUT_SECONDS" restart_ssh || true
 	sleep 2
 	failures="$(record_failure)"
 	log "external peer health still awaiting recovery after ssh restart; consecutive_failures=$failures"
 	maybe_reboot "$failures"
 	log "external peer health still unhealthy after ssh restart; killing heavy runtimes"
-	kill_heavy_runtimes
+	run_bounded_child kill_heavy_runtimes "$KILL_RUNTIME_TIMEOUT_SECONDS" kill_heavy_runtimes || true
 	sleep 5
-	restart_ssh || true
+	run_bounded_child restart_ssh "$RESTART_SSH_TIMEOUT_SECONDS" restart_ssh || true
 	return 1
 }
 
