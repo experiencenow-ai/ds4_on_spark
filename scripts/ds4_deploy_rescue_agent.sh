@@ -87,6 +87,24 @@ install_root_watchdog()
 	fi
 }
 
+extend_swap()
+{
+	host="$1"
+	if [ "${DS4_EXTEND_SWAP:-0}" != "1" ]
+	then
+		return 0
+	fi
+	if [ "${DS4_REMOTE_SUDO_TTY:-0}" = "1" ]
+	then
+		ssh $ssh_opts -tt "$host" 'sudo "$HOME/.ds4-rescue/spark_extend_swap.sh" /swap-extra-16g.img 16'
+	elif [ "$sudo_password" = "" ]
+	then
+		ssh $ssh_opts "$host" 'sudo -n "$HOME/.ds4-rescue/spark_extend_swap.sh" /swap-extra-16g.img 16'
+	else
+		printf '%s\n' "$sudo_password" | ssh $ssh_opts "$host" 'sudo -S -p "" "$HOME/.ds4-rescue/spark_extend_swap.sh" /swap-extra-16g.img 16'
+	fi
+}
+
 echo "==> preparing peer SSH key mesh"
 for host in "$@"
 do
@@ -109,6 +127,8 @@ do
 	then
 		echo "==> $host: install root watchdog and enable linger"
 		install_root_watchdog "$host"
+		echo "==> $host: extend persistent swap if requested"
+		extend_swap "$host"
 	else
 		echo "==> $host: skipped root watchdog; rerun with DS4_RESCUE_ROOT=1"
 	fi
