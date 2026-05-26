@@ -27,6 +27,7 @@ port="${DS4_DSV4_PORT:-8000}"
 master_addr="${DS4_DSV4_MASTER_ADDR:-10.20.0.14}"
 master_port="${DS4_DSV4_MASTER_PORT:-29511}"
 persistent_store="${DS4_DSV4_PERSIST_STORE:-/var/tmp/ds4_hma_store/dsv4/simple_cpu_offload}"
+kv_offload_size="${DS4_DSV4_KV_OFFLOAD_SIZE:-8}"
 python_dev_include="${DS4_DSV4_PYTHON_DEV_INCLUDE:-$HOME/standard-runtimes/python3.12-dev-extract/usr/include}"
 
 export PATH="$runtime/bin:/usr/local/cuda/bin:$PATH"
@@ -67,7 +68,7 @@ exec "$runtime/bin/python" "$runtime/bin/vllm" serve "$model_path" \
 	--max-num-batched-tokens 8192 \
 	--gpu-memory-utilization 0.8 \
 	--no-disable-hybrid-kv-cache-manager \
-	--kv-offloading-size 16 \
+	--kv-offloading-size "$kv_offload_size" \
 	--kv-offloading-backend native \
 	--no-enable-flashinfer-autotune \
 	--enforce-eager \
