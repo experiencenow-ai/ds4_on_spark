@@ -1,0 +1,7 @@
+[Unit]
+Description=DS4 peer SSH observation publisher
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.ds4-rescue/ds4_peer_ssh_heartbeat.py --node %u --peers spark0=spark0@10.20.0.10,spark1=spark1@10.20.0.11,spark2=spark2@10.20.0.12,spark3=spark3@10.20.0.13,spark4=spark4@10.20.0.14,spark5=spark5@10.20.0.15,spark6=spark6@10.20.0.16,spark7=spark7@10.20.0.17 --remote-dir .ds4-rescue/peer-heartbeats --timeout 5

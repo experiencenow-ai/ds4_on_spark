@@ -276,9 +276,22 @@ control plane:
   `~/.ds4-rescue/token`; do not commit or print it.
 - Persistence: `loginctl enable-linger` is enabled for `spark0` through
   `spark7`, so the user service can start at boot without an active SSH login.
+- Peer SSH health: `ds4-peer-ssh-heartbeat.timer` runs every minute as the
+  Spark user. Each Spark tries the other seven Spark SSH paths and publishes a
+  JSON observation into the target node's `~/.ds4-rescue/peer-heartbeats/`
+  directory. A fresh record with `ssh_exec_ok=true` means externally healthy; a
+  fresh record with `ssh_exec_ok=false` means the target is writable but SSH
+  command execution is degraded; stale or missing records mean no peer has been
+  able to update the target for the watchdog window.
+- Peer SSH auth: deployment creates a per-node Ed25519 key if needed and
+  installs the provided nodes' public keys into each other node's
+  `authorized_keys`, preserving existing keys. The heartbeat uses concrete 10G
+  control targets such as `spark6=spark6@10.20.0.16`, not Mac-only SSH aliases.
 - Local self-heal: `ds4-sshd-watchdog.timer` runs every minute as root. If the
-  local SSH banner probe fails, it restarts SSH, then escalates to runtime and
-  memory-hog cleanup if SSH still does not recover.
+  local SSH banner probe fails, or if peer-written external health records are
+  degraded/stale for more than `DS4_WATCHDOG_PEER_STALE_SECONDS` seconds
+  (default `300`), it restarts SSH, then escalates to runtime and memory-hog
+  cleanup.
 - Allowlisted heavy-runtime kills: Docker containers named
   `vllm_deepseek_v4_flash`, `vllm_*`, `ds4_vllm_*`, or `centaur_vllm_*`, plus
   process command lines matching `vllm serve` / `VLLM::`. Ray kills are disabled
@@ -288,9 +301,11 @@ control plane:
   while protecting only essential OS/network/SSH processes. Tunables:
   `DS4_WATCHDOG_KILL_TOP_MEM_COUNT`, `DS4_WATCHDOG_MIN_KILL_RSS_KB`, and
   `DS4_WATCHDOG_KILL_GPU_PROCS`.
-- Reboot escalation is available but disabled by default. Set
-  `DS4_WATCHDOG_REBOOT_AFTER=N` to reboot after `N` consecutive failed rescue
-  attempts.
+- Reboot escalation is enabled as the last resort after `3` consecutive failed
+  rescue attempts by default. Set `DS4_WATCHDOG_REBOOT_AFTER=N` to adjust it or
+  `0` to disable it. Peer-health knobs are `DS4_WATCHDOG_PEER_MIN_FRESH`,
+  `DS4_WATCHDOG_PEER_STALE_SECONDS`, and
+  `DS4_WATCHDOG_PEER_BOOT_GRACE_SECONDS`.
 - Narrow sudo: `/etc/sudoers.d/ds4-sshd-rescue` allows only `systemctl restart
   ssh`, `systemctl restart sshd`, and `/usr/local/sbin/ds4-sshd-watchdog`.
 

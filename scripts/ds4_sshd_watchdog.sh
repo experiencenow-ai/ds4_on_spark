@@ -5,10 +5,14 @@ LOGTAG=ds4-sshd-watchdog
 STATE_DIR=/run/ds4-rescue
 FAIL_FILE=$STATE_DIR/sshd-watchdog.failures
 LOCK_DIR=$STATE_DIR/sshd-watchdog.lock
-REBOOT_AFTER="${DS4_WATCHDOG_REBOOT_AFTER:-0}"
+REBOOT_AFTER="${DS4_WATCHDOG_REBOOT_AFTER:-3}"
 TOP_MEM_COUNT="${DS4_WATCHDOG_KILL_TOP_MEM_COUNT:-16}"
 MIN_KILL_RSS_KB="${DS4_WATCHDOG_MIN_KILL_RSS_KB:-262144}"
 KILL_GPU_PROCS="${DS4_WATCHDOG_KILL_GPU_PROCS:-1}"
+PEER_DIR="${DS4_WATCHDOG_PEER_DIR:-}"
+PEER_STALE_SECONDS="${DS4_WATCHDOG_PEER_STALE_SECONDS:-300}"
+PEER_MIN_FRESH="${DS4_WATCHDOG_PEER_MIN_FRESH:-1}"
+PEER_BOOT_GRACE_SECONDS="${DS4_WATCHDOG_PEER_BOOT_GRACE_SECONDS:-600}"
 
 log()
 {
@@ -34,6 +38,103 @@ try:
     sys.exit(0 if data.startswith(b"SSH-") else 1)
 except Exception:
     sys.exit(1)
+PY
+}
+
+peer_dir()
+{
+	if [ "$PEER_DIR" != "" ]
+	then
+		printf '%s\n' "$PEER_DIR"
+		return 0
+	fi
+	for dir in /home/spark*/.ds4-rescue/peer-heartbeats
+	do
+		if [ -d "$dir" ]
+		then
+			printf '%s\n' "$dir"
+			return 0
+		fi
+	done
+	return 1
+}
+
+peer_health()
+{
+	dir="$(peer_dir 2>/dev/null || true)"
+	if [ "$dir" = "" ]
+	then
+		printf 'peer_health=disabled reason=no-peer-dir\n'
+		return 0
+	fi
+	DS4_PEER_DIR="$dir" DS4_PEER_STALE_SECONDS="$PEER_STALE_SECONDS" DS4_PEER_MIN_FRESH="$PEER_MIN_FRESH" DS4_PEER_BOOT_GRACE_SECONDS="$PEER_BOOT_GRACE_SECONDS" python3 - <<'PY'
+import glob
+import json
+import os
+import sys
+import time
+
+def intval(name, default):
+    try:
+        return int(os.environ.get(name, str(default)))
+    except Exception:
+        return default
+
+peer_dir = os.environ["DS4_PEER_DIR"]
+stale = max(30, intval("DS4_PEER_STALE_SECONDS", 300))
+min_fresh = max(1, intval("DS4_PEER_MIN_FRESH", 1))
+boot_grace = max(stale, intval("DS4_PEER_BOOT_GRACE_SECONDS", 600))
+now = int(time.time())
+try:
+    with open("/proc/uptime", "r", encoding="utf-8") as fp:
+        uptime = int(float(fp.read().split()[0]))
+except Exception:
+    uptime = boot_grace + 1
+fresh = 0
+healthy = 0
+degraded = 0
+newest_age = None
+seen_files = 0
+for path in glob.glob(os.path.join(peer_dir, "*.json")):
+    seen_files += 1
+    try:
+        with open(path, "r", encoding="utf-8") as fp:
+            rec = json.load(fp)
+    except Exception:
+        continue
+    checked = int(float(rec.get("checked_at_unix", 0)))
+    age = now - checked
+    if newest_age is None or age < newest_age:
+        newest_age = age
+    if checked <= 0 or age > stale:
+        continue
+    fresh += 1
+    if rec.get("ssh_exec_ok") is True:
+        healthy += 1
+    else:
+        degraded += 1
+summary = "peer_health=%s dir=%s fresh=%d healthy=%d degraded=%d newest_age=%s min_fresh=%d stale_s=%d" % (
+    "%s", peer_dir, fresh, healthy, degraded, "none" if newest_age is None else newest_age, min_fresh, stale
+)
+if healthy >= min_fresh:
+    print(summary % "healthy")
+    sys.exit(0)
+if seen_files == 0:
+    try:
+        dir_age = now - int(os.stat(peer_dir).st_mtime)
+    except Exception:
+        dir_age = stale
+    if dir_age < stale:
+        print((summary % "init-grace") + " dir_age=%d" % dir_age)
+        sys.exit(0)
+if uptime < boot_grace and fresh == 0:
+    print(summary % "boot-grace")
+    sys.exit(0)
+if fresh >= min_fresh:
+    print(summary % "degraded")
+    sys.exit(10)
+print(summary % "stale")
+sys.exit(11)
 PY
 }
 
@@ -218,7 +319,7 @@ maybe_reboot()
 	then
 		return 0
 	fi
-	log "SSH still wedged after $failures failures; rebooting by watchdog policy"
+	log "watchdog still failing after $failures failures; rebooting by watchdog policy"
 	systemctl reboot --force
 }
 
@@ -251,6 +352,21 @@ run_rescue()
 	return 1
 }
 
+run_peer_rescue()
+{
+	reason="$1"
+	log "$reason; external peer health failed; restarting ssh and killing heavy runtimes"
+	restart_ssh || true
+	sleep 2
+	kill_heavy_runtimes
+	sleep 5
+	restart_ssh || true
+	failures="$(record_failure)"
+	log "external peer health still awaiting recovery; consecutive_failures=$failures"
+	maybe_reboot "$failures"
+	return 1
+}
+
 mkdir -p "$STATE_DIR"
 if ! mkdir "$LOCK_DIR" 2>/dev/null
 then
@@ -268,6 +384,28 @@ esac
 
 if probe_ssh
 then
+	peer_status="$(peer_health)"
+	peer_rc=$?
+	case "$peer_rc" in
+	0)
+		log "$peer_status"
+		clear_failures
+		exit 0
+		;;
+	10)
+		run_peer_rescue "peer records fresh but external SSH unhealthy: $peer_status"
+		exit $?
+		;;
+	11)
+		run_peer_rescue "peer records stale or missing for external SSH: $peer_status"
+		exit $?
+		;;
+	*)
+		log "peer health check failed rc=$peer_rc status=$peer_status; local SSH healthy"
+		clear_failures
+		exit 0
+		;;
+	esac
 	clear_failures
 	exit 0
 fi

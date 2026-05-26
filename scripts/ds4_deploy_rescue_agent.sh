@@ -14,6 +14,7 @@ fi
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 token_file="${DS4_RESCUE_TOKEN_FILE:-/private/tmp/ds4_rescue_token}"
+sudo_password="${DS4_SUDO_PASSWORD:-}"
 if [ ! -s "$token_file" ]
 then
 	umask 077
@@ -23,6 +24,24 @@ import secrets
 print(secrets.token_urlsafe(48))
 PY
 fi
+keys_file="$(mktemp)"
+cleanup()
+{
+	rm -f "$keys_file"
+}
+trap cleanup EXIT INT TERM
+
+ensure_peer_key()
+{
+	host="$1"
+	ssh "$host" 'mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"; if [ ! -s "$HOME/.ssh/id_ed25519.pub" ]; then ssh-keygen -q -t ed25519 -N "" -f "$HOME/.ssh/id_ed25519" -C "ds4-peer-ssh:$(whoami)@$(hostname)"; fi; chmod 600 "$HOME/.ssh/id_ed25519"; chmod 644 "$HOME/.ssh/id_ed25519.pub"; cat "$HOME/.ssh/id_ed25519.pub"'
+}
+
+install_peer_keys()
+{
+	host="$1"
+	ssh "$host" 'mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"; touch "$HOME/.ssh/authorized_keys"; chmod 600 "$HOME/.ssh/authorized_keys"; tmp="$(mktemp)"; cat > "$tmp"; while IFS= read -r key; do [ "$key" != "" ] || continue; grep -qxF "$key" "$HOME/.ssh/authorized_keys" || printf "%s\n" "$key" >> "$HOME/.ssh/authorized_keys"; done < "$tmp"; rm -f "$tmp"' < "$keys_file"
+}
 
 copy_payload()
 {
@@ -31,6 +50,9 @@ copy_payload()
 	scp "$repo_dir/scripts/ds4_rescue_agent.py" "$host:.ds4-rescue/ds4_rescue_agent.py"
 	scp "$repo_dir/scripts/ds4_rescue_agent.service" "$host:.config/systemd/user/ds4-rescue-agent.service"
 	scp "$repo_dir/scripts/ds4_rescue_client.py" "$host:.ds4-rescue/ds4_rescue_client.py"
+	scp "$repo_dir/scripts/ds4_peer_ssh_heartbeat.py" "$host:.ds4-rescue/ds4_peer_ssh_heartbeat.py"
+	scp "$repo_dir/scripts/ds4-peer-ssh-heartbeat.service" "$host:.config/systemd/user/ds4-peer-ssh-heartbeat.service"
+	scp "$repo_dir/scripts/ds4-peer-ssh-heartbeat.timer" "$host:.config/systemd/user/ds4-peer-ssh-heartbeat.timer"
 	scp "$repo_dir/scripts/ds4_sshd_watchdog.sh" "$host:.ds4-rescue/ds4_sshd_watchdog.sh"
 	scp "$repo_dir/scripts/ds4_install_sshd_watchdog.sh" "$host:.ds4-rescue/ds4_install_sshd_watchdog.sh"
 	scp "$repo_dir/scripts/ds4-sshd-watchdog.service" "$host:.ds4-rescue/ds4-sshd-watchdog.service"
@@ -43,14 +65,31 @@ copy_payload()
 start_user_service()
 {
 	host="$1"
-	ssh "$host" 'chmod 700 "$HOME/.ds4-rescue"; chmod 600 "$HOME/.ds4-rescue/token"; chmod 755 "$HOME/.ds4-rescue/"*.sh; systemctl --user daemon-reload; systemctl --user enable ds4-rescue-agent; systemctl --user restart ds4-rescue-agent; systemctl --user --no-pager --plain status ds4-rescue-agent | sed -n "1,8p"'
+	ssh "$host" 'chmod 700 "$HOME/.ds4-rescue"; mkdir -p "$HOME/.ds4-rescue/peer-heartbeats"; chmod 700 "$HOME/.ds4-rescue/peer-heartbeats"; chmod 600 "$HOME/.ds4-rescue/token"; chmod 755 "$HOME/.ds4-rescue/"*.sh "$HOME/.ds4-rescue/"*.py; systemctl --user daemon-reload; systemctl --user enable ds4-rescue-agent ds4-peer-ssh-heartbeat.timer; systemctl --user restart ds4-rescue-agent; systemctl --user restart ds4-peer-ssh-heartbeat.timer; systemctl --user --no-pager --plain status ds4-rescue-agent | sed -n "1,8p"; systemctl --user --no-pager --plain list-timers ds4-peer-ssh-heartbeat.timer'
 }
 
 install_root_watchdog()
 {
 	host="$1"
-	ssh -t "$host" 'sudo "$HOME/.ds4-rescue/ds4_install_sshd_watchdog.sh" "$HOME/.ds4-rescue"; sudo loginctl enable-linger "$USER"; loginctl show-user "$USER" -p Linger'
+	if [ "$sudo_password" = "" ]
+	then
+		ssh "$host" 'sudo -n "$HOME/.ds4-rescue/ds4_install_sshd_watchdog.sh" "$HOME/.ds4-rescue"; sudo -n loginctl enable-linger "$USER"; loginctl show-user "$USER" -p Linger'
+	else
+		{ printf '%s\n' "$sudo_password"; printf '%s\n' "$sudo_password"; } | ssh "$host" 'sudo -S "$HOME/.ds4-rescue/ds4_install_sshd_watchdog.sh" "$HOME/.ds4-rescue"; sudo -S loginctl enable-linger "$USER"; loginctl show-user "$USER" -p Linger'
+	fi
 }
+
+echo "==> preparing peer SSH key mesh"
+for host in "$@"
+do
+	echo "==> $host: ensure peer SSH key"
+	ensure_peer_key "$host" >> "$keys_file"
+done
+for host in "$@"
+do
+	echo "==> $host: install peer authorized keys"
+	install_peer_keys "$host"
+done
 
 for host in "$@"
 do

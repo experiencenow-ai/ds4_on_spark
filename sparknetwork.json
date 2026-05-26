@@ -948,17 +948,36 @@
         "/action self_rescue"
       ]
     },
+    "peer_ssh_heartbeat": {
+      "unit": "ds4-peer-ssh-heartbeat.timer",
+      "frequency": "1 minute",
+      "script": "scripts/ds4_peer_ssh_heartbeat.py",
+      "remote_dir": "~/.ds4-rescue/peer-heartbeats",
+      "record_schema": "ds4.peer_ssh_observation.v1",
+      "control_targets": [
+        "spark0=spark0@10.20.0.10",
+        "spark1=spark1@10.20.0.11",
+        "spark2=spark2@10.20.0.12",
+        "spark3=spark3@10.20.0.13",
+        "spark4=spark4@10.20.0.14",
+        "spark5=spark5@10.20.0.15",
+        "spark6=spark6@10.20.0.16",
+        "spark7=spark7@10.20.0.17"
+      ],
+      "purpose": "each Spark writes peer-observed external SSH health records onto the target Spark"
+    },
     "sshd_watchdog": {
       "unit": "ds4-sshd-watchdog.timer",
       "frequency": "1 minute",
       "root_script": "/usr/local/sbin/ds4-sshd-watchdog",
       "local_escalation": [
+        "check peer-written external SSH health records",
         "restart ssh",
         "kill allowlisted vllm containers and processes",
         "kill GPU compute processes",
         "kill top RSS memory-heavy processes above DS4_WATCHDOG_MIN_KILL_RSS_KB",
         "restart ssh again",
-        "optional reboot if DS4_WATCHDOG_REBOOT_AFTER is set"
+        "reboot after DS4_WATCHDOG_REBOOT_AFTER consecutive failed rescue windows"
       ],
       "allowlisted_container_patterns": [
         "vllm_deepseek_v4_flash",
@@ -973,7 +992,10 @@
         "VLLM::"
       ],
       "ray_kill_default": false,
-      "reboot_after_default": 0,
+      "reboot_after_default": 3,
+      "peer_stale_seconds_default": 300,
+      "peer_min_fresh_default": 1,
+      "peer_boot_grace_seconds_default": 600,
       "sudoers": "/etc/sudoers.d/ds4-sshd-rescue",
       "allowed_sudo": [
         "/usr/bin/systemctl restart ssh",
@@ -1001,7 +1023,11 @@
         "tunables": [
           "DS4_WATCHDOG_KILL_TOP_MEM_COUNT",
           "DS4_WATCHDOG_MIN_KILL_RSS_KB",
-          "DS4_WATCHDOG_KILL_GPU_PROCS"
+          "DS4_WATCHDOG_KILL_GPU_PROCS",
+          "DS4_WATCHDOG_PEER_MIN_FRESH",
+          "DS4_WATCHDOG_PEER_STALE_SECONDS",
+          "DS4_WATCHDOG_PEER_BOOT_GRACE_SECONDS",
+          "DS4_WATCHDOG_REBOOT_AFTER"
         ]
       }
     },
