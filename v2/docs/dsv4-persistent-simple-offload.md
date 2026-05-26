@@ -85,7 +85,7 @@ hybrid KV manager:             enabled
 prefix caching:                enabled
 KV cache dtype:                fp8
 KV offload backend:            native
-KV offload size:               8 GiB total default, 4 GiB per TP rank
+KV offload size:               6 GiB total default, 3 GiB per TP rank
 KV connector:                  SimpleCPUOffloadConnector
 persistent runtime mod:        ds4-dsv4-persistent-simple-offload
 PYTHONHASHSEED:                0
@@ -98,14 +98,15 @@ The key launch flags are:
 --enable-prefix-caching
 --no-disable-hybrid-kv-cache-manager
 --kv-cache-dtype fp8
---kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8}
+--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-6}
 --kv-offloading-backend native
 ```
 
 The first verified run used `DS4_DSV4_KV_OFFLOAD_SIZE=16`, but that allocates
-`8 GiB` per Spark node. The safer default is `8` total. Use `4` total for
+`8 GiB` per Spark node. The safer default is `6` total. Use `4` total for
 recovery boots on memory-sensitive nodes; it still keeps a useful CPU KV pool,
-just with fewer retained blocks.
+just with fewer retained blocks. Swap can help keep the OS reachable during
+pressure, but it is not part of the KV capacity plan.
 
 The persistent store must be the same absolute path on spark4 and spark5, and
 that path must be mounted into both containers. The wrapper does this when
