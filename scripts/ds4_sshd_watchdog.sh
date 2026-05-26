@@ -22,6 +22,7 @@ PEER_MIN_FRESH="${DS4_WATCHDOG_PEER_MIN_FRESH:-1}"
 PEER_BOOT_GRACE_SECONDS="${DS4_WATCHDOG_PEER_BOOT_GRACE_SECONDS:-600}"
 RUNTIME_LOAD_GRACE_SECONDS="${DS4_WATCHDOG_RUNTIME_LOAD_GRACE_SECONDS:-2400}"
 RUNTIME_LOAD_FILE=$STATE_DIR/runtime-load-grace-start
+EXTERNAL_DEADMAN_SECONDS="${DS4_WATCHDOG_EXTERNAL_DEADMAN_SECONDS:-28800}"
 
 run_timeout()
 {
@@ -185,6 +186,79 @@ if fresh >= min_fresh:
 print(summary % "stale")
 sys.exit(11)
 PY
+}
+
+peer_newest_external_age()
+{
+	dir="$(peer_dir 2>/dev/null || true)"
+	if [ "$dir" = "" ]
+	then
+		return 1
+	fi
+	DS4_PEER_DIR="$dir" python3 - <<'PY'
+import glob
+import json
+import os
+import sys
+import time
+
+peer_dir = os.environ["DS4_PEER_DIR"]
+now = int(time.time())
+newest = None
+for path in glob.glob(os.path.join(peer_dir, "*.json")):
+    try:
+        with open(path, "r", encoding="utf-8") as fp:
+            rec = json.load(fp)
+        checked = int(float(rec.get("checked_at_unix", 0)))
+    except Exception:
+        checked = 0
+    if checked > 0:
+        age = now - checked
+        if newest is None or age < newest:
+            newest = age
+if newest is not None:
+    print(max(0,newest))
+    sys.exit(0)
+try:
+    print(max(0,now - int(os.stat(peer_dir).st_mtime)))
+    sys.exit(0)
+except Exception:
+    sys.exit(1)
+PY
+}
+
+external_deadman_expired()
+{
+	case "$EXTERNAL_DEADMAN_SECONDS" in
+	''|*[!0-9]*|0)
+		return 1
+		;;
+	esac
+	age="$(peer_newest_external_age 2>/dev/null || echo '')"
+	case "$age" in
+	''|*[!0-9]*)
+		log "external deadman disabled for this run; no peer heartbeat age available"
+		return 1
+		;;
+	esac
+	uptime="$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)"
+	case "$uptime" in
+	''|*[!0-9]*)
+		uptime=0
+		;;
+	esac
+	if [ "$uptime" -lt "$PEER_BOOT_GRACE_SECONDS" ]
+	then
+		log "external deadman suppressed during boot grace uptime=${uptime}s grace=${PEER_BOOT_GRACE_SECONDS}s newest_external_age=${age}s"
+		return 1
+	fi
+	if [ "$age" -ge "$EXTERNAL_DEADMAN_SECONDS" ]
+	then
+		log "external deadman expired newest_external_age=${age}s threshold=${EXTERNAL_DEADMAN_SECONDS}s"
+		return 0
+	fi
+	log "external deadman not expired newest_external_age=${age}s threshold=${EXTERNAL_DEADMAN_SECONDS}s"
+	return 1
 }
 
 restart_ssh()
@@ -633,12 +707,27 @@ run_rescue()
 run_peer_rescue()
 {
 	reason="$1"
+	mode="${2:-degraded}"
 	log "$reason; external peer health failed; restarting ssh"
 	run_bounded_child restart_ssh "$RESTART_SSH_TIMEOUT_SECONDS" restart_ssh || true
 	sleep 2
 	failures="$(record_failure)"
 	log "external peer health still awaiting recovery after ssh restart; consecutive_failures=$failures"
-	maybe_reboot "$failures"
+	if [ "$mode" = "stale" ]
+	then
+		if external_deadman_expired
+		then
+			request_reboot
+		else
+			log "peer records stale but external deadman has not expired; skipping runtime kill and reboot"
+		fi
+		return 1
+	fi
+	if runtime_load_grace_active
+	then
+		log "external peer health degraded, but runtime load grace is active; skipping heavy runtime kill and reboot"
+		return 1
+	fi
 	log "external peer health still unhealthy after ssh restart; killing heavy runtimes"
 	run_bounded_child kill_heavy_runtimes "$KILL_RUNTIME_TIMEOUT_SECONDS" kill_heavy_runtimes || true
 	sleep 5
@@ -684,11 +773,11 @@ then
 		exit 0
 		;;
 	10)
-		run_peer_rescue "peer records fresh but external SSH unhealthy: $peer_status"
+		run_peer_rescue "peer records fresh but external SSH unhealthy: $peer_status" degraded
 		exit $?
 		;;
 	11)
-		run_peer_rescue "peer records stale or missing for external SSH: $peer_status"
+		run_peer_rescue "peer records stale or missing for external SSH: $peer_status" stale
 		exit $?
 		;;
 	*)

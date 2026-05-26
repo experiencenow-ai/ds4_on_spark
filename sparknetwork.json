@@ -973,11 +973,11 @@
       "local_escalation": [
         "check peer-written external SSH health records",
         "restart ssh",
-        "kill allowlisted vllm containers and processes",
-        "kill GPU compute processes",
-        "kill top RSS memory-heavy processes above DS4_WATCHDOG_MIN_KILL_RSS_KB",
+        "for fresh peer reports that say new SSH is unhealthy, defer heavy rescue during runtime load grace, then kill allowlisted runtimes and GPU/memory hogs",
+        "for stale or missing peer reports, skip runtime kill and reboot until external deadman expires",
         "restart ssh again",
-        "reboot after DS4_WATCHDOG_REBOOT_AFTER consecutive failed rescue windows"
+        "local SSH banner failure still reboots after DS4_WATCHDOG_REBOOT_AFTER consecutive failed rescue windows",
+        "external deadman forced reboot after DS4_WATCHDOG_EXTERNAL_DEADMAN_SECONDS with no peer-created heartbeat activity"
       ],
       "allowlisted_container_patterns": [
         "vllm_deepseek_v4_flash",
@@ -996,6 +996,7 @@
       "peer_stale_seconds_default": 300,
       "peer_min_fresh_default": 1,
       "peer_boot_grace_seconds_default": 600,
+      "external_deadman_seconds_default": 28800,
       "sudoers": "/etc/sudoers.d/ds4-sshd-rescue",
       "allowed_sudo": [
         "/usr/bin/systemctl restart ssh",
@@ -1027,6 +1028,7 @@
           "DS4_WATCHDOG_PEER_MIN_FRESH",
           "DS4_WATCHDOG_PEER_STALE_SECONDS",
           "DS4_WATCHDOG_PEER_BOOT_GRACE_SECONDS",
+          "DS4_WATCHDOG_EXTERNAL_DEADMAN_SECONDS",
           "DS4_WATCHDOG_REBOOT_AFTER"
         ]
       }
