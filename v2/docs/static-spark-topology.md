@@ -28,6 +28,98 @@ models for probes without becoming a production resident lane.
 KV-cache experiments should use `ds4_kvcache` deployment files. They do not add
 resident profiles to the topology.
 
+## DSV4 Launch Rule
+
+The spark4+spark5 DSV4 lane must use the no-Ray dual-Spark recipe path. This is
+not an interchangeable implementation detail. Each Spark has one GPU, and the
+working MTP result was produced by vLLM's multi-node `mp` backend with explicit
+node ranks, not by Ray placement groups.
+
+Use the service wrapper:
+
+```bash
+systemctl --user start ds4-dsv4-vllm.service
+```
+
+The service launches:
+
+```text
+v2/scripts/ds4_dsv4_recipe_spark45.sh
+  -> spark-vllm-docker PR 219
+  -> v2/recipes/deepseek-v4-flash-spark45.yaml
+  -> run-recipe.sh ... --no-ray --no-cache-dirs -d
+```
+
+The recipe runner must use the old working runtime lineage:
+
+```text
+spark-vllm-docker: https://github.com/eugr/spark-vllm-docker.git
+runner ref:        refs/pull/219/head
+runner commit:     7a3249e3b4826233972c147a4fe2c6f791227a0b
+vLLM fork:         https://github.com/jasl/vllm.git
+vLLM commit:       dda4668b59567416f86956cfe7bbc1eab371a61e
+recipe source:     https://github.com/tonyd2wild/deepseek-v4-flash-dual-spark-recipe
+recipe commit:     84387a446ae42ca1c98ca912c8136642043ea9c6
+```
+
+The working serving command shape is:
+
+```text
+TP=2, PP=1, EP enabled
+MTP speculative decoding with 2 tokens
+max_model_len=200000
+max_num_seqs=2
+max_num_batched_tokens=8192
+block_size=256
+fp8 KV cache
+FULL_AND_PIECEWISE CUDA graphs
+distributed_executor_backend=mp
+node ranks: spark4 rank 0, spark5 rank 1 --headless
+```
+
+The measured working artifact reported:
+
+```text
+API endpoint:       http://10.20.0.14:8000/v1
+served model name:  deepseek-v4-flash
+API ready:          true
+memory used:        75.76 GiB
+engine init:        about 176s
+MTP load:           about 24-27s per node
+target load:        about 114-142s per node
+single stream:      about 20.9 generated tok/s
+concurrency 2:      about 38-43 aggregate generated tok/s
+```
+
+This is the known-good command from the benchmark artifact:
+
+```bash
+DOTENV_CONTAINER_NAME=vllm_deepseek_v4_flash \
+  ./run-recipe.sh recipes/deepseek-v4-flash-local.yaml --no-ray --no-cache-dirs -d
+```
+
+Do not replace this with a Ray vLLM service unless a new benchmark proves the
+Ray path reaches API readiness and matches the recipe-backed lane.
+
+Do not "simplify" the DSV4 lane by disabling MTP. MTP was present in the
+working config. If a future smoke test needs a smaller shape, record it as a
+temporary diagnostic profile, not as the production DSV4 lane.
+
+Latest recovery status after the bad Ray launch attempt:
+
+```text
+checked_at: 2026-05-26 14:28 KST
+spark4: rebooted, up 8 minutes, GPU clear
+spark4 ds4-dsv4-vllm.service: installed, enabled, inactive
+spark4 ds4-dsv4-ray-head.service: disabled, inactive
+spark5: GPU clear
+spark5 ds4-dsv4-ray-worker.service: disabled, inactive
+spark4 local port 8000: closed because DSV4 is not currently running
+```
+
+This means the cluster is clean for a recipe-backed DSV4 start, and the broken
+Ray DSV4 services are no longer part of the startup path.
+
 ## Policy
 
 The inference scheduler owns node assignment. Centaur requests a capability and job class; it does not target a Spark directly.

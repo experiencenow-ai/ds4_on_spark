@@ -72,6 +72,10 @@ The DeepSeek V4 Flash path also carried parser/backend details:
 - Qwen3 reasoning parser support for Qwen-family models.
 - Code/GLM/Phi parser mapping when the model config advertises those families.
 - DeepSeek V4 HF path using FP8 KV.
+- DeepSeek V4 Flash on spark4+spark5 used no-Ray multi-node vLLM, not Ray:
+  `--distributed-executor-backend mp` plus `--nnodes`, `--node-rank`, and
+  `--headless` for the worker rank. Keep that shape for the production DSV4
+  MTP lane.
 - DFlash drafter discovery under `DS4_DFLASH_ROOT`.
 - DFlash speculative config: `method=dflash`, `num_speculative_tokens=15`,
   FlashAttention backend, max seqs 16, GPU utilization 0.85.
