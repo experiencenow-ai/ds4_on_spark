@@ -102,18 +102,18 @@ The critical launch settings are:
 --block-size 256
 --kv-cache-dtype fp8
 --enable-prefix-caching
---kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8}
+--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-6}
 --kv-offloading-backend native
 --no-disable-hybrid-kv-cache-manager
 --enforce-eager
 ```
 
 `DS4_DSV4_KV_OFFLOAD_SIZE` is GiB of CPU KV offload buffer summed across TP
-ranks. The conservative default is `8`, which is `4 GiB` on spark4 and `4 GiB`
-on spark5. The earlier `16` value gave `8 GiB` per node and may be too much
-host-memory pressure for a fragile node. Use `4` total (`2 GiB` per node) as a
-recovery setting if sshd or the API becomes unresponsive during startup. Smaller
-pools still provide useful prefix-cache benefit; they just retain fewer
+ranks. The conservative default is `6`, which is `3 GiB` on spark4 and `3 GiB`
+on spark5. The first verified `16` value gave `8 GiB` per node and may be too
+much host-memory pressure for a fragile node. Use `4` total (`2 GiB` per node)
+as a recovery setting if sshd or the API becomes unresponsive during startup.
+Smaller pools still provide useful prefix-cache benefit; they just retain fewer
 offloaded blocks before vLLM has to evict or recompute.
 
 Keep `--block-size 256`. Changing it to 64 breaks DSV4 KV group planning. The
@@ -139,6 +139,37 @@ and export:
 ```bash
 export CPATH="$HOME/standard-runtimes/python3.12-dev-extract/usr/include:$HOME/standard-runtimes/python3.12-dev-extract/usr/include/python3.12:${CPATH:-}"
 ```
+
+## Swap Survival Rail
+
+Adding swap is reasonable as a node-survival mechanism, not as inference
+capacity. A `64 GiB` NVMe-backed swapfile can keep sshd/systemd responsive long
+enough to stop a memory-hungry vLLM process, but if inference actively depends
+on swap the service is already unhealthy. CUDA-pinned memory and pinned vLLM
+offload buffers may not be swappable, so swap is not a substitute for reducing
+`DS4_DSV4_KV_OFFLOAD_SIZE`.
+
+Use low swappiness so Linux treats swap as a last-ditch pressure valve:
+
+```bash
+sudo mkdir -p /var/lib/ds4
+sudo fallocate -l 64G /var/lib/ds4/ds4-survival.swap
+sudo chmod 600 /var/lib/ds4/ds4-survival.swap
+sudo mkswap /var/lib/ds4/ds4-survival.swap
+sudo swapon /var/lib/ds4/ds4-survival.swap
+echo '/var/lib/ds4/ds4-survival.swap none swap sw,pri=10 0 0' | sudo tee -a /etc/fstab
+echo 'vm.swappiness=10' | sudo tee /etc/sysctl.d/90-ds4-survival-swap.conf
+sudo sysctl --system
+```
+
+Before enabling the DSV4 service after a bad memory event, boot with:
+
+```bash
+DS4_DSV4_KV_OFFLOAD_SIZE=4
+```
+
+Then raise to the default `6` only after `/health`, `/v1/models`, ssh, and
+system logs stay stable.
 
 ## Persistent KV Store
 
