@@ -66,7 +66,15 @@ def _build_parser() -> argparse.ArgumentParser:
     queue_warm.add_argument("--batch-key")
     queue_warm.add_argument("--min-group-size", type=int, default=2)
     queue_warm.add_argument("--max-output-tokens", type=int, default=1)
+    queue_warm.add_argument("--concurrency", type=int, default=1)
+    queue_warm.add_argument("--max-groups", type=int)
+    queue_warm.add_argument("--max-groups-per-node", type=int)
     queue_warm.add_argument("--force", action="store_true")
+    queue_warm.add_argument("--topology")
+    queue_warm.add_argument("--all-resident-nodes", action="store_true")
+    queue_warm.add_argument("--loop", action="store_true")
+    queue_warm.add_argument("--sleep-s", type=float, default=1.0)
+    queue_warm.add_argument("--max-iterations", type=int, default=0)
 
     queue_prefix_status = sub.add_parser("queue-prefix-status")
     queue_prefix_status.add_argument("--queue-dir", required=True)
@@ -209,6 +217,8 @@ def _queue_work_once(queue: InferenceQueue, registry: ProfileRegistry, runner: o
         warm_prefixes=args.warm_prefixes,
         warm_min_group_size=args.warm_min_group_size,
         warm_max_output_tokens=args.warm_max_output_tokens,
+        warm_max_groups=args.warm_max_groups,
+        warm_max_groups_per_node=args.warm_max_groups_per_node,
     )
 
 
@@ -220,19 +230,32 @@ def _cmd_queue_reap(args: argparse.Namespace) -> int:
 def _cmd_queue_warm_prefixes(args: argparse.Namespace) -> int:
     queue = InferenceQueue(args.queue_dir)
     registry = ProfileRegistry.load(args.profiles_dir)
+    topology = SparkTopology.load(args.topology) if args.topology else None
+    if args.all_resident_nodes and topology is None:
+        raise ValueError("--all-resident-nodes requires --topology")
     runner = _make_runner(args.runner, args.command or [], args.runner_timeout_s)
-    _emit(
-        queue.warm_prefixes(
+    iterations = 0
+    while True:
+        result = queue.warm_prefixes(
             registry=registry,
             runner=runner,
+            topology=topology,
             node_id=args.node_id,
             batch_id=args.batch_id,
             batch_key=args.batch_key,
             min_group_size=args.min_group_size,
             max_output_tokens=args.max_output_tokens,
+            concurrency=args.concurrency,
+            max_groups=args.max_groups,
+            max_groups_per_node=args.max_groups_per_node,
             force=args.force,
+            all_resident_nodes=args.all_resident_nodes,
         )
-    )
+        _emit(result, indent=None, flush=True)
+        iterations += 1
+        if not args.loop or (args.max_iterations > 0 and iterations >= args.max_iterations):
+            break
+        time.sleep(args.sleep_s)
     return 0
 
 
@@ -278,6 +301,8 @@ def _add_queue_worker_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--warm-prefixes", action="store_true")
     parser.add_argument("--warm-min-group-size", type=int, default=2)
     parser.add_argument("--warm-max-output-tokens", type=int, default=1)
+    parser.add_argument("--warm-max-groups", type=int)
+    parser.add_argument("--warm-max-groups-per-node", type=int)
     parser.add_argument("--loop", action="store_true")
     parser.add_argument("--sleep-s", type=float, default=1.0)
     parser.add_argument("--max-iterations", type=int, default=0)

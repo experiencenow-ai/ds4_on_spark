@@ -182,10 +182,45 @@ Then warm groups before normal work:
 PYTHONPATH=src python3 -m ds4_infer.cli queue-warm-prefixes \
   --queue-dir /tmp/ds4_queue \
   --profiles-dir profiles/models \
+  --topology profiles/topology/static_sparks.json \
   --runner spark \
   --node-id spark0 \
   --min-group-size 2 \
   --max-output-tokens 1
+```
+
+For repeated regression/evolution runs where a request may land on any resident
+node for the same profile, warm every resident node for the active work window
+explicitly:
+
+```bash
+PYTHONPATH=src python3 -m ds4_infer.cli queue-warm-prefixes \
+  --queue-dir /tmp/ds4_queue \
+  --profiles-dir profiles/models \
+  --topology profiles/topology/static_sparks.json \
+  --runner spark \
+  --all-resident-nodes \
+  --min-group-size 1 \
+  --concurrency 16 \
+  --max-output-tokens 1
+```
+
+After the first active window is resident, keep warming just ahead of workers
+instead of replaying the whole window. Caps are applied after already-warm
+prefixes are skipped, so repeated calls advance to the next cold prefix groups:
+
+```bash
+PYTHONPATH=src python3 -m ds4_infer.cli queue-warm-prefixes \
+  --queue-dir /tmp/ds4_queue \
+  --profiles-dir profiles/models \
+  --runner spark \
+  --node-id spark0 \
+  --min-group-size 1 \
+  --max-groups 2 \
+  --concurrency 2 \
+  --max-output-tokens 1 \
+  --loop \
+  --sleep-s 0.25
 ```
 
 Workers can also warm just before claiming requests:
@@ -197,6 +232,7 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-work \
   --runner spark \
   --node-id spark0 \
   --warm-prefixes \
+  --warm-max-groups 2 \
   --limit 128
 ```
 
@@ -205,6 +241,11 @@ skeleton_hash, shared_prefix)` group. The shared prefix is byte-identical to the
 real request prefix, so vLLM Automatic Prefix Caching can reuse prefill work.
 The queue records best-effort status in `prefix_warms`; it cannot prove vLLM has
 not evicted the blocks later.
+
+Disk `kv_cache_ref` prefix blobs are durable prefix text, not proof that decoded
+KV blocks are resident. Use them to rebuild and warm the active window; do not
+assume the whole benchmark is resident in unified memory unless the serving
+backend exposes a fail-closed disk-KV load contract.
 
 Status:
 
