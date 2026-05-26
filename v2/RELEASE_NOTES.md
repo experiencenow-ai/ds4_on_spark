@@ -3,18 +3,19 @@
 This release keeps the purge architecture and adds the service pieces needed for stable Centaur use:
 
 - spark6 is now antirez/support only; all Qwen profiles were removed from spark6.
-- Qwen production capacity is exactly 5 resident lanes: spark0, spark1, spark2, spark3, and spark7.
+- Qwen production capacity is exactly 4 resident lanes: spark0, spark1, spark2, and spark3.
 - The inference queue is request-first: every request has independent status, completion notice, and pollable events.
 - Queue batch keys include profile, node, chat/completion mode, job class, input size, output size, thinking budget, and shared prefix hash.
 - `ds4-transfer` adds a direct Spark-to-Spark transfer planner/executor for the 200Gbps fabric.
+- `ds4-kvcache` plans optional vLLM external KV cache deployments without creating new model profiles.
 
 ## Static topology
 
 ```text
 spark0-3: Qwen 27B/fastest-Qwen resident lanes
-spark4-5: DSV4 vLLM/MTP resident lanes
+spark4-5: DSV4 vLLM/MTP resident lane
 spark6:   DSV4 antirez/support lane only
-spark7:   Qwen 27B/fastest-Qwen resident lane
+spark7:   experimental on-demand lane
 ```
 
 ## Queue commands
@@ -41,7 +42,7 @@ python3 -m compileall -q src tests
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-Result: 37 tests passed.
+Result: 80 tests passed.
 
 ## Additional runner/tool/chat update
 
@@ -51,3 +52,4 @@ Result: 37 tests passed.
 - Added `tool:spark.status`, `tool:spark7.command.run`, and transfer tool entries in the lattice registry.
 - Added `ds4-spark-chat`, a simple CLI chat interface for the resident vLLM/MTP lane with optional spark7 tool access.
 - Added `docs/xhigh-live-validation.md` and `profiles/validation/xhigh_live_validation_tasks.json` for the required live v2 runner checks.
+- Added `docs/kv-cache.md` and `profiles/kv_cache/dsv4_spark45_lmcache.json` as optional cache launch plumbing for the existing DSV4 profile.

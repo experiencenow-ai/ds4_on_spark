@@ -20,7 +20,7 @@ ds4-calibrate = "ds4_calibrate.cli:main"
 ds4-transfer = "ds4_transfer.cli:main"
 ds4-spark-chat = "ds4_chat.cli:main"
 ds4-sparkrunner-queue = "ds4_infer.sparkrunner_adapter:main"
-ds4-nixl = "ds4_nixl.cli:main"
+ds4-kvcache = "ds4_kvcache.cli:main"
 
 [project.optional-dependencies]
 web = ["playwright>=1.40"]

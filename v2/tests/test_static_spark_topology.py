@@ -44,7 +44,6 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(capacity["qwen3_6_35b_a3b_fp8_fastest_v1"], 4)
         self.assertEqual(capacity["dsv4_vllm_mtp_smartest_v1"], 1)
         self.assertEqual(capacity["dsv4_antirez_smart_v1"], 1)
-        self.assertEqual(capacity["qwen3_6_27b_fp8_nixl_experimental_v1"], 1)
 
     def test_qwen_requests_spread_across_qwen_lanes_only(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
@@ -89,7 +88,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
                 out_dir=tmp,
                 topology=SparkTopology.load(TOPOLOGY),
             )
-            self.assertEqual(manifest["topology_id"], "static_sparks_2026_05_25_v5")
+            self.assertEqual(manifest["topology_id"], "static_sparks_2026_05_26_v7")
             self.assertEqual(manifest["selected_nodes"]["spark0"], 1)
             self.assertEqual(manifest["selected_nodes"]["spark5"], 1)
             responses = [json.loads(line) for line in (Path(tmp) / "responses.jsonl").read_text().splitlines()]
@@ -113,7 +112,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertTrue(all(not node.dynamic_load for node in production_nodes))
         spark7 = [node for node in topology.nodes if node.node_id == "spark7"][0]
         self.assertTrue(spark7.dynamic_load)
-        self.assertEqual(spark7.resident_profiles, ("qwen3_6_27b_fp8_nixl_experimental_v1",))
+        self.assertEqual(spark7.resident_profiles, ())
 
     def test_xhigh_live_validation_manifest_lists_required_checks(self) -> None:
         manifest = json.loads(VALIDATION_TASKS.read_text(encoding="utf-8"))
@@ -127,6 +126,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
                 "xhv-003-antirez-spark6",
                 "xhv-004-mac-studio-ds4-spark-chat",
                 "xhv-005-web-tool-playwright-host",
+                "xhv-006-dsv4-vllm-lmcache-spark45",
             ],
         )
         qwen_task = manifest["tasks"][0]
@@ -145,7 +145,13 @@ class StaticSparkTopologyTests(unittest.TestCase):
         spark7 = startup_plan(topology=topology, registry=registry, node_id="spark7")
         self.assertEqual([item["model_id"] for item in spark0["items"]], ["Qwen/Qwen3.6-27B-FP8", "Qwen/Qwen3.6-35B-A3B-FP8"])
         self.assertEqual(spark4["items"][0]["action"], "group_primary_warm")
-        self.assertEqual(spark5["items"], [{"profile_id": "dsv4_vllm_mtp_smartest_v1", "action": "group_secondary", "primary_node": "spark4"}])
+        self.assertEqual(len(spark4["items"]), 1)
+        self.assertEqual(
+            spark5["items"],
+            [
+                {"profile_id": "dsv4_vllm_mtp_smartest_v1", "action": "group_secondary", "primary_node": "spark4"},
+            ],
+        )
         self.assertEqual(spark6["items"][0]["endpoint"], "/v1/completions")
         self.assertEqual(spark6["items"][0]["fallback_endpoints"], ["/completion"])
         self.assertEqual(spark7["items"], [])

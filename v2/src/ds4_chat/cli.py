@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--queue-dir", default=str(Path.home() / ".ds4_v2_chat_queue"))
     parser.add_argument("--profiles-dir", default=str(V2_ROOT / "profiles" / "models"))
     parser.add_argument("--topology", default=str(V2_ROOT / "profiles" / "topology" / "static_sparks.json"))
-    parser.add_argument("--runner", choices=["spark", "auto", "vllm", "nixl", "antirez", "fake"], default="spark")
+    parser.add_argument("--runner", choices=["spark", "auto", "vllm", "antirez", "fake"], default="spark")
     parser.add_argument("--registry", default=str(V2_ROOT / "tools" / "registry.jsonl"))
     parser.add_argument("--system", default=DEFAULT_SYSTEM)
     parser.add_argument("--max-tokens", type=int, default=1024)
