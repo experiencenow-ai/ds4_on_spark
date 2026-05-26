@@ -137,9 +137,11 @@ temporary diagnostic profile, not as the production DSV4 lane.
 Antirez's DS4 engine proves that durable, disk-backed DSV4 KV persistence is
 possible when the runtime owns the DS4-specific compressed session payload.
 That is not the same as generic LMCache support in vLLM. To get persistent
-external KV cache with full-quality HF/vLLM DSV4, use or build a connector that
-supports HMA across all DSV4 KV cache groups. Until that exists, the production
-vLLM lane uses HMA-compatible CPU KV offload, not LMCache disk persistence.
+external KV cache with full-quality HF/vLLM DSV4, extend an HMA-aware connector
+that already sees the compressed/sliding groups. The current reversible path is
+`docs/dsv4-persistent-simple-offload.md`, which persists vLLM's native
+`SimpleCPUOffloadConnector` CPU block pool instead of flattening DSV4 through
+LMCache.
 
 Latest recovery status after the bad Ray launch attempt:
 

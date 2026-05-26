@@ -1,0 +1,245 @@
+# DSV4 Persistent Native HMA Offload
+
+DSV4 persistent KV is implemented as a reversible vLLM runtime mod on top of
+vLLM's native `SimpleCPUOffloadConnector`. This is deliberately not an LMCache
+launch. The live DSV4 path already stores the correct HMA KV block tensors in
+native CPU offload; the mod makes that CPU offload pool durable across vLLM
+restarts.
+
+## What Is Patched
+
+The Spark recipe wrapper can install:
+
+```text
+v2/runtime_mods/dsv4_persistent_simple_offload
+```
+
+This is real vLLM code patching, packaged as a launch-time runtime mod so it is
+easy to revert and does not permanently mutate the base image. `run.sh` executes
+`patch_vllm.py` inside each DSV4 container. The patcher copies
+`persistent_disk.py` into the installed vLLM package and edits these vLLM files
+inside the temporary Docker container:
+
+```text
+vllm/v1/simple_kv_offload/metadata.py
+vllm/v1/simple_kv_offload/manager.py
+vllm/v1/simple_kv_offload/worker.py
+```
+
+It also copies:
+
+```text
+vllm/v1/simple_kv_offload/persistent_disk.py
+```
+
+The code changes are intentionally narrow:
+
+```text
+metadata.py:
+  add load_block_hashes and store_block_hashes to SimpleCPUOffloadMetadata
+
+manager.py:
+  restore scheduler CPU-block hash index at startup
+  persist scheduler block/hash assignments after stores complete
+  advertise persistent external hits with one HMA-LCM guard block
+  validate replay loads with one extra HMA-LCM lookahead block
+  pass block hashes through load/store transfer metadata
+
+worker.py:
+  restore CPU offload tensors at startup
+  fail closed if a requested load block was not restored
+  persist CPU offload tensors after store DMA completion
+
+persistent_disk.py:
+  store scheduler_index.json
+  store per-rank worker_index.json
+  store one torch payload per CPU offload block under workers/<rank>/blocks/
+```
+
+The scheduler persists and restores the HMA CPU block hash index. Workers
+persist and restore the actual CPU offload tensors for each block. Load metadata
+includes the expected block hashes so a worker that failed to restore tensor
+data fails visibly instead of loading empty CPU blocks into GPU cache.
+
+DSV4's HMA grouped/sliding layout needs one aligned lookahead block when vLLM
+validates the load after allocating GPU slots. The scheduler therefore logs the
+raw persistent hit, advertises one HMA LCM less than that raw hit, and validates
+the load with the extra lookahead hashes. Without that lookahead, the first
+restart replay under-advertises by exactly one 256-token HMA unit during
+post-allocation validation.
+
+## Golden Recipe
+
+Do not preserve DSV4 by launching a generic cache connector. Preserve these
+invariants together:
+
+```text
+model:                         deepseek-ai/DeepSeek-V4-Flash
+served model:                  deepseek-v4-flash
+nodes:                         spark4 + spark5 as one no-Ray TP=2 service
+vLLM ref:                      dda4668b59567416f86956cfe7bbc1eab371a61e
+image:                         vllm-node-dsv4-lmcache-rankfix
+max_model_len:                 1048576
+block_size:                    256
+hybrid KV manager:             enabled
+prefix caching:                enabled
+KV cache dtype:                fp8
+KV offload backend:            native
+KV offload size:               16 GiB total, 8 GiB per TP rank
+KV connector:                  SimpleCPUOffloadConnector
+persistent runtime mod:        ds4-dsv4-persistent-simple-offload
+PYTHONHASHSEED:                0
+```
+
+The key launch flags are:
+
+```text
+--max-model-len 1048576
+--enable-prefix-caching
+--no-disable-hybrid-kv-cache-manager
+--kv-cache-dtype fp8
+--kv-offloading-size 16
+--kv-offloading-backend native
+```
+
+The persistent store must be the same absolute path on spark4 and spark5, and
+that path must be mounted into both containers. The wrapper does this when
+`DS4_DSV4_PERSIST_STORE` is set. Use a model/topology-specific store path; do
+not share one store across different vLLM commits, TP layouts, model revisions,
+block sizes, or cache dtypes.
+
+## Proper KV Cache Use
+
+There are three DSV4 cache layers, and they solve different problems:
+
+```text
+vLLM automatic prefix cache:  reuses token-identical prefix blocks while live
+native CPU KV offload:        keeps HMA KV blocks outside GPU memory while live
+persistent runtime mod:       reloads the native CPU offload pool after restart
+```
+
+To get hits, requests must keep the reusable prefix token-identical. Put the
+large stable material first: system prompt, repository skeleton, tool schemas,
+LongMem documents, and shared context. Put variable task text and small atom
+suffixes after that. Keep the same model, tokenizer, chat template kwargs,
+thinking mode, served model name, and lane. Whitespace changes inside the prefix
+can change token hashes and miss the cache.
+
+Operational flow:
+
+1. Start DSV4 with the golden recipe and a persistent store.
+2. Send one warm request containing the full shared prefix.
+3. Send follow-up requests with the exact same prefix and only suffix changes.
+4. Keep those requests sticky to the same DSV4 service lane.
+5. After a restart, re-send the same prefix and confirm an external hit.
+
+The good log lines look like:
+
+```text
+GPU KV cache size: 2,264,597 tokens
+Maximum concurrency for 1,048,576 tokens per request: 2.16x
+SimpleCPUOffloadWorker: restored 1264 persistent CPU blocks
+SimpleCPUOffloadScheduler: restored 1264 persistent CPU blocks
+DS4 persistent SimpleCPUOffload scheduler hit: ... tokens=2560 raw_tokens=2816 guard_tokens=256
+External prefix cache hit rate: 82.9%
+```
+
+Bad signs:
+
+```text
+LMCacheConnectorV1Dynamic
+disable_hybrid_kv_cache_manager=True
+max_model_len near 45056
+GPU KV cache size near 49,152 tokens
+PYTHONHASHSEED unset
+```
+
+The `45056` value was the bad generic LMCache/no-HMA launch cap. It is not the
+DSV4 model limit. The working DSV4 HMA launch advertises `max_model_len=1048576`.
+That is the per-request serve limit. The GPU KV cache size is the aggregate pool
+of live KV slots and determines concurrency/residency, not a preallocated 1M
+tokens per request.
+
+## Enable
+
+Set a persistent store path in spark4's service environment:
+
+```bash
+DS4_DSV4_PERSIST_STORE=/mnt/nvme/ds4_hma_store/dsv4/simple_cpu_offload
+DS4_DSV4_PERSIST_STRICT=1
+DS4_DSV4_PYTHONHASHSEED=0
+```
+
+Then restart the normal DSV4 service:
+
+```bash
+systemctl --user restart ds4-dsv4-vllm.service
+```
+
+The wrapper mounts the same absolute store path into both containers, adds the
+container env vars, copies the runtime mod into the Spark recipe runner, and
+adds it to the installed recipe for that launch.
+
+Quick read-only checks after launch:
+
+```bash
+curl -sS http://127.0.0.1:8000/v1/models
+docker logs --tail 200 vllm_deepseek_v4_flash
+find "$DS4_DSV4_PERSIST_STORE" -type f | wc -l
+```
+
+## Revert
+
+Remove or comment out `DS4_DSV4_PERSIST_STORE` and restart:
+
+```bash
+systemctl --user restart ds4-dsv4-vllm.service
+```
+
+The containers are launched with `--rm`. Restarting without the persistent
+store env returns to the unmodified image and the normal native CPU offload
+path. The disk store may be left in place or removed separately.
+
+## Required Hash Stability
+
+`PYTHONHASHSEED=0` is required for restart-stable block hashes. Without it,
+vLLM warns that block hashes may not be reproducible across processes, which
+would make any disk KV index miss or, worse, point at the wrong block.
+
+## Verification Gate
+
+Use the same prefix before and after a restart:
+
+1. Warm a deterministic long prefix through `deepseek-v4-flash`.
+2. Confirm the store contains worker block files and `scheduler_index.json`.
+3. Restart `ds4-dsv4-vllm.service` with the same store.
+4. Re-run the same prefix.
+5. Confirm startup logs report restored persistent CPU blocks.
+6. Confirm TTFT or prefill work is lower than a cold prefix.
+7. Corrupt one block file and confirm strict mode fails the request visibly.
+
+Live spark4/spark5 gate, May 26 2026:
+
+```text
+model max_model_len:                    1048576
+GPU KV cache size:                      2,264,597 tokens
+Maximum concurrency at 1,048,576:       2.16x
+worker restore:                         1264 persistent CPU blocks
+scheduler restore:                      1264 persistent CPU blocks
+restart replay prompt tokens:           3087
+restart replay result:                  HTTP 200 in 7.788782s
+external persistent hit log:            tokens=2560 raw_tokens=2816 guard_tokens=256
+external prefix cache hit rate:         82.9%
+spark4 store files after replay:        1266
+spark5 store files after replay:        1265
+```
+
+The working replay was launched through the normal spark4+spark5 no-Ray DSV4
+recipe with:
+
+```bash
+DS4_DSV4_RECIPE_SOURCE=/tmp/ds4_dsv4_persistent_trial/v2/recipes/deepseek-v4-flash-spark45.yaml
+DS4_DSV4_PERSIST_MOD_SOURCE=/tmp/ds4_dsv4_persistent_trial/v2/runtime_mods/dsv4_persistent_simple_offload
+DS4_DSV4_PERSIST_STORE=/tmp/ds4_hma_store_trial2/dsv4/simple_cpu_offload
+/tmp/ds4_dsv4_persistent_trial/v2/scripts/ds4_dsv4_recipe_spark45.sh start
+```

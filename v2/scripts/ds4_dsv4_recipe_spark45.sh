@@ -13,6 +13,11 @@ eth_if="${DS4_DSV4_ETH_IF:-enP7s7}"
 ib_if="${DS4_DSV4_IB_IF:-__disabled__}"
 container_name="${DS4_DSV4_CONTAINER_NAME:-vllm_deepseek_v4_flash}"
 container_image="${DS4_DSV4_IMAGE_NAME:-vllm-node-dsv4-lmcache-rankfix}"
+persistent_store="${DS4_DSV4_PERSIST_STORE:-}"
+persistent_mod_name="ds4-dsv4-persistent-simple-offload"
+persistent_mod_source="${DS4_DSV4_PERSIST_MOD_SOURCE:-$HOME/ds4_on_spark/v2/runtime_mods/dsv4_persistent_simple_offload}"
+persistent_strict="${DS4_DSV4_PERSIST_STRICT:-1}"
+python_hash_seed="${DS4_DSV4_PYTHONHASHSEED:-0}"
 
 ensure_runner()
 {
@@ -57,21 +62,76 @@ CONTAINER_NCCL_SOCKET_IFNAME=$eth_if
 CONTAINER_GLOO_SOCKET_IFNAME=$eth_if
 CONTAINER_TP_SOCKET_IFNAME=$eth_if
 CONTAINER_CUDA_HOME=/usr/local/cuda
+CONTAINER_PYTHONHASHSEED=$python_hash_seed
 EOF
+	if [ -n "$persistent_store" ]; then
+		cat >> "$recipe_repo/.env" <<EOF
+CONTAINER_VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT=$persistent_store
+CONTAINER_VLLM_SIMPLE_KV_OFFLOAD_PERSIST_STRICT=$persistent_strict
+EOF
+	fi
+}
+
+persistent_enabled()
+{
+	if [ "${DS4_DSV4_ENABLE_PERSISTENT_OFFLOAD:-0}" = "1" ]; then
+		return 0
+	fi
+	if [ -n "$persistent_store" ]; then
+		return 0
+	fi
+	return 1
+}
+
+install_recipe()
+{
+	install -m 0644 "$recipe_source" "$recipe_repo/recipes/deepseek-v4-flash-spark45.yaml"
+	if persistent_enabled; then
+		if [ ! -f "$persistent_mod_source/run.sh" ]; then
+			echo "missing persistent offload runtime mod: $persistent_mod_source" >&2
+			exit 3
+		fi
+		rm -rf "$recipe_repo/mods/$persistent_mod_name"
+		mkdir -p "$recipe_repo/mods/$persistent_mod_name"
+		cp -R "$persistent_mod_source/." "$recipe_repo/mods/$persistent_mod_name/"
+		cat >> "$recipe_repo/recipes/deepseek-v4-flash-spark45.yaml" <<EOF
+
+mods:
+  - mods/$persistent_mod_name
+EOF
+	fi
+}
+
+prepare_persistent_store()
+{
+	if [ -z "$persistent_store" ]; then
+		return
+	fi
+	if [[ ! "$persistent_store" =~ ^/[A-Za-z0-9._/-]+$ ]]; then
+		echo "DS4_DSV4_PERSIST_STORE must be a docker-safe absolute path" >&2
+		exit 4
+	fi
+	mkdir -p "$persistent_store"
+	ssh "$worker_ip" "mkdir -p $persistent_store"
+	export VLLM_SPARK_EXTRA_DOCKER_ARGS="${VLLM_SPARK_EXTRA_DOCKER_ARGS:-} -v $persistent_store:$persistent_store"
+	if [ -n "${DS4_DSV4_EXTRA_DOCKER_ARGS:-}" ]; then
+		export VLLM_SPARK_EXTRA_DOCKER_ARGS="$VLLM_SPARK_EXTRA_DOCKER_ARGS ${DS4_DSV4_EXTRA_DOCKER_ARGS}"
+	fi
 }
 
 case "$mode" in
 	install)
 		ensure_runner
 		ensure_worker_ssh
-		install -m 0644 "$recipe_source" "$recipe_repo/recipes/deepseek-v4-flash-spark45.yaml"
+		install_recipe
 		write_env
 		;;
 	start)
 		ensure_runner
 		ensure_worker_ssh
-		install -m 0644 "$recipe_source" "$recipe_repo/recipes/deepseek-v4-flash-spark45.yaml"
+		install_recipe
 		write_env
+		prepare_persistent_store
 		cd "$recipe_repo"
 		exec ./run-recipe.sh recipes/deepseek-v4-flash-spark45.yaml -t "$container_image" --no-ray --no-cache-dirs -d
 		;;

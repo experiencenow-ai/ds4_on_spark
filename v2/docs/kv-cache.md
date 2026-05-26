@@ -78,8 +78,28 @@ GPU KV cache size:  2,088,846 tokens
 1M concurrency:     1.99x
 ```
 
-This is external CPU KV offload, not durable disk persistence. It preserves the
-full-quality HF/vLLM DSV4 path and avoids the bad full-KV fallback.
+This is external CPU KV offload. It preserves the full-quality HF/vLLM DSV4 path
+and avoids the bad full-KV fallback. Durable restart persistence is handled by
+the native-offload runtime mod in `docs/dsv4-persistent-simple-offload.md`,
+which extends vLLM's HMA-aware `SimpleCPUOffloadConnector` instead of replacing
+it with LMCache.
+
+Proper DSV4 KV use is:
+
+```text
+1. keep the spark4+spark5 service as one no-Ray TP=2 DSV4 lane
+2. keep HMA enabled and use native SimpleCPUOffloadConnector
+3. set PYTHONHASHSEED=0 for restart-stable block hashes
+4. set DS4_DSV4_PERSIST_STORE for disk persistence of the CPU offload pool
+5. warm one token-identical shared prefix before suffix fanout
+6. route suffix requests stickily to the same DSV4 lane
+7. verify external prefix cache hits in vLLM logs or metrics
+```
+
+The persistent runtime mod is not a replacement for prefix discipline. It can
+reload CPU offload blocks after restart, but it still keys those blocks by vLLM
+block hashes. A reused LongMem prefix must be byte/token-identical across warm
+and replay requests.
 
 Do not use `LMCacheConnectorV1Dynamic` for production DSV4 long context in the
 current image. Live introspection showed its classes do not implement
@@ -92,10 +112,11 @@ DS4-specific session payload: token history, logits, raw sliding rows,
 compressed rows, ratio-4 indexer rows, and compressor frontier state. That
 design is the right model for durable DSV4 cache persistence, but those payloads
 belong to the Antirez GGUF engine and are not compatible with vLLM's HF tensor
-layout. A vLLM version of that feature needs an HMA-aware external connector
-that saves and restores every DSV4 KV cache group, not a connector that flattens
-the model back to full attention. The pinned-only scaffold for that work lives
-in `docs/dsv4-hma-persistent-kv.md` and `profiles/hma/dsv4_hma_persistent.json`.
+layout. The first vLLM implementation path is the persistent native CPU-offload
+mod because the live connector already sees the compressed/sliding HMA groups
+that DSV4 actually uses. The pinned-only dynamic connector scaffold still lives
+in `docs/dsv4-hma-persistent-kv.md` and `profiles/hma/dsv4_hma_persistent.json`
+for future upstream connector work.
 
 ## Limits and scheduling constraints
 
