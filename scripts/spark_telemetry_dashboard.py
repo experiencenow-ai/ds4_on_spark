@@ -67,7 +67,7 @@ const modeLabels={queue:"Queue",gpu:"GPU"};
 const modeColors={queue:["#00e5ff","#ff4d4d","#ffe156","#a78bfa"],gpu:["#2f80ed","#ff7a00","#00c853","#e040fb","#f4d35e"]};
 function metric(label,value){return `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`}
 function bar(label,value,cls){let width=Math.max(0,Math.min(100,Number(value)||0));return `<div class="barrow ${cls}"><span>${label}</span><div class="track"><div class="fill" style="width:${width}%"></div></div><span>${pct(value)}</span></div>`}
-function card(n){return `<article class="card ${n.state} ${n.node===selectedNode?"selected":""}" data-node="${n.node}"><header><div class="node">${n.node}</div><div class="pill">${n.state_label}</div></header><div class="bars">${bar("GPU",n.gpu_pct,"gpu")}${bar("KV",n.kv_pct,"kv")}${bar("MEM",n.mem_pct,"mem")}</div><div class="details"><span>Temp <b>${fmt(n.gpu_temp_c)}C</b></span><span>Power <b>${fmt(n.gpu_power_w)}W</b></span><span>vLLM <b>${fmt(n.vllm_running)}/${fmt(n.vllm_waiting)}</b></span><span>Queue <b>${fmt(n.local_q_depth)}</b></span><span>CPU <b>${pct(n.cpu_pct)}</b></span><span>Gateway <b>${n.gateway_up?"up":"down"}</b></span></div>${n.error?`<div class="error">${n.error}</div>`:""}</article>`}
+function card(n){let err=n.error||n.fetch_error||"";return `<article class="card ${n.state} ${n.node===selectedNode?"selected":""}" data-node="${n.node}"><header><div class="node">${n.node}</div><div class="pill">${n.state_label}</div></header><div class="bars">${bar("GPU",n.gpu_pct,"gpu")}${bar("KV",n.kv_pct,"kv")}${bar("MEM",n.mem_pct,"mem")}</div><div class="details"><span>Temp <b>${fmt(n.gpu_temp_c)}C</b></span><span>Power <b>${fmt(n.gpu_power_w)}W</b></span><span>vLLM <b>${fmt(n.vllm_running)}/${fmt(n.vllm_waiting)}</b></span><span>Queue <b>${fmt(n.local_q_depth)}</b></span><span>CPU <b>${pct(n.cpu_pct)}</b></span><span>Gateway <b>${n.gateway_up?"up":"down"}</b></span></div>${err?`<div class="error">${err}</div>`:""}</article>`}
 function wireCards(){document.querySelectorAll(".card[data-node]").forEach(el=>el.onclick=()=>{selectedNode=el.dataset.node;document.querySelectorAll(".card").forEach(c=>c.classList.toggle("selected",c.dataset.node===selectedNode));refreshHistory()})}
 function modeButtons(){return `<div class="modes">${Object.keys(metricModes).map(k=>`<button class="${k===selectedMode?"active":""}" data-mode="${k}">${modeLabels[k]}</button>`).join("")}</div>`}
 function wireModes(){document.querySelectorAll(".modes button").forEach(el=>el.onclick=()=>{selectedMode=el.dataset.mode;drawHistory(lastHistory)})}
@@ -108,6 +108,8 @@ def valid_node_name(node: str) -> bool:
 def node_state(row: dict[str,Any]) -> tuple[str,str]:
     if int(fnum(row.get("sample_count"))) <= 0 or str(row.get("error","")) != "":
         return("down","down")
+    if fnum(row.get("stale_data")) > 0.0 or str(row.get("fetch_error","")) != "":
+        return("warn","stale")
     if fnum(row.get("last_gpu_temp_c")) >= 80.0 or fnum(row.get("last_thermal_max_c")) >= 85.0:
         return("hot","hot")
     if fnum(row.get("last_vllm_waiting")) > 0.0 or fnum(row.get("last_vllm_kv_cache_pct")) >= 90.0:
@@ -125,6 +127,7 @@ def normalize_node(node: str, row: dict[str,Any]) -> dict[str,Any]:
         "state_label": label,
         "sample_count": int(fnum(row.get("sample_count"))),
         "last_iso_ts": row.get("last_iso_ts",""),
+        "last_sample_age_s": fnum(row.get("last_sample_age_s")),
         "gpu_pct": fnum(row.get("last_gpu_util_pct")),
         "gpu_temp_c": fnum(row.get("last_gpu_temp_c")),
         "gpu_power_w": fnum(row.get("last_gpu_power_w")),
@@ -138,6 +141,7 @@ def normalize_node(node: str, row: dict[str,Any]) -> dict[str,Any]:
         "gateway_active": fnum(row.get("last_ds4_gateway_active")) > 0.0,
         "local_q_depth": fnum(row.get("last_local_queue_depth")),
         "error": str(row.get("error","")),
+        "fetch_error": str(row.get("fetch_error","")),
     })
 
 

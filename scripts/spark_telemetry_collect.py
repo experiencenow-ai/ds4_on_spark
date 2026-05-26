@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import datetime as dt
 import os
 import shlex
 import subprocess
@@ -25,6 +26,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--tail-lines", type=int, default=17280)
     p.add_argument("--loop-interval", type=float, default=0.0)
     p.add_argument("--ssh-timeout", type=float, default=8.0)
+    p.add_argument("--stale-ok-seconds", type=float, default=300.0)
     p.add_argument("--queue-db", default=os.environ.get("DS4_QUEUE_DB",""))
     p.add_argument("--queue-db-glob", default=telemetry.QUEUE_DB_GLOB)
     return(p.parse_args())
@@ -68,11 +70,35 @@ def read_rows(text: str) -> List[Dict[str,str]]:
     return(rows)
 
 
-def summarize_node(rows: List[Dict[str,str]], error: str) -> Dict[str,object]:
+def row_unix_ts(row: Dict[str,str]) -> float:
+    try:
+        return(float(row.get("unix_ts","0") or 0.0))
+    except Exception:
+        pass
+    try:
+        return(dt.datetime.fromisoformat(row.get("iso_ts","").replace("Z","+00:00")).timestamp())
+    except Exception:
+        return(0.0)
+
+
+def read_cached_rows(path: str, max_age_s: float) -> List[Dict[str,str]]:
+    try:
+        with open(path,"r",encoding="utf-8",newline="") as fp:
+            rows = read_rows(fp.read())
+    except Exception:
+        return([])
+    if len(rows) == 0:
+        return([])
+    age_s = time.time() - row_unix_ts(rows[-1])
+    return(rows if age_s <= max_age_s else [])
+
+
+def summarize_node(rows: List[Dict[str,str]], error: str, fetch_error: str = "", stale_data: bool = False) -> Dict[str,object]:
     if len(rows) == 0:
         return({"sample_count":0,"error":error})
     good = [r for r in rows if not r.get("error")]
     latest = rows[-1]
+    latest_age_s = max(0.0,time.time() - row_unix_ts(latest))
     gpu_vals = [telemetry.fnum(r,"gpu_util_pct") for r in good if telemetry.gpu_index(r) >= 0]
     gpu_temps = [telemetry.fnum(r,"gpu_temp_c") for r in good if telemetry.gpu_index(r) >= 0 and telemetry.fnum(r,"gpu_temp_c") > 0.0]
     hot = [v for v in gpu_vals if v >= 90.0]
@@ -81,6 +107,9 @@ def summarize_node(rows: List[Dict[str,str]], error: str) -> Dict[str,object]:
         "sample_count": len(rows),
         "first_iso_ts": rows[0].get("iso_ts",""),
         "last_iso_ts": latest.get("iso_ts",""),
+        "last_sample_age_s": round(latest_age_s,2),
+        "stale_data": 1 if stale_data else 0,
+        "fetch_error": fetch_error,
         "last_cpu_util_pct": telemetry.fnum(latest,"cpu_util_pct"),
         "last_mem_used_pct": telemetry.fnum(latest,"mem_used_pct"),
         "last_thermal_avg_c": telemetry.fnum(latest,"thermal_avg_c"),
@@ -146,7 +175,9 @@ def summarize_node(rows: List[Dict[str,str]], error: str) -> Dict[str,object]:
     })
 
 
-def write_combined(out_dir: str, all_rows: Dict[str,List[Dict[str,str]]], errors: Dict[str,str], queue: Dict[str,object]) -> Dict[str,object]:
+def write_combined(out_dir: str, all_rows: Dict[str,List[Dict[str,str]]], errors: Dict[str,str], queue: Dict[str,object], fetch_errors: Dict[str,str] | None = None, stale_nodes: set[str] | None = None) -> Dict[str,object]:
+    fetch_errors = fetch_errors or {}
+    stale_nodes = stale_nodes or set()
     os.makedirs(out_dir,exist_ok=True)
     combined_path = os.path.join(out_dir,"combined_latest.csv")
     summary_path = os.path.join(out_dir,"cluster_summary.json")
@@ -170,7 +201,7 @@ def write_combined(out_dir: str, all_rows: Dict[str,List[Dict[str,str]]], errors
     summary = telemetry.summary_base()
     summary.update({"combined_csv":combined_path,"queue":queue,"nodes":{}})
     for node in sorted(set(all_rows) | set(errors)):
-        summary["nodes"][node] = summarize_node(all_rows.get(node,[]),errors.get(node,""))
+        summary["nodes"][node] = summarize_node(all_rows.get(node,[]),errors.get(node,""),fetch_errors.get(node,""),node in stale_nodes)
     telemetry.write_json_atomic(summary_path,summary)
     lines = ["# Spark telemetry summary",""]
     if str(queue.get("local_queue_db","")):
@@ -217,16 +248,24 @@ def collect_once(args: argparse.Namespace) -> Dict[str,object]:
     os.makedirs(raw_dir,exist_ok=True)
     all_rows: Dict[str,List[Dict[str,str]]] = {}
     errors: Dict[str,str] = {}
+    fetch_errors: Dict[str,str] = {}
+    stale_nodes: set[str] = set()
     for node,target in telemetry.parse_node_targets(args.nodes):
         name,text,error = fetch_node(node,args.remote_dir,args.ssh_timeout,args.tail_lines,target)
         if error:
-            errors[name] = error
-            all_rows[name] = []
+            cached = read_cached_rows(os.path.join(raw_dir,name + ".csv"),args.stale_ok_seconds)
+            if cached:
+                fetch_errors[name] = error
+                stale_nodes.add(name)
+                all_rows[name] = cached
+            else:
+                errors[name] = error
+                all_rows[name] = []
             continue
         telemetry.write_text_atomic(os.path.join(raw_dir,name + ".csv"),text)
         all_rows[name] = read_rows(text)
     queue = telemetry.read_local_queue(args.queue_db,args.queue_db_glob)
-    return(write_combined(args.out_dir,all_rows,errors,queue))
+    return(write_combined(args.out_dir,all_rows,errors,queue,fetch_errors,stale_nodes))
 
 
 def main() -> int:
