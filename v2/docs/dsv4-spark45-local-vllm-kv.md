@@ -102,11 +102,19 @@ The critical launch settings are:
 --block-size 256
 --kv-cache-dtype fp8
 --enable-prefix-caching
---kv-offloading-size 16
+--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8}
 --kv-offloading-backend native
 --no-disable-hybrid-kv-cache-manager
 --enforce-eager
 ```
+
+`DS4_DSV4_KV_OFFLOAD_SIZE` is GiB of CPU KV offload buffer summed across TP
+ranks. The conservative default is `8`, which is `4 GiB` on spark4 and `4 GiB`
+on spark5. The earlier `16` value gave `8 GiB` per node and may be too much
+host-memory pressure for a fragile node. Use `4` total (`2 GiB` per node) as a
+recovery setting if sshd or the API becomes unresponsive during startup. Smaller
+pools still provide useful prefix-cache benefit; they just retain fewer
+offloaded blocks before vLLM has to evict or recompute.
 
 Keep `--block-size 256`. Changing it to 64 breaks DSV4 KV group planning. The
 DSV4 offload support patch makes native offload use the DSV4 group hash size
