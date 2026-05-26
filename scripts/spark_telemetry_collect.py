@@ -30,7 +30,8 @@ def parse_args() -> argparse.Namespace:
     return(p.parse_args())
 
 
-def fetch_node(node: str, remote_dir: str, timeout: float, lines: int) -> Tuple[str,str,str]:
+def fetch_node(node: str, remote_dir: str, timeout: float, lines: int, target: str | None = None) -> Tuple[str,str,str]:
+    target = target or node
     remote_path = shlex.quote(telemetry.node_csv_path(remote_dir))
     cmd = [
         "ssh",
@@ -38,7 +39,7 @@ def fetch_node(node: str, remote_dir: str, timeout: float, lines: int) -> Tuple[
         "BatchMode=yes",
         "-o",
         "ConnectTimeout=%d" % max(1,int(timeout)),
-        node,
+        target,
         "if [ -r %s ]; then head -n 1 %s; tail -n %d %s; else exit 1; fi" % (remote_path,remote_path,lines,remote_path),
     ]
     try:
@@ -216,8 +217,8 @@ def collect_once(args: argparse.Namespace) -> Dict[str,object]:
     os.makedirs(raw_dir,exist_ok=True)
     all_rows: Dict[str,List[Dict[str,str]]] = {}
     errors: Dict[str,str] = {}
-    for node in telemetry.parse_nodes(args.nodes):
-        name,text,error = fetch_node(node,args.remote_dir,args.ssh_timeout,args.tail_lines)
+    for node,target in telemetry.parse_node_targets(args.nodes):
+        name,text,error = fetch_node(node,args.remote_dir,args.ssh_timeout,args.tail_lines,target)
         if error:
             errors[name] = error
             all_rows[name] = []

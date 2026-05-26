@@ -30,6 +30,7 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(telemetry.SPARK_NODES, expected)
         self.assertEqual(telemetry.parse_nodes("all"), list(expected))
         self.assertEqual(telemetry.parse_nodes(""), list(expected))
+        self.assertEqual(telemetry.parse_node_targets("spark4=spark4-10g,spark5"), [("spark4","spark4-10g"), ("spark5","spark5")])
         self.assertEqual(collect.telemetry.DEFAULT_NODES, ",".join(expected))
         self.assertEqual(node_mon.CSV_FIELDS, telemetry.CSV_FIELDS)
         self.assertIn("vllm_requests_running", telemetry.CSV_FIELDS)

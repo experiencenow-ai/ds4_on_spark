@@ -10,7 +10,7 @@
     <string>/usr/bin/python3</string>
     <string>/Users/mac/.local/share/ds4_telemetry/spark_telemetry_collect.py</string>
     <string>--nodes</string>
-    <string>spark0,spark1,spark2,spark3,spark4,spark5,spark6,spark7</string>
+    <string>spark0,spark1,spark2,spark3,spark4=spark4-10g,spark5=spark5-10g,spark6,spark7</string>
     <string>--out-dir</string>
     <string>/tmp/ds4_telemetry/mac</string>
     <string>--tail-lines</string>

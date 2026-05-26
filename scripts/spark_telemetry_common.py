@@ -9,7 +9,7 @@ import json
 import os
 import sqlite3
 import time
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Tuple
 
 
 SPARK_NODE_COUNT = 8
@@ -117,6 +117,21 @@ def parse_nodes(raw: str) -> List[str]:
     if text == "" or text.lower() in ("all","8x","spark8","sparks"):
         return(list(SPARK_NODES))
     return([node.strip() for node in text.split(",") if node.strip()])
+
+
+def parse_node_targets(raw: str) -> List[Tuple[str,str]]:
+    out: List[Tuple[str,str]] = []
+    for item in parse_nodes(raw):
+        if "=" in item:
+            label,target = item.split("=",1)
+            label = label.strip()
+            target = target.strip()
+        else:
+            label = item
+            target = item
+        if label and target:
+            out.append((label,target))
+    return(out)
 
 
 def node_csv_path(root: str = TELEMETRY_DIR) -> str:
