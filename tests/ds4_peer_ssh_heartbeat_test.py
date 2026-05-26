@@ -43,6 +43,8 @@ class Ds4PeerSshHeartbeatTest(unittest.TestCase):
     def test_remote_rescue_requires_owner_control_and_failed_fresh_probe(self) -> None:
         mod = load_module()
         self.assertTrue(mod.should_attempt_remote_rescue("spark0", "spark0", {"ok": False}, {"ok": True}))
+        self.assertTrue(mod.should_attempt_remote_rescue("spark1", "any", {"ok": False}, {"ok": True}))
+        self.assertTrue(mod.should_attempt_remote_rescue("spark2", "spark0,spark2", {"ok": False}, {"ok": True}))
         self.assertFalse(mod.should_attempt_remote_rescue("spark1", "spark0", {"ok": False}, {"ok": True}))
         self.assertFalse(mod.should_attempt_remote_rescue("spark0", "spark0", {"ok": True}, {"ok": True}))
         self.assertFalse(mod.should_attempt_remote_rescue("spark0", "spark0", {"ok": False}, {"ok": False}))

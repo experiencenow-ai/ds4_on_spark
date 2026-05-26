@@ -103,6 +103,14 @@ def self_rescue() -> dict[str, Any]:
     }
 
 
+def peer_rescue() -> dict[str, Any]:
+    first = run_cmd(["sudo", "-n", "/usr/local/sbin/ds4-sshd-watchdog", "--peer-force"], 60)
+    return {
+        "attempts": [first],
+        "ssh_probe": ssh_banner_probe(),
+    }
+
+
 class RescueHandler(http.server.BaseHTTPRequestHandler):
     server_version = "ds4-rescue/1"
 
@@ -165,6 +173,9 @@ class RescueHandler(http.server.BaseHTTPRequestHandler):
             return
         if action == "self_rescue":
             self.write_json(200, {"ok": True, "result": self_rescue()})
+            return
+        if action == "peer_rescue":
+            self.write_json(200, {"ok": True, "result": peer_rescue()})
             return
         if action == "status":
             self.write_json(200, {"ok": True, "status": status_payload()})

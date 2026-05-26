@@ -81,8 +81,18 @@ def ssh_control_exec(peer: str, timeout: float, control_dir: str, persist_second
     return(result)
 
 
+def rescue_owner_matches(observer: str, owner: str) -> bool:
+    for item in owner.replace(";",",").split(","):
+        name = safe_name(item.strip())
+        if name in ("any","all","star") or item.strip() == "*":
+            return(True)
+        if name == observer:
+            return(True)
+    return(False)
+
+
 def should_attempt_remote_rescue(observer: str, owner: str, ssh_result: dict[str,Any], control_result: dict[str,Any]) -> bool:
-    if owner == "" or observer != safe_name(owner):
+    if owner == "" or not rescue_owner_matches(observer,owner):
         return(False)
     return(bool(control_result.get("ok",False)) and not bool(ssh_result.get("ok",False)))
 
@@ -108,7 +118,7 @@ def trigger_remote_rescue(peer: str, observer: str, target: str, timeout: float,
     path.parent.mkdir(parents=True,exist_ok=True)
     if remote_rescue_in_cooldown(path,now,cooldown_seconds):
         return({"ok":False,"skipped":"cooldown","state_path":str(path)})
-    cmd = ssh_base(timeout) + control_options(control_dir,persist_seconds) + [peer,"sudo -n /usr/local/sbin/ds4-sshd-watchdog --force"]
+    cmd = ssh_base(timeout) + control_options(control_dir,persist_seconds) + [peer,"sudo -n /usr/local/sbin/ds4-sshd-watchdog --peer-force"]
     result = run_cmd(cmd,timeout + 35.0)
     result["ok"] = result.get("rc") == 0
     path.write_text(json.dumps({
@@ -207,8 +217,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--remote-dir", default=DEFAULT_REMOTE_DIR)
     p.add_argument("--timeout", type=float, default=5.0)
     p.add_argument("--control-dir", default=DEFAULT_CONTROL_DIR)
-    p.add_argument("--control-persist-seconds", type=int, default=600)
-    p.add_argument("--remote-rescue-owner", default="spark0")
+    p.add_argument("--control-persist-seconds", type=int, default=86400)
+    p.add_argument("--remote-rescue-owner", default="any")
     p.add_argument("--remote-rescue-state-dir", default=DEFAULT_RESCUE_STATE_DIR)
     p.add_argument("--remote-rescue-cooldown-seconds", type=int, default=300)
     return(p.parse_args())

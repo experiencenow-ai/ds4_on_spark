@@ -16,6 +16,18 @@ PEER_BOOT_GRACE_SECONDS="${DS4_WATCHDOG_PEER_BOOT_GRACE_SECONDS:-600}"
 RUNTIME_LOAD_GRACE_SECONDS="${DS4_WATCHDOG_RUNTIME_LOAD_GRACE_SECONDS:-2400}"
 RUNTIME_LOAD_FILE=$STATE_DIR/runtime-load-grace-start
 
+run_timeout()
+{
+	seconds="$1"
+	shift
+	if command -v timeout >/dev/null 2>&1
+	then
+		timeout "${seconds}s" "$@"
+	else
+		"$@"
+	fi
+}
+
 log()
 {
 	if command -v logger >/dev/null 2>&1
@@ -169,7 +181,7 @@ allowlisted_runtime_present()
 			return 0
 		fi
 	fi
-	if pgrep -f '/usr/local/bin/vllm serve|/usr/bin/python3 /usr/local/bin/vllm serve|vllm serve /models/|VLLM::' >/dev/null 2>&1
+	if pgrep -f '/usr/local/bin/vllm serve|/usr/bin/python3 /usr/local/bin/vllm serve|vllm serve /models/|vllm serve /home/|standard-runtimes/.*/vllm.*serve|ds4_vllm_lazy_proxy.py|llama-server .*\.gguf|llama.cpp.*/llama-server|VLLM::' >/dev/null 2>&1
 	then
 		return 0
 	fi
@@ -198,7 +210,7 @@ runtime_age_seconds()
 			fi
 		done
 	fi
-	for pid in $(pgrep -f '/usr/local/bin/vllm serve|/usr/bin/python3 /usr/local/bin/vllm serve|vllm serve /models/|VLLM::' 2>/dev/null || true)
+	for pid in $(pgrep -f '/usr/local/bin/vllm serve|/usr/bin/python3 /usr/local/bin/vllm serve|vllm serve /models/|vllm serve /home/|standard-runtimes/.*/vllm.*serve|ds4_vllm_lazy_proxy.py|llama-server .*\.gguf|llama.cpp.*/llama-server|VLLM::' 2>/dev/null || true)
 	do
 		case "$pid" in
 		''|*[!0-9]*)
@@ -308,6 +320,11 @@ kill_allowlisted_processes()
 	kill_pattern '/usr/local/bin/vllm serve'
 	kill_pattern '/usr/bin/python3 /usr/local/bin/vllm serve'
 	kill_pattern 'vllm serve /models/'
+	kill_pattern 'vllm serve /home/'
+	kill_pattern 'standard-runtimes/.*/vllm.*serve'
+	kill_pattern 'ds4_vllm_lazy_proxy.py'
+	kill_pattern 'llama-server .*\.gguf'
+	kill_pattern 'llama.cpp.*/llama-server'
 	kill_pattern 'VLLM::'
 	if [ "${DS4_WATCHDOG_KILL_RAY:-0}" = "1" ]
 	then
@@ -324,7 +341,7 @@ kill_gpu_compute_processes()
 	then
 		return 0
 	fi
-	nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits 2>/dev/null | while IFS=, read -r pid mem
+	run_timeout 5 nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits 2>/dev/null | while IFS=, read -r pid mem
 	do
 		pid="$(echo "$pid" | tr -dc '0-9')"
 		mem="$(echo "$mem" | tr -dc '0-9')"
@@ -482,12 +499,6 @@ run_peer_rescue()
 	log "$reason; external peer health failed; restarting ssh"
 	restart_ssh || true
 	sleep 2
-	if runtime_load_grace_active
-	then
-		failures="$(record_failure)"
-		log "external peer health still unhealthy, but runtime load grace is active; consecutive_failures=$failures reboot_deferred=1"
-		return 1
-	fi
 	log "external peer health still unhealthy after ssh restart; killing heavy runtimes"
 	kill_heavy_runtimes
 	sleep 5
@@ -509,6 +520,10 @@ trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM
 case "${1:-}" in
 --force|rescue|rescue-now)
 	run_rescue "forced local self-rescue requested"
+	exit $?
+	;;
+--peer-force|peer-rescue|peer-rescue-now)
+	run_peer_rescue "forced external peer-health rescue requested"
 	exit $?
 	;;
 esac
