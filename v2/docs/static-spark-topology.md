@@ -75,6 +75,7 @@ block_size=256
 fp8 KV cache
 hybrid KV cache manager enabled
 SimpleCPUOffloadConnector via --kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-6} --kv-offloading-backend native
+VLLM_USE_SIMPLE_KV_OFFLOAD=1
 NCCL_IB_DISABLE=1, NCCL/Gloo/TP sockets pinned to enP7s7
 FULL_AND_PIECEWISE CUDA graphs
 distributed_executor_backend=mp
