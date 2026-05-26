@@ -30,6 +30,7 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(telemetry.SPARK_NODES, expected)
         self.assertEqual(telemetry.parse_nodes("all"), list(expected))
         self.assertEqual(telemetry.parse_nodes(""), list(expected))
+        self.assertEqual(telemetry.parse_node_targets("spark4=spark4-10g,spark5"), [("spark4","spark4-10g"), ("spark5","spark5")])
         self.assertEqual(collect.telemetry.DEFAULT_NODES, ",".join(expected))
         self.assertEqual(node_mon.CSV_FIELDS, telemetry.CSV_FIELDS)
         self.assertIn("vllm_requests_running", telemetry.CSV_FIELDS)
@@ -62,6 +63,18 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(summary["last_root_disk_used_pct"],72.0)
         self.assertEqual(summary["net_tx_mbps"]["max"],4.0)
         self.assertEqual(summary["cpu_util_pct"]["avg"],20.0)
+
+    def test_collect_summary_marks_cached_fetch_failures_as_stale(self):
+        text = "\n".join([
+            ",".join(node_mon.CSV_FIELDS),
+            telemetry_row(unix_ts=1,cpu_util_pct=10,mem_used_pct=50,gpu_util_pct=20),
+        ])
+        rows = collect.read_rows(text)
+        summary = collect.summarize_node(rows,"","ssh timed out",True)
+        self.assertEqual(summary["sample_count"],1)
+        self.assertEqual(summary["error"],"")
+        self.assertEqual(summary["fetch_error"],"ssh timed out")
+        self.assertEqual(summary["stale_data"],1)
 
     def test_vllm_metrics_parser_sums_live_depth(self):
         text = "\n".join([
