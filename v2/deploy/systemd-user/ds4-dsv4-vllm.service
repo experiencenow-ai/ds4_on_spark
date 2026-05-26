@@ -1,0 +1,21 @@
+[Unit]
+Description=DS4 DSV4 vLLM service on spark4+spark5
+After=network-online.target
+StartLimitIntervalSec=1800
+StartLimitBurst=2
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/ds4_on_spark/v2
+EnvironmentFile=-%h/.config/ds4/dsv4-spark45.env
+ExecStart=%h/ds4_on_spark/v2/scripts/ds4_dsv4_recipe_spark45.sh start
+ExecStop=%h/ds4_on_spark/v2/scripts/ds4_dsv4_recipe_spark45.sh stop
+RemainAfterExit=true
+Restart=no
+TimeoutStartSec=900
+TimeoutStopSec=120
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
