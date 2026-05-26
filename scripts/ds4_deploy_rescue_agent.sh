@@ -53,6 +53,8 @@ copy_payload()
 	scp $scp_opts "$repo_dir/scripts/ds4_rescue_agent.service" "$host:.config/systemd/user/ds4-rescue-agent.service"
 	scp $scp_opts "$repo_dir/scripts/ds4_rescue_client.py" "$host:.ds4-rescue/ds4_rescue_client.py"
 	scp $scp_opts "$repo_dir/scripts/ds4_peer_ssh_heartbeat.py" "$host:.ds4-rescue/ds4_peer_ssh_heartbeat.py"
+	scp $scp_opts "$repo_dir/scripts/spark_memory_launch_guard.py" "$host:.ds4-rescue/spark_memory_launch_guard.py"
+	scp $scp_opts "$repo_dir/scripts/spark_extend_swap.sh" "$host:.ds4-rescue/spark_extend_swap.sh"
 	scp $scp_opts "$repo_dir/scripts/ds4-peer-ssh-heartbeat.service" "$host:.config/systemd/user/ds4-peer-ssh-heartbeat.service"
 	scp $scp_opts "$repo_dir/scripts/ds4-peer-ssh-heartbeat.timer" "$host:.config/systemd/user/ds4-peer-ssh-heartbeat.timer"
 	scp $scp_opts "$repo_dir/scripts/ds4_sshd_watchdog.sh" "$host:.ds4-rescue/ds4_sshd_watchdog.sh"

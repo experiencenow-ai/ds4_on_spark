@@ -13,6 +13,8 @@ KILL_RUNTIME_TIMEOUT_SECONDS="${DS4_WATCHDOG_KILL_RUNTIME_TIMEOUT_SECONDS:-45}"
 SYSRQ_REBOOT="${DS4_WATCHDOG_SYSRQ_REBOOT:-1}"
 TOP_MEM_COUNT="${DS4_WATCHDOG_KILL_TOP_MEM_COUNT:-16}"
 MIN_KILL_RSS_KB="${DS4_WATCHDOG_MIN_KILL_RSS_KB:-262144}"
+TOP_VSZ_COUNT="${DS4_WATCHDOG_KILL_TOP_VSZ_COUNT:-8}"
+MIN_KILL_VSZ_KB="${DS4_WATCHDOG_MIN_KILL_VSZ_KB:-67108864}"
 KILL_GPU_PROCS="${DS4_WATCHDOG_KILL_GPU_PROCS:-1}"
 PEER_DIR="${DS4_WATCHDOG_PEER_DIR:-}"
 PEER_STALE_SECONDS="${DS4_WATCHDOG_PEER_STALE_SECONDS:-300}"
@@ -436,12 +438,60 @@ kill_top_memory_processes()
 	done
 }
 
+kill_top_virtual_processes()
+{
+	ps -eo pid=,ppid=,user=,rss=,vsz=,comm=,args= --sort=-vsz 2>/dev/null | awk -v min="$MIN_KILL_VSZ_KB" -v limit="$TOP_VSZ_COUNT" -v self="$$" '
+	function protected(pid,ppid,user,rss,vsz,comm,args) {
+		if (pid <= 2 || pid == self || ppid == self)
+			return 1
+		if (comm ~ /^(\[.*\]|systemd|systemctl|sshd|ssh|NetworkManager|wpa_supplicant|systemd-network|systemd-resolve|resolved|dbus-daemon|avahi-daemon|chronyd|systemd-journal|systemd-udevd|login|agetty|sudo|su|sh|bash|dash|awk|ps|logger)$/)
+			return 1
+		if (args ~ /ds4-sshd-watchdog/)
+			return 1
+		if (args !~ /(vllm serve|VLLM::|llama-server|ds4_vllm_lazy_proxy.py|python.*models\/hf|\.gguf)/)
+			return 1
+		return 0
+	}
+	BEGIN {
+		killed = 0
+	}
+	{
+		pid = $1
+		ppid = $2
+		user = $3
+		rss = $4
+		vsz = $5
+		comm = $6
+		args = ""
+		for (i=7; i<=NF; i++)
+			args = args $i (i<NF ? " " : "")
+		if (vsz < min)
+			next
+		if (protected(pid,ppid,user,rss,vsz,comm,args))
+			next
+		printf "%s %s %s %s %s\n", pid, rss, vsz, comm, args
+		killed++
+		if (killed >= limit)
+			exit
+	}' | while read -r pid rss vsz comm args
+	do
+		case "$pid" in
+		''|*[!0-9]*)
+			continue
+			;;
+		esac
+		log "killing top virtual-memory model process pid=$pid rss_kb=$rss vsz_kb=$vsz comm=$comm args=$args"
+		kill -9 "$pid" >/dev/null 2>&1 || true
+	done
+}
+
 kill_heavy_runtimes()
 {
 	log "killing allowlisted and memory-heavy runtimes"
 	kill_allowlisted_containers
 	kill_allowlisted_processes
 	kill_gpu_compute_processes
+	kill_top_virtual_processes
 	kill_top_memory_processes
 }
 
