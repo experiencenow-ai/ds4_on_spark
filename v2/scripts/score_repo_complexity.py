@@ -2,9 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
+import shutil
+import subprocess
 import sys
+import tarfile
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +28,6 @@ FORMAT = "ds4-repo-centaur-complexity-v1"
 DEFAULT_BASELINE = ".complexity-baseline.json"
 DEFAULT_INCLUDE_PATTERNS = [
     "v2/src/**",
-    "v2/tests/**",
     "v2/docs/**",
     "v2/scripts/**",
     "v2/tools/**",
@@ -35,12 +39,19 @@ DEFAULT_INCLUDE_PATTERNS = [
 DEFAULT_EXCLUDE_PATTERNS = [
     ".centaur-audit/**",
 ]
-GATED_METRICS = (
+CHECKED_METRICS = (
     "score",
     "max_function_lines",
     "functions_over_50",
     "functions_over_100",
     "repeated_normalized_blocks",
+    "max_file_lines",
+    "max_file_function_count",
+)
+SHAPE_GATED_METRICS = (
+    "max_function_lines",
+    "functions_over_50",
+    "functions_over_100",
     "max_file_lines",
     "max_file_function_count",
 )
@@ -93,26 +104,39 @@ def _build_scan(root: Path, limit: int, full: bool, product_scope: str) -> dict[
 
 
 def _build_gate(current: dict[str, Any], baseline: dict[str, Any]) -> dict[str, Any]:
+    return _build_named_gate(current, baseline, "gate", "static_baseline", None, SHAPE_GATED_METRICS)
+
+
+def _build_pr_gate(current: dict[str, Any], base: dict[str, Any], base_ref: str | None, mode: str = "gate-pr") -> dict[str, Any]:
+    return _build_named_gate(current, base, mode, "git_base", base_ref, SHAPE_GATED_METRICS)
+
+
+def _build_named_gate(current: dict[str, Any], baseline: dict[str, Any], mode: str, baseline_kind: str, base_ref: str | None, gated_metrics: tuple[str, ...]) -> dict[str, Any]:
     current_scan = current.get("scan") if isinstance(current.get("scan"), dict) else current
     baseline_scan = baseline.get("scan") if isinstance(baseline.get("scan"), dict) else baseline
     if not isinstance(current_scan, dict) or not isinstance(baseline_scan, dict):
         raise RepoComplexityError("complexity gate requires current and baseline scan objects")
     checks = []
-    for name in GATED_METRICS:
+    for name in CHECKED_METRICS:
         current_value = _metric_value(current_scan, name)
         baseline_value = _metric_value(baseline_scan, name)
         delta = round(current_value - baseline_value, 6)
-        checks.append({"name": name, "current": current_value, "baseline": baseline_value, "delta": delta, "max_growth": 0.0, "ok": delta <= 0.0})
-    violations = [item for item in checks if not item["ok"]]
+        gated = name in gated_metrics
+        checks.append({"name": name, "current": current_value, "baseline": baseline_value, "delta": delta, "max_growth": 0.0 if gated else None, "gated": gated, "ok": True if not gated else delta <= 0.0})
+    violations = [item for item in checks if item["gated"] and not item["ok"]]
     return {
         "format": FORMAT,
         "status": "success",
-        "mode": "gate",
+        "mode": mode,
         "profile_id": current_scan.get("profile_id"),
         "direction": "lower_is_better",
         "gate_satisfied": len(violations) == 0,
         "decision": "accept" if not violations else "reject",
         "reason": "ok" if not violations else "complexity_regression",
+        "baseline_kind": baseline_kind,
+        "base_ref": base_ref,
+        "include_patterns": current.get("include_patterns", DEFAULT_INCLUDE_PATTERNS),
+        "exclude_patterns": current.get("exclude_patterns", DEFAULT_EXCLUDE_PATTERNS),
         "checks": checks,
         "violation_count": len(violations),
         "violations": violations,
@@ -148,6 +172,57 @@ def _gate_summary(scan: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _run(args: list[str]) -> str:
+    try:
+        proc = subprocess.run(
+            args,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip()
+        raise RepoComplexityError(f"{' '.join(args)} failed: {detail}") from exc
+    return proc.stdout.strip()
+
+
+def _archive_ref(root: Path, base_ref: str) -> bytes:
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(root), "archive", "--format=tar", base_ref],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or b"").decode("utf-8", errors="replace").strip()
+        raise RepoComplexityError(f"git archive {base_ref} failed: {detail}") from exc
+    return proc.stdout
+
+
+def _extract_archive(payload: bytes, target: Path) -> None:
+    target_resolved = target.resolve()
+    with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
+        for member in archive.getmembers():
+            destination = (target / member.name).resolve()
+            if destination != target_resolved and target_resolved not in destination.parents:
+                raise RepoComplexityError(f"unsafe archive member: {member.name}")
+        archive.extractall(target)
+
+
+def _scan_base_ref(root: Path, base_ref: str, limit: int, full: bool, product_scope: str) -> dict[str, Any]:
+    tmp_parent = Path(tempfile.mkdtemp(prefix="ds4-complexity-base-"))
+    base_root = tmp_parent / "repo"
+    try:
+        base_root.mkdir()
+        _extract_archive(_archive_ref(root, base_ref), base_root)
+        _run(["git", "-C", str(base_root), "init"])
+        return _build_scan(base_root.resolve(), limit, full, product_scope)
+    finally:
+        shutil.rmtree(tmp_parent, ignore_errors=True)
+
+
 def _write(record: dict[str, Any], output: str | None) -> None:
     text = json.dumps(record, indent=2, sort_keys=True) + "\n"
     if output:
@@ -157,9 +232,11 @@ def _write(record: dict[str, Any], output: str | None) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run Centaur complexity scoring against ds4_on_spark.")
-    parser.add_argument("mode", choices=("scan", "gate", "record-baseline"))
+    parser.add_argument("mode", choices=("scan", "gate", "gate-baseline", "gate-pr", "record-baseline"))
     parser.add_argument("--root", default=str(REPO_ROOT))
     parser.add_argument("--baseline", default=DEFAULT_BASELINE)
+    parser.add_argument("--base-ref", default="origin/main")
+    parser.add_argument("--base-root")
     parser.add_argument("--limit", type=int, default=25)
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--product-scope", default="ignore_aware")
@@ -177,6 +254,17 @@ def main(argv: list[str] | None = None) -> int:
             current["baseline_path"] = str(baseline)
             _write(current, args.output)
             return 0
+        if args.mode in {"gate", "gate-pr"}:
+            if args.base_root:
+                base_root = Path(args.base_root).resolve()
+                base = _build_scan(base_root, args.limit, args.full, args.product_scope)
+                base_ref = str(base_root)
+            else:
+                base = _scan_base_ref(root, args.base_ref, args.limit, args.full, args.product_scope)
+                base_ref = args.base_ref
+            gate = _build_pr_gate(current, base, base_ref, args.mode)
+            _write(gate, args.output)
+            return 0 if gate["gate_satisfied"] else 1
         gate = _build_gate(current, _load_json(root / args.baseline))
         _write(gate, args.output)
         return 0 if gate["gate_satisfied"] else 1

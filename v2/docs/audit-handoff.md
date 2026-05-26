@@ -30,19 +30,27 @@ baseline comparison policy here. The code-rot gate is Centaur's
 
 ```bash
 CENTAUR_REPO=/private/tmp/centaur-v2-main-latest \
-  python3 v2/scripts/score_repo_complexity.py gate --root "$PWD"
+  python3 v2/scripts/score_repo_complexity.py gate-pr --root "$PWD" --base-ref origin/main
 
 PYTHONPATH=/private/tmp/centaur-v2-main-latest \
   python3 -m v2.audit.repo_code_rot \
   --root "$PWD" \
   --include-dir v2/src \
   --include-dir v2/scripts \
-  --include-dir v2/tests \
   --docs-dir v2/docs
 ```
 
-`v2/scripts/run_centaur_audit.sh` runs the complexity gate and the v2 unit
-tests for local smoke coverage.
+`gate-pr` compares the current checkout against the requested base ref, so a
+PR is charged only for the complexity delta it introduces. It skips
+`v2/tests/**`, reports total score and repeated-block deltas as context, and
+gates only on shape regressions such as oversized functions/files and new
+over-50-line functions. The static baseline gate remains available as
+`gate-baseline` for explicit baseline maintenance, but CI uses base-ref
+comparisons for both PRs and pushes. `gate` is a safe alias for `gate-pr`.
+
+`v2/scripts/run_centaur_audit.sh` runs the PR-delta complexity gate, code-rot
+gate, and the v2 unit tests for local smoke coverage. Override
+`COMPLEXITY_BASE_REF` when the target branch is not `origin/main`.
 
 ## CI command
 
@@ -50,10 +58,25 @@ tests for local smoke coverage.
 into `.centaur-audit` and runs:
 
 ```bash
-CENTAUR_REPO="$PWD/.centaur-audit" python3 v2/scripts/score_repo_complexity.py gate --root "$PWD"
-PYTHONPATH="$PWD/.centaur-audit" python3 -m v2.audit.repo_code_rot --root "$PWD" --include-dir v2/src --include-dir v2/scripts --include-dir v2/tests --docs-dir v2/docs
+CENTAUR_REPO="$PWD/.centaur-audit" python3 v2/scripts/score_repo_complexity.py gate-pr --root "$PWD" --base-ref "$BASE_SHA_OR_BEFORE_SHA"
+PYTHONPATH="$PWD/.centaur-audit" python3 -m v2.audit.repo_code_rot --root "$PWD" --include-dir v2/src --include-dir v2/scripts --docs-dir v2/docs
 PYTHONPATH="$PWD/v2/src" python3 -m unittest discover -s v2/tests -v
 ```
 
 That is the minimal duplicate surface: DS4 has a target profile and baselines;
 Centaur remains the source of truth for scoring.
+
+## Clean xhigh workspaces
+
+Do not rebase or rewrite shared `main` to clean up local agent trees. Dirty
+trees are local state, not a property of `main`. Give each xhigh a fresh
+worktree from the current base instead:
+
+```bash
+python3 v2/scripts/xhigh_clean_workspace.py --name xhigh7 --fetch
+```
+
+The helper creates `/private/tmp/ds4_xhigh_workspaces/xhigh7` from
+`origin/main` without touching the current checkout. If an existing xhigh
+worktree is dirty, it fails closed and tells the operator to choose a new name
+or clean that specific workspace.

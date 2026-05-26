@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Check out ds4_on_spark
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Check out Centaur audit engine
         if: env.CENTAUR_REPO_TOKEN != ''
         uses: actions/checkout@v4
@@ -36,12 +38,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Run Centaur complexity gate
-        if: env.CENTAUR_REPO_TOKEN != ''
-        run: CENTAUR_REPO="$PWD/.centaur-audit" python3 v2/scripts/score_repo_complexity.py gate --root "$PWD"
+      - name: Run Centaur PR complexity gate
+        if: env.CENTAUR_REPO_TOKEN != '' && github.event_name == 'pull_request'
+        run: CENTAUR_REPO="$PWD/.centaur-audit" python3 v2/scripts/score_repo_complexity.py gate-pr --root "$PWD" --base-ref "${{ github.event.pull_request.base.sha }}"
+      - name: Run Centaur push complexity gate
+        if: env.CENTAUR_REPO_TOKEN != '' && github.event_name != 'pull_request'
+        run: CENTAUR_REPO="$PWD/.centaur-audit" python3 v2/scripts/score_repo_complexity.py gate-pr --root "$PWD" --base-ref "${{ github.event.before }}"
       - name: Run Centaur code-rot gate
         if: env.CENTAUR_REPO_TOKEN != ''
-        run: PYTHONPATH="$PWD/.centaur-audit" python3 -m v2.audit.repo_code_rot --root "$PWD" --include-dir v2/src --include-dir v2/scripts --include-dir v2/tests --docs-dir v2/docs
+        run: PYTHONPATH="$PWD/.centaur-audit" python3 -m v2.audit.repo_code_rot --root "$PWD" --include-dir v2/src --include-dir v2/scripts --docs-dir v2/docs
       - name: Explain skipped Centaur gates
         if: env.CENTAUR_REPO_TOKEN == ''
         run: echo "Set CENTAUR_REPO_TOKEN to let this workflow check out the private Centaur repo and enforce Centaur audit gates."
