@@ -5,7 +5,9 @@ LOGTAG=ds4-sshd-watchdog
 STATE_DIR=/run/ds4-rescue
 FAIL_FILE=$STATE_DIR/sshd-watchdog.failures
 LOCK_DIR=$STATE_DIR/sshd-watchdog.lock
+LOCK_PID_FILE=$LOCK_DIR/pid
 REBOOT_AFTER="${DS4_WATCHDOG_REBOOT_AFTER:-3}"
+LOCK_STALE_REBOOT_SECONDS="${DS4_WATCHDOG_LOCK_STALE_REBOOT_SECONDS:-600}"
 TOP_MEM_COUNT="${DS4_WATCHDOG_KILL_TOP_MEM_COUNT:-16}"
 MIN_KILL_RSS_KB="${DS4_WATCHDOG_MIN_KILL_RSS_KB:-262144}"
 KILL_GPU_PROCS="${DS4_WATCHDOG_KILL_GPU_PROCS:-1}"
@@ -458,6 +460,48 @@ maybe_reboot()
 	systemctl reboot --force
 }
 
+lock_age_seconds()
+{
+	now="$(date +%s)"
+	mtime="$(stat -c %Y "$LOCK_DIR" 2>/dev/null || echo '')"
+	case "$mtime" in
+	''|*[!0-9]*)
+		return 1
+		;;
+	esac
+	printf '%s\n' "$((now - mtime))"
+	return 0
+}
+
+handle_lock_busy()
+{
+	pid="$(cat "$LOCK_PID_FILE" 2>/dev/null || echo '')"
+	age="$(lock_age_seconds 2>/dev/null || echo '')"
+	case "$pid" in
+	''|*[!0-9]*)
+		pid=""
+		;;
+	esac
+	if [ "$pid" != "" ] && kill -0 "$pid" 2>/dev/null
+	then
+		case "$age" in
+		''|*[!0-9]*)
+			age=0
+			;;
+		esac
+		if [ "$LOCK_STALE_REBOOT_SECONDS" != "0" ] && [ "$age" -ge "$LOCK_STALE_REBOOT_SECONDS" ]
+		then
+			log "previous watchdog pid=$pid still active after ${age}s; rebooting by stale-lock policy"
+			systemctl reboot --force
+		fi
+		log "previous watchdog run still active pid=$pid age=${age}s; skipping"
+		return 1
+	fi
+	log "removing stale watchdog lock pid=${pid:-unknown} age=${age:-unknown}s"
+	rm -rf "$LOCK_DIR"
+	return 0
+}
+
 run_rescue()
 {
 	reason="$1"
@@ -499,23 +543,31 @@ run_peer_rescue()
 	log "$reason; external peer health failed; restarting ssh"
 	restart_ssh || true
 	sleep 2
+	failures="$(record_failure)"
+	log "external peer health still awaiting recovery after ssh restart; consecutive_failures=$failures"
+	maybe_reboot "$failures"
 	log "external peer health still unhealthy after ssh restart; killing heavy runtimes"
 	kill_heavy_runtimes
 	sleep 5
 	restart_ssh || true
-	failures="$(record_failure)"
-	log "external peer health still awaiting recovery; consecutive_failures=$failures"
-	maybe_reboot "$failures"
 	return 1
 }
 
 mkdir -p "$STATE_DIR"
 if ! mkdir "$LOCK_DIR" 2>/dev/null
 then
-	log "previous watchdog run still active; skipping"
-	exit 0
+	if ! handle_lock_busy
+	then
+		exit 0
+	fi
+	if ! mkdir "$LOCK_DIR" 2>/dev/null
+	then
+		log "previous watchdog run still active after stale-lock cleanup; skipping"
+		exit 0
+	fi
 fi
-trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM
+printf '%s\n' "$$" > "$LOCK_PID_FILE"
+trap 'rm -rf "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM
 
 case "${1:-}" in
 --force|rescue|rescue-now)
