@@ -63,7 +63,7 @@ The production recipe in `recipes/deepseek-v4-flash-spark45.yaml` uses:
 --max-model-len 1048576
 --enable-prefix-caching
 --no-disable-hybrid-kv-cache-manager
---kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-6}
+--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8}
 --kv-offloading-backend native
 VLLM_USE_SIMPLE_KV_OFFLOAD=1
 ```
@@ -74,17 +74,17 @@ The verified 2026-05-26 launch reported:
 max_model_len:      1048576
 HMA:                enabled
 KV connector:       SimpleCPUOffloadConnector
-CPU KV offload:     6 GiB total default, 3 GiB per TP rank
+CPU KV offload:     8 GiB total default, 4 GiB per TP rank
 GPU KV cache size:  2,088,846 tokens
 1M concurrency:     1.99x
 ```
 
-`DS4_DSV4_KV_OFFLOAD_SIZE=16` was the first verified value. The safer default is
-`6` total because the offload pool is real host RAM. `4` total is still useful
-for repeated medium/large prefixes and is the recovery setting when Spark nodes
-are memory-sensitive. NVMe swap can help the OS survive pressure long enough to
-kill vLLM, but swap is not KV capacity and should not be used for normal
-inference.
+`DS4_DSV4_KV_OFFLOAD_SIZE=16` was the first verified value. The default is `8`
+total because a full 1M-token DSV4 cached prefix is roughly 7 GiB across the TP
+lane. `6` total is a cautious mode, and `4` total is the recovery setting when
+Spark nodes are memory-sensitive. NVMe swap can help the OS survive pressure
+long enough to kill vLLM, but swap is not KV capacity and should not be used for
+normal inference.
 
 This is external CPU KV offload. It preserves the full-quality HF/vLLM DSV4 path
 and avoids the bad full-KV fallback. Durable restart persistence is handled by

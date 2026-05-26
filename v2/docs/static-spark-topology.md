@@ -74,7 +74,7 @@ max_num_batched_tokens=8192
 block_size=256
 fp8 KV cache
 hybrid KV cache manager enabled
-SimpleCPUOffloadConnector via --kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-6} --kv-offloading-backend native
+SimpleCPUOffloadConnector via --kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8} --kv-offloading-backend native
 VLLM_USE_SIMPLE_KV_OFFLOAD=1
 NCCL_IB_DISABLE=1, NCCL/Gloo/TP sockets pinned to enP7s7
 FULL_AND_PIECEWISE CUDA graphs
@@ -103,7 +103,7 @@ max_model_len:      1048576
 container image:    vllm-node-dsv4-lmcache-rankfix
 HMA:                enabled (disable_hybrid_kv_cache_manager=False)
 KV connector:       SimpleCPUOffloadConnector
-CPU KV offload:     6 GiB total default, 3 GiB per TP rank
+CPU KV offload:     8 GiB total default, 4 GiB per TP rank
 GPU KV cache size:  2,088,846 tokens
 1M concurrency:     1.99x
 smoke response:     dsv4-1m-ok

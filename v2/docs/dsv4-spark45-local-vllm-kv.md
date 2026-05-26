@@ -102,7 +102,7 @@ The critical launch settings are:
 --block-size 256
 --kv-cache-dtype fp8
 --enable-prefix-caching
---kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-6}
+--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8}
 --kv-offloading-backend native
 VLLM_USE_SIMPLE_KV_OFFLOAD=1
 --no-disable-hybrid-kv-cache-manager
@@ -117,12 +117,12 @@ reduce avoidable host allocations first: use SimpleCPUOffload, lower
 survival rail.
 
 `DS4_DSV4_KV_OFFLOAD_SIZE` is GiB of CPU KV offload buffer summed across TP
-ranks. The conservative default is `6`, which is `3 GiB` on spark4 and `3 GiB`
-on spark5. The first verified `16` value gave `8 GiB` per node and may be too
-much host-memory pressure for a fragile node. Use `4` total (`2 GiB` per node)
-as a recovery setting if sshd or the API becomes unresponsive during startup.
-Smaller pools still provide useful prefix-cache benefit; they just retain fewer
-offloaded blocks before vLLM has to evict or recompute.
+ranks. The default is `8`, which is `4 GiB` on spark4 and `4 GiB` on spark5.
+This leaves room for roughly one full 1M-token DSV4 cached prefix while still
+being much lighter than the first verified `16` value. Use `6` total as a
+cautious setting and `4` total (`2 GiB` per node) as a recovery setting if sshd
+or the API becomes unresponsive during startup. Smaller pools still allow 1M
+requests, but they may not retain a full 1M prefix for reuse.
 
 Keep `VLLM_USE_SIMPLE_KV_OFFLOAD=1`. Without it, vLLM's native backend can
 select the generic `OffloadingConnector`, whose PyTorch pinned CPU allocations
@@ -182,7 +182,7 @@ Before enabling the DSV4 service after a bad memory event, boot with:
 DS4_DSV4_KV_OFFLOAD_SIZE=4
 ```
 
-Then raise to the default `6` only after `/health`, `/v1/models`, ssh, and
+Then raise to the default `8` only after `/health`, `/v1/models`, ssh, and
 system logs stay stable.
 
 ## Persistent KV Store
