@@ -31,6 +31,29 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["queue_depth"], 12)
         self.assertEqual([node["state"] for node in snap["nodes"]], ["busy", "hot", "down"])
 
+    def test_history_reads_last_csv_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "spark2.csv"
+            path.write_text(
+                "unix_ts,iso_ts,node,gpu_util_pct,gpu_temp_c,gpu_power_w,cpu_util_pct,mem_used_pct,vllm_requests_running,vllm_requests_waiting,vllm_kv_cache_pct,local_queue_depth\n"
+                "1,2026-05-26T00:00:01+00:00,spark2,10,40,20,5,30,1,0,3,7\n"
+                "2,2026-05-26T00:00:02+00:00,spark2,20,41,21,6,31,2,1,4,8\n"
+                "3,2026-05-26T00:00:03+00:00,spark2,30,42,22,7,32,3,2,5,9\n",
+                encoding="utf-8",
+            )
+            hist = dashboard.build_history(tmp, "spark2", 2)
+        self.assertTrue(hist["ok"])
+        self.assertEqual(hist["node"], "spark2")
+        self.assertEqual(len(hist["points"]), 2)
+        self.assertEqual(hist["points"][0]["iso_ts"], "2026-05-26T00:00:02+00:00")
+        self.assertEqual(hist["points"][1]["gpu_pct"], 30)
+        self.assertEqual(hist["points"][1]["queue_depth"], 9)
+
+    def test_history_rejects_invalid_node_name(self):
+        hist = dashboard.build_history("/tmp", "../spark2", 2)
+        self.assertFalse(hist["ok"])
+        self.assertEqual(hist["error"], "invalid node")
+
 
 if __name__ == "__main__":
     unittest.main()

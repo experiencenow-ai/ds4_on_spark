@@ -4,16 +4,30 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import time
+from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 
 DEFAULT_SUMMARY_JSON = "/tmp/ds4_telemetry/mac/cluster_summary.json"
+DEFAULT_NODES_DIR = "/tmp/ds4_telemetry/mac/nodes"
+HISTORY_METRICS = [
+    {"key": "gpu_pct", "label": "GPU", "field": "gpu_util_pct", "unit": "%"},
+    {"key": "kv_pct", "label": "KV", "field": "vllm_kv_cache_pct", "unit": "%"},
+    {"key": "cpu_pct", "label": "CPU", "field": "cpu_util_pct", "unit": "%"},
+    {"key": "mem_pct", "label": "MEM", "field": "mem_used_pct", "unit": "%"},
+    {"key": "temp_c", "label": "TEMP", "field": "gpu_temp_c", "unit": "C"},
+    {"key": "power_w", "label": "PWR", "field": "gpu_power_w", "unit": "W"},
+    {"key": "vllm_running", "label": "RUN", "field": "vllm_requests_running", "unit": ""},
+    {"key": "vllm_waiting", "label": "WAIT", "field": "vllm_requests_waiting", "unit": ""},
+    {"key": "queue_depth", "label": "QUEUE", "field": "local_queue_depth", "unit": ""},
+]
 DASHBOARD_HTML = """<!doctype html>
 <html lang="en">
 <head>
@@ -26,10 +40,11 @@ DASHBOARD_HTML = """<!doctype html>
 main{max-width:1280px;margin:0 auto;padding:18px}.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:14px}
 h1{font-size:22px;line-height:1.1;margin:0}.meta{color:var(--muted);text-align:right;line-height:1.5}.summary{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px;margin-bottom:14px}
 .metric,.card{background:var(--panel);border:1px solid var(--line);border-radius:8px}.metric{padding:12px}.label{color:var(--muted);font-size:12px}.value{font-size:23px;font-weight:700;margin-top:4px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}.card{padding:12px;min-height:150px}.card header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}.card{padding:12px;min-height:150px;cursor:pointer}.card.selected{border-color:var(--busy);box-shadow:0 0 0 1px var(--busy)}.card header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 .node{font-size:18px;font-weight:700}.pill{border-radius:999px;padding:3px 8px;font-size:12px;font-weight:700;color:#111316;background:var(--muted)}.busy .pill{background:var(--busy)}.idle .pill{background:var(--ok)}.warn .pill,.hot .pill{background:var(--warn)}.down .pill{background:var(--bad)}
 .bars{display:grid;gap:8px}.barrow{display:grid;grid-template-columns:54px 1fr 48px;align-items:center;gap:8px;color:var(--muted)}.track{height:8px;background:#0d0f12;border-radius:999px;overflow:hidden}.fill{height:100%;width:0;background:var(--ok)}.busy .gpu .fill,.busy .kv .fill{background:var(--busy)}.warn .fill,.hot .fill{background:var(--warn)}.down .fill{background:var(--bad)}
 .details{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin-top:10px;color:var(--muted)}.details b{color:var(--text);font-weight:600}.error{margin-top:8px;color:var(--bad);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.history{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}.history-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}.history-title{font-size:17px;font-weight:700}.legend{display:flex;flex-wrap:wrap;gap:8px 14px;color:var(--muted);font-size:12px}.legend span{white-space:nowrap}.swatch{display:inline-block;width:9px;height:9px;border-radius:999px;margin-right:5px}.chart-wrap{height:270px;min-height:270px}.chart-wrap canvas{display:block;width:100%;height:100%}.empty{color:var(--muted);padding:24px 0;text-align:center}
 @media (max-width:720px){main{padding:12px}.top{align-items:flex-start;flex-direction:column}.meta{text-align:left}.summary{grid-template-columns:repeat(2,minmax(120px,1fr))}}
 </style>
 </head>
@@ -37,15 +52,26 @@ h1{font-size:22px;line-height:1.1;margin:0}.meta{color:var(--muted);text-align:r
 <div class="top"><h1>Spark Telemetry</h1><div class="meta"><div id="updated">loading</div><div id="source"></div></div></div>
 <section class="summary" id="summary"></section>
 <section class="grid" id="nodes"></section>
+<section class="history" id="history"><div class="empty">select a spark</div></section>
 </main>
 <script>
 const fmt=n=>Number.isFinite(Number(n))?Number(n).toFixed(0):"";
 const pct=n=>Number.isFinite(Number(n))?Number(n).toFixed(0)+"%":"n/a";
 const val=(n,s="")=>Number.isFinite(Number(n))?Number(n).toFixed(1)+s:"n/a";
+let selectedNode="";
+let lastHistory=null;
+const colors=["#63b3ff","#53d18a","#f4bf5f","#ff6b6b","#c084fc","#7dd3fc","#f9a8d4","#a3e635","#fb923c"];
 function metric(label,value){return `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`}
 function bar(label,value,cls){let width=Math.max(0,Math.min(100,Number(value)||0));return `<div class="barrow ${cls}"><span>${label}</span><div class="track"><div class="fill" style="width:${width}%"></div></div><span>${pct(value)}</span></div>`}
-function card(n){return `<article class="card ${n.state}"><header><div class="node">${n.node}</div><div class="pill">${n.state_label}</div></header><div class="bars">${bar("GPU",n.gpu_pct,"gpu")}${bar("KV",n.kv_pct,"kv")}${bar("MEM",n.mem_pct,"mem")}</div><div class="details"><span>Temp <b>${fmt(n.gpu_temp_c)}C</b></span><span>Power <b>${fmt(n.gpu_power_w)}W</b></span><span>vLLM <b>${fmt(n.vllm_running)}/${fmt(n.vllm_waiting)}</b></span><span>Queue <b>${fmt(n.local_q_depth)}</b></span><span>CPU <b>${pct(n.cpu_pct)}</b></span><span>Gateway <b>${n.gateway_up?"up":"down"}</b></span></div>${n.error?`<div class="error">${n.error}</div>`:""}</article>`}
-async function refresh(){try{let r=await fetch("/api/summary",{cache:"no-store"});let d=await r.json();document.getElementById("updated").textContent="updated "+(d.updated_iso||"unknown");document.getElementById("source").textContent=d.summary_path||"";document.getElementById("summary").innerHTML=[metric("Busy GPUs",`${d.busy_gpu_nodes}/${d.reachable_nodes}`),metric("vLLM Run/Wait",`${fmt(d.vllm_running)}/${fmt(d.vllm_waiting)}`),metric("Max KV",pct(d.max_kv_pct)),metric("Hot Nodes",fmt(d.hot_nodes)),metric("Queue Depth",fmt(d.queue_depth))].join("");document.getElementById("nodes").innerHTML=d.nodes.map(card).join("")}catch(e){document.getElementById("updated").textContent="dashboard read failed: "+e}}
+function card(n){return `<article class="card ${n.state} ${n.node===selectedNode?"selected":""}" data-node="${n.node}"><header><div class="node">${n.node}</div><div class="pill">${n.state_label}</div></header><div class="bars">${bar("GPU",n.gpu_pct,"gpu")}${bar("KV",n.kv_pct,"kv")}${bar("MEM",n.mem_pct,"mem")}</div><div class="details"><span>Temp <b>${fmt(n.gpu_temp_c)}C</b></span><span>Power <b>${fmt(n.gpu_power_w)}W</b></span><span>vLLM <b>${fmt(n.vllm_running)}/${fmt(n.vllm_waiting)}</b></span><span>Queue <b>${fmt(n.local_q_depth)}</b></span><span>CPU <b>${pct(n.cpu_pct)}</b></span><span>Gateway <b>${n.gateway_up?"up":"down"}</b></span></div>${n.error?`<div class="error">${n.error}</div>`:""}</article>`}
+function wireCards(){document.querySelectorAll(".card[data-node]").forEach(el=>el.onclick=()=>{selectedNode=el.dataset.node;document.querySelectorAll(".card").forEach(c=>c.classList.toggle("selected",c.dataset.node===selectedNode));refreshHistory()})}
+function metricLast(metric,points){let p=points[points.length-1]||{};let v=Number(p[metric.key]);return Number.isFinite(v)?v:null}
+function metricScale(metric,points){if(["gpu_pct","kv_pct","cpu_pct","mem_pct","temp_c"].includes(metric.key))return 100;let max=Math.max(...points.map(p=>Number(p[metric.key])||0));return Math.max(1,max)}
+function drawHistory(data){lastHistory=data;let el=document.getElementById("history");if(!data.ok||!data.points.length){el.innerHTML=`<div class="history-head"><div class="history-title">${selectedNode||"spark"}</div></div><div class="empty">no history</div>`;return}let legend=data.metrics.map((m,i)=>{let v=metricLast(m,data.points);return `<span><i class="swatch" style="background:${colors[i%colors.length]}"></i>${m.label} <b>${v===null?"n/a":val(v,m.unit)}</b></span>`}).join("");el.innerHTML=`<div class="history-head"><div class="history-title">${data.node}</div><div class="label">${data.points.length} samples</div></div><div class="legend">${legend}</div><div class="chart-wrap"><canvas id="chart"></canvas></div>`;paintChart(data)}
+function paintChart(data){let canvas=document.getElementById("chart");if(!canvas)return;let rect=canvas.getBoundingClientRect();let dpr=window.devicePixelRatio||1;canvas.width=Math.max(1,Math.floor(rect.width*dpr));canvas.height=Math.max(1,Math.floor(rect.height*dpr));let ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);let w=rect.width,h=rect.height,pad=28;ctx.clearRect(0,0,w,h);ctx.strokeStyle="#313943";ctx.lineWidth=1;for(let i=0;i<=4;i++){let y=pad+((h-(pad*2))*i/4);ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(w-pad,y);ctx.stroke()}let points=data.points;data.metrics.forEach((m,i)=>{let scale=metricScale(m,points);ctx.strokeStyle=colors[i%colors.length];ctx.lineWidth=1.8;ctx.beginPath();points.forEach((p,idx)=>{let x=pad+((w-(pad*2))*idx/Math.max(1,points.length-1));let y=h-pad-((h-(pad*2))*Math.max(0,Math.min(scale,Number(p[m.key])||0))/scale);if(idx===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});ctx.stroke()});ctx.fillStyle="#a8b1bb";ctx.font="12px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif";ctx.fillText("now",w-pad-24,h-8);ctx.fillText("then",pad,h-8)}
+async function refreshHistory(){if(!selectedNode)return;try{let r=await fetch(`/api/history?node=${encodeURIComponent(selectedNode)}&limit=720`,{cache:"no-store"});drawHistory(await r.json())}catch(e){document.getElementById("history").innerHTML=`<div class="empty">history read failed</div>`}}
+async function refresh(){try{let r=await fetch("/api/summary",{cache:"no-store"});let d=await r.json();if(!selectedNode&&d.nodes&&d.nodes.length)selectedNode=d.nodes[0].node;document.getElementById("updated").textContent="updated "+(d.updated_iso||"unknown");document.getElementById("source").textContent=d.summary_path||"";document.getElementById("summary").innerHTML=[metric("Busy GPUs",`${d.busy_gpu_nodes}/${d.reachable_nodes}`),metric("vLLM Run/Wait",`${fmt(d.vllm_running)}/${fmt(d.vllm_waiting)}`),metric("Max KV",pct(d.max_kv_pct)),metric("Hot Nodes",fmt(d.hot_nodes)),metric("Queue Depth",fmt(d.queue_depth))].join("");document.getElementById("nodes").innerHTML=d.nodes.map(card).join("");wireCards();refreshHistory()}catch(e){document.getElementById("updated").textContent="dashboard read failed: "+e}}
+window.addEventListener("resize",()=>{if(lastHistory)paintChart(lastHistory)});
 refresh();setInterval(refresh,3000);
 </script></body></html>
 """
@@ -54,6 +80,7 @@ refresh();setInterval(refresh,3000);
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--summary-json", default=DEFAULT_SUMMARY_JSON)
+    p.add_argument("--nodes-dir", default=DEFAULT_NODES_DIR)
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
     return(p.parse_args())
@@ -64,6 +91,10 @@ def fnum(value: Any) -> float:
         return(float(value))
     except Exception:
         return(0.0)
+
+
+def valid_node_name(node: str) -> bool:
+    return(node.startswith("spark") and all(ch.isalnum() or ch in "-_" for ch in node))
 
 
 def node_state(row: dict[str,Any]) -> tuple[str,str]:
@@ -128,14 +159,50 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
     })
 
 
-def make_handler(summary_path: str) -> type[BaseHTTPRequestHandler]:
+def history_limit(value: str | None) -> int:
+    try:
+        limit = int(value or "360")
+    except ValueError:
+        limit = 360
+    return(max(1,min(2000,limit)))
+
+
+def build_history(nodes_dir: str, node: str, limit: int = 360) -> dict[str,Any]:
+    if not valid_node_name(node):
+        return({"ok":False,"node":node,"error":"invalid node","metrics":HISTORY_METRICS,"points":[]})
+    path = Path(nodes_dir) / ("%s.csv" % node)
+    rows: deque[dict[str,str]] = deque(maxlen=limit)
+    try:
+        with path.open("r",encoding="utf-8",newline="") as fp:
+            for row in csv.DictReader(fp):
+                if row.get("iso_ts","") != "":
+                    rows.append(row)
+    except Exception as exc:
+        return({"ok":False,"node":node,"history_path":str(path),"error":str(exc),"metrics":HISTORY_METRICS,"points":[]})
+    points = []
+    for row in rows:
+        point: dict[str,Any] = {"iso_ts": row.get("iso_ts",""), "unix_ts": fnum(row.get("unix_ts"))}
+        for metric in HISTORY_METRICS:
+            point[metric["key"]] = fnum(row.get(metric["field"]))
+        points.append(point)
+    return({"ok":True,"node":node,"history_path":str(path),"metrics":HISTORY_METRICS,"points":points})
+
+
+def make_handler(summary_path: str, nodes_dir: str) -> type[BaseHTTPRequestHandler]:
     class DashboardHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
-            path = urlparse(self.path).path
+            parsed = urlparse(self.path)
+            path = parsed.path
             if path in ("/","/index.html"):
                 self._send(200,"text/html; charset=utf-8",DASHBOARD_HTML.encode("utf-8"))
             elif path == "/api/summary":
                 payload = json.dumps(build_snapshot(summary_path),sort_keys=True).encode("utf-8")
+                self._send(200,"application/json",payload)
+            elif path == "/api/history":
+                qs = parse_qs(parsed.query)
+                node = (qs.get("node") or [""])[0]
+                limit = history_limit((qs.get("limit") or [""])[0])
+                payload = json.dumps(build_history(nodes_dir,node,limit),sort_keys=True).encode("utf-8")
                 self._send(200,"application/json",payload)
             elif path == "/healthz":
                 self._send(200,"text/plain; charset=utf-8",b"ok\n")
@@ -155,7 +222,7 @@ def make_handler(summary_path: str) -> type[BaseHTTPRequestHandler]:
 
 def main() -> int:
     args = parse_args()
-    server = ThreadingHTTPServer((args.host,args.port),make_handler(args.summary_json))
+    server = ThreadingHTTPServer((args.host,args.port),make_handler(args.summary_json,args.nodes_dir))
     print("serving Spark telemetry dashboard on http://%s:%d" % (args.host,args.port),flush=True)
     server.serve_forever()
     return(0)
