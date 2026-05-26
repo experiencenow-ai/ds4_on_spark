@@ -7,11 +7,11 @@ import time
 
 from .profiles import ProfileRegistry
 from .queue import InferenceQueue
-from .runners import AntirezRunner, AutoRunner, CommandRunner, FakeRunner, SparkHttpRunner, VllmOpenAIRunner
+from .runners import AntirezRunner, AutoRunner, CommandRunner, FakeRunner, HmaPersistentRunner, SparkHttpRunner, VllmOpenAIRunner
 from .service import load_requests_jsonl
 from .topology import SparkTopology
 
-RUNNER_CHOICES = ("fake", "command", "vllm", "antirez", "auto", "spark")
+RUNNER_CHOICES = ("fake", "command", "vllm", "hma", "antirez", "auto", "spark")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -303,6 +303,8 @@ def _make_runner(kind: str, command: list[str], timeout_s: int):
         return CommandRunner(command, timeout_s=timeout_s)
     if kind == "vllm":
         return VllmOpenAIRunner(timeout_s=timeout_s)
+    if kind == "hma":
+        return HmaPersistentRunner(timeout_s=timeout_s)
     if kind == "antirez":
         return AntirezRunner(timeout_s=timeout_s)
     if kind == "auto":

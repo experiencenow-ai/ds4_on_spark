@@ -245,6 +245,16 @@ class VllmOpenAIRunner(OpenAICompatibleRunner):
         )
 
 
+class HmaPersistentRunner(OpenAICompatibleRunner):
+    def __init__(self, *, base_url: str | None = None, api_key: str | None = None, timeout_s: int = 300) -> None:
+        super().__init__(
+            base_url=base_url or os.environ.get("DS4_HMA_BASE_URL") or "http://spark4:8300",
+            api_key=api_key if api_key is not None else os.environ.get("DS4_HMA_API_KEY", ""),
+            timeout_s=timeout_s,
+            default_extra_body=_json_env("DS4_HMA_EXTRA_BODY_JSON"),
+        )
+
+
 class AntirezRunner:
     def __init__(self, *, base_url: str | None = None, timeout_s: int = 300) -> None:
         self.base_url = (base_url or os.environ.get("DS4_ANTIREZ_BASE_URL") or "http://127.0.0.1:8080").rstrip("/")
@@ -302,9 +312,12 @@ class AntirezRunner:
 class AutoRunner:
     def __init__(self, *, timeout_s: int = 300) -> None:
         self._vllm = VllmOpenAIRunner(timeout_s=timeout_s)
+        self._hma = HmaPersistentRunner(timeout_s=timeout_s)
         self._antirez = AntirezRunner(timeout_s=timeout_s)
 
     def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
+        if profile.backend == "vllm_hma":
+            return self._hma.run_one(request, profile)
         if profile.backend in {"vllm", "vllm_mtp"}:
             return self._vllm.run_one(request, profile)
         if profile.backend == "antirez":
@@ -365,6 +378,8 @@ def make_runner(kind: str, *, timeout_s: int) -> Any:
         return AutoRunner(timeout_s=timeout_s)
     if kind == "vllm":
         return VllmOpenAIRunner(timeout_s=timeout_s)
+    if kind == "hma":
+        return HmaPersistentRunner(timeout_s=timeout_s)
     if kind == "antirez":
         return AntirezRunner(timeout_s=timeout_s)
     if kind == "spark":

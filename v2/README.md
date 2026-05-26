@@ -50,14 +50,11 @@ Production Sparks should run `ds4-infer startup-models` after reboot. The
 command warms only the resident profiles assigned to that Spark by topology;
 spark7 stays on demand.
 
-KV cache is optional launch plumbing, not a separate model variant. The normal
-DSV4 profile references `profiles/kv_cache/dsv4_spark45_lmcache.json` when
-external KV reuse is desired. The live vLLM prefix-cache proof on Qwen27 showed
-30k prompt tokens drop from 46.19s cold to 0.286s warm when the prefix was
-token-identical. DSV4 advertises a 1,048,576-token model limit and the current
-spark4+spark5 service exposes roughly 3.2M aggregate KV-token slots, so 1M
-contexts are a rare scheduled mode, not a default batch shape. See
-`docs/kv-cache.md`.
+KV cache is optional launch plumbing, not a separate production model variant.
+The normal DSV4 service uses the HMA/native CPU-offload recipe in
+`profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json`. The live vLLM service on
+spark4+spark5 reports `max_model_len=1048576`, a 2,088,846-token GPU KV pool,
+and roughly two 1M-token full-context request slots. See `docs/kv-cache.md`.
 
 ## Inference queue
 
@@ -139,6 +136,8 @@ tool:spark.status
 tool:spark7.command.run
 tool:spark.transfer.plan
 tool:spark.transfer.run
+tool:ds4.kvcache.plan
+tool:ds4.hma.plan
 ```
 
 Bash-backed tools use fixed argv, schema validation, timeouts, output caps, and no `shell=True`. CPU service batches use a bounded process-wide pool; allowlisted commands come only from `CPU_SERVICE_COMMANDS_JSON`.
@@ -182,3 +181,20 @@ full history locally but runs inference on the selected Spark. See
 Gateway, transfer, and audit extraction notes live in
 `docs/model-gateway-operational-notes.md`, `docs/spark-transfer.md`, and
 `docs/audit-handoff.md`.
+
+## DSV4 HMA Persistent KV Experiment
+
+`ds4-hma` plans a pinned-only vLLM dynamic connector for durable DSV4/HMA state
+packages. It is deliberately separate from generic LMCache: a safe DSV4 disk
+cache must preserve latent/MLA state, sliding-window state, indexer state,
+compressor state, and the HMA group block map.
+
+```bash
+PYTHONPATH=src python3 -m ds4_hma.cli plan \
+  --deployment profiles/hma/dsv4_hma_persistent.json
+```
+
+The profile `dsv4_vllm_hma_persistent_experimental_v1` is not production
+eligible and is skipped by startup warmups. It must be explicitly pinned until
+the live vLLM extractor/injector seam passes the restart-and-reload acceptance
+gate in `docs/dsv4-hma-persistent-kv.md`.

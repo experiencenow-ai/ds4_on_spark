@@ -8,7 +8,8 @@ This release keeps the purge architecture and adds the service pieces needed for
 - The inference queue is request-first: every request has independent status, completion notice, and pollable events.
 - Queue batch keys include profile, node, chat/completion mode, job class, input size, output size, thinking budget, and shared prefix hash.
 - `ds4-transfer` adds a direct Spark-to-Spark transfer planner/executor for the 200Gbps fabric.
-- `ds4-kvcache` plans optional vLLM external KV cache deployments without creating new model profiles.
+- `ds4-kvcache` plans optional vLLM HMA/native CPU KV-offload deployments without creating new model profiles.
+- `ds4-hma` adds a pinned-only DSV4/HMA persistent KV connector scaffold for live extractor/injector work.
 
 ## Static topology
 
@@ -53,6 +54,15 @@ Result: 85 tests passed.
 - Added `tool:spark.status`, `tool:spark7.command.run`, and transfer tool entries in the lattice registry.
 - Added `ds4-spark-chat`, a simple CLI chat interface for the resident vLLM/MTP lane with optional spark7 tool access.
 - Added `docs/xhigh-live-validation.md` and `profiles/validation/xhigh_live_validation_tasks.json` for the required live v2 runner checks.
-- Added `docs/kv-cache.md` and `profiles/kv_cache/dsv4_spark45_lmcache.json` as optional cache launch plumbing for the existing DSV4 profile.
+- Added `docs/kv-cache.md` and `profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json` as optional HMA/native CPU KV-offload plumbing for the existing DSV4 profile.
 - Documented live prefix-cache behavior: a spark7 Qwen27 30k-token prompt dropped from 46.190s cold to 0.286s warm, with 29,792 prompt tokens served from local cache.
-- Documented context limits: Qwen tokenizer limit is 262,144 tokens; DSV4 model limit is 1,048,576 tokens; current DSV4 service exposes about 3.2M aggregate KV-token slots.
+- Documented context limits: Qwen tokenizer limit is 262,144 tokens; DSV4 model limit is 1,048,576 tokens; current DSV4 service exposes 2,088,846 GPU KV-token slots.
+
+## DSV4 HMA persistent KV scaffold
+
+- Added `ds4_hma` with an atomic `ds4-dsv4-hma-state-package-v1` store and a dynamic vLLM connector class, `ds4_hma.vllm_connector:DS4HmaPersistentConnector`.
+- The connector implements the HMA `request_finished_all_groups` surface and fails closed at the live DSV4 extractor/injector seam.
+- Added `profiles/hma/dsv4_hma_persistent.json` and `dsv4_vllm_hma_persistent_experimental_v1`.
+- The profile is pinned-only, not production eligible, and skipped by startup warmups.
+- Added `tool:ds4.hma.plan` and `docs/dsv4-hma-persistent-kv.md`.
+- Durable disk KV is still gated on live vLLM DSV4 extractor/injector work: warm, write package, restart, reload same prefix, verify output parity and lower prefill/TTFT, and corrupt a package part to confirm visible failure.

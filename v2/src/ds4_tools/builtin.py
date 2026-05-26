@@ -116,6 +116,12 @@ def kvcache_plan(arguments: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "plan": plan_deployment(deployment)}
 
 
+def hma_plan(arguments: dict[str, Any]) -> dict[str, Any]:
+    from ds4_hma.service import Dsv4HmaDeployment, plan_deployment
+    deployment = Dsv4HmaDeployment.load(Path(str(arguments.get("deployment", "profiles/hma/dsv4_hma_persistent.json"))))
+    return {"ok": True, "plan": plan_deployment(deployment)}
+
+
 class _TextExtractor(HTMLParser):
     def __init__(self) -> None:
         super().__init__()

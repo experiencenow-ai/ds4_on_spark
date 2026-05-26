@@ -67,7 +67,8 @@
         "chat_mtp"
       ],
       "resident_profiles": [
-        "dsv4_vllm_mtp_smartest_v1"
+        "dsv4_vllm_mtp_smartest_v1",
+        "dsv4_vllm_hma_persistent_experimental_v1"
       ],
       "default_capacity": 1,
       "immediate_reserved": false,
@@ -81,7 +82,8 @@
         "chat_mtp"
       ],
       "resident_profiles": [
-        "dsv4_vllm_mtp_smartest_v1"
+        "dsv4_vllm_mtp_smartest_v1",
+        "dsv4_vllm_hma_persistent_experimental_v1"
       ],
       "default_capacity": 1,
       "immediate_reserved": false,
@@ -126,10 +128,15 @@
       "dsv4_vllm_mtp_smartest_v1": [
         "spark4",
         "spark5"
+      ],
+      "dsv4_vllm_hma_persistent_experimental_v1": [
+        "spark4",
+        "spark5"
       ]
     },
     "profile_node_group_ingress": {
-      "dsv4_vllm_mtp_smartest_v1": "spark5"
+      "dsv4_vllm_mtp_smartest_v1": "spark5",
+      "dsv4_vllm_hma_persistent_experimental_v1": "spark4"
     }
   }
 }
