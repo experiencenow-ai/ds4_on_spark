@@ -30,10 +30,11 @@ resident profiles to the topology.
 
 ## DSV4 Launch Rule
 
-The spark4+spark5 DSV4 lane must use the no-Ray dual-Spark recipe path. This is
-not an interchangeable implementation detail. Each Spark has one GPU, and the
-working MTP result was produced by vLLM's multi-node `mp` backend with explicit
-node ranks, not by Ray placement groups.
+The spark4+spark5 DSV4 lane must use the no-Ray dual-Spark recipe path with the
+LMCache dynamic KV connector. This is not an interchangeable implementation
+detail. Each Spark has one GPU, and the working MTP result was produced by
+vLLM's multi-node `mp` backend with explicit node ranks, not by Ray placement
+groups.
 
 Use the service wrapper:
 
@@ -47,7 +48,7 @@ The service launches:
 v2/scripts/ds4_dsv4_recipe_spark45.sh
   -> spark-vllm-docker PR 219
   -> v2/recipes/deepseek-v4-flash-spark45.yaml
-  -> run-recipe.sh ... --no-ray --no-cache-dirs -d
+  -> run-recipe.sh ... -t vllm-node-dsv4-lmcache-rankfix --no-ray --no-cache-dirs -d
 ```
 
 The recipe runner must use the old working runtime lineage:
@@ -58,6 +59,7 @@ runner ref:        refs/pull/219/head
 runner commit:     7a3249e3b4826233972c147a4fe2c6f791227a0b
 vLLM fork:         https://github.com/jasl/vllm.git
 vLLM commit:       dda4668b59567416f86956cfe7bbc1eab371a61e
+LMCache version:   v0.4.5
 recipe source:     https://github.com/tonyd2wild/deepseek-v4-flash-dual-spark-recipe
 recipe commit:     84387a446ae42ca1c98ca912c8136642043ea9c6
 ```
@@ -67,14 +69,38 @@ The working serving command shape is:
 ```text
 TP=2, PP=1, EP enabled
 MTP speculative decoding with 2 tokens
-max_model_len=200000
+max_model_len=45056
 max_num_seqs=2
 max_num_batched_tokens=8192
 block_size=256
 fp8 KV cache
+LMCacheConnectorV1Dynamic with kv_role=kv_both
+LMCache local CPU cache: 16 GiB
+LMCache local disk cache: /tmp/ds4-lmcache/dsv4-spark45, 512 GiB
+NCCL_IB_DISABLE=1, NCCL/Gloo/TP sockets pinned to enP7s7
 FULL_AND_PIECEWISE CUDA graphs
 distributed_executor_backend=mp
 node ranks: spark4 rank 0, spark5 rank 1 --headless
+```
+
+The `vllm-node-dsv4-lmcache-rankfix` image is required for this exact shape.
+Build `vllm-node-dsv4-lmcache:latest` from
+`v2/docker/dsv4-lmcache.Dockerfile`, then build
+`vllm-node-dsv4-lmcache-rankfix:latest` from
+`v2/docker/dsv4-lmcache-rankfix.Dockerfile` on both spark4 and spark5. The
+rankfix layer keeps LMCache from mapping spark5's single local GPU to `cuda:1`
+when TP=2 spans two one-GPU nodes.
+
+The live verified launch on 2026-05-26 exposed:
+
+```text
+API endpoint:       http://10.20.0.14:8000/v1
+served model name:  deepseek-v4-flash
+max_model_len:      45056
+container image:    vllm-node-dsv4-lmcache-rankfix
+rank 0 LMCache:     world_size=2, local_world_size=1, worker_id=0, local_worker_id=0
+rank 1 LMCache:     world_size=2, local_world_size=1, worker_id=1, local_worker_id=0
+smoke response:     dsv4-ok
 ```
 
 The measured working artifact reported:
@@ -91,11 +117,13 @@ single stream:      about 20.9 generated tok/s
 concurrency 2:      about 38-43 aggregate generated tok/s
 ```
 
-This is the known-good command from the benchmark artifact:
+This is the old benchmark command shape that the service wrapper now adapts
+with the rank-fixed LMCache image:
 
 ```bash
 DOTENV_CONTAINER_NAME=vllm_deepseek_v4_flash \
-  ./run-recipe.sh recipes/deepseek-v4-flash-local.yaml --no-ray --no-cache-dirs -d
+  ./run-recipe.sh recipes/deepseek-v4-flash-spark45.yaml \
+    -t vllm-node-dsv4-lmcache-rankfix --no-ray --no-cache-dirs -d
 ```
 
 Do not replace this with a Ray vLLM service unless a new benchmark proves the

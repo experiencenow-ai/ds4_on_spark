@@ -1,8 +1,8 @@
 recipe_version: "1"
-name: DeepSeek V4 Flash spark4+spark5
-description: Official DeepSeek V4 Flash no-Ray TP=2 MTP=2 recipe for the spark4+spark5 DSV4 lane.
+name: DeepSeek V4 Flash spark4+spark5 LMCache
+description: Official DeepSeek V4 Flash no-Ray TP=2 MTP=2 recipe for the spark4+spark5 DSV4 lane, launched with the LMCache dynamic KV connector.
 model: deepseek-ai/DeepSeek-V4-Flash
-container: vllm-node-dsv4
+container: vllm-node-dsv4-lmcache-rankfix
 cluster_only: true
 build_args:
   - --vllm-repo
@@ -16,7 +16,7 @@ defaults:
   tensor_parallel: 2
   pipeline_parallel: 1
   gpu_memory_utilization: 0.8
-  max_model_len: 200000
+  max_model_len: 45056
   max_num_batched_tokens: 8192
   max_num_seqs: 2
   block_size: 256
@@ -30,8 +30,13 @@ env:
   DG_JIT_USE_NVRTC: "0"
   DG_JIT_NVCC_COMPILER: /usr/local/cuda/bin/nvcc
   DG_JIT_PRINT_COMPILER_COMMAND: "1"
-  NCCL_IB_DISABLE: "0"
+  NCCL_IB_DISABLE: "1"
+  NCCL_SOCKET_IFNAME: enP7s7
+  GLOO_SOCKET_IFNAME: enP7s7
+  TP_SOCKET_IFNAME: enP7s7
   NCCL_DEBUG: WARN
+  LMCACHE_USE_EXPERIMENTAL: "True"
+  LMCACHE_CONFIG_FILE: /etc/ds4/lmcache_dsv4_spark45.yaml
 command: |
   vllm serve deepseek-ai/DeepSeek-V4-Flash \
     --served-model-name {served_model_name} \
@@ -52,6 +57,7 @@ command: |
     --no-enable-flashinfer-autotune \
     --compilation-config '{{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}}' \
     --speculative-config '{{"method":"deepseek_mtp","num_speculative_tokens":2}}' \
+    --kv-transfer-config '{{"kv_connector":"LMCacheConnectorV1Dynamic","kv_role":"kv_both","kv_connector_module_path":"lmcache.integration.vllm.lmcache_connector_v1"}}' \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \
     --enable-auto-tool-choice \
