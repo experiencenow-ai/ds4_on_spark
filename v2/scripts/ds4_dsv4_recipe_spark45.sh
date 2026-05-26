@@ -19,6 +19,8 @@ persistent_mod_source="${DS4_DSV4_PERSIST_MOD_SOURCE:-$HOME/ds4_on_spark/v2/runt
 persistent_strict="${DS4_DSV4_PERSIST_STRICT:-1}"
 python_hash_seed="${DS4_DSV4_PYTHONHASHSEED:-0}"
 
+echo "[ds4-dsv4] legacy Docker recipe path; current source-built launch is scripts/ds4_dsv4_spark45_local_vllm.sh" >&2
+
 ensure_runner()
 {
 	if [ ! -d "$recipe_repo/.git" ]; then

@@ -116,6 +116,12 @@ def _validate_deployment(deployment: KvCacheDeployment) -> None:
             "until they implement vLLM SupportsHMA; use HMA-compatible CPU KV "
             "offload or a proven HMA connector"
         )
+    if deployment.model_id == "deepseek-ai/DeepSeek-V4-Flash" and deployment.connector.kv_connector == "OffloadingConnector":
+        raise ValueError(
+            "DSV4 long-context KV offload must use SimpleCPUOffloadConnector; "
+            "plain OffloadingConnector does not prove the HMA-aware persistent "
+            "SimpleCPUOffload path"
+        )
 
 
 def plan_deployment(deployment: KvCacheDeployment) -> dict[str, Any]:
@@ -209,6 +215,8 @@ def _default_connector_name(connector_id: str) -> str:
         return "LMCacheConnectorV1Dynamic"
     if connector_id == "lmcache":
         return "LMCacheConnectorV1"
+    if connector_id == "simple_cpu_offload":
+        return "SimpleCPUOffloadConnector"
     if connector_id == "offloading":
         return "OffloadingConnector"
     return connector_id
@@ -233,7 +241,7 @@ def _dedupe_args(extra_args: tuple[str, ...], *, present: set[str]) -> list[str]
         if skip_next:
             skip_next = False
             continue
-        if item in present:
+        if item.startswith("--") and item in present:
             skip_next = index + 1 < len(extra_args) and not extra_args[index + 1].startswith("--")
             continue
         out.append(item)

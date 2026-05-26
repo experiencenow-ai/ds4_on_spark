@@ -55,8 +55,8 @@
       "target_nodes": ["spark4", "spark5"],
       "profiles": ["dsv4_vllm_mtp_smartest_v1"],
       "purpose": "Prove the normal DSV4 vLLM profile can be launched with HMA enabled and external CPU KV offload without adding a second DSV4 instance.",
-      "command_template": "cd {repo}/v2 && PYTHONPATH=src python3 -m ds4_kvcache.cli write-scripts --deployment profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json --output-dir /tmp/ds4_hma_kvoffload_dsv4 && /tmp/ds4_hma_kvoffload_dsv4/00_install_kv_cache_deps.sh && echo 'start /tmp/ds4_hma_kvoffload_dsv4/start_vllm_cache.sh under the Spark vLLM service supervisor before running queue-warm-prefixes'",
-      "acceptance": ["vLLM starts with HMA enabled", "startup logs do not say hybrid KV cache manager is disabled", "one DSV4 vLLM server owns both KV load and save", "queue-warm-prefixes records a completed warm for a long shared_prefix", "second same-prefix request has materially lower TTFT/prefill time than cold", "no prefiller/decoder/proxy split is started"]
+      "command_template": "ssh spark5 'cd {repo}/v2 && systemctl --user restart ds4-dsv4-local-worker.service' && ssh spark4 'cd {repo}/v2 && systemctl --user restart ds4-dsv4-local-head.service && curl -fsS http://127.0.0.1:8000/v1/models'",
+      "acceptance": ["vLLM starts from experiencenow-ai/vllm@75358b5ef269050fbbf0d34a1e9772d8c56ac7c7", "startup logs say SimpleCPUOffloadConnector", "startup logs do not say hybrid KV cache manager is disabled", "model metadata reports max_model_len=1048576", "one DSV4 vLLM server owns both KV load and save", "queue-warm-prefixes records a completed warm for a long shared_prefix", "second same-prefix request has materially lower TTFT/prefill time than cold", "no prefiller/decoder/proxy split is started"]
     },
     {
       "task_id": "xhv-007-dsv4-hma-persistent-kv-restart-reload",
@@ -64,7 +64,7 @@
       "target_nodes": ["spark4", "spark5"],
       "profiles": ["dsv4_vllm_hma_persistent_experimental_v1"],
       "purpose": "Wire and prove the pinned-only DSV4/HMA persistent KV connector across process restart without falling back to generic LMCache.",
-      "command_template": "cd {repo}/v2 && PYTHONPATH=src python3 -m ds4_hma.cli write-scripts --deployment profiles/hma/dsv4_hma_persistent.json --output-dir /tmp/ds4_hma_dsv4 && echo 'install ds4_hma into the vLLM image, launch /tmp/ds4_hma_dsv4/start_dsv4_hma_persistent.sh under the Spark supervisor, then run warm/restart/reload acceptance'",
+      "command_template": "cd {repo}/v2 && PYTHONPATH=src python3 -m ds4_hma.cli write-scripts --deployment profiles/hma/dsv4_hma_persistent.json --output-dir /tmp/ds4_hma_dsv4 && echo 'install ds4_hma into the source-built vLLM runtime, launch /tmp/ds4_hma_dsv4/start_dsv4_hma_persistent.sh under the Spark supervisor, then run warm/restart/reload acceptance'",
       "acceptance": ["vLLM imports ds4_hma.vllm_connector and recognizes SupportsHMA", "startup logs do not say hybrid KV cache manager is disabled", "warm request writes a ds4-dsv4-hma-state-package-v1 manifest", "restart vLLM and rerun the same prefix", "reload comes from disk without hidden recompute", "output matches the non-cache baseline", "TTFT or prefill time is materially lower than cold", "corrupting one package part fails visibly with kv_load_failure_policy=fail"]
     }
   ]

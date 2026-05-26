@@ -1,8 +1,7 @@
 [Unit]
-Description=DS4 DSV4 local vLLM head service on spark4
+Description=DS4 DSV4 local vLLM worker service on spark5
 After=network-online.target
 Wants=network-online.target
-Conflicts=ds4-dsv4-local-head.service
 StartLimitIntervalSec=1800
 StartLimitBurst=2
 
@@ -10,7 +9,7 @@ StartLimitBurst=2
 Type=simple
 WorkingDirectory=%h/ds4_on_spark/v2
 EnvironmentFile=-%h/.config/ds4/dsv4-spark45.env
-ExecStart=%h/ds4_on_spark/v2/scripts/ds4_dsv4_spark45_local_vllm.sh head
+ExecStart=%h/ds4_on_spark/v2/scripts/ds4_dsv4_spark45_local_vllm.sh worker
 Restart=on-failure
 RestartSec=10
 TimeoutStartSec=1200

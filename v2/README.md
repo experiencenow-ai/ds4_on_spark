@@ -50,11 +50,13 @@ Production Sparks should run `ds4-infer startup-models` after reboot. The
 command warms only the resident profiles assigned to that Spark by topology;
 spark7 stays on demand.
 
-KV cache is optional launch plumbing, not a separate production model variant.
-The normal DSV4 service uses the HMA/native CPU-offload recipe in
-`profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json`. The live vLLM service on
-spark4+spark5 reports `max_model_len=1048576`, a 2,088,846-token GPU KV pool,
-and roughly two 1M-token full-context request slots. See `docs/kv-cache.md`.
+KV cache is launch plumbing, not a separate production model variant. The
+normal DSV4 service is the source-built local vLLM runtime from
+`experiencenow-ai/vllm@75358b5ef269050fbbf0d34a1e9772d8c56ac7c7`, launched by
+`scripts/ds4_dsv4_spark45_local_vllm.sh` with native SimpleCPUOffload. The live
+spark4+spark5 shape reports `max_model_len=1048576`, a 2,088,846-token GPU KV
+pool, and roughly two 1M-token full-context request slots. See
+`docs/kv-cache.md`.
 
 ## Inference queue
 

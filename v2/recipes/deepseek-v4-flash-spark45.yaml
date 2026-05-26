@@ -1,6 +1,11 @@
+# LEGACY Docker fallback recipe.
+# Current DSV4 launch is the source-built local runtime in:
+#   scripts/ds4_dsv4_spark45_local_vllm.sh
+#   docs/dsv4-spark45-local-vllm-kv.md
+# Do not use this file to recreate the current production lane.
 recipe_version: "1"
-name: DeepSeek V4 Flash spark4+spark5 HMA KV offload
-description: Official DeepSeek V4 Flash no-Ray TP=2 MTP=2 recipe for the spark4+spark5 DSV4 lane, launched with DSV4 hybrid KV allocation and vLLM native KV offload.
+name: DeepSeek V4 Flash spark4+spark5 legacy Docker HMA KV offload
+description: Legacy Docker fallback for the spark4+spark5 DSV4 lane. The current production lane is source-built local vLLM from experiencenow-ai/vllm@75358b5ef269050fbbf0d34a1e9772d8c56ac7c7.
 model: deepseek-ai/DeepSeek-V4-Flash
 container: vllm-node-dsv4-lmcache-rankfix
 cluster_only: true
@@ -53,11 +58,11 @@ command: |
     --max-num-batched-tokens {max_num_batched_tokens} \
     --gpu-memory-utilization {gpu_memory_utilization} \
     --no-disable-hybrid-kv-cache-manager \
-    --kv-offloading-size 16 \
+    --kv-offloading-size 8 \
     --kv-offloading-backend native \
     --distributed-executor-backend mp \
     --no-enable-flashinfer-autotune \
-    --compilation-config '{{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}}' \
+    --enforce-eager \
     --speculative-config '{{"method":"deepseek_mtp","num_speculative_tokens":2}}' \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \

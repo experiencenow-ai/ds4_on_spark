@@ -78,11 +78,14 @@ The DeepSeek V4 Flash path also carried parser/backend details:
   MTP lane. The currently verified launch keeps vLLM's hybrid KV cache manager
   enabled, uses `max_model_len=1048576`, and adds native CPU KV offload with
   `--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8} --kv-offloading-backend native`
-  and `VLLM_USE_SIMPLE_KV_OFFLOAD=1`.
+  and `VLLM_USE_SIMPLE_KV_OFFLOAD=1`. The current source-built runtime is
+  `experiencenow-ai/vllm@75358b5ef269050fbbf0d34a1e9772d8c56ac7c7` launched by
+  `scripts/ds4_dsv4_spark45_local_vllm.sh`, not the old Docker recipe.
   Do not add
   `LMCacheConnectorV1Dynamic` to this lane unless a live probe proves the
-  connector implements HMA support; in the current image it disables the DSV4
-  compressed KV layout and collapses useful context back to about 45k tokens.
+  connector implements HMA support; the tested generic LMCache path disabled
+  the DSV4 compressed KV layout and collapsed useful context back to about 45k
+  tokens.
 - DFlash drafter discovery under `DS4_DFLASH_ROOT`.
 - DFlash speculative config: `method=dflash`, `num_speculative_tokens=15`,
   FlashAttention backend, max seqs 16, GPU utilization 0.85.

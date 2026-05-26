@@ -1,18 +1,18 @@
 [Unit]
-Description=DS4 DSV4 local vLLM head service on spark4
+Description=LEGACY DS4 DSV4 Docker recipe service on spark4+spark5
 After=network-online.target
 Wants=network-online.target
-Conflicts=ds4-dsv4-local-head.service
 StartLimitIntervalSec=1800
 StartLimitBurst=2
 
 [Service]
-Type=simple
+Type=oneshot
 WorkingDirectory=%h/ds4_on_spark/v2
 EnvironmentFile=-%h/.config/ds4/dsv4-spark45.env
-ExecStart=%h/ds4_on_spark/v2/scripts/ds4_dsv4_spark45_local_vllm.sh head
-Restart=on-failure
-RestartSec=10
+ExecStart=%h/ds4_on_spark/v2/scripts/ds4_dsv4_recipe_spark45.sh start
+ExecStop=%h/ds4_on_spark/v2/scripts/ds4_dsv4_recipe_spark45.sh stop
+RemainAfterExit=true
+Restart=no
 TimeoutStartSec=1200
 TimeoutStopSec=120
 StandardOutput=journal

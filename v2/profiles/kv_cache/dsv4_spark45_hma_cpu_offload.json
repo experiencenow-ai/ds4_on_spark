@@ -14,17 +14,22 @@
   "working_directory": "/home/spark4/ds4_on_spark/v2",
   "pythonpath": "/home/spark4/ds4_on_spark/v2/src",
   "connector": {
-    "connector_id": "offloading",
+    "connector_id": "simple_cpu_offload",
     "kv_role": "kv_both",
     "kv_connector_extra_config": {
-      "cpu_bytes_to_use": "17179869184",
+      "cpu_bytes_to_use": "8589934592",
       "eviction_policy": "lru",
-      "spec_name": "CPUOffloadingSpec"
+      "lazy_offload": true,
+      "spec_name": "SimpleCPUOffloadingSpec"
     }
   },
   "extra_env": {
     "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-    "VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1"
+    "PYTHONHASHSEED": "0",
+    "VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1",
+    "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT": "/var/tmp/ds4_hma_store/dsv4/simple_cpu_offload",
+    "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_STRICT": "1",
+    "VLLM_USE_SIMPLE_KV_OFFLOAD": "1"
   },
   "cache_directories": [],
   "extra_args": [
@@ -41,7 +46,7 @@
     "--enable-expert-parallel",
     "--distributed-executor-backend", "mp",
     "--no-enable-flashinfer-autotune",
-    "--compilation-config", "{\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"custom_ops\":[\"all\"]}",
+    "--enforce-eager",
     "--speculative-config", "{\"method\":\"deepseek_mtp\",\"num_speculative_tokens\":2}",
     "--tokenizer-mode", "deepseek_v4",
     "--tool-call-parser", "deepseek_v4",

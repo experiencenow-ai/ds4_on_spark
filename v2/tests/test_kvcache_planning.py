@@ -29,6 +29,8 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["openai_base_url"], "http://spark4:8000")
         self.assertIn("--kv-transfer-config", plan["vllm"]["argv"])
         self.assertIn("--no-disable-hybrid-kv-cache-manager", plan["vllm"]["argv"])
+        self.assertEqual(plan["vllm"]["argv"][plan["vllm"]["argv"].index("--max-num-seqs") + 1], "2")
+        self.assertEqual(plan["vllm"]["argv"][plan["vllm"]["argv"].index("--max-num-batched-tokens") + 1], "8192")
         self.assertNotIn("LMCacheConnectorV1Dynamic", plan["vllm"]["command"])
         self.assertNotIn("prefiller", plan)
         self.assertNotIn("decoder", plan)
@@ -38,12 +40,15 @@ class KvCachePlanningTests(unittest.TestCase):
         deployment = KvCacheDeployment.load(DEPLOYMENT)
         config = kv_transfer_config(deployment.connector)
 
-        self.assertEqual(config["kv_connector"], "OffloadingConnector")
+        self.assertEqual(config["kv_connector"], "SimpleCPUOffloadConnector")
         self.assertEqual(config["kv_role"], "kv_both")
-        self.assertEqual(config["kv_connector_extra_config"]["spec_name"], "CPUOffloadingSpec")
-        self.assertEqual(config["kv_connector_extra_config"]["cpu_bytes_to_use"], "17179869184")
+        self.assertEqual(config["kv_connector_extra_config"]["spec_name"], "SimpleCPUOffloadingSpec")
+        self.assertEqual(config["kv_connector_extra_config"]["cpu_bytes_to_use"], "8589934592")
+        self.assertTrue(config["kv_connector_extra_config"]["lazy_offload"])
         self.assertNotIn("kv_connector_module_path", config)
         self.assertNotIn("LMCACHE_USE_EXPERIMENTAL", deployment.extra_env)
+        self.assertEqual(deployment.extra_env["VLLM_USE_SIMPLE_KV_OFFLOAD"], "1")
+        self.assertEqual(deployment.extra_env["PYTHONHASHSEED"], "0")
 
     def test_dsv4_lmcache_dynamic_is_rejected_until_hma_supported(self) -> None:
         deployment = json.loads(DEPLOYMENT.read_text())
@@ -52,6 +57,15 @@ class KvCachePlanningTests(unittest.TestCase):
             "kv_role": "kv_both",
         }
         with self.assertRaisesRegex(ValueError, "SupportsHMA"):
+            KvCacheDeployment.from_json(deployment)
+
+    def test_dsv4_plain_offloading_connector_is_rejected(self) -> None:
+        deployment = json.loads(DEPLOYMENT.read_text())
+        deployment["connector"] = {
+            "connector_id": "offloading",
+            "kv_role": "kv_both",
+        }
+        with self.assertRaisesRegex(ValueError, "SimpleCPUOffloadConnector"):
             KvCacheDeployment.from_json(deployment)
 
     def test_write_launch_scripts(self) -> None:
@@ -63,7 +77,7 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertTrue(install.exists())
             self.assertTrue(start.exists())
             self.assertIn("no connector packages requested", install.read_text())
-            self.assertIn("OffloadingConnector", start.read_text())
+            self.assertIn("SimpleCPUOffloadConnector", start.read_text())
             self.assertIn("--no-disable-hybrid-kv-cache-manager", start.read_text())
             self.assertNotIn("LMCacheConnectorV1Dynamic", start.read_text())
             self.assertTrue((Path(tmp) / "kv_cache_launch_manifest.json").exists())
