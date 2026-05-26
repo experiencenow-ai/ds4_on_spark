@@ -1,2 +1,0 @@
-{"w":"A","m":2,"sa":8,"sb":6,"r":"A is more correct and specific.","h":"Fix the key mistake before adding detail.","t":["factuality"]}
-

@@ -1,0 +1,82 @@
+name: centaur-audit
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+on:
+  pull_request:
+    paths:
+      - 'v2/**'
+      - 'fixtures/model_contract/**'
+      - '.audit-baseline.json'
+      - '.complexity-baseline.json'
+      - '.github/workflows/centaur-audit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'v2/**'
+      - 'fixtures/model_contract/**'
+      - '.audit-baseline.json'
+      - '.complexity-baseline.json'
+      - '.github/workflows/centaur-audit.yml'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    env:
+      CENTAUR_REPO_TOKEN: ${{ secrets.CENTAUR_REPO_TOKEN }}
+    steps:
+      - name: Check out ds4_on_spark
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check out Centaur audit engine
+        if: env.CENTAUR_REPO_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          repository: experiencenow-ai/centaur
+          path: .centaur-audit
+          token: ${{ env.CENTAUR_REPO_TOKEN }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run Centaur PR complexity gate
+        if: env.CENTAUR_REPO_TOKEN != '' && github.event_name == 'pull_request'
+        run: CENTAUR_REPO="$PWD/.centaur-audit" python3 v2/scripts/score_repo_complexity.py gate-pr --root "$PWD" --base-ref "${{ github.event.pull_request.base.sha }}" --output .centaur-complexity-gate.json
+      - name: Run Centaur push complexity gate
+        if: env.CENTAUR_REPO_TOKEN != '' && github.event_name != 'pull_request'
+        run: CENTAUR_REPO="$PWD/.centaur-audit" python3 v2/scripts/score_repo_complexity.py gate-pr --root "$PWD" --base-ref "${{ github.event.before }}" --output .centaur-complexity-gate.json
+      - name: Render Centaur complexity cost
+        if: always() && env.CENTAUR_REPO_TOKEN != '' && hashFiles('.centaur-complexity-gate.json') != ''
+        run: python3 v2/scripts/render_complexity_cost.py .centaur-complexity-gate.json --output .centaur-complexity-cost.md
+      - name: Add Centaur complexity cost to summary
+        if: always() && env.CENTAUR_REPO_TOKEN != '' && hashFiles('.centaur-complexity-cost.md') != ''
+        run: cat .centaur-complexity-cost.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Comment Centaur complexity cost on PR
+        if: always() && env.CENTAUR_REPO_TOKEN != '' && github.event_name == 'pull_request' && hashFiles('.centaur-complexity-cost.md') != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- ds4-complexity-cost-report -->';
+            const body = fs.readFileSync('.centaur-complexity-cost.md', 'utf8');
+            const issue_number = context.payload.pull_request.number;
+            const {owner, repo} = context.repo;
+            const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
+            const prior = comments.data.find((comment) => comment.user?.type === 'Bot' && comment.body?.includes(marker));
+            if (prior) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: prior.id, body});
+            } else {
+              await github.rest.issues.createComment({owner, repo, issue_number, body});
+            }
+      - name: Run Centaur code-rot gate
+        if: env.CENTAUR_REPO_TOKEN != ''
+        run: PYTHONPATH="$PWD/.centaur-audit" python3 -m v2.audit.repo_code_rot --root "$PWD" --include-dir v2/src --include-dir v2/scripts --docs-dir v2/docs
+      - name: Explain skipped Centaur gates
+        if: env.CENTAUR_REPO_TOKEN == ''
+        run: echo "Set CENTAUR_REPO_TOKEN to let this workflow check out the private Centaur repo and enforce Centaur audit gates."
+      - name: Run v2 tests
+        run: PYTHONPATH="$PWD/v2/src" python3 -m unittest discover -s v2/tests -v

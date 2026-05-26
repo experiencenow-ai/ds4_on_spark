@@ -1,0 +1,15 @@
+{
+  "format": "ds4-model-profile-v1",
+  "profile_id": "qwen3_6_35b_a3b_fp8_fastest_v1",
+  "model_id": "Qwen/Qwen3.6-35B-A3B-FP8",
+  "backend": "vllm",
+  "capability_classes": ["fastest"],
+  "supported_job_classes": ["summary", "json_repair", "triage", "tool_selection"],
+  "supports_chat": true,
+  "supports_completion": true,
+  "supports_thinking": true,
+  "production_eligible": true,
+  "quality": {"ds4_eval_correct": 68, "ds4_eval_total": 92, "ds4_eval_accuracy": 0.739},
+  "performance": {"measured_output_tps": 241.8, "latency_rank": 0.5},
+  "routing": {"default_for": ["fastest"], "rank": 100, "chat_template_thinking_key": "enable_thinking"}
+}

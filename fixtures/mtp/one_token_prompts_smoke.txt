@@ -1,4 +1,0 @@
-Explain Redis streams in one paragraph.
-Write a Python function that reverses a linked list.
-Summarize why batch inference improves throughput.
-Translate good morning to Spanish and French.

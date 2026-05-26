@@ -1,0 +1,27 @@
+[Unit]
+Description=DS4 model gateway with optional resident model backends
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+SyslogIdentifier=ds4-model-gateway
+Environment=FRONT_HOST=127.0.0.1
+Environment=FRONT_PORT=8000
+Environment=BACKEND_HOST=127.0.0.1
+Environment=BACKEND_PORT=18000
+Environment=DS4_RESIDENT_BACKEND_BASE_PORT=18100
+Environment=DS4_RESIDENT_START=1
+EnvironmentFile=-%h/.config/ds4/model-gateway.env
+ExecStart=/usr/bin/env python3 %h/bin/ds4_vllm_lazy_proxy.py
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=3600
+TimeoutStopSec=60
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

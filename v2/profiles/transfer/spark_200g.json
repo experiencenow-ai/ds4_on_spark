@@ -1,0 +1,31 @@
+{
+  "format": "ds4-transfer-topology-v1",
+  "fabric_id": "spark_200g_static_v1",
+  "fabric_hint": "200Gbps Spark interconnect; transfer commands should run on the source Spark so payload never hairpins through the controller.",
+  "rsync_options": [
+    "-a",
+    "--whole-file",
+    "--inplace",
+    "--partial",
+    "--numeric-ids",
+    "--no-compress",
+    "--info=stats2,progress2",
+    "--protect-args"
+  ],
+  "ssh_options": [
+    "-T",
+    "-o", "Compression=no",
+    "-o", "BatchMode=yes",
+    "-x"
+  ],
+  "nodes": [
+    {"node_id": "spark0", "host": "spark0", "root_allowlist": ["/mnt", "/data", "/tmp"]},
+    {"node_id": "spark1", "host": "spark1", "root_allowlist": ["/mnt", "/data", "/tmp"]},
+    {"node_id": "spark2", "host": "spark2", "root_allowlist": ["/mnt", "/data", "/tmp"]},
+    {"node_id": "spark3", "host": "spark3", "root_allowlist": ["/mnt", "/data", "/tmp"]},
+    {"node_id": "spark4", "host": "spark4", "root_allowlist": ["/mnt", "/data", "/tmp"]},
+    {"node_id": "spark5", "host": "spark5", "root_allowlist": ["/mnt", "/data", "/tmp"]},
+    {"node_id": "spark6", "host": "spark6", "root_allowlist": ["/mnt", "/data", "/tmp"]},
+    {"node_id": "spark7", "host": "spark7", "root_allowlist": ["/mnt", "/data", "/tmp"]}
+  ]
+}

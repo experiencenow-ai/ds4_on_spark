@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ds4-on-spark"
+version = "0.4.0"
+description = "Clean DS4 Spark service substrate: inference profiles, lattice tools, and bounded agent loops."
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+ds4-infer = "ds4_infer.cli:main"
+ds4-tools = "ds4_tools.cli:main"
+ds4-agent = "ds4_agent.cli:main"
+ds4-calibrate = "ds4_calibrate.cli:main"
+ds4-transfer = "ds4_transfer.cli:main"
+ds4-spark-chat = "ds4_chat.cli:main"
+ds4-sparkrunner-queue = "ds4_infer.sparkrunner_adapter:main"
+ds4-kvcache = "ds4_kvcache.cli:main"
+ds4-hma = "ds4_hma.cli:main"
+
+[project.optional-dependencies]
+web = ["playwright>=1.40"]

@@ -1,0 +1,23 @@
+[Unit]
+Description=DS4 Qwen 35B resident vLLM backend
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+Environment=PATH=%h/standard-runtimes/vllm-0.21.0/bin:/usr/local/bin:/usr/bin:/bin
+Environment=CPATH=%h/standard-runtimes/python3.12-dev-extract/usr/include/python3.12:%h/standard-runtimes/python3.12-dev-extract/usr/include
+Environment=C_INCLUDE_PATH=%h/standard-runtimes/python3.12-dev-extract/usr/include/python3.12:%h/standard-runtimes/python3.12-dev-extract/usr/include
+ExecStart=%h/standard-runtimes/vllm-0.21.0/bin/python %h/standard-runtimes/vllm-0.21.0/bin/vllm serve %h/models/hf/Qwen/Qwen3.6-35B-A3B-FP8 --served-model-name Qwen/Qwen3.6-35B-A3B-FP8 --host 127.0.0.1 --port 18101 --max-model-len 32768 --max-num-seqs 32 --max-num-batched-tokens 8192 --gpu-memory-utilization 0.36 --enable-chunked-prefill --enable-prefix-caching --async-scheduling --reasoning-parser qwen3 --trust-remote-code
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=3600
+TimeoutStopSec=120
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

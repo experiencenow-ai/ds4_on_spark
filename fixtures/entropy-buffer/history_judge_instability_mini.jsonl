@@ -1,5 +1,0 @@
-{"type":"judge_pair","judge_id":"j1","item_id":"pair.u1","task_family":"math","prompt_template_id":"unstable.v1","a_model_id":"mA","b_model_id":"mB","label":"a"}
-{"type":"judge_pair","judge_id":"j2","item_id":"pair.u1","task_family":"math","prompt_template_id":"unstable.v1","a_model_id":"mA","b_model_id":"mB","label":"b"}
-{"type":"judge_pair","judge_id":"j3","item_id":"pair.u2","task_family":"math","prompt_template_id":"unstable.v1","a_model_id":"mA","b_model_id":"mB","label":"invalid"}
-{"type":"judge_pair","judge_id":"j4","item_id":"pair.s1","task_family":"math","prompt_template_id":"stable.v1","a_model_id":"mA","b_model_id":"mB","label":"a"}
-{"type":"judge_pair","judge_id":"j5","item_id":"pair.s1","task_family":"math","prompt_template_id":"stable.v1","a_model_id":"mA","b_model_id":"mB","label":"a"}

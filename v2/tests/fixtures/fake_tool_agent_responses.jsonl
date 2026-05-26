@@ -1,0 +1,2 @@
+{"role":"assistant","content":"","tool_calls":[{"id":"call_1","type":"function","function":{"name":"tool:ds4.json.validate","arguments":"{\"text\":\"{\\\"ok\\\":true}\"}"}}]}
+{"role":"assistant","content":"The JSON is valid."}
