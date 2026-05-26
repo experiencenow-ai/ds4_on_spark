@@ -1,0 +1,12 @@
+[Unit]
+Description=DS4 rootless rescue agent
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.ds4-rescue/ds4_rescue_agent.py --host 0.0.0.0 --port 25100 --token-file %h/.ds4-rescue/token
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
