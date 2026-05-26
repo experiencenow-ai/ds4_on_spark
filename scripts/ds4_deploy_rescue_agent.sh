@@ -55,6 +55,7 @@ copy_payload()
 	scp "$repo_dir/scripts/ds4-peer-ssh-heartbeat.timer" "$host:.config/systemd/user/ds4-peer-ssh-heartbeat.timer"
 	scp "$repo_dir/scripts/ds4_sshd_watchdog.sh" "$host:.ds4-rescue/ds4_sshd_watchdog.sh"
 	scp "$repo_dir/scripts/ds4_install_sshd_watchdog.sh" "$host:.ds4-rescue/ds4_install_sshd_watchdog.sh"
+	scp "$repo_dir/scripts/ds4_root_watchdog_install_root_once.sh" "$host:.ds4-rescue/ds4_root_watchdog_install_root_once.sh"
 	scp "$repo_dir/scripts/ds4-sshd-watchdog.service" "$host:.ds4-rescue/ds4-sshd-watchdog.service"
 	scp "$repo_dir/scripts/ds4-sshd-watchdog.timer" "$host:.ds4-rescue/ds4-sshd-watchdog.timer"
 	scp "$repo_dir/scripts/ds4-sshd-rescue.sudoers" "$host:.ds4-rescue/ds4-sshd-rescue.sudoers"
@@ -71,11 +72,14 @@ start_user_service()
 install_root_watchdog()
 {
 	host="$1"
-	if [ "$sudo_password" = "" ]
+	if [ "${DS4_REMOTE_SUDO_TTY:-0}" = "1" ]
 	then
-		ssh "$host" 'sudo -n "$HOME/.ds4-rescue/ds4_install_sshd_watchdog.sh" "$HOME/.ds4-rescue"; sudo -n loginctl enable-linger "$USER"; loginctl show-user "$USER" -p Linger'
+		ssh -tt "$host" 'sudo "$HOME/.ds4-rescue/ds4_root_watchdog_install_root_once.sh"'
+	elif [ "$sudo_password" = "" ]
+	then
+		ssh "$host" 'sudo -n "$HOME/.ds4-rescue/ds4_root_watchdog_install_root_once.sh"'
 	else
-		{ printf '%s\n' "$sudo_password"; printf '%s\n' "$sudo_password"; } | ssh "$host" 'sudo -S "$HOME/.ds4-rescue/ds4_install_sshd_watchdog.sh" "$HOME/.ds4-rescue"; sudo -S loginctl enable-linger "$USER"; loginctl show-user "$USER" -p Linger'
+		printf '%s\n' "$sudo_password" | ssh "$host" 'sudo -S -p "" "$HOME/.ds4-rescue/ds4_root_watchdog_install_root_once.sh"'
 	fi
 }
 

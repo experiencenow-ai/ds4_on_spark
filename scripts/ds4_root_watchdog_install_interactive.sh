@@ -14,10 +14,14 @@ restore_tty()
 }
 trap restore_tty EXIT INT TERM
 
-printf 'Remote sudo password for Spark accounts: ' >&2
-stty -echo
-IFS= read -r sudo_password
-stty echo
-printf '\n' >&2
-
-DS4_SUDO_PASSWORD="$sudo_password" DS4_RESCUE_ROOT=1 "$repo_dir/scripts/ds4_deploy_rescue_agent.sh" "${nodes[@]}"
+if [ "${DS4_SUDO_PASSWORD:-}" = "" ]
+then
+	cat >&2 <<'EOF'
+This installer first uses normal ssh/scp access to copy the payload.
+When root install starts, each reachable Spark will show a normal remote sudo prompt.
+Type that Spark account password at the sudo prompt when it appears.
+EOF
+	DS4_REMOTE_SUDO_TTY=1 DS4_RESCUE_ROOT=1 "$repo_dir/scripts/ds4_deploy_rescue_agent.sh" "${nodes[@]}"
+else
+	DS4_RESCUE_ROOT=1 "$repo_dir/scripts/ds4_deploy_rescue_agent.sh" "${nodes[@]}"
+fi
