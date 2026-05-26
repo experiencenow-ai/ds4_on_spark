@@ -7,8 +7,8 @@
   "supported_job_classes": ["atom_edit", "analysis", "debug", "cluster_synthesis"],
   "supports_chat": false,
   "supports_completion": true,
-  "production_eligible": true,
-  "quality": {"status": "requires current calibration"},
+  "production_eligible": false,
+  "quality": {"status": "legacy fallback; not resident in the static Spark topology"},
   "performance": {"latency_rank": 2.0},
-  "routing": {"default_for": ["smart"], "rank": 100}
+  "routing": {"default_for": [], "rank": 1000}
 }

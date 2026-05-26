@@ -52,10 +52,9 @@ PYTHONPATH=src python3 -m ds4_infer.cli startup-models \
 ```
 
 That posts one tiny request per resident profile to the Spark-local
-OpenAI-compatible endpoint. It warms spark0-3 Qwen profiles, spark4's grouped
-DSV4 vLLM/MTP lane, and spark6's antirez profile. Spark5 is a grouped-lane
-secondary and spark7 is experimental/on-demand, so neither gets a production
-warmup request.
+OpenAI-compatible endpoint. It warms spark0-3 and spark6 Qwen profiles plus
+spark4's grouped DSV4 vLLM/MTP lane. Spark5 is a grouped-lane secondary and
+spark7 is experimental/on-demand, so neither gets a production warmup request.
 
 ## Tuning defaults worth preserving
 

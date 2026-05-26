@@ -26,8 +26,8 @@ from ds4_infer.topology import SparkTopology
 
 LANE_PROFILES = (
     "qwen3_6_27b_fp8_efficient_v1",
+    "qwen3_6_35b_a3b_fp8_fastest_v1",
     "dsv4_vllm_mtp_smartest_v1",
-    "dsv4_antirez_smart_v1",
 )
 GROUP_INGRESS = {"spark4+spark5": "spark5"}
 
@@ -233,12 +233,7 @@ def submit_loop(queue: InferenceQueue, registry: ProfileRegistry, topology: Spar
 
 
 def make_request(profile: ModelProfile, request_id: str) -> InferenceRequest:
-    if profile.profile_id == "dsv4_antirez_smart_v1":
-        chat = False
-        job_class = "analysis"
-        prompt = "Write a dense DS4 queue saturation paragraph with numbered observations. Continue until the token budget is used."
-        payload_input = {"prompt": prompt, "suffix": prompt}
-    elif profile.profile_id == "dsv4_vllm_mtp_smartest_v1":
+    if profile.profile_id == "dsv4_vllm_mtp_smartest_v1":
         chat = True
         job_class = "tool_chat"
         payload_input = {"messages": [{"role": "user", "content": "Produce a detailed DS4 queue saturation analysis. Keep generating until the token budget is used."}]}

@@ -63,8 +63,8 @@ spark0 process 5: --node-id spark4+spark5
 spark0 process 6: --node-id spark6
 ```
 
-This covers the seven production GPUs: spark0-3 as independent Qwen lanes,
-spark4+spark5 as one DSV4 group lane, and spark6 as the antirez/support lane.
+This covers the seven production GPUs: spark0-3 and spark6 as independent
+Qwen lanes, and spark4+spark5 as one DSV4 group lane.
 spark7 remains experimental unless the topology explicitly assigns it a
 resident production profile.
 
@@ -92,8 +92,9 @@ The harness keeps the topology-derived mix queued for five minutes:
 
 ```text
 spark0-3: qwen3_6_27b_fp8_efficient_v1
+spark0-3: qwen3_6_35b_a3b_fp8_fastest_v1
 spark4+spark5: dsv4_vllm_mtp_smartest_v1, ingress spark5
-spark6: dsv4_antirez_smart_v1
+spark6: qwen3_6_27b_fp8_efficient_v1, qwen3_6_35b_a3b_fp8_fastest_v1
 ```
 
 It writes `plan.json`, `gpu_samples.jsonl`, `summary.json`, and the queue DB
@@ -121,15 +122,14 @@ Manual chat uses the same path:
 ```bash
 ds4-spark-chat -m ds4v
 ds4-spark-chat -m qwen
-ds4-spark-chat -m ds4a
+ds4-spark-chat -m fast
 ```
 
 Aliases:
 
 - `ds4v`: DeepSeek V4 Flash vLLM/MTP lane on spark4+spark5.
-- `ds4a`: DeepSeek V4 Flash antirez/support profile.
-- `qwen`: Qwen efficient lane on spark0-3.
-- `fast`: fastest Qwen lane on spark0-3.
+- `qwen`: Qwen efficient lane on spark0-3 and spark6.
+- `fast`: fastest Qwen lane on spark0-3 and spark6.
 
 The controller keeps the full chat history in the local history file, but each
 model request is executed on the Spark selected by the v2 topology.

@@ -356,7 +356,7 @@ class InferenceQueueTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             queue = InferenceQueue(tmp)
-            requests = [make_request(f"r{i}") for i in range(5)]
+            requests = [make_request(f"r{i}") for i in range(10)]
             queue.submit_requests(
                 requests=requests,
                 registry=ProfileRegistry.load(PROFILES),
@@ -379,7 +379,7 @@ class InferenceQueueTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             queue = InferenceQueue(tmp)
             queue.submit_requests(
-                requests=[make_request(f"r{i}") for i in range(5)],
+                requests=[make_request(f"r{i}") for i in range(10)],
                 registry=ProfileRegistry.load(PROFILES),
                 topology=SparkTopology.load(TOPOLOGY),
                 batch_id="batch-a",

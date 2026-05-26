@@ -37,15 +37,15 @@ spark4 + spark5
   profile: dsv4_vllm_mtp_smartest_v1
 
 spark6
-  antirez/support lane
-  profile: dsv4_antirez_smart_v1
+  resident Qwen lane
+  profiles: qwen3_6_27b_fp8_efficient_v1, qwen3_6_35b_a3b_fp8_fastest_v1
 
 spark7
   experimental on-demand lane
   resident profiles: none
 ```
 
-There is no production model ejection code in this plan. The Qwen defaults stay resident on spark0-3 after startup; spark7 is the only on-demand experimental lane.
+There is no production model ejection code in this plan. The Qwen defaults stay resident on spark0-3 and spark6 after startup; spark7 is the only on-demand experimental lane.
 
 ## Shared Request Files
 
@@ -66,17 +66,11 @@ DSV4 vLLM/MTP request file:
 
 The live vLLM endpoint observed on 2026-05-25 advertises model id `deepseek-v4-flash`; the DSV4 profile must match that exact id.
 
-Antirez request file:
-
-```jsonl
-{"format":"ds4-inference-request-v1","request_id":"antirez-smart-smoke","capability":"smart","chat":false,"immediate":true,"job_class":"atom_edit","max_output_tokens":128,"thinking_budget_tokens":0,"temperature":0,"input":{"prompt":"Return one short sentence proving the antirez completion lane is reachable."},"output_contract":{"format":"text"}}
-```
-
 ## Required Checks
 
 ### 1. Qwen vLLM Resident Lanes
 
-Run on each Qwen host: `spark0`, `spark1`, `spark2`, and `spark3`.
+Run on each Qwen host: `spark0`, `spark1`, `spark2`, `spark3`, and `spark6`.
 
 ```bash
 ssh spark0 'cd /path/to/ds4_on_spark/v2 && DS4_VLLM_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests /tmp/qwen_requests.jsonl --out /tmp/ds4-v2-live/spark0-qwen-vllm --runner vllm --runner-timeout-s 600 --run'
@@ -114,21 +108,21 @@ Acceptance:
 - transport base URL is the MTP endpoint
 - token usage is captured when the endpoint returns it
 
-### 3. Spark6 Antirez Runner
+### 3. Spark6 Qwen vLLM Runner
 
-Run on spark6 so `127.0.0.1:18000` is the local antirez `ds4-server`
+Run on spark6 so `127.0.0.1:8000` is the local Qwen OpenAI-compatible
 endpoint.
 
 ```bash
-ssh spark6 'cd /path/to/ds4_on_spark/v2 && DS4_ANTIREZ_BASE_URL=http://127.0.0.1:18000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests /tmp/antirez_requests.jsonl --out /tmp/ds4-v2-live/spark6-antirez --runner antirez --runner-timeout-s 1200 --run'
+ssh spark6 'cd /path/to/ds4_on_spark/v2 && DS4_VLLM_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests /tmp/qwen_requests.jsonl --out /tmp/ds4-v2-live/spark6-qwen-vllm --runner vllm --runner-timeout-s 1200 --run'
 ```
 
 Acceptance:
 
-- request completes
-- selected profile is `dsv4_antirez_smart_v1`
-- output text is non-empty
-- endpoint/version details are captured if available
+- `completed_count=2`
+- both result records have `status=completed`
+- selected profiles include both Qwen profile IDs
+- capture `/v1/models` and the response JSONL for the handoff
 
 ### 4. Mac Studio Spark Chat
 

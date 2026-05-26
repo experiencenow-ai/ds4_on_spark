@@ -11,7 +11,7 @@ Example:
 ```bash
 PYTHONPATH=src python3 -m ds4_chat.cli -m ds4v
 PYTHONPATH=src python3 -m ds4_chat.cli -m qwen
-PYTHONPATH=src python3 -m ds4_chat.cli -m ds4a
+PYTHONPATH=src python3 -m ds4_chat.cli -m fast
 ```
 
 If Spark hostnames do not resolve from the Mac Studio, run

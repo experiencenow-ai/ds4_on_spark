@@ -2,8 +2,9 @@
 
 This release keeps the purge architecture and adds the service pieces needed for stable Centaur use:
 
-- spark6 is now antirez/support only; all Qwen profiles were removed from spark6.
-- Qwen production capacity is exactly 4 resident lanes: spark0, spark1, spark2, and spark3.
+- spark6 is now the fifth resident Qwen lane.
+- Qwen production capacity is exactly 5 resident lanes: spark0, spark1, spark2, spark3, and spark6.
+- The antirez DSV4 profile remains in the registry as a non-production legacy fallback, but it is no longer a resident static lane.
 - The inference queue is request-first: every request has independent status, completion notice, and pollable events.
 - Queue batch keys include profile, node, chat/completion mode, job class, input size, output size, thinking budget, and shared prefix hash.
 - `ds4-transfer` adds a direct Spark-to-Spark transfer planner/executor for the 200Gbps fabric.
@@ -12,9 +13,9 @@ This release keeps the purge architecture and adds the service pieces needed for
 ## Static topology
 
 ```text
-spark0-3: Qwen 27B/fastest-Qwen resident lanes
+spark0-3,6: Qwen 27B/fastest-Qwen resident lanes
 spark4-5: DSV4 vLLM/MTP resident lane
-spark6:   DSV4 antirez/support lane only
+spark6:   Qwen 27B/fastest-Qwen resident lane
 spark7:   experimental on-demand lane
 ```
 
@@ -42,7 +43,7 @@ python3 -m compileall -q src tests
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-Result: 80 tests passed.
+Result: 85 tests passed.
 
 ## Additional runner/tool/chat update
 
@@ -53,3 +54,5 @@ Result: 80 tests passed.
 - Added `ds4-spark-chat`, a simple CLI chat interface for the resident vLLM/MTP lane with optional spark7 tool access.
 - Added `docs/xhigh-live-validation.md` and `profiles/validation/xhigh_live_validation_tasks.json` for the required live v2 runner checks.
 - Added `docs/kv-cache.md` and `profiles/kv_cache/dsv4_spark45_lmcache.json` as optional cache launch plumbing for the existing DSV4 profile.
+- Documented live prefix-cache behavior: a spark7 Qwen27 30k-token prompt dropped from 46.190s cold to 0.286s warm, with 29,792 prompt tokens served from local cache.
+- Documented context limits: Qwen tokenizer limit is 262,144 tokens; DSV4 model limit is 1,048,576 tokens; current DSV4 service exposes about 3.2M aggregate KV-token slots.
