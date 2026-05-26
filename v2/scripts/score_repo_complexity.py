@@ -137,11 +137,27 @@ def _build_named_gate(current: dict[str, Any], baseline: dict[str, Any], mode: s
         "base_ref": base_ref,
         "include_patterns": current.get("include_patterns", DEFAULT_INCLUDE_PATTERNS),
         "exclude_patterns": current.get("exclude_patterns", DEFAULT_EXCLUDE_PATTERNS),
+        "cost": _cost_summary(current_scan, baseline_scan, checks),
         "checks": checks,
         "violation_count": len(violations),
         "violations": violations,
         "current": _gate_summary(current_scan),
         "baseline": _gate_summary(baseline_scan),
+    }
+
+
+def _delta(current: dict[str, Any], baseline: dict[str, Any], key: str) -> float:
+    return round(_metric_value(current, key) - _metric_value(baseline, key), 6)
+
+
+def _cost_summary(current_scan: dict[str, Any], baseline_scan: dict[str, Any], checks: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "score_delta": _delta(current_scan, baseline_scan, "score"),
+        "file_count_delta": _delta(current_scan, baseline_scan, "file_count"),
+        "total_line_count_delta": _delta(current_scan, baseline_scan, "total_line_count"),
+        "metric_deltas": {str(item["name"]): item["delta"] for item in checks},
+        "gated_metrics": [str(item["name"]) for item in checks if item.get("gated")],
+        "informational_metrics": [str(item["name"]) for item in checks if not item.get("gated")],
     }
 
 

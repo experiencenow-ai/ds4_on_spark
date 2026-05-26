@@ -20,6 +20,8 @@ ZERO_SCAN = {
     "repeated_normalized_blocks": 0,
     "max_file_lines": 0,
     "max_file_function_count": 0,
+    "file_count": 0,
+    "total_line_count": 0,
 }
 
 
@@ -122,6 +124,9 @@ class ScoreRepoComplexityTests(unittest.TestCase):
             self.assertEqual(pr_gate.returncode, 0, pr_gate.stderr + pr_gate.stdout)
             payload = json.loads(pr_gate.stdout)
             self.assertEqual(payload["mode"], "gate-pr")
+            self.assertIn("cost", payload)
+            self.assertEqual(payload["cost"]["score_delta"], 0.0)
+            self.assertIn("score", payload["cost"]["informational_metrics"])
             self.assertFalse(next(item for item in payload["checks"] if item["name"] == "score")["gated"])
             self.assertFalse(next(item for item in payload["checks"] if item["name"] == "repeated_normalized_blocks")["gated"])
             baseline_gate = self.run_score(current, centaur, "gate-baseline")
