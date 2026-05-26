@@ -85,7 +85,7 @@ hybrid KV manager:             enabled
 prefix caching:                enabled
 KV cache dtype:                fp8
 KV offload backend:            native
-KV offload size:               6 GiB total default, 3 GiB per TP rank
+KV offload size:               8 GiB total default, 4 GiB per TP rank
 KV connector:                  SimpleCPUOffloadConnector
 persistent runtime mod:        ds4-dsv4-persistent-simple-offload
 PYTHONHASHSEED:                0
@@ -98,16 +98,18 @@ The key launch flags are:
 --enable-prefix-caching
 --no-disable-hybrid-kv-cache-manager
 --kv-cache-dtype fp8
---kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-6}
+--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8}
 --kv-offloading-backend native
 VLLM_USE_SIMPLE_KV_OFFLOAD=1
 ```
 
 The first verified run used `DS4_DSV4_KV_OFFLOAD_SIZE=16`, but that allocates
-`8 GiB` per Spark node. The safer default is `6` total. Use `4` total for
-recovery boots on memory-sensitive nodes; it still keeps a useful CPU KV pool,
-just with fewer retained blocks. Swap can help keep the OS reachable during
-pressure, but it is not part of the KV capacity plan.
+`8 GiB` per Spark node. The default is `8` total, which leaves room for roughly
+one full 1M-token DSV4 cached prefix across the TP lane. Use `6` total for
+cautious boots and `4` total for recovery boots on memory-sensitive nodes.
+Smaller pools still keep useful CPU KV blocks, but they may not retain a full 1M
+prefix. Swap can help keep the OS reachable during pressure, but it is not part
+of the KV capacity plan.
 
 `VLLM_USE_SIMPLE_KV_OFFLOAD=1` is required for this persistent path. Without it,
 vLLM may select the generic native `OffloadingConnector`; that connector can

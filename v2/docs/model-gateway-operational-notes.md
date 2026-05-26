@@ -77,7 +77,7 @@ The DeepSeek V4 Flash path also carried parser/backend details:
   `--headless` for the worker rank. Keep that shape for the production DSV4
   MTP lane. The currently verified launch keeps vLLM's hybrid KV cache manager
   enabled, uses `max_model_len=1048576`, and adds native CPU KV offload with
-  `--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-6} --kv-offloading-backend native`
+  `--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8} --kv-offloading-backend native`
   and `VLLM_USE_SIMPLE_KV_OFFLOAD=1`.
   Do not add
   `LMCacheConnectorV1Dynamic` to this lane unless a live probe proves the
