@@ -16,6 +16,9 @@ MIN_KILL_RSS_KB="${DS4_WATCHDOG_MIN_KILL_RSS_KB:-262144}"
 TOP_VSZ_COUNT="${DS4_WATCHDOG_KILL_TOP_VSZ_COUNT:-8}"
 MIN_KILL_VSZ_KB="${DS4_WATCHDOG_MIN_KILL_VSZ_KB:-67108864}"
 KILL_GPU_PROCS="${DS4_WATCHDOG_KILL_GPU_PROCS:-1}"
+SWAP_PRESSURE_USED_PCT="${DS4_WATCHDOG_SWAP_PRESSURE_USED_PCT:-60}"
+SWAP_PRESSURE_MAX_FREE_KB="${DS4_WATCHDOG_SWAP_PRESSURE_MAX_FREE_KB:-4194304}"
+SWAP_PRESSURE_MIN_TOTAL_KB="${DS4_WATCHDOG_SWAP_PRESSURE_MIN_TOTAL_KB:-1048576}"
 PEER_DIR="${DS4_WATCHDOG_PEER_DIR:-}"
 PEER_STALE_SECONDS="${DS4_WATCHDOG_PEER_STALE_SECONDS:-300}"
 PEER_MIN_FRESH="${DS4_WATCHDOG_PEER_MIN_FRESH:-1}"
@@ -512,6 +515,14 @@ kill_top_memory_processes()
 	done
 }
 
+kill_memory_hoggiest_process()
+{
+	old_top="$TOP_MEM_COUNT"
+	TOP_MEM_COUNT=1
+	kill_top_memory_processes
+	TOP_MEM_COUNT="$old_top"
+}
+
 kill_top_virtual_processes()
 {
 	ps -eo pid=,ppid=,user=,rss=,vsz=,comm=,args= --sort=-vsz 2>/dev/null | awk -v min="$MIN_KILL_VSZ_KB" -v limit="$TOP_VSZ_COUNT" -v self="$$" '
@@ -567,6 +578,51 @@ kill_heavy_runtimes()
 	kill_gpu_compute_processes
 	kill_top_virtual_processes
 	kill_top_memory_processes
+}
+
+swap_pressure_status()
+{
+	awk -v used_pct_threshold="$SWAP_PRESSURE_USED_PCT" -v max_free="$SWAP_PRESSURE_MAX_FREE_KB" -v min_total="$SWAP_PRESSURE_MIN_TOTAL_KB" '
+		BEGIN {
+			if (used_pct_threshold <= 0)
+				used_pct_threshold = 60
+			if (max_free <= 0)
+				max_free = 4194304
+			if (min_total <= 0)
+				min_total = 1048576
+		}
+		/^SwapTotal:/ { total = $2 }
+		/^SwapFree:/ { free = $2 }
+		END {
+			if (total <= 0 || total < min_total) {
+				printf "swap_pressure=inactive swap_total_kb=%d reason=no-swap\n", total
+				exit 1
+			}
+			used = total - free
+			if (used < 0)
+				used = 0
+			used_pct = int((used * 100) / total)
+			if (used_pct >= used_pct_threshold || free <= max_free) {
+				printf "swap_pressure=active swap_total_kb=%d swap_free_kb=%d swap_used_kb=%d swap_used_pct=%d used_pct_threshold=%d max_free_kb=%d\n", total, free, used, used_pct, used_pct_threshold, max_free
+				exit 0
+			}
+			printf "swap_pressure=inactive swap_total_kb=%d swap_free_kb=%d swap_used_kb=%d swap_used_pct=%d used_pct_threshold=%d max_free_kb=%d\n", total, free, used, used_pct, used_pct_threshold, max_free
+			exit 1
+		}
+	' /proc/meminfo 2>/dev/null
+}
+
+handle_swap_pressure()
+{
+	status="$(swap_pressure_status)"
+	rc=$?
+	if [ "$rc" = "0" ]
+	then
+		log "$status; killing memory hoggiest process"
+		run_bounded_child kill_memory_hoggiest_process "$KILL_RUNTIME_TIMEOUT_SECONDS" kill_memory_hoggiest_process || true
+	else
+		log "$status"
+	fi
 }
 
 clear_failures()
@@ -750,6 +806,8 @@ then
 fi
 printf '%s\n' "$$" > "$LOCK_PID_FILE"
 trap 'rm -rf "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM
+
+handle_swap_pressure
 
 case "${1:-}" in
 --force|rescue|rescue-now)

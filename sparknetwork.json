@@ -972,6 +972,7 @@
       "root_script": "/usr/local/sbin/ds4-sshd-watchdog",
       "local_escalation": [
         "check peer-written external SSH health records",
+        "if swap pressure is active, kill the single highest-RSS non-system process before SSH fully wedges",
         "restart ssh",
         "for fresh peer reports that say new SSH is unhealthy, defer heavy rescue during runtime load grace, then kill allowlisted runtimes and GPU/memory hogs",
         "for stale or missing peer reports, skip runtime kill and reboot until external deadman expires",
@@ -1009,6 +1010,13 @@
         "enabled": true,
         "default_top_process_count": 16,
         "default_min_rss_kb": 262144,
+        "swap_pressure": {
+          "enabled": true,
+          "action": "kill_single_highest_rss_non_system_process",
+          "default_used_pct_threshold": 60,
+          "default_max_free_kb": 4194304,
+          "default_min_total_kb": 1048576
+        },
         "protects": [
           "systemd",
           "sshd/ssh",
@@ -1024,6 +1032,9 @@
         "tunables": [
           "DS4_WATCHDOG_KILL_TOP_MEM_COUNT",
           "DS4_WATCHDOG_MIN_KILL_RSS_KB",
+          "DS4_WATCHDOG_SWAP_PRESSURE_USED_PCT",
+          "DS4_WATCHDOG_SWAP_PRESSURE_MAX_FREE_KB",
+          "DS4_WATCHDOG_SWAP_PRESSURE_MIN_TOTAL_KB",
           "DS4_WATCHDOG_KILL_GPU_PROCS",
           "DS4_WATCHDOG_PEER_MIN_FRESH",
           "DS4_WATCHDOG_PEER_STALE_SECONDS",

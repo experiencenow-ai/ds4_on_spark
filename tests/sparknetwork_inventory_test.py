@@ -45,7 +45,10 @@ class SparkNetworkInventoryTest(unittest.TestCase):
         self.assertEqual(topo["rescue_control"]["sshd_watchdog"]["peer_stale_seconds_default"], 300)
         self.assertEqual(topo["rescue_control"]["sshd_watchdog"]["reboot_after_default"], 3)
         self.assertEqual(topo["rescue_control"]["sshd_watchdog"]["external_deadman_seconds_default"], 28800)
+        self.assertEqual(topo["rescue_control"]["sshd_watchdog"]["memory_hog_fallback"]["swap_pressure"]["default_used_pct_threshold"], 60)
+        self.assertEqual(topo["rescue_control"]["sshd_watchdog"]["memory_hog_fallback"]["swap_pressure"]["default_max_free_kb"], 4194304)
         self.assertIn("DS4_WATCHDOG_EXTERNAL_DEADMAN_SECONDS", topo["rescue_control"]["sshd_watchdog"]["memory_hog_fallback"]["tunables"])
+        self.assertIn("DS4_WATCHDOG_SWAP_PRESSURE_USED_PCT", topo["rescue_control"]["sshd_watchdog"]["memory_hog_fallback"]["tunables"])
 
     def test_internet_status_matches_current_wired_report(self) -> None:
         topo = load_topology()
