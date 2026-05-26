@@ -299,6 +299,11 @@ control plane:
   degraded/stale for more than `DS4_WATCHDOG_PEER_STALE_SECONDS` seconds
   (default `300`), it restarts SSH, then escalates to runtime and memory-hog
   cleanup.
+- Model-load grace: when an allowlisted vLLM/DS4 runtime is present, the
+  watchdog restarts SSH but defers heavy runtime kills and reboot escalation for
+  `DS4_WATCHDOG_RUNTIME_LOAD_GRACE_SECONDS` seconds (default `2400`). This
+  keeps 30-minute model loads from being killed merely because fresh SSH logins
+  are slow or wedged during startup.
 - Allowlisted heavy-runtime kills: Docker containers named
   `vllm_deepseek_v4_flash`, `vllm_*`, `ds4_vllm_*`, or `centaur_vllm_*`, plus
   process command lines matching `vllm serve` / `VLLM::`. Ray kills are disabled

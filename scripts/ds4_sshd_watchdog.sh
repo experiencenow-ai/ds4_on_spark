@@ -13,6 +13,8 @@ PEER_DIR="${DS4_WATCHDOG_PEER_DIR:-}"
 PEER_STALE_SECONDS="${DS4_WATCHDOG_PEER_STALE_SECONDS:-300}"
 PEER_MIN_FRESH="${DS4_WATCHDOG_PEER_MIN_FRESH:-1}"
 PEER_BOOT_GRACE_SECONDS="${DS4_WATCHDOG_PEER_BOOT_GRACE_SECONDS:-600}"
+RUNTIME_LOAD_GRACE_SECONDS="${DS4_WATCHDOG_RUNTIME_LOAD_GRACE_SECONDS:-2400}"
+RUNTIME_LOAD_FILE=$STATE_DIR/runtime-load-grace-start
 
 log()
 {
@@ -158,6 +160,57 @@ kill_container()
 	docker kill "$name" >/dev/null 2>&1 || true
 }
 
+allowlisted_runtime_present()
+{
+	if command -v docker >/dev/null 2>&1
+	then
+		if docker ps --format '{{.Names}}' 2>/dev/null | grep -Eq '^(vllm_deepseek_v4_flash|vllm_|ds4_vllm_|centaur_vllm_)'
+		then
+			return 0
+		fi
+	fi
+	if pgrep -f '/usr/local/bin/vllm serve|/usr/bin/python3 /usr/local/bin/vllm serve|vllm serve /models/|VLLM::' >/dev/null 2>&1
+	then
+		return 0
+	fi
+	return 1
+}
+
+runtime_load_grace_active()
+{
+	now="$(date +%s)"
+	case "$RUNTIME_LOAD_GRACE_SECONDS" in
+	''|*[!0-9]*|0)
+		return 1
+		;;
+	esac
+	if ! allowlisted_runtime_present
+	then
+		rm -f "$RUNTIME_LOAD_FILE" 2>/dev/null || true
+		return 1
+	fi
+	if [ ! -r "$RUNTIME_LOAD_FILE" ]
+	then
+		mkdir -p "$STATE_DIR"
+		printf '%s\n' "$now" > "$RUNTIME_LOAD_FILE"
+	fi
+	start="$(cat "$RUNTIME_LOAD_FILE" 2>/dev/null || echo "$now")"
+	case "$start" in
+	''|*[!0-9]*)
+		start="$now"
+		printf '%s\n' "$now" > "$RUNTIME_LOAD_FILE"
+		;;
+	esac
+	age=$((now - start))
+	if [ "$age" -lt "$RUNTIME_LOAD_GRACE_SECONDS" ]
+	then
+		log "runtime load grace active age=${age}s limit=${RUNTIME_LOAD_GRACE_SECONDS}s; deferring heavy runtime kill"
+		return 0
+	fi
+	log "runtime load grace expired age=${age}s limit=${RUNTIME_LOAD_GRACE_SECONDS}s"
+	return 1
+}
+
 kill_allowlisted_containers()
 {
 	name=""
@@ -282,6 +335,7 @@ clear_failures()
 {
 	mkdir -p "$STATE_DIR"
 	printf '0\n' > "$FAIL_FILE"
+	rm -f "$RUNTIME_LOAD_FILE" 2>/dev/null || true
 }
 
 record_failure()
@@ -335,6 +389,12 @@ run_rescue()
 		clear_failures
 		return 0
 	fi
+	if runtime_load_grace_active
+	then
+		failures="$(record_failure)"
+		log "SSH banner still failing after restart, but runtime load grace is active; consecutive_failures=$failures reboot_deferred=1"
+		return 1
+	fi
 	log "SSH banner still failing after restart; escalating to runtime and memory-hog kill"
 	kill_heavy_runtimes
 	sleep 5
@@ -355,9 +415,16 @@ run_rescue()
 run_peer_rescue()
 {
 	reason="$1"
-	log "$reason; external peer health failed; restarting ssh and killing heavy runtimes"
+	log "$reason; external peer health failed; restarting ssh"
 	restart_ssh || true
 	sleep 2
+	if runtime_load_grace_active
+	then
+		failures="$(record_failure)"
+		log "external peer health still unhealthy, but runtime load grace is active; consecutive_failures=$failures reboot_deferred=1"
+		return 1
+	fi
+	log "external peer health still unhealthy after ssh restart; killing heavy runtimes"
 	kill_heavy_runtimes
 	sleep 5
 	restart_ssh || true
