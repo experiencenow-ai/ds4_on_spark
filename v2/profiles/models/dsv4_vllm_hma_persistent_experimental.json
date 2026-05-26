@@ -1,0 +1,29 @@
+{
+  "backend": "vllm_hma",
+  "capability_classes": [
+    "smartest"
+  ],
+  "format": "ds4-model-profile-v1",
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "performance": {
+    "status": "not calibrated"
+  },
+  "production_eligible": false,
+  "profile_id": "dsv4_vllm_hma_persistent_experimental_v1",
+  "quality": {
+    "status": "experimental DSV4 HMA persistent KV profile; pinned-only until live disk reload acceptance passes"
+  },
+  "routing": {
+    "rank": 900,
+    "requires_profile_pin": true
+  },
+  "supported_job_classes": [
+    "longmem",
+    "analysis",
+    "debug",
+    "tool_chat"
+  ],
+  "supports_chat": true,
+  "supports_completion": true,
+  "supports_thinking": true
+}

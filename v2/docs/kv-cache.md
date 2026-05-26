@@ -94,7 +94,8 @@ design is the right model for durable DSV4 cache persistence, but those payloads
 belong to the Antirez GGUF engine and are not compatible with vLLM's HF tensor
 layout. A vLLM version of that feature needs an HMA-aware external connector
 that saves and restores every DSV4 KV cache group, not a connector that flattens
-the model back to full attention.
+the model back to full attention. The pinned-only scaffold for that work lives
+in `docs/dsv4-hma-persistent-kv.md` and `profiles/hma/dsv4_hma_persistent.json`.
 
 ## Limits and scheduling constraints
 

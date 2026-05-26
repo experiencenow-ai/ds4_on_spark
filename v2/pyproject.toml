@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ds4-on-spark"
-version = "0.3.0"
+version = "0.4.0"
 description = "Clean DS4 Spark service substrate: inference profiles, lattice tools, and bounded agent loops."
 requires-python = ">=3.10"
 dependencies = []
@@ -21,6 +21,7 @@ ds4-transfer = "ds4_transfer.cli:main"
 ds4-spark-chat = "ds4_chat.cli:main"
 ds4-sparkrunner-queue = "ds4_infer.sparkrunner_adapter:main"
 ds4-kvcache = "ds4_kvcache.cli:main"
+ds4-hma = "ds4_hma.cli:main"
 
 [project.optional-dependencies]
 web = ["playwright>=1.40"]

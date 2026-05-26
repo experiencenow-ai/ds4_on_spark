@@ -16,11 +16,13 @@ def startup_plan(*, topology: SparkTopology, registry: ProfileRegistry, node_id:
         raise ValueError(f"unknown spark node: {node_id}")
     items: list[dict[str, Any]] = []
     for profile_id in node.resident_profiles:
+        profile = registry.get(profile_id)
+        if bool(profile.routing.get("requires_profile_pin", False)) or not profile.production_eligible:
+            continue
         group = topology.profile_node_groups.get(profile_id, ())
         if group and group[0] != node_id:
             items.append({"profile_id": profile_id, "action": "group_secondary", "primary_node": group[0]})
             continue
-        profile = registry.get(profile_id)
         items.append(_warm_item(profile, "group_primary_warm" if group else "warm"))
     return {
         "format": "ds4-startup-model-plan-v1",
