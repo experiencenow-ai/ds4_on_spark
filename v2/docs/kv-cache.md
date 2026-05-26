@@ -3,15 +3,15 @@
 KV cache is a launch option on the normal vLLM model profiles. It is not a
 separate DS4 profile, capability class, queue backend, or model identity.
 
-The preferred DSV4 path is a single logical vLLM serving lane with an external
-KV connector:
+The preferred DSV4 path is a single logical vLLM serving lane with vLLM's
+hybrid KV cache manager enabled:
 
 ```text
 one vLLM DSV4 service on the existing spark4+spark5 TP lane
-  -> LMCache connector checks reusable prompt tokens
-  -> cached KV loads from CPU/disk into vLLM's paged KV buffer
-  -> vLLM computes only the uncached suffix
-  -> newly computed KV is stored back through the connector
+  -> DSV4 HMA keeps sliding/compressed cache groups small
+  -> prefix caching reuses token-identical prompt blocks while resident
+  -> native CPU KV offload moves reusable blocks out of GPU memory
+  -> vLLM computes only the uncached suffix when the prefix still matches
 ```
 
 The DSV4 lane may use tensor parallel workers across spark4+spark5. That is
@@ -49,53 +49,52 @@ vllm:prompt_tokens_by_source_total{source="local_cache_hit"}
 vllm:prompt_tokens_by_source_total{source="external_kv_transfer"}
 ```
 
-## DSV4 LMCache launch
+## DSV4 vLLM cache launch
 
-Plan:
-
-```bash
-PYTHONPATH=v2/src python3 -m ds4_kvcache.cli plan \
-  --deployment v2/profiles/kv_cache/dsv4_spark45_lmcache.json
-```
-
-Write scripts:
+Use the service-backed recipe:
 
 ```bash
-PYTHONPATH=v2/src python3 -m ds4_kvcache.cli write-scripts \
-  --deployment v2/profiles/kv_cache/dsv4_spark45_lmcache.json \
-  --output-dir /tmp/ds4_lmcache_dsv4
+systemctl --user start ds4-dsv4-vllm.service
 ```
 
-The generated launch uses:
+The production recipe in `recipes/deepseek-v4-flash-spark45.yaml` uses:
 
-```json
-{
-  "kv_connector": "LMCacheConnectorV1Dynamic",
-  "kv_role": "kv_both",
-  "kv_connector_module_path": "lmcache.integration.vllm.lmcache_connector_v1"
-}
+```text
+--max-model-len 1048576
+--enable-prefix-caching
+--no-disable-hybrid-kv-cache-manager
+--kv-offloading-size 16
+--kv-offloading-backend native
 ```
 
-The LMCache config is `profiles/kv_cache/lmcache_dsv4_spark45.yaml`:
+The verified 2026-05-26 launch reported:
 
-```yaml
-chunk_size: 256
-local_cpu: true
-max_local_cpu_size: 16.0
-local_disk: "file:///mnt/nvme/ds4-lmcache/dsv4-spark45/"
-max_local_disk_size: 512.0
+```text
+max_model_len:      1048576
+HMA:                enabled
+KV connector:       SimpleCPUOffloadConnector
+CPU KV offload:     16 GiB total, 8 GiB per TP rank
+GPU KV cache size:  2,088,846 tokens
+1M concurrency:     1.99x
 ```
 
-The generated install script creates `/mnt/nvme/ds4-lmcache/dsv4-spark45`.
-Move that path in the deployment JSON if a Spark uses a different local SSD
-mount.
+This is external CPU KV offload, not durable disk persistence. It preserves the
+full-quality HF/vLLM DSV4 path and avoids the bad full-KV fallback.
 
-`LMCACHE_USE_EXPERIMENTAL=True` must remain an environment variable. LMCache's
-configuration docs call out `LMCACHE_CONFIG_FILE` for YAML/JSON config and
-`LMCACHE_LOCAL_DISK` / `max_local_disk_size` for disk offload.
+Do not use `LMCacheConnectorV1Dynamic` for production DSV4 long context in the
+current image. Live introspection showed its classes do not implement
+`SupportsHMA`, and the launch log showed that adding it turns off the hybrid KV
+cache manager. The result was only 49,152 GPU KV tokens and a 45,056-token
+request cap.
 
-The deployment references `dsv4_vllm_mtp_smartest_v1`; there is no separate
-LMCache model profile.
+Antirez's DS4 engine has a stronger disk KV cache because it owns the exact
+DS4-specific session payload: token history, logits, raw sliding rows,
+compressed rows, ratio-4 indexer rows, and compressor frontier state. That
+design is the right model for durable DSV4 cache persistence, but those payloads
+belong to the Antirez GGUF engine and are not compatible with vLLM's HF tensor
+layout. A vLLM version of that feature needs an HMA-aware external connector
+that saves and restores every DSV4 KV cache group, not a connector that flattens
+the model back to full attention.
 
 ## Limits and scheduling constraints
 
@@ -115,8 +114,8 @@ Qwen27 spark7 service launch:  --max-model-len 32,768
 Qwen27 spark7 KV pool:         about 733,866 tokens
 
 DSV4 max_position_embeddings:  1,048,576 tokens
-DSV4 spark4+spark5 launch:     --max-model-len 200,000
-DSV4 spark4+spark5 KV pool:    12,568 blocks * 256 = about 3,217,408 tokens
+DSV4 spark4+spark5 launch:     --max-model-len 1,048,576
+DSV4 spark4+spark5 KV pool:    2,088,846 tokens
 ```
 
 Raising `--max-model-len` does not allocate that many KV tokens for every
@@ -126,8 +125,7 @@ concurrency and cache residency:
 ```text
 Qwen at 32k:   about 22 full-context requests in the observed spark7 pool
 Qwen at 262k:  about 2.8 full-context requests in that same pool
-DSV4 at 200k:  about 16 full-context requests in the observed spark4+spark5 pool
-DSV4 at 1M:    about 3 full-context requests in that same pool
+DSV4 at 1M:    about 2 full-context requests in the observed spark4+spark5 pool
 ```
 
 The operational rule is therefore:
@@ -136,7 +134,7 @@ The operational rule is therefore:
 small/normal requests: keep them short and highly batched
 shared long prefixes: group by shared_prefix_hash and warm once per lane
 rare 1M DSV4 contexts: schedule deliberately; do not mix casually with bulk queue traffic
-external KV cache: use it to preserve high-value prefixes beyond normal vLLM residency
+external CPU KV offload: use it to preserve high-value prefixes beyond normal GPU residency
 ```
 
 The `shared_prefix` must be byte/token-identical. Put repo skeletons,
@@ -153,19 +151,20 @@ cache keys and prefix grouping; the vLLM connector should own the bytes.
 
 ## Acceptance
 
-First live gate:
+Persistent external KV cache gate:
 
 ```text
-1. install lmcache in the existing vLLM runtime
-2. start the normal DSV4 profile with the LMCache deployment on spark4+spark5
-3. send one long shared_prefix warm request
-4. send 16-128 suffix requests with the same shared_prefix
-5. observe lower TTFT/prefill time on cached requests
-6. verify outputs are unchanged against the same profile without the connector
+1. choose or build a vLLM connector whose class implements SupportsHMA
+2. start DSV4 with --no-disable-hybrid-kv-cache-manager and that connector
+3. verify startup reports HMA enabled and max_model_len=1048576
+4. send one long shared_prefix warm request
+5. send 16-128 suffix requests with the same shared_prefix
+6. observe external-cache reads and lower TTFT/prefill time on cached requests
+7. verify outputs are unchanged against the same HF/vLLM DSV4 profile
 ```
 
-Only after that should this launch mode become the default service launch for
-the existing `smartest` profile.
+Only after that should durable external cache become the default service launch
+for the existing `smartest` profile.
 
 ## PegaFlow status
 

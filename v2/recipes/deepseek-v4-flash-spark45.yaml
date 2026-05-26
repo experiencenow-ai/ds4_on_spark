@@ -1,6 +1,6 @@
 recipe_version: "1"
-name: DeepSeek V4 Flash spark4+spark5 LMCache
-description: Official DeepSeek V4 Flash no-Ray TP=2 MTP=2 recipe for the spark4+spark5 DSV4 lane, launched with the LMCache dynamic KV connector.
+name: DeepSeek V4 Flash spark4+spark5 HMA KV offload
+description: Official DeepSeek V4 Flash no-Ray TP=2 MTP=2 recipe for the spark4+spark5 DSV4 lane, launched with DSV4 hybrid KV allocation and vLLM native KV offload.
 model: deepseek-ai/DeepSeek-V4-Flash
 container: vllm-node-dsv4-lmcache-rankfix
 cluster_only: true
@@ -16,7 +16,7 @@ defaults:
   tensor_parallel: 2
   pipeline_parallel: 1
   gpu_memory_utilization: 0.8
-  max_model_len: 45056
+  max_model_len: 1048576
   max_num_batched_tokens: 8192
   max_num_seqs: 2
   block_size: 256
@@ -24,6 +24,7 @@ defaults:
 env:
   TORCH_CUDA_ARCH_LIST: 12.1a
   VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+  VLLM_USE_SIMPLE_KV_OFFLOAD: "1"
   VLLM_TRITON_MLA_SPARSE: "1"
   FLASHINFER_DISABLE_VERSION_CHECK: "1"
   TILELANG_CLEANUP_TEMP_FILES: "1"
@@ -35,8 +36,6 @@ env:
   GLOO_SOCKET_IFNAME: enP7s7
   TP_SOCKET_IFNAME: enP7s7
   NCCL_DEBUG: WARN
-  LMCACHE_USE_EXPERIMENTAL: "True"
-  LMCACHE_CONFIG_FILE: /etc/ds4/lmcache_dsv4_spark45.yaml
 command: |
   vllm serve deepseek-ai/DeepSeek-V4-Flash \
     --served-model-name {served_model_name} \
@@ -53,11 +52,13 @@ command: |
     --max-num-seqs {max_num_seqs} \
     --max-num-batched-tokens {max_num_batched_tokens} \
     --gpu-memory-utilization {gpu_memory_utilization} \
+    --no-disable-hybrid-kv-cache-manager \
+    --kv-offloading-size 16 \
+    --kv-offloading-backend native \
     --distributed-executor-backend mp \
     --no-enable-flashinfer-autotune \
     --compilation-config '{{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}}' \
     --speculative-config '{{"method":"deepseek_mtp","num_speculative_tokens":2}}' \
-    --kv-transfer-config '{{"kv_connector":"LMCacheConnectorV1Dynamic","kv_role":"kv_both","kv_connector_module_path":"lmcache.integration.vllm.lmcache_connector_v1"}}' \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \
     --enable-auto-tool-choice \

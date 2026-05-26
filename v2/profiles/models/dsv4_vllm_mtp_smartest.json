@@ -15,6 +15,6 @@
     "default_for": ["smartest"],
     "rank": 50,
     "chat_template_thinking_key": "thinking",
-    "optional_kv_cache_deployments": ["profiles/kv_cache/dsv4_spark45_lmcache.json"]
+    "optional_kv_cache_deployments": ["profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json"]
   }
 }

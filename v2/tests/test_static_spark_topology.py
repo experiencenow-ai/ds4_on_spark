@@ -128,7 +128,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
                 "xhv-003-spark6-qwen-vllm",
                 "xhv-004-mac-studio-ds4-spark-chat",
                 "xhv-005-web-tool-playwright-host",
-                "xhv-006-dsv4-vllm-lmcache-spark45",
+                "xhv-006-dsv4-vllm-hma-kvoffload-spark45",
             ],
         )
         qwen_task = manifest["tasks"][0]

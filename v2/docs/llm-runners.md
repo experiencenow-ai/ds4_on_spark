@@ -21,7 +21,7 @@ queue-selected Spark node and uses `/ds4/batches` on that Spark. Direct live
 - `fake` is for tests and dry runs.
 - `command` is for fixed local adapter commands.
 - `spark` is the production Spark gateway runner and fails closed without a selected node.
-- `vllm` uses a local OpenAI-compatible vLLM endpoint from `DS4_VLLM_BASE_URL` or `DS4_VLLM_MTP_BASE_URL`. LMCache is a server launch property, not a different client API.
+- `vllm` uses a local OpenAI-compatible vLLM endpoint from `DS4_VLLM_BASE_URL` or `DS4_VLLM_MTP_BASE_URL`. KV offload is a server launch property, not a different client API.
 - `antirez` uses the antirez completion endpoint from `DS4_ANTIREZ_BASE_URL`.
 - `auto` routes by profile backend: `vllm`, `vllm_mtp`, or `antirez`.
 

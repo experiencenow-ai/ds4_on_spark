@@ -21,7 +21,7 @@ class KvCacheConnector:
 
     @staticmethod
     def from_json(data: dict[str, Any]) -> "KvCacheConnector":
-        connector_id = str(data.get("connector_id", data.get("kind", "lmcache_dynamic")))
+        connector_id = str(data.get("connector_id", data.get("kind", "offloading")))
         kv_connector = str(data.get("kv_connector", _default_connector_name(connector_id)))
         kv_role = str(data.get("kv_role", "kv_both"))
         if kv_role not in {"kv_both", "kv_producer", "kv_consumer"}:
@@ -69,7 +69,7 @@ class KvCacheDeployment:
         tensor_parallel_size = int(data.get("tensor_parallel_size", 1))
         if http_port <= 0 or tensor_parallel_size <= 0:
             raise ValueError("http_port and tensor_parallel_size must be positive")
-        return KvCacheDeployment(
+        deployment = KvCacheDeployment(
             deployment_id=str(data["deployment_id"]),
             profile_id=str(data["profile_id"]),
             spark_node=str(data["spark_node"]),
@@ -88,6 +88,8 @@ class KvCacheDeployment:
             connector=KvCacheConnector.from_json(dict(data["connector"])),
             extra_args=tuple(str(item) for item in data.get("extra_args", [])),
         )
+        _validate_deployment(deployment)
+        return deployment
 
     @staticmethod
     def load(path: str | Path) -> "KvCacheDeployment":
@@ -105,6 +107,15 @@ def kv_transfer_config(connector: KvCacheConnector) -> dict[str, Any]:
     if connector.kv_connector_extra_config:
         config["kv_connector_extra_config"] = connector.kv_connector_extra_config
     return config
+
+
+def _validate_deployment(deployment: KvCacheDeployment) -> None:
+    if deployment.model_id == "deepseek-ai/DeepSeek-V4-Flash" and deployment.connector.kv_connector.startswith("LMCache"):
+        raise ValueError(
+            "LMCache connectors are not a valid DSV4 long-context deployment "
+            "until they implement vLLM SupportsHMA; use HMA-compatible CPU KV "
+            "offload or a proven HMA connector"
+        )
 
 
 def plan_deployment(deployment: KvCacheDeployment) -> dict[str, Any]:
