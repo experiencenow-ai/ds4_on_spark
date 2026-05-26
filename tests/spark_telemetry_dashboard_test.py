@@ -54,6 +54,10 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertFalse(hist["ok"])
         self.assertEqual(hist["error"], "invalid node")
 
+    def test_default_history_limit_is_one_hour(self):
+        self.assertEqual(dashboard.history_limit(None), 720)
+        self.assertEqual(dashboard.history_limit(""), 720)
+
 
 if __name__ == "__main__":
     unittest.main()
