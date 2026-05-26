@@ -51,10 +51,9 @@ Production Sparks should run `ds4-infer startup-models` after reboot. The
 command warms only the resident profiles assigned to that Spark by topology;
 spark7 stays on demand.
 
-Spark7 NIXL/GDN experiments are generated explicitly from
-`profiles/nixl/qwen35_0_8b_spark7_gdn_nixl_smoke.json` and
-`profiles/vllm_builds/vllm_main_after_gdn_nixl_41869.json`; see
-`docs/nixl-spark7-experiments.md`.
+KV cache is optional launch plumbing, not a separate model variant. The normal
+DSV4 profile references `profiles/kv_cache/dsv4_spark45_lmcache.json` when
+external KV reuse is desired. See `docs/kv-cache.md`.
 
 ## Inference queue
 
@@ -96,9 +95,10 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-work \
   --limit 128
 ```
 
-This is best-effort cache warming, not raw KV export/import: DS4 sends one tiny
-request per shared-prefix group on the same resident lane, then processes the
-real requests with byte-identical `shared_prefix` text.
+This is best-effort cache warming. On normal vLLM lanes it warms automatic
+prefix cache; when the same profile was launched with an external KV connector,
+it also seeds that connector so later requests with byte-identical
+`shared_prefix` text can skip the long prefill.
 
 `--runner spark` executes the model request on the selected Spark over SSH,
 using that Spark's local `http://127.0.0.1:8000` DS4 API. Spark inference uses

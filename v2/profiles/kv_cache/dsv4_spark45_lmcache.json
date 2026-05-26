@@ -1,0 +1,43 @@
+{
+  "format": "ds4-vllm-kv-cache-deployment-v1",
+  "deployment_id": "dsv4_spark45_lmcache_v1",
+  "profile_id": "dsv4_vllm_mtp_smartest_v1",
+  "spark_node": "spark4",
+  "worker_nodes": ["spark4", "spark5"],
+  "host": "0.0.0.0",
+  "http_port": 8000,
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "served_model_name": "deepseek-ai/DeepSeek-V4-Flash",
+  "tensor_parallel_size": 2,
+  "vllm_bin": "/home/spark4/standard-runtimes/vllm-0.21.0/bin/vllm",
+  "python_bin": "/home/spark4/standard-runtimes/vllm-0.21.0/bin/python",
+  "working_directory": "/home/spark4/ds4_on_spark",
+  "pythonpath": "/home/spark4/ds4_on_spark/v2/src",
+  "connector": {
+    "connector_id": "lmcache_dynamic",
+    "kv_role": "kv_both",
+    "install_packages": ["lmcache"],
+    "kv_connector_extra_config": {
+      "discard_partial_chunks": false
+    }
+  },
+  "extra_env": {
+    "PATH": "/home/spark4/standard-runtimes/vllm-0.21.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "LMCACHE_USE_EXPERIMENTAL": "True",
+    "LMCACHE_CONFIG_FILE": "/home/spark4/ds4_on_spark/v2/profiles/kv_cache/lmcache_dsv4_spark45.yaml"
+  },
+  "cache_directories": [
+    "/mnt/nvme/ds4-lmcache/dsv4-spark45"
+  ],
+  "extra_args": [
+    "--trust-remote-code",
+    "--max-model-len", "32768",
+    "--gpu-memory-utilization", "0.72",
+    "--max-num-seqs", "16",
+    "--max-num-batched-tokens", "32768",
+    "--kv-cache-dtype", "fp8",
+    "--enable-prefix-caching",
+    "--enable-chunked-prefill",
+    "--async-scheduling"
+  ]
+}

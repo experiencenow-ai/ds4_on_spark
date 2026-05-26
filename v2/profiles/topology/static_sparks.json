@@ -1,7 +1,7 @@
 {
   "format": "ds4-spark-topology-v1",
-  "topology_id": "static_sparks_2026_05_25_v5",
-  "description": "Static Spark allocation: Qwen resident lanes on spark0-3 with both Qwen profiles loaded at startup, one DSV4/vLLM/MTP grouped lane consuming spark4+spark5, antirez/support on spark6, and a pinned-only Qwen27 NIXL experimental lane on spark7. No production model ejection.",
+  "topology_id": "static_sparks_2026_05_26_v7",
+  "description": "Static Spark allocation: Qwen resident lanes on spark0-3 with both Qwen profiles loaded at startup, one DSV4 vLLM grouped lane consuming spark4+spark5, antirez/support on spark6, and spark7 kept on-demand for experiments. KV cache is an optional launch mode, not a separate model profile. No production model ejection.",
   "nodes": [
     {
       "node_id": "spark0",
@@ -105,12 +105,9 @@
       "node_id": "spark7",
       "roles": [
         "experimental",
-        "on_demand",
-        "nixl"
+        "on_demand"
       ],
-      "resident_profiles": [
-        "qwen3_6_27b_fp8_nixl_experimental_v1"
-      ],
+      "resident_profiles": [],
       "default_capacity": 1,
       "immediate_reserved": false,
       "dynamic_load": true

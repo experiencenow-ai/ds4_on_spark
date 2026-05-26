@@ -1,0 +1,5 @@
+chunk_size: 256
+local_cpu: true
+max_local_cpu_size: 16.0
+local_disk: "file:///mnt/nvme/ds4-lmcache/dsv4-spark45/"
+max_local_disk_size: 512.0

@@ -11,5 +11,10 @@
   "production_eligible": true,
   "quality": {"status": "best quality candidate pending calibration"},
   "performance": {"observed_chat_mtp_tps": 20.0, "latency_rank": 3.0},
-  "routing": {"default_for": ["smartest"], "rank": 50, "chat_template_thinking_key": "thinking"}
+  "routing": {
+    "default_for": ["smartest"],
+    "rank": 50,
+    "chat_template_thinking_key": "thinking",
+    "optional_kv_cache_deployments": ["profiles/kv_cache/dsv4_spark45_lmcache.json"]
+  }
 }
