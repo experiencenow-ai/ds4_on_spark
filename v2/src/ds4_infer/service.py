@@ -2,6 +2,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Iterable
+
+from .kv_cache import resolve_request_cache_refs
 from .profiles import ProfileRegistry
 from .runners import Runner
 from .schemas import BATCH_MANIFEST_FORMAT, InferenceRequest
@@ -9,13 +11,15 @@ from .topology import SparkTopology
 
 def load_requests_jsonl(path: str | Path) -> list[InferenceRequest]:
     requests: list[InferenceRequest] = []
-    with Path(path).open("r", encoding="utf-8") as handle:
+    request_path = Path(path)
+    with request_path.open("r", encoding="utf-8") as handle:
         for line_number, line in enumerate(handle, start=1):
             stripped = line.strip()
             if not stripped:
                 continue
             try:
-                requests.append(InferenceRequest.from_json(json.loads(stripped)))
+                data = resolve_request_cache_refs(json.loads(stripped), base_dir=request_path.parent)
+                requests.append(InferenceRequest.from_json(data))
             except Exception as exc:
                 raise ValueError(f"invalid request on line {line_number}: {exc}") from exc
     return requests

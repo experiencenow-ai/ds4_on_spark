@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed
 from contextlib import closing
 from dataclasses import dataclass
 import hashlib
@@ -12,6 +14,7 @@ import uuid
 from typing import Any, Callable, Iterable
 
 from .builders import new_id, safe_request_id
+from .kv_cache import ensure_cache_refs_resolved
 from .profiles import ModelProfile, ProfileRegistry
 from .runners import Runner
 from .schemas import InferenceRequest, make_result
@@ -169,6 +172,7 @@ class InferenceQueue:
                 (batch_id, now, now),
             )
             for request in request_list:
+                ensure_cache_refs_resolved(request.input)
                 profile = registry.resolve(
                     capability=request.capability,
                     chat=request.chat,
@@ -319,6 +323,8 @@ class InferenceQueue:
         warm_prefixes: bool = False,
         warm_min_group_size: int = 2,
         warm_max_output_tokens: int = 1,
+        warm_max_groups: int | None = None,
+        warm_max_groups_per_node: int | None = None,
         on_result: Callable[[QueueClaim, dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
         from .worker import BatchWorker
@@ -333,6 +339,8 @@ class InferenceQueue:
                 batch_key=batch_key,
                 min_group_size=warm_min_group_size,
                 max_output_tokens=warm_max_output_tokens,
+                max_groups=warm_max_groups,
+                max_groups_per_node=warm_max_groups_per_node,
             )
         worker = BatchWorker(
             queue=self,
@@ -538,21 +546,37 @@ class InferenceQueue:
         *,
         registry: ProfileRegistry,
         runner: Runner,
+        topology: SparkTopology | None = None,
         node_id: str | None = None,
         batch_id: str | None = None,
         batch_key: str | None = None,
         min_group_size: int = 2,
         max_output_tokens: int = 1,
+        concurrency: int = 1,
+        max_groups: int | None = None,
+        max_groups_per_node: int | None = None,
         force: bool = False,
+        all_resident_nodes: bool = False,
     ) -> dict[str, Any]:
         if min_group_size < 1:
             raise ValueError("min_group_size must be positive")
         if max_output_tokens < 1:
             raise ValueError("max_output_tokens must be positive")
+        if concurrency < 1:
+            raise ValueError("concurrency must be positive")
+        if max_groups is not None and max_groups < 1:
+            raise ValueError("max_groups must be positive")
+        if max_groups_per_node is not None and max_groups_per_node < 1:
+            raise ValueError("max_groups_per_node must be positive")
+        if all_resident_nodes and topology is None:
+            raise ValueError("all_resident_nodes requires topology")
         warmed = failed = skipped = 0
         public_groups: list[dict[str, Any]] = []
+        warm_candidates: list[dict[str, Any]] = []
         with closing(self._connect()) as conn, conn:
             groups = self._prefix_groups(conn, node_id=node_id, batch_id=batch_id, batch_key=batch_key, min_group_size=min_group_size)
+            if all_resident_nodes:
+                groups = _replicate_prefix_groups_to_resident_nodes(groups, registry=registry, topology=topology)
             statuses = {group["warm_key"]: self._prefix_warm_status(conn, group["warm_key"]) for group in groups}
         for group in groups:
             status = statuses[group["warm_key"]]
@@ -560,30 +584,20 @@ class InferenceQueue:
                 skipped += 1
                 public_groups.append(_public_prefix_group(group, state="warm", skipped=True, status=status))
                 continue
+            warm_candidates.append(group)
+        pending_groups = _limit_prefix_warm_groups(warm_candidates, max_groups=max_groups, max_groups_per_node=max_groups_per_node)
+        deferred_count = len(warm_candidates) - len(pending_groups)
+        for group in pending_groups:
             with closing(self._connect()) as conn, conn:
                 self._record_prefix_warm(conn, group, state="warming", result=None, error=None)
-            try:
-                profile = registry.get(group["profile_id"])
-                request = _warm_request_from_group(group, max_output_tokens=max_output_tokens)
-                result = _run_warm_request(runner, request, profile, group["node_id"])
-                state = "warm" if result.get("status") == "completed" else "failed"
-                with closing(self._connect()) as conn, conn:
-                    self._record_prefix_warm(conn, group, state=state, result=result, error=None if state == "warm" else str(result.get("status", "failed")))
-                if state == "warm":
-                    warmed += 1
-                else:
-                    failed += 1
-                public_groups.append(_public_prefix_group(group, state=state, skipped=False, result=result))
-            except Exception as exc:
+        for group, state, result in _run_warm_groups(registry=registry, runner=runner, groups=pending_groups, max_output_tokens=max_output_tokens, concurrency=concurrency):
+            with closing(self._connect()) as conn, conn:
+                self._record_prefix_warm(conn, group, state=state, result=result, error=None if state == "warm" else str(result.get("status", "failed")))
+            if state == "warm":
+                warmed += 1
+            else:
                 failed += 1
-                result = {
-                    "format": "ds4-prefix-warm-failure-v1",
-                    "status": "failed",
-                    "error": str(exc),
-                }
-                with closing(self._connect()) as conn, conn:
-                    self._record_prefix_warm(conn, group, state="failed", result=result, error=str(exc))
-                public_groups.append(_public_prefix_group(group, state="failed", skipped=False, result=result))
+            public_groups.append(_public_prefix_group(group, state=state, skipped=False, result=result))
         return {
             "format": PREFIX_WARM_REPORT_FORMAT,
             "state": "completed" if failed == 0 else "completed_with_failures",
@@ -591,6 +605,9 @@ class InferenceQueue:
             "warmed_count": warmed,
             "failed_count": failed,
             "skipped_count": skipped,
+            "deferred_count": deferred_count,
+            "max_groups": max_groups,
+            "max_groups_per_node": max_groups_per_node,
             "groups": public_groups,
         }
 
@@ -969,7 +986,7 @@ class InferenceQueue:
             profile_id = str(row["selected_profile_id"])
             group_node_id = str(row["selected_node_id"]) if row["selected_node_id"] is not None else None
             chat = bool(raw.get("chat", False))
-            warm_key = "|".join([group_node_id or "unassigned", profile_id, "chat" if chat else "completion", skeleton_hash, shared_prefix_hash, system_hash])
+            warm_key = _prefix_warm_key(node_id=group_node_id, profile_id=profile_id, chat=chat, skeleton_hash=skeleton_hash, shared_prefix_hash=shared_prefix_hash, system_hash=system_hash)
             group = groups.setdefault(
                 warm_key,
                 {
@@ -982,21 +999,26 @@ class InferenceQueue:
                     "profile_id": profile_id,
                     "node_id": group_node_id,
                     "chat": chat,
+                    "system_hash": system_hash,
                     "system": input_data.get("system") if isinstance(input_data.get("system"), str) else None,
                     "sample_request_json": raw,
                     "request_ids": [],
                     "batch_keys": set(),
+                    "priority": int(row["priority"]),
+                    "created_at": float(row["created_at"]),
                 },
             )
             group["request_ids"].append(str(row["request_id"]))
             group["batch_keys"].add(str(row["batch_key"]))
+            group["priority"] = min(int(group["priority"]), int(row["priority"]))
+            group["created_at"] = min(float(group["created_at"]), float(row["created_at"]))
         result = []
         for group in groups.values():
             if len(group["request_ids"]) < min_group_size:
                 continue
             group["batch_keys"] = sorted(group["batch_keys"])
             result.append(group)
-        return sorted(result, key=lambda item: item["warm_key"])
+        return sorted(result, key=lambda item: (str(item["node_id"] or ""), int(item["priority"]), float(item["created_at"]), item["warm_key"]))
 
     def _prefix_warm_status(self, conn: sqlite3.Connection, warm_key: str) -> dict[str, Any] | None:
         row = conn.execute("select * from prefix_warms where warm_key = ?", (warm_key,)).fetchone()
@@ -1116,6 +1138,75 @@ class InferenceQueue:
             "updated_at": float(row["updated_at"]),
             "error": row["error"],
         }
+
+
+def _prefix_warm_key(*, node_id: str | None, profile_id: str, chat: bool, skeleton_hash: str, shared_prefix_hash: str, system_hash: str) -> str:
+    return "|".join([node_id or "unassigned", profile_id, "chat" if chat else "completion", skeleton_hash, shared_prefix_hash, system_hash])
+
+
+def _prefix_group_base_key(group: dict[str, Any]) -> tuple[str, bool, str, str, str]:
+    return (
+        str(group["profile_id"]),
+        bool(group["chat"]),
+        str(group["skeleton_hash"]),
+        str(group["shared_prefix_hash"]),
+        str(group.get("system_hash") or _sha256_text(str(group.get("system") or ""))),
+    )
+
+
+def _replicate_prefix_groups_to_resident_nodes(groups: list[dict[str, Any]], *, registry: ProfileRegistry, topology: SparkTopology | None) -> list[dict[str, Any]]:
+    if topology is None:
+        raise ValueError("topology is required to warm all resident nodes")
+    merged: dict[tuple[str, bool, str, str, str], dict[str, Any]] = {}
+    for group in groups:
+        key = _prefix_group_base_key(group)
+        combined = merged.setdefault(key, dict(group, node_id=None, request_ids=[], batch_keys=set()))
+        combined["request_ids"].extend(str(request_id) for request_id in group["request_ids"])
+        combined["batch_keys"].update(str(batch_key) for batch_key in group["batch_keys"])
+    replicated: list[dict[str, Any]] = []
+    for group in merged.values():
+        profile = registry.get(str(group["profile_id"]))
+        node_ids = [node.node_id for node in topology.nodes_for_profile(profile)]
+        if not node_ids:
+            raise ValueError(f"no resident nodes for profile {profile.profile_id!r}")
+        system_hash = str(group.get("system_hash") or _sha256_text(str(group.get("system") or "")))
+        for node_id in sorted(node_ids):
+            clone = dict(group)
+            clone["node_id"] = node_id
+            clone["system_hash"] = system_hash
+            clone["batch_keys"] = sorted(set(str(batch_key) for batch_key in group["batch_keys"]))
+            clone["request_ids"] = sorted(set(str(request_id) for request_id in group["request_ids"]))
+            clone["warm_key"] = _prefix_warm_key(
+                node_id=node_id,
+                profile_id=str(group["profile_id"]),
+                chat=bool(group["chat"]),
+                skeleton_hash=str(group["skeleton_hash"]),
+                shared_prefix_hash=str(group["shared_prefix_hash"]),
+                system_hash=system_hash,
+            )
+            replicated.append(clone)
+    return sorted(replicated, key=lambda item: (str(item["node_id"] or ""), int(item.get("priority", 0)), float(item.get("created_at", 0.0)), item["warm_key"]))
+
+
+def _limit_prefix_warm_groups(
+    groups: list[dict[str, Any]],
+    *,
+    max_groups: int | None,
+    max_groups_per_node: int | None,
+) -> list[dict[str, Any]]:
+    if max_groups is None and max_groups_per_node is None:
+        return list(groups)
+    selected: list[dict[str, Any]] = []
+    per_node: dict[str, int] = {}
+    for group in groups:
+        node_key = str(group.get("node_id") or "unassigned")
+        if max_groups is not None and len(selected) >= max_groups:
+            break
+        if max_groups_per_node is not None and per_node.get(node_key, 0) >= max_groups_per_node:
+            continue
+        selected.append(group)
+        per_node[node_key] = per_node.get(node_key, 0) + 1
+    return selected
 
 
 def request_batch_key(request: InferenceRequest, profile: ModelProfile, assignment: SparkAssignment | None) -> str:
@@ -1319,6 +1410,78 @@ def _run_warm_request(runner: Runner, request: InferenceRequest, profile: ModelP
     if hasattr(runner, "run_one"):
         return runner.run_one(request, profile)
     return make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text="warm skipped: runner lacks run_one", status="transport_failed")
+
+
+def _run_warm_groups(
+    *,
+    registry: ProfileRegistry,
+    runner: Runner,
+    groups: list[dict[str, Any]],
+    max_output_tokens: int,
+    concurrency: int,
+) -> list[tuple[dict[str, Any], str, dict[str, Any]]]:
+    if not groups:
+        return []
+    if hasattr(runner, "run_many_on_node"):
+        return _run_warm_groups_batched(registry=registry, runner=runner, groups=groups, max_output_tokens=max_output_tokens, concurrency=concurrency)
+    outcomes = []
+    for group in groups:
+        try:
+            profile = registry.get(group["profile_id"])
+            request = _warm_request_from_group(group, max_output_tokens=max_output_tokens)
+            result = _run_warm_request(runner, request, profile, group["node_id"])
+            state = "warm" if result.get("status") == "completed" else "failed"
+        except Exception as exc:
+            result = {"format": "ds4-prefix-warm-failure-v1", "status": "failed", "error": str(exc)}
+            state = "failed"
+        outcomes.append((group, state, result))
+    return outcomes
+
+
+def _run_warm_groups_batched(
+    *,
+    registry: ProfileRegistry,
+    runner: Runner,
+    groups: list[dict[str, Any]],
+    max_output_tokens: int,
+    concurrency: int,
+) -> list[tuple[dict[str, Any], str, dict[str, Any]]]:
+    outcomes: list[tuple[dict[str, Any], str, dict[str, Any]]] = []
+    grouped: dict[tuple[str | None, str], list[tuple[dict[str, Any], InferenceRequest]]] = {}
+    for group in groups:
+        request = _warm_request_from_group(group, max_output_tokens=max_output_tokens)
+        grouped.setdefault((group["node_id"], group["profile_id"]), []).append((group, request))
+    with ThreadPoolExecutor(max_workers=max(1, min(len(grouped), concurrency))) as executor:
+        futures = {
+            executor.submit(_run_one_warm_batch, registry, runner, node_id, profile_id, entries, concurrency): (node_id, profile_id, entries)
+            for (node_id, profile_id), entries in sorted(grouped.items(), key=lambda item: ((item[0][0] or ""), item[0][1]))
+        }
+        for future in as_completed(futures):
+            outcomes.extend(future.result())
+    return outcomes
+
+
+def _run_one_warm_batch(
+    registry: ProfileRegistry,
+    runner: Runner,
+    node_id: str | None,
+    profile_id: str,
+    entries: list[tuple[dict[str, Any], InferenceRequest]],
+    concurrency: int,
+) -> list[tuple[dict[str, Any], str, dict[str, Any]]]:
+    outcomes: list[tuple[dict[str, Any], str, dict[str, Any]]] = []
+    requests = [request for _, request in entries]
+    profile = registry.get(profile_id)
+    try:
+        by_id = runner.run_many_on_node(requests, profile, node_id, concurrency=concurrency)  # type: ignore[attr-defined]
+    except Exception as exc:
+        by_id = {request.request_id: make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=str(exc), status="transport_failed") for request in requests}
+    for group, request in entries:
+        result = by_id.get(request.request_id)
+        if result is None:
+            result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text="missing warm batch result", status="transport_failed")
+        outcomes.append((group, "warm" if result.get("status") == "completed" else "failed", result))
+    return outcomes
 
 
 def _public_prefix_group(group: dict[str, Any], *, state: str, skipped: bool, status: dict[str, Any] | None = None, result: dict[str, Any] | None = None) -> dict[str, Any]:

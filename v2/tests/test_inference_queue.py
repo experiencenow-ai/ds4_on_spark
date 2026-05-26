@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import closing
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -13,6 +14,7 @@ from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.queue import CPU_QUEUE_TIMEOUT_KEY, InferenceQueue, request_batch_key
 from ds4_infer.runners import FakeRunner
 from ds4_infer.schemas import InferenceRequest, make_result
+from ds4_infer.service import load_requests_jsonl
 from ds4_infer.topology import SparkTopology
 from ds4_infer.worker import BatchWorker
 from ds4_tools.cpu_batch import CpuServiceError
@@ -45,6 +47,14 @@ def make_request(request_id: str, *, capability: str = "efficient", immediate: b
             "output_contract": {"format": "centaur-atom-edit-v1", "strict_json": True},
         }
     )
+
+
+def make_prefixed_request(request_id: str, prefix_id: str) -> InferenceRequest:
+    raw = json.loads(json.dumps(make_request(request_id).raw))
+    raw["input"]["shared_prefix"] = f"repo skeleton {prefix_id}\noutput contract\n"
+    raw["input"]["shared_prefix_hash"] = prefix_id
+    raw["input"]["skeleton_hash"] = prefix_id
+    return InferenceRequest.from_json(raw)
 
 
 class DelayedRunner:
@@ -132,6 +142,90 @@ def _assert_refill(case: unittest.TestCase, root: Path, queue: InferenceQueue, r
 
 
 class InferenceQueueTests(unittest.TestCase):
+    def test_load_requests_resolves_disk_prefix_cache_ref_before_queueing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix = "repo skeleton\noutput contract\n"
+            digest = hashlib.sha256(prefix.encode("utf-8")).hexdigest()
+            (root / "prefix.txt").write_text(prefix, encoding="utf-8")
+            payload = make_request("cached").raw
+            payload["input"] = {
+                "kv_cache_ref": {
+                    "format": "ds4-prefix-cache-ref-v1",
+                    "kind": "prefix_text",
+                    "path": "prefix.txt",
+                    "sha256": "sha256:" + digest,
+                    "skeleton_hash": "longmem-baseline-v1",
+                },
+                "suffix": "def f():\n    return 1\n",
+            }
+            requests_path = root / "requests.jsonl"
+            requests_path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+            requests = load_requests_jsonl(requests_path)
+            self.assertEqual(requests[0].input["shared_prefix"], prefix)
+            self.assertEqual(requests[0].input["shared_prefix_hash"], "sha256:" + digest)
+            self.assertEqual(requests[0].input["skeleton_hash"], "longmem-baseline-v1")
+            self.assertEqual(requests[0].input["kv_cache_resolution"]["kind"], "prefix_text")
+            queue = InferenceQueue(root / "queue")
+            queue.submit_requests(requests=requests, registry=ProfileRegistry.load(PROFILES), topology=SparkTopology.load(TOPOLOGY), batch_id="batch-a")
+            self.assertIn("sha256:" + digest, queue.status(request_id="cached")["batch_key"])
+
+    def test_load_requests_rejects_bad_prefix_cache_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "prefix.txt").write_text("prefix", encoding="utf-8")
+            payload = make_request("bad-cache").raw
+            payload["input"] = {
+                "kv_cache_ref": {
+                    "format": "ds4-prefix-cache-ref-v1",
+                    "kind": "prefix_text",
+                    "path": "prefix.txt",
+                    "sha256": "0" * 64,
+                },
+                "suffix": "target",
+            }
+            requests_path = root / "requests.jsonl"
+            requests_path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "sha256 mismatch"):
+                load_requests_jsonl(requests_path)
+
+    def test_load_requests_rejects_unknown_prefix_cache_kind(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix = "prefix"
+            digest = hashlib.sha256(prefix.encode("utf-8")).hexdigest()
+            (root / "prefix.txt").write_text(prefix, encoding="utf-8")
+            payload = make_request("bad-cache-kind").raw
+            payload["input"] = {
+                "kv_cache_ref": {
+                    "format": "ds4-prefix-cache-ref-v1",
+                    "kind": "raw_tensor_kv",
+                    "path": "prefix.txt",
+                    "sha256": digest,
+                },
+                "suffix": "target",
+            }
+            requests_path = root / "requests.jsonl"
+            requests_path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unsupported kv_cache_ref kind"):
+                load_requests_jsonl(requests_path)
+
+    def test_queue_rejects_unresolved_prefix_cache_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            raw = make_request("unresolved-cache").raw
+            raw["input"] = {
+                "kv_cache_ref": {
+                    "format": "ds4-prefix-cache-ref-v1",
+                    "kind": "prefix_text",
+                    "path": "prefix.txt",
+                    "sha256": "0" * 64,
+                },
+                "suffix": "target",
+            }
+            queue = InferenceQueue(tmp)
+            with self.assertRaisesRegex(ValueError, "resolved before queueing"):
+                queue.submit_requests(requests=[InferenceRequest.from_json(raw)], registry=ProfileRegistry.load(PROFILES), batch_id="batch-a")
+
     def test_submit_records_individual_request_status_and_batch_status(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             queue = InferenceQueue(tmp)
@@ -389,6 +483,52 @@ class InferenceQueueTests(unittest.TestCase):
             self.assertEqual(first["warmed_count"], 1)
             self.assertEqual(second["warmed_count"], 0)
             self.assertEqual(second["skipped_count"], 1)
+
+    def test_prefix_warm_limit_advances_past_already_warm_groups(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            requests = [make_prefixed_request(f"r{i}", f"prefix-{i}") for i in range(4)]
+            queue.submit_requests(requests=requests, registry=ProfileRegistry.load(PROFILES), batch_id="batch-a")
+            first = queue.warm_prefixes(registry=ProfileRegistry.load(PROFILES), runner=FakeRunner(), min_group_size=1, max_groups=2)
+            second = queue.warm_prefixes(registry=ProfileRegistry.load(PROFILES), runner=FakeRunner(), min_group_size=1, max_groups=2)
+            self.assertEqual(first["warmed_count"], 2)
+            self.assertEqual(first["deferred_count"], 2)
+            self.assertEqual(second["skipped_count"], 2)
+            self.assertEqual(second["warmed_count"], 2)
+            self.assertEqual(second["deferred_count"], 0)
+
+    def test_prefix_warm_can_replicate_group_to_all_resident_nodes(self) -> None:
+        class WarmRunner:
+            def __init__(self) -> None:
+                self.nodes: list[str | None] = []
+                self.batch_sizes: list[int] = []
+
+            def run_many_on_node(self, requests: list[InferenceRequest], profile, node_id: str | None, *, concurrency: int = 1) -> dict[str, dict]:
+                self.nodes.append(node_id)
+                self.batch_sizes.append(len(requests))
+                return {request.request_id: make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text="warm") for request in requests}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            queue.submit_requests(
+                requests=[make_request(f"r{i}") for i in range(10)],
+                registry=ProfileRegistry.load(PROFILES),
+                topology=SparkTopology.load(TOPOLOGY),
+                batch_id="batch-a",
+            )
+            runner = WarmRunner()
+            report = queue.warm_prefixes(
+                registry=ProfileRegistry.load(PROFILES),
+                runner=runner,
+                topology=SparkTopology.load(TOPOLOGY),
+                min_group_size=1,
+                concurrency=8,
+                all_resident_nodes=True,
+            )
+            self.assertEqual(report["warmed_count"], 5)
+            self.assertEqual(sorted(runner.nodes), ["spark0", "spark1", "spark2", "spark3", "spark6"])
+            self.assertEqual(runner.batch_sizes, [1, 1, 1, 1, 1])
+            self.assertEqual({group["skeleton_hash"] for group in report["groups"]}, {"prefix-a"})
 
 
 if __name__ == "__main__":
