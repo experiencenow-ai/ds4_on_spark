@@ -11,6 +11,7 @@ the current rescue/watchdog payload and the spark4/spark5 local DSV4 service
 units.
 
 Important environment knobs:
+  DS4_SELF_UPDATE=1               fetch and detach this local worktree first
   DS4_UPDATE_REF=origin/main        git ref to deploy on each Spark checkout
   DS4_REMOTE_REPO=$HOME/ds4_on_spark remote repo path on each Spark
   DS4_FORCE_RESET=0                set 1 to reset dirty remote checkouts
@@ -29,15 +30,11 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
 fi
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-nodes=("$@")
-if [ "${#nodes[@]}" -eq 0 ]; then
-	nodes=(spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7)
-fi
-
 remote_repo="${DS4_REMOTE_REPO:-}"
 update_remote="${DS4_UPDATE_REMOTE:-origin}"
 update_branch="${DS4_UPDATE_BRANCH:-main}"
 update_ref="${DS4_UPDATE_REF:-origin/main}"
+local_self_update="${DS4_SELF_UPDATE:-1}"
 force_reset="${DS4_FORCE_RESET:-0}"
 skip_unreachable="${DS4_SKIP_UNREACHABLE:-1}"
 connect_timeout="${DS4_CONNECT_TIMEOUT:-8}"
@@ -50,6 +47,40 @@ dsv4_kv_offload_size="${DS4_DSV4_KV_OFFLOAD_SIZE:-4}"
 dsv4_persist_store="${DS4_DSV4_PERSIST_STORE:-/var/tmp/ds4_hma_store/dsv4/simple_cpu_offload}"
 dsv4_persist_strict="${DS4_DSV4_PERSIST_STRICT:-1}"
 dsv4_pythonhashseed="${DS4_DSV4_PYTHONHASHSEED:-0}"
+
+self_update_local_checkout()
+{
+	if [ "$local_self_update" != "1" ] || [ "${DS4_SELF_UPDATE_DONE:-0}" = "1" ]; then
+		return 0
+	fi
+	if ! git -C "$repo_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		return 0
+	fi
+	if [ -n "$(git -C "$repo_dir" status --porcelain)" ]; then
+		echo "local checkout is dirty; refusing to self-update" >&2
+		echo "set DS4_SELF_UPDATE=0 to run this exact checkout anyway" >&2
+		git -C "$repo_dir" status --short >&2
+		exit 12
+	fi
+	echo "==> local: fetch $update_remote $update_branch"
+	git -C "$repo_dir" fetch "$update_remote" "$update_branch"
+	target="$(git -C "$repo_dir" rev-parse --verify "$update_ref")"
+	current="$(git -C "$repo_dir" rev-parse --verify HEAD)"
+	if [ "$current" = "$target" ]; then
+		echo "==> local: already at $update_ref ($(git -C "$repo_dir" rev-parse --short HEAD))"
+		return 0
+	fi
+	echo "==> local: checkout --detach $update_ref"
+	git -C "$repo_dir" checkout --detach "$update_ref"
+	exec env DS4_SELF_UPDATE_DONE=1 "$0" "$@"
+}
+
+self_update_local_checkout "$@"
+
+nodes=("$@")
+if [ "${#nodes[@]}" -eq 0 ]; then
+	nodes=(spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7)
+fi
 
 ssh_cmd()
 {
