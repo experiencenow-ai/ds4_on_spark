@@ -14,6 +14,7 @@ Important environment knobs:
   DS4_SELF_UPDATE=1               fetch and detach this local worktree first
   DS4_UPDATE_REF=origin/main        git ref to deploy on each Spark checkout
   DS4_REMOTE_REPO=$HOME/ds4_on_spark remote repo path on each Spark
+  DS4_REMOTE_UPDATE_MODE=auto      auto, git, or sync-local
   DS4_FORCE_RESET=0                set 1 to reset dirty remote checkouts
   DS4_INSTALL_RESCUE=1             rerun scripts/ds4_deploy_rescue_agent.sh
   DS4_RESCUE_ROOT=1                install root watchdog while deploying rescue
@@ -35,6 +36,7 @@ update_remote="${DS4_UPDATE_REMOTE:-origin}"
 update_branch="${DS4_UPDATE_BRANCH:-main}"
 update_ref="${DS4_UPDATE_REF:-origin/main}"
 local_self_update="${DS4_SELF_UPDATE:-1}"
+remote_update_mode="${DS4_REMOTE_UPDATE_MODE:-auto}"
 force_reset="${DS4_FORCE_RESET:-0}"
 skip_unreachable="${DS4_SKIP_UNREACHABLE:-1}"
 connect_timeout="${DS4_CONNECT_TIMEOUT:-8}"
@@ -47,6 +49,7 @@ dsv4_kv_offload_size="${DS4_DSV4_KV_OFFLOAD_SIZE:-4}"
 dsv4_persist_store="${DS4_DSV4_PERSIST_STORE:-/var/tmp/ds4_hma_store/dsv4/simple_cpu_offload}"
 dsv4_persist_strict="${DS4_DSV4_PERSIST_STRICT:-1}"
 dsv4_pythonhashseed="${DS4_DSV4_PYTHONHASHSEED:-0}"
+local_release_id="$(git -C "$repo_dir" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
 
 self_update_local_checkout()
 {
@@ -94,6 +97,26 @@ scp_cmd()
 	scp $scp_opts "$@"
 }
 
+remote_repo_path()
+{
+	local host="$1"
+	ssh_cmd "$host" "DS4_REMOTE_REPO='$remote_repo' bash -s" <<'REMOTE'
+set -eu
+repo="${DS4_REMOTE_REPO:-$HOME/ds4_on_spark}"
+printf '%s\n' "$repo"
+REMOTE
+}
+
+remote_has_git_repo()
+{
+	local host="$1"
+	ssh_cmd "$host" "DS4_REMOTE_REPO='$remote_repo' bash -s" >/dev/null 2>&1 <<'REMOTE'
+set -eu
+repo="${DS4_REMOTE_REPO:-$HOME/ds4_on_spark}"
+[ -d "$repo/.git" ]
+REMOTE
+}
+
 node_is_selected()
 {
 	local wanted="$1"
@@ -110,7 +133,9 @@ node_is_selected()
 update_remote_repo()
 {
 	local host="$1"
-	echo "==> $host: update $remote_repo to $update_ref"
+	local repo_path
+	repo_path="$(remote_repo_path "$host")"
+	echo "==> $host: git update $repo_path to $update_ref"
 	ssh_cmd "$host" \
 		"DS4_REMOTE_REPO='$remote_repo' DS4_UPDATE_REMOTE='$update_remote' DS4_UPDATE_BRANCH='$update_branch' DS4_UPDATE_REF='$update_ref' DS4_FORCE_RESET='$force_reset' bash -s" <<'REMOTE'
 set -euo pipefail
@@ -138,6 +163,75 @@ else
 fi
 git rev-parse --short HEAD
 REMOTE
+}
+
+sync_local_repo()
+{
+	local host="$1"
+	local repo_path
+	repo_path="$(remote_repo_path "$host")"
+	echo "==> $host: sync local release $local_release_id to $repo_path"
+	COPYFILE_DISABLE=1 LC_ALL=C tar --no-mac-metadata -C "$repo_dir" \
+		--exclude='./.git' \
+		--exclude='./.pytest_cache' \
+		--exclude='./.mypy_cache' \
+		--exclude='./__pycache__' \
+		--exclude='*/__pycache__' \
+		-cf - . | ssh_cmd "$host" "DS4_REMOTE_REPO='$remote_repo' DS4_RELEASE_ID='$local_release_id' bash -c '
+set -euo pipefail
+repo=\"\${DS4_REMOTE_REPO:-\$HOME/ds4_on_spark}\"
+release_id=\"\$DS4_RELEASE_ID\"
+parent=\"\$(dirname \"\$repo\")/ds4_on_spark_releases\"
+release=\"\$parent/\$release_id\"
+tmp=\"\$parent/.incoming-\$release_id-\$\$\"
+tar_log=\"\$tmp.tar.log\"
+mkdir -p \"\$parent\"
+rm -rf \"\$tmp\"
+rm -f \"\$tar_log\"
+mkdir -p \"\$tmp\"
+tar -C \"\$tmp\" -xf - 2>\"\$tar_log\"
+if [ -s \"\$tar_log\" ]; then
+	grep -v \"LIBARCHIVE.xattr.com.apple.provenance\" \"\$tar_log\" >&2 || true
+fi
+rm -f \"\$tar_log\"
+if [ -e \"\$release\" ] || [ -L \"\$release\" ]; then
+	rm -rf \"\$release\"
+fi
+mv \"\$tmp\" \"\$release\"
+if [ -e \"\$repo\" ] && [ ! -L \"\$repo\" ]; then
+	if [ -d \"\$repo/.git\" ]; then
+		mv \"\$repo\" \"\$repo.git-backup.\$(date +%Y%m%d%H%M%S)\"
+	else
+		mv \"\$repo\" \"\$repo.backup.\$(date +%Y%m%d%H%M%S)\"
+	fi
+fi
+ln -sfn \"\$release\" \"\$repo\"
+printf \"%s\\n\" \"\$release\"
+'"
+}
+
+update_node_code()
+{
+	local host="$1"
+	case "$remote_update_mode" in
+	git)
+		update_remote_repo "$host"
+		;;
+	sync-local)
+		sync_local_repo "$host"
+		;;
+	auto)
+		if remote_has_git_repo "$host"; then
+			update_remote_repo "$host"
+		else
+			sync_local_repo "$host"
+		fi
+		;;
+	*)
+		echo "invalid DS4_REMOTE_UPDATE_MODE=$remote_update_mode; use auto, git, or sync-local" >&2
+		exit 2
+		;;
+	esac
 }
 
 write_dsv4_env()
@@ -186,7 +280,7 @@ fi
 
 for node in "${reachable[@]}"
 do
-	update_remote_repo "$node"
+	update_node_code "$node"
 done
 
 if [ "$install_rescue" = "1" ]; then
