@@ -40,13 +40,13 @@ Qwen27 throughput must be measured as separate service metrics:
 | `prefill_prompt_tok_s` | ~7,660 prompt tok/s per Spark |
 | `single_stream_decode_tok_s` | ~8 generated tok/s |
 | `aggregate_decode_tok_s_at_16` | ~99 generated tok/s per Spark |
-| `aggregate_decode_tok_s_at_32` | ~187 generated tok/s per Spark |
+| `aggregate_decode_tok_s_at_32` | historical calibration only, not a launch cap |
 
 The `measured_output_tps` profile field is aggregate batched decode, not
 single-request chat latency. A one-off long answer can take minutes even on a
-warm lane; throughput-sensitive Qwen queues should keep each Qwen Spark near
-16-32 running sequences. Comparing single-stream latency to aggregate batched
-throughput is invalid for capacity planning.
+warm lane; Qwen27 launches should stay capped at `max_num_seqs=12` unless a new
+live calibration updates the runtime contract. Comparing single-stream latency
+to aggregate batched throughput is invalid for capacity planning.
 
 `--runner spark` SSHes to the selected Spark and posts to that Spark's local
 `http://127.0.0.1:8000` DS4 endpoint. The Spark runner uses `/ds4/batches`;

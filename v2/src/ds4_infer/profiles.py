@@ -9,6 +9,7 @@ class ModelProfile:
     profile_id: str
     model_id: str
     backend: str
+    runtime_contract_id: str | None
     capability_classes: tuple[str, ...]
     supported_job_classes: tuple[str, ...]
     supports_chat: bool
@@ -31,6 +32,7 @@ class ModelProfile:
             profile_id=str(data["profile_id"]),
             model_id=str(data["model_id"]),
             backend=str(data["backend"]),
+            runtime_contract_id=str(data["runtime_contract_id"]) if data.get("runtime_contract_id") else None,
             capability_classes=tuple(str(item) for item in data["capability_classes"]),
             supported_job_classes=tuple(str(item) for item in data["supported_job_classes"]),
             supports_chat=bool(data["supports_chat"]),
@@ -48,6 +50,7 @@ class ModelProfile:
             "profile_id": self.profile_id,
             "model_id": self.model_id,
             "backend": self.backend,
+            "runtime_contract_id": self.runtime_contract_id,
             "capability_classes": list(self.capability_classes),
             "supported_job_classes": list(self.supported_job_classes),
             "supports_chat": self.supports_chat,

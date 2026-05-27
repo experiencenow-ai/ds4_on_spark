@@ -5,6 +5,7 @@
   ],
   "format": "ds4-model-profile-v1",
   "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "runtime_contract_id": "dsv4_hma_persistent_experimental_v1",
   "performance": {
     "status": "not calibrated"
   },

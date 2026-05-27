@@ -1,0 +1,57 @@
+{
+  "format": "ds4-runtime-contract-v1",
+  "contract_id": "dsv4_spark45_vllm_mtp_v1",
+  "description": "Canonical Spark4/5 DeepSeek V4 Flash host-local vLLM/MTP runtime with native DSV4 KV offload.",
+  "profile_ids": [
+    "dsv4_vllm_mtp_smartest_v1"
+  ],
+  "required_nodes": [
+    "spark4",
+    "spark5"
+  ],
+  "vllm": {
+    "runtime_root_template": "/home/{node_id}/ds4-vllm-local",
+    "required_source_commit": "75358b5ef269050fbbf0d34a1e9772d8c56ac7c7",
+    "trim_endpoint": "/v1/trim_memory"
+  },
+  "model": {
+    "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+    "served_model_name": "deepseek-v4-flash"
+  },
+  "launch": {
+    "head_node": "spark4",
+    "worker_nodes": [
+      "spark5"
+    ],
+    "api_base_url": "http://127.0.0.1:8000",
+    "args": [
+      "--tensor-parallel-size",
+      "2",
+      "--enable-expert-parallel",
+      "--kv-cache-dtype",
+      "fp8",
+      "--block-size",
+      "256",
+      "--enable-prefix-caching",
+      "--max-model-len",
+      "1048576",
+      "--max-num-seqs",
+      "2",
+      "--max-num-batched-tokens",
+      "8192",
+      "--gpu-memory-utilization",
+      "0.8",
+      "--no-disable-hybrid-kv-cache-manager",
+      "--kv-offloading-size",
+      "8",
+      "--kv-offloading-backend",
+      "native",
+      "--enforce-eager"
+    ]
+  },
+  "trim_request": {
+    "method": "POST",
+    "path": "/v1/trim_memory",
+    "query": "mode=abort&reset_external=true&release_offload_memory=true&malloc_trim=true&resume=true"
+  }
+}

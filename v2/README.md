@@ -44,6 +44,19 @@ The production Spark allocation is fixed in `profiles/topology/static_sparks.jso
 - spark4+spark5 jointly host one DSV4 vLLM/MTP lane because that profile consumes both Sparks;
 - spark7 is the only dynamic experiment lane.
 
+Memory relief uses the same client-level control API for every Spark:
+
+```bash
+PYTHONPATH=src python3 -m ds4_tools.cli invoke \
+  --registry tools/registry.jsonl \
+  --tool-id tool:spark.trim_memory \
+  --arguments '{"node":"spark0","execute":true}'
+```
+
+The API resolves topology and runtime contracts before it calls the Spark-local
+`POST /v1/trim_memory` endpoint. Use `mode=wait` for graceful drain and
+`mode=abort` for watchdog/OOM recovery.
+
 This keeps Centaur-facing requests capability-based instead of Spark/backend-specific. See `docs/static-spark-topology.md`.
 
 Production Sparks should run `ds4-infer startup-models` after reboot. The

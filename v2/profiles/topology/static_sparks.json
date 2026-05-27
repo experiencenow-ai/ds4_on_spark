@@ -137,6 +137,15 @@
     "profile_node_group_ingress": {
       "dsv4_vllm_mtp_smartest_v1": "spark5",
       "dsv4_vllm_hma_persistent_experimental_v1": "spark4"
+    },
+    "trim_default_profiles_by_node": {
+      "spark0": "qwen3_6_27b_fp8_efficient_v1",
+      "spark1": "qwen3_6_27b_fp8_efficient_v1",
+      "spark2": "qwen3_6_27b_fp8_efficient_v1",
+      "spark3": "qwen3_6_27b_fp8_efficient_v1",
+      "spark4": "dsv4_vllm_mtp_smartest_v1",
+      "spark5": "dsv4_vllm_mtp_smartest_v1",
+      "spark6": "qwen3_6_27b_fp8_efficient_v1"
     }
   }
 }

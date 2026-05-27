@@ -56,13 +56,17 @@ OpenAI-compatible endpoint. It warms spark0-3 and spark6 Qwen profiles plus
 spark4's grouped DSV4 vLLM/MTP lane. Spark5 is a grouped-lane secondary and
 spark7 is experimental/on-demand, so neither gets a production warmup request.
 
-## Tuning defaults worth preserving
+## Tuning defaults
 
-The old GB10/Spark vLLM defaults were selected for throughput:
+The old GB10/Spark vLLM defaults were selected for throughput, but they are not
+the current Qwen27 launch contract:
 
-- `--max-num-seqs 64`
+- Qwen27 current cap: `--max-num-seqs 12`
+- Do not revive the old `--max-num-seqs 64` gateway default.
 - `--max-num-batched-tokens 32768`
-- `--gpu-memory-utilization 0.75`
+- Qwen27 full-context trim runtime: `--gpu-memory-utilization 0.50`
+- Do not revive the old Qwen27 `--gpu-memory-utilization 0.75` trial; it pushed
+  Spark7 into swap before the API was ready.
 - `--enable-chunked-prefill`
 - `--enable-prefix-caching`
 - `--async-scheduling`

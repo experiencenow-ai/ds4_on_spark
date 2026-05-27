@@ -6,6 +6,7 @@ import sys
 import time
 
 from .profiles import ProfileRegistry
+from .control import trim_spark_memory
 from .queue import InferenceQueue
 from .runners import AntirezRunner, AutoRunner, CommandRunner, FakeRunner, HmaPersistentRunner, SparkHttpRunner, VllmOpenAIRunner
 from .service import load_requests_jsonl
@@ -17,18 +18,39 @@ RUNNER_CHOICES = ("fake", "command", "vllm", "hma", "antirez", "auto", "spark")
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ds4-infer")
     sub = parser.add_subparsers(dest="cmd", required=True)
+    _add_basic_args(sub)
+    _add_submit_args(sub)
+    _add_queue_work_args(sub)
+    _add_queue_status_args(sub)
+    return parser
 
+
+def _add_basic_args(sub: argparse._SubParsersAction) -> None:
     profiles = sub.add_parser("profiles")
     profiles.add_argument("--profiles-dir", required=True)
-
     topology_cmd = sub.add_parser("topology")
     topology_cmd.add_argument("--topology", required=True)
     topology_cmd.add_argument("--capacity", action="store_true")
+    trim = sub.add_parser("trim-spark-memory")
+    trim.add_argument("--node-id", required=True)
+    trim.add_argument("--topology", default="profiles/topology/static_sparks.json")
+    trim.add_argument("--profiles-dir", default="profiles/models")
+    trim.add_argument("--contracts-dir", default="profiles/runtime_contracts")
+    trim.add_argument("--profile-id")
+    trim.add_argument("--base-url")
+    trim.add_argument("--timeout-s", type=int, default=60)
+    trim.add_argument("--mode", choices=("abort", "wait"), default="abort")
+    trim.add_argument("--reset-external", action=argparse.BooleanOptionalAction, default=True)
+    trim.add_argument("--release-offload-memory", action=argparse.BooleanOptionalAction, default=True)
+    trim.add_argument("--malloc-trim", action=argparse.BooleanOptionalAction, default=True)
+    trim.add_argument("--resume", action=argparse.BooleanOptionalAction, default=True)
+    trim.add_argument("--execute", action="store_true")
 
+
+def _add_submit_args(sub: argparse._SubParsersAction) -> None:
     submit = sub.add_parser("submit")
     submit.add_argument("--profiles-dir", required=True)
     submit.add_argument("--requests", required=True)
-
     queue_submit = sub.add_parser("queue-submit")
     queue_submit.add_argument("--queue-dir", required=True)
     queue_submit.add_argument("--profiles-dir", required=True)
@@ -45,16 +67,15 @@ def _build_parser() -> argparse.ArgumentParser:
     queue_submit_cpu.add_argument("--timeout-s", type=float)
     queue_submit_cpu.add_argument("--immediate", action="store_true")
 
+
+def _add_queue_work_args(sub: argparse._SubParsersAction) -> None:
     queue_work = sub.add_parser("queue-work")
     _add_queue_worker_args(queue_work)
-
     queue_worker = sub.add_parser("queue-worker")
     _add_queue_worker_args(queue_worker)
-
     queue_reap = sub.add_parser("queue-reap-leases")
     queue_reap.add_argument("--queue-dir", required=True)
     queue_reap.add_argument("--max-attempts", type=int, default=3)
-
     queue_warm = sub.add_parser("queue-warm-prefixes")
     queue_warm.add_argument("--queue-dir", required=True)
     queue_warm.add_argument("--profiles-dir", required=True)
@@ -76,6 +97,8 @@ def _build_parser() -> argparse.ArgumentParser:
     queue_warm.add_argument("--sleep-s", type=float, default=1.0)
     queue_warm.add_argument("--max-iterations", type=int, default=0)
 
+
+def _add_queue_status_args(sub: argparse._SubParsersAction) -> None:
     queue_prefix_status = sub.add_parser("queue-prefix-status")
     queue_prefix_status.add_argument("--queue-dir", required=True)
     queue_prefix_status.add_argument("--skeleton-hash")
@@ -102,7 +125,6 @@ def _build_parser() -> argparse.ArgumentParser:
     queue_collect.add_argument("--queue-dir", required=True)
     queue_collect.add_argument("--request-id")
     queue_collect.add_argument("--batch-id")
-    return parser
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -113,6 +135,7 @@ def _run(args: argparse.Namespace) -> int:
     handlers = {
         "profiles": _cmd_profiles,
         "topology": _cmd_topology,
+        "trim-spark-memory": _cmd_trim_spark_memory,
         "submit": _cmd_submit,
         "queue-submit": _cmd_queue_submit,
         "queue-submit-cpu": _cmd_queue_submit_cpu,
@@ -145,6 +168,27 @@ def _cmd_profiles(args: argparse.Namespace) -> int:
 def _cmd_topology(args: argparse.Namespace) -> int:
     topology = SparkTopology.load(args.topology)
     _emit(topology.estimate_capacity_by_profile() if args.capacity else topology.to_public_dict())
+    return 0
+
+
+def _cmd_trim_spark_memory(args: argparse.Namespace) -> int:
+    _emit(
+        trim_spark_memory(
+            node_id=args.node_id,
+            topology_path=args.topology,
+            profiles_dir=args.profiles_dir,
+            contracts_dir=args.contracts_dir,
+            profile_id=args.profile_id,
+            base_url=args.base_url,
+            execute=args.execute,
+            timeout_s=args.timeout_s,
+            mode=args.mode,
+            reset_external=args.reset_external,
+            release_offload_memory=args.release_offload_memory,
+            malloc_trim=args.malloc_trim,
+            resume=args.resume,
+        )
+    )
     return 0
 
 

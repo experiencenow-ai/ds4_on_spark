@@ -1,0 +1,62 @@
+{
+  "format": "ds4-runtime-contract-v1",
+  "contract_id": "qwen27_vllm_trim_v1",
+  "description": "Canonical Qwen27 FP8 vLLM runtime with /v1/trim_memory and SimpleCPUOffload trim support.",
+  "profile_ids": [
+    "qwen3_6_27b_fp8_efficient_v1"
+  ],
+  "required_nodes": [
+    "spark0",
+    "spark1",
+    "spark2",
+    "spark3",
+    "spark6"
+  ],
+  "verification_node": "spark7",
+  "vllm": {
+    "required_source_commit": "6735ed5a8284641ec7088f90fad9349a42758edf",
+    "fork_pr": "experiencenow-ai/vllm#3",
+    "fork_merge_commit": "fc80cce6247b41e883d9cae0412860c88f51e792",
+    "trim_endpoint": "/v1/trim_memory"
+  },
+  "model": {
+    "model_id": "Qwen/Qwen3.6-27B-FP8",
+    "served_model_name": "Qwen/Qwen3.6-27B-FP8"
+  },
+  "launch": {
+    "host": "127.0.0.1",
+    "port": 18100,
+    "node_overrides": {
+      "spark7": {
+        "api_base_url": "http://127.0.0.1:18110"
+      }
+    },
+    "args": [
+      "--max-model-len",
+      "262144",
+      "--max-num-seqs",
+      "12",
+      "--max-num-batched-tokens",
+      "32768",
+      "--gpu-memory-utilization",
+      "0.50",
+      "--enable-prefix-caching",
+      "--enable-chunked-prefill",
+      "--no-disable-hybrid-kv-cache-manager",
+      "--no-async-scheduling"
+    ],
+    "kv_transfer_config": {
+      "kv_connector": "SimpleCPUOffloadConnector",
+      "kv_role": "kv_both",
+      "kv_connector_extra_config": {
+        "cpu_bytes_to_use": 4294967296,
+        "lazy_offload": true
+      }
+    }
+  },
+  "trim_request": {
+    "method": "POST",
+    "path": "/v1/trim_memory",
+    "query": "mode=abort&reset_external=true&release_offload_memory=true&malloc_trim=true&resume=true"
+  }
+}
