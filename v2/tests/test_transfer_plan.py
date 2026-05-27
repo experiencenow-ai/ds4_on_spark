@@ -11,7 +11,7 @@ TOPOLOGY = ROOT / "profiles" / "transfer" / "spark_200g.json"
 
 
 class TransferPlanTests(unittest.TestCase):
-    def test_transfer_plan_runs_rsync_on_source_node_for_direct_data_path(self) -> None:
+    def test_transfer_plan_uses_200g_bulk_copy(self) -> None:
         topology = TransferTopology.load(TOPOLOGY)
         request = TransferRequest.from_json(
             {
@@ -24,12 +24,11 @@ class TransferPlanTests(unittest.TestCase):
             }
         )
         plan = plan_transfer(topology, request)
-        self.assertEqual(plan["method"], "source_initiated_rsync_over_ssh_no_compress")
-        self.assertEqual(plan["direct_data_path"], "spark0 -> spark4")
-        self.assertEqual(plan["argv"][:4], ["ssh", "-T", "-o", "Compression=no"])
-        self.assertIn("spark0", plan["argv"])
-        self.assertIn("spark4:/mnt/data/batch/", plan["argv"])
-        self.assertIn("--no-compress", plan["argv"])
+        self.assertEqual(plan["method"], "parallel_nc_fanout_200g_v1")
+        self.assertEqual(plan["direct_data_path"], "spark0-200g -> spark4-200g")
+        self.assertIn("ds4_transfer.fast_copy", plan["argv"])
+        self.assertIn("--jobs-per-edge", plan["argv"])
+        self.assertEqual(plan["destination_fabric_ip"], "10.10.100.14")
 
     def test_transfer_rejects_disallowed_paths(self) -> None:
         topology = TransferTopology.load(TOPOLOGY)

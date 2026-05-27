@@ -8,7 +8,7 @@ The live substrate has five contracts:
 2. **ds4-tools** exposes stable lattice-addressed tools such as `tool:ds4.json.validate` and `tool:repo.tests.echo_contract`. A tool ID is a task location; the registry resolves it to the latest approved implementation.
 3. **ds4-agent** runs a bounded model + tool loop. Models may request tools, but only the tool service executes approved implementations.
 4. **ds4-calibrate** produces profile calibration plans so runtime batch sizes, output budgets, and chat/completion choices are measured inside the service layer instead of leaking into Centaur.
-5. **ds4-transfer** plans and runs direct Spark-to-Spark file transfers over the 200Gbps fabric without hairpinning payloads through the controller.
+5. **ds4-transfer** plans and runs parallel Spark-to-Spark bulk transfers over the 200Gbps fabric without hairpinning payloads through the controller.
 
 The main repository's Git history is the archive. Obsolete scripts are purged from live main instead of carried forward behind compatibility shims.
 
@@ -177,7 +177,7 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-submit-cpu \
 
 ## Spark transfer
 
-Plan a direct Spark-to-Spark transfer:
+Plan a direct Spark-to-Spark 200G transfer:
 
 ```bash
 PYTHONPATH=src python3 -m ds4_transfer.cli plan \
@@ -185,7 +185,9 @@ PYTHONPATH=src python3 -m ds4_transfer.cli plan \
   --request-json '{"format":"ds4-transfer-request-v1","source_node":"spark0","source_path":"/mnt/data/batch/","destination_node":"spark4","destination_path":"/mnt/data/batch/"}'
 ```
 
-The generated command SSHes into the source Spark and runs rsync from source to destination, so data flows over the Spark fabric rather than through the controller.
+The generated command uses the `parallel_nc_fanout_200g_v1` copier. Plain
+`sparkN` hostnames are control-plane only; bulk bytes target `sparkN-200g` /
+`10.10.100.N` and flow Spark-to-Spark.
 
 ## No local forge layer
 

@@ -1,16 +1,26 @@
 {
   "format": "ds4-transfer-topology-v1",
   "fabric_id": "spark_200g_static_v1",
-  "fabric_hint": "200Gbps Spark interconnect; transfer commands should run on the source Spark so payload never hairpins through the controller.",
-  "rsync_options": [
-    "-a",
-    "--whole-file",
-    "--inplace",
-    "--partial",
-    "--numeric-ids",
-    "--no-compress",
-    "--info=stats2,progress2",
-    "--protect-args"
+  "fabric_hint": "200Gbps Spark interconnect. Bulk payloads use parallel unencrypted streams on the sparkN-200g / 10.10.100.N fabric; the Mac Studio is control plane only.",
+  "bulk_method": "parallel_nc_fanout_200g_v1",
+  "default_jobs_per_edge": 16,
+  "port_base": 49300,
+  "fanout_stages": [
+    [
+      {"source_node": "spark3", "destination_node": "spark2"},
+      {"source_node": "spark3", "destination_node": "spark4"}
+    ],
+    [
+      {"source_node": "spark2", "destination_node": "spark1"},
+      {"source_node": "spark4", "destination_node": "spark5"}
+    ],
+    [
+      {"source_node": "spark1", "destination_node": "spark0"},
+      {"source_node": "spark5", "destination_node": "spark6"}
+    ],
+    [
+      {"source_node": "spark6", "destination_node": "spark7"}
+    ]
   ],
   "ssh_options": [
     "-T",
@@ -19,13 +29,13 @@
     "-x"
   ],
   "nodes": [
-    {"node_id": "spark0", "host": "spark0", "root_allowlist": ["/mnt", "/data", "/tmp"]},
-    {"node_id": "spark1", "host": "spark1", "root_allowlist": ["/mnt", "/data", "/tmp"]},
-    {"node_id": "spark2", "host": "spark2", "root_allowlist": ["/mnt", "/data", "/tmp"]},
-    {"node_id": "spark3", "host": "spark3", "root_allowlist": ["/mnt", "/data", "/tmp"]},
-    {"node_id": "spark4", "host": "spark4", "root_allowlist": ["/mnt", "/data", "/tmp"]},
-    {"node_id": "spark5", "host": "spark5", "root_allowlist": ["/mnt", "/data", "/tmp"]},
-    {"node_id": "spark6", "host": "spark6", "root_allowlist": ["/mnt", "/data", "/tmp"]},
-    {"node_id": "spark7", "host": "spark7", "root_allowlist": ["/mnt", "/data", "/tmp"]}
+    {"node_id": "spark0", "host": "spark0", "fabric_host": "spark0-200g", "fabric_ip": "10.10.100.10", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark0/models"]},
+    {"node_id": "spark1", "host": "spark1", "fabric_host": "spark1-200g", "fabric_ip": "10.10.100.11", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark1/models"]},
+    {"node_id": "spark2", "host": "spark2", "fabric_host": "spark2-200g", "fabric_ip": "10.10.100.12", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark2/models"]},
+    {"node_id": "spark3", "host": "spark3", "fabric_host": "spark3-200g", "fabric_ip": "10.10.100.13", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark3/models"]},
+    {"node_id": "spark4", "host": "spark4", "fabric_host": "spark4-200g", "fabric_ip": "10.10.100.14", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark4/models"]},
+    {"node_id": "spark5", "host": "spark5", "fabric_host": "spark5-200g", "fabric_ip": "10.10.100.15", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark5/models"]},
+    {"node_id": "spark6", "host": "spark6", "fabric_host": "spark6-200g", "fabric_ip": "10.10.100.16", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark6/models"]},
+    {"node_id": "spark7", "host": "spark7", "fabric_host": "spark7-200g", "fabric_ip": "10.10.100.17", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark7/models"]}
   ]
 }
