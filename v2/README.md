@@ -96,7 +96,7 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-poll \
   --after-event-id 0
 ```
 
-The queue internally groups requests by model/profile, Spark node, chat mode, job class, input/output/thinking buckets, and shared prefix hash. Workers claim one compatible group, commit the lease, and batch-capable runners submit that group to `/ds4/batches` as one request. Centaur does not need to know batch-size folklore.
+The queue internally groups requests by model/profile, Spark node, chat mode, job class, input/output/thinking buckets, and shared prefix hash. Workers claim compatible model work for one profile/node window, commit leases immediately, and dispatch each claim independently so fast completions are written without waiting for a slow tail. The Spark runner still uses `/ds4/batches` for execution, but queue completion is per request. Centaur does not need to know batch-size folklore.
 
 For Centaur lattice and LongMem batches, workers can prewarm vLLM Automatic
 Prefix Caching for repeated skeletons:

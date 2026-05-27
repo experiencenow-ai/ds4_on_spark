@@ -62,13 +62,53 @@ class BatchWorker:
             claimed += len(claims)
             return claims
 
-        initial_claims = claim_more(concurrency)
+        def claim_more_model_batch(wanted: int, template: QueueClaim) -> list[QueueClaim]:
+            nonlocal claimed
+            if wanted < 1 or claimed >= limit:
+                return []
+            out: list[QueueClaim] = []
+            claim_node_id = node_id if node_id is not None else template.selected_node_id
+            while wanted > 0 and claimed < limit:
+                claims = self.queue.claim_requests(
+                    node_id=claim_node_id,
+                    batch_id=batch_id,
+                    batch_key=batch_key,
+                    request_kind="model",
+                    profile_id=template.selected_profile_id,
+                    include_unassigned=claim_node_id is not None,
+                    limit=min(wanted, (limit - claimed)),
+                    leased_by=self.worker_id,
+                    lease_ttl_s=self.lease_ttl_s,
+                )
+                if not claims:
+                    break
+                _record_claims(groups, claims)
+                claimed += len(claims)
+                wanted -= len(claims)
+                out.extend(claims)
+            return out
+
+        initial_claims = claim_more(1 if _runner_supports_model_batch(self.runner) else concurrency)
         if not initial_claims:
             return _summary(0, 0, 0, 0, groups, reap)
-        if initial_claims[0].request_kind == "cpu" and claimed < limit:
-            initial_claims.extend(claim_more(limit - claimed))
         if _claims_use_batch_runner(self.runner, initial_claims):
-            payload = self._run_claim_batch(initial_claims, concurrency=concurrency, groups=groups, reap=reap, on_result=on_result)
+            if initial_claims[0].request_kind == "cpu":
+                if claimed < limit:
+                    initial_claims.extend(claim_more(limit - claimed))
+                payload = self._run_claim_batch(initial_claims, concurrency=concurrency, groups=groups, reap=reap, on_result=on_result)
+                return payload
+            if initial_claims[0].request_kind == "model" and claimed < min(limit, concurrency):
+                initial_claims.extend(claim_more_model_batch(min(limit, concurrency) - claimed, initial_claims[0]))
+            template = initial_claims[0]
+            stream = self._run_streaming_claims(initial_claims, claim_more=lambda wanted: claim_more_model_batch(wanted, template), concurrency=concurrency, groups=groups, on_result=on_result)
+            completed += stream["completed_count"]
+            failed += stream["failed_count"]
+            lost += stream["lost_lease_count"]
+            heartbeats += stream["heartbeat_count"]
+            payload = _summary(claimed, completed, failed, lost, groups, reap)
+            payload["heartbeat_count"] = heartbeats
+            payload["batch_dispatch_count"] = claimed
+            payload["batch_dispatch_mode"] = "per_request"
             return payload
         stream = self._run_streaming_claims(initial_claims, claim_more=claim_more, concurrency=concurrency, groups=groups, on_result=on_result)
         completed += stream["completed_count"]
@@ -107,6 +147,9 @@ class BatchWorker:
         profile = self.registry.get(claim.selected_profile_id)
         if hasattr(self.runner, "run_one_on_node"):
             result = self.runner.run_one_on_node(claim.request, profile, claim.selected_node_id)  # type: ignore[attr-defined]
+        elif hasattr(self.runner, "run_many_on_node"):
+            results = self.runner.run_many_on_node([claim.request], profile, claim.selected_node_id, concurrency=1)  # type: ignore[attr-defined]
+            result = results.get(claim.request_id) or _failure(claim, "batch runner omitted request result")
         else:
             result = self.runner.run_one(claim.request, profile)
         if claim.selected_node_id:
@@ -148,19 +191,7 @@ class BatchWorker:
     def _run_claims_as_batch(self, claims: list[QueueClaim], concurrency: int) -> list[tuple[QueueClaim, dict[str, Any]]]:
         if claims[0].request_kind == "cpu":
             return self._run_cpu_claims(claims, concurrency)
-        profile = self.registry.get(claims[0].selected_profile_id)
-        requests = [claim.request for claim in claims if claim.request is not None]
-        if len(requests) != len(claims):
-            return [(claim, _failure(claim, "missing model request payload")) for claim in claims]
-        results = self.runner.run_many_on_node(requests, profile, claims[0].selected_node_id, concurrency=concurrency)  # type: ignore[attr-defined]
-        out: list[tuple[QueueClaim, dict[str, Any]]] = []
-        for claim in claims:
-            result = results.get(claim.request_id) or _failure(claim, "batch runner omitted request result")
-            if claim.selected_node_id:
-                result["selected_node"] = {"node_id": claim.selected_node_id}
-            result["batch_key"] = claim.batch_key
-            out.append((claim, result))
-        return out
+        return [(claim, _failure(claim, "model batch claims use per-request dispatch")) for claim in claims]
 
     def _run_cpu_claims(self, claims: list[QueueClaim], concurrency: int) -> list[tuple[QueueClaim, dict[str, Any]]]:
         service = claims[0].service_name or ""
@@ -188,7 +219,11 @@ def _record_claims(groups: dict[str, dict[str, int]], claims: list[QueueClaim]) 
 
 
 def _claims_use_batch_runner(runner: Runner, claims: list[QueueClaim]) -> bool:
-    return bool(claims and claims[0].request_kind == "cpu")
+    return bool(claims and (claims[0].request_kind == "cpu" or (claims[0].request_kind == "model" and _runner_supports_model_batch(runner))))
+
+
+def _runner_supports_model_batch(runner: Runner) -> bool:
+    return hasattr(runner, "run_many_on_node")
 
 
 def _cpu_items_and_timeout(claims: list[QueueClaim], default_timeout_s: int) -> tuple[list[dict[str, Any]], float]:
