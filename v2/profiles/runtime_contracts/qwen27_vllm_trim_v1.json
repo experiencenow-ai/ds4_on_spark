@@ -1,7 +1,7 @@
 {
   "format": "ds4-runtime-contract-v1",
   "contract_id": "qwen27_vllm_trim_v1",
-  "description": "Canonical Qwen27 FP8 vLLM runtime with /v1/trim_memory and SimpleCPUOffload trim support.",
+  "description": "Canonical Qwen27 FP8 vLLM runtime with /v1/trim_memory and optional LMCache MP external KV support.",
   "profile_ids": [
     "qwen3_6_27b_fp8_efficient_v1"
   ],
@@ -14,9 +14,9 @@
   ],
   "verification_node": "spark7",
   "vllm": {
-    "required_source_commit": "6735ed5a8284641ec7088f90fad9349a42758edf",
-    "fork_pr": "experiencenow-ai/vllm#3",
-    "fork_merge_commit": "fc80cce6247b41e883d9cae0412860c88f51e792",
+    "required_source_commit": "d523ead071132cd291e66e3dfd68f55446c27357",
+    "fork_pr": "experiencenow-ai/vllm#4",
+    "fork_merge_commit": "d523ead071132cd291e66e3dfd68f55446c27357",
     "trim_endpoint": "/v1/trim_memory"
   },
   "model": {
@@ -53,6 +53,11 @@
         "lazy_offload": true
       }
     }
+  },
+  "optional_kv_cache": {
+    "deployment": "profiles/kv_cache/qwen27_lmcache_mp_spark7.json",
+    "connector": "LMCacheMPConnector",
+    "lmcache_version": "0.4.5"
   },
   "trim_request": {
     "method": "POST",

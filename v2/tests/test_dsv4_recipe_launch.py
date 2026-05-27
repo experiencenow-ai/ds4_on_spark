@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class Dsv4RecipeLaunchTests(unittest.TestCase):
     def test_local_source_launch_preserves_known_good_no_ray_mtp_shape(self) -> None:
         script = (ROOT / "scripts" / "ds4_dsv4_spark45_local_vllm.sh").read_text()
-        self.assertIn("75358b5ef269050fbbf0d34a1e9772d8c56ac7c7", script)
+        self.assertIn("d523ead071132cd291e66e3dfd68f55446c27357", script)
         self.assertIn("kv_offload_size=\"${DS4_DSV4_KV_OFFLOAD_SIZE:-8}\"", script)
         self.assertIn("VLLM_USE_SIMPLE_KV_OFFLOAD", script)
         self.assertIn("VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT", script)
@@ -102,7 +102,7 @@ class Dsv4RecipeLaunchTests(unittest.TestCase):
     def test_topology_doc_warns_against_ray_and_no_mtp_regressions(self) -> None:
         doc = (ROOT / "docs" / "static-spark-topology.md").read_text()
         self.assertIn("experiencenow-ai/vllm", doc)
-        self.assertIn("75358b5ef269050fbbf0d34a1e9772d8c56ac7c7", doc)
+        self.assertIn("d523ead071132cd291e66e3dfd68f55446c27357", doc)
         self.assertIn("SimpleCPUOffloadConnector", doc)
         self.assertIn("LMCacheConnectorV1Dynamic", doc)
         self.assertIn("turns off vLLM's hybrid KV cache manager", doc)

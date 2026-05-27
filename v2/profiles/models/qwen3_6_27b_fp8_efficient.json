@@ -24,6 +24,7 @@
   "routing": {
     "default_for": ["efficient"],
     "rank": 100,
-    "chat_template_thinking_key": "enable_thinking"
+    "chat_template_thinking_key": "enable_thinking",
+    "optional_kv_cache_deployments": ["profiles/kv_cache/qwen27_lmcache_mp_spark7.json"]
   }
 }

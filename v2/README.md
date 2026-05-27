@@ -65,7 +65,7 @@ spark7 stays on demand.
 
 KV cache is launch plumbing, not a separate production model variant. The
 normal DSV4 service is the source-built local vLLM runtime from
-`experiencenow-ai/vllm@75358b5ef269050fbbf0d34a1e9772d8c56ac7c7`, launched by
+`experiencenow-ai/vllm@d523ead071132cd291e66e3dfd68f55446c27357`, launched by
 `scripts/ds4_dsv4_spark45_local_vllm.sh` with native SimpleCPUOffload. The live
 spark4+spark5 shape reports `max_model_len=1048576`, a 2,088,846-token GPU KV
 pool, and roughly two 1M-token full-context request slots. See
@@ -115,6 +115,14 @@ This is best-effort cache warming. On normal vLLM lanes it warms automatic
 prefix cache; when the same profile was launched with an external KV connector,
 it also seeds that connector so later requests with byte-identical
 `shared_prefix` text can skip the long prefill.
+
+Qwen27 now has a concrete experimental LMCache MP deployment at
+`profiles/kv_cache/qwen27_lmcache_mp_spark7.json`. DSV4 remains on the
+custom/native HMA offload path; the common DS4 API is the stable
+`shared_prefix` / `kv_cache_ref` request contract above both implementations.
+Both paths require the source-built `experiencenow-ai/vllm` fork pinned in the
+runtime contracts; the current unified fork commit is
+`d523ead071132cd291e66e3dfd68f55446c27357`.
 
 `--runner spark` executes the model request on the selected Spark over SSH,
 using that Spark's local `http://127.0.0.1:8000` DS4 API. Spark inference uses

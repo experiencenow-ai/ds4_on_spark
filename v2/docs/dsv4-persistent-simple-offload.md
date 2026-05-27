@@ -12,7 +12,7 @@ Current production target:
 launch script: scripts/ds4_dsv4_spark45_local_vllm.sh
 systemd units: ds4-dsv4-local-worker.service, ds4-dsv4-local-head.service
 vLLM fork:     https://github.com/experiencenow-ai/vllm
-vLLM commit:   75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
+vLLM commit:   d523ead071132cd291e66e3dfd68f55446c27357
 ```
 
 The earlier Docker runtime mod remains in `runtime_mods/` as the historical
@@ -92,8 +92,8 @@ model:                         deepseek-ai/DeepSeek-V4-Flash
 served model:                  deepseek-v4-flash
 nodes:                         spark4 + spark5 as one no-Ray TP=2 service
 historical proof vLLM ref:     dda4668b59567416f86956cfe7bbc1eab371a61e
-current source vLLM ref:       75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
-runtime:                       ~/ds4-vllm-local-75358b5
+current source vLLM ref:       d523ead071132cd291e66e3dfd68f55446c27357
+runtime:                       ~/ds4-vllm-local-d523ead
 max_model_len:                 1048576
 block_size:                    256
 hybrid KV manager:             enabled

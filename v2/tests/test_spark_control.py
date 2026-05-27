@@ -16,6 +16,7 @@ PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 CONTRACTS = ROOT / "profiles" / "runtime_contracts"
 TOOLS = ROOT / "tools" / "registry.jsonl"
+VLLM_COMMIT = "d523ead071132cd291e66e3dfd68f55446c27357"
 
 
 class _Done:
@@ -35,6 +36,8 @@ class SparkControlTests(unittest.TestCase):
     def test_qwen27_contract_caps_max_num_seqs_at_12(self) -> None:
         contract = json.loads((CONTRACTS / "qwen27_vllm_trim_v1.json").read_text(encoding="utf-8"))
         args = contract["launch"]["args"]
+        self.assertEqual(contract["vllm"]["required_source_commit"], VLLM_COMMIT)
+        self.assertEqual(contract["optional_kv_cache"]["connector"], "LMCacheMPConnector")
         self.assertEqual(args[args.index("--max-num-seqs") + 1], "12")
         self.assertEqual(args[args.index("--gpu-memory-utilization") + 1], "0.50")
 

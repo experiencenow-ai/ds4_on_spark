@@ -25,22 +25,23 @@ marking the source-built runtime healthy.
 Runtime paths:
 
 ```text
-/home/spark4/ds4-vllm-local-75358b5
-/home/spark5/ds4-vllm-local-75358b5
-/home/spark4/ds4-vllm-local -> ds4-vllm-local-75358b5
-/home/spark5/ds4-vllm-local -> ds4-vllm-local-75358b5
+/home/spark4/ds4-vllm-local-d523ead
+/home/spark5/ds4-vllm-local-d523ead
+/home/spark4/ds4-vllm-local -> ds4-vllm-local-d523ead
+/home/spark5/ds4-vllm-local -> ds4-vllm-local-d523ead
 ```
 
 The durable runtime must be built or installed from the local vLLM fork commit:
 
 ```text
 https://github.com/experiencenow-ai/vllm
-75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
+d523ead071132cd291e66e3dfd68f55446c27357
 ```
 
 That commit includes the DS4 persistent SimpleCPUOffload API commits,
 request-side `cache_ref` plumbing, upstream vLLM's DSV4 native KV offload
-support, and the source-controlled DeepSeek V4 loader package under:
+support, the public trim endpoint, Qwen27 LMCache MP docs/tooling, and the
+source-controlled DeepSeek V4 loader package under:
 
 ```text
 vllm/models/deepseek_v4/
@@ -63,16 +64,16 @@ prefix, then atomically move the `ds4-vllm-local` symlink after the install
 succeeds:
 
 ```bash
-git clone https://github.com/experiencenow-ai/vllm.git ~/src/vllm-dsv4-75358b5
-cd ~/src/vllm-dsv4-75358b5
-git checkout 75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
-python3.12 -m venv ~/ds4-vllm-local-75358b5
+git clone https://github.com/experiencenow-ai/vllm.git ~/src/vllm-dsv4-d523ead
+cd ~/src/vllm-dsv4-d523ead
+git checkout d523ead071132cd291e66e3dfd68f55446c27357
+python3.12 -m venv ~/ds4-vllm-local-d523ead
 export CUDA_HOME=/usr/local/cuda
 export TORCH_CUDA_ARCH_LIST=12.1a
 export CPATH="$HOME/standard-runtimes/python3.12-dev-extract/usr/include:$HOME/standard-runtimes/python3.12-dev-extract/usr/include/python3.12:${CPATH:-}"
-~/ds4-vllm-local-75358b5/bin/python -m pip install -U pip wheel setuptools
-~/ds4-vllm-local-75358b5/bin/python -m pip install -e .
-ln -sfn ~/ds4-vllm-local-75358b5 ~/ds4-vllm-local
+~/ds4-vllm-local-d523ead/bin/python -m pip install -U pip wheel setuptools
+~/ds4-vllm-local-d523ead/bin/python -m pip install -e .
+ln -sfn ~/ds4-vllm-local-d523ead ~/ds4-vllm-local
 ```
 
 Keep the previous runtime directory intact until the new source-built service

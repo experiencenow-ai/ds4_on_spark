@@ -74,14 +74,15 @@ The runtime must come from the local vLLM fork:
 
 ```text
 vLLM fork:   https://github.com/experiencenow-ai/vllm
-vLLM commit: 75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
-runtime:     ~/ds4-vllm-local-75358b5
+vLLM commit: d523ead071132cd291e66e3dfd68f55446c27357
+runtime:     ~/ds4-vllm-local-d523ead
 symlink:     ~/ds4-vllm-local
 ```
 
 That source commit includes the DSV4 loader, upstream DSV4 native KV offload,
-and the DS4 persistent SimpleCPUOffload/cache-ref API. Do not recreate the
-service by copying Python files out of the old
+the DS4 persistent SimpleCPUOffload/cache-ref API, the trim endpoint, and the
+Qwen27 LMCache MP runtime docs/tooling. Do not recreate the service by copying
+Python files out of the old
 `vllm-node-dsv4-lmcache-rankfix` image.
 
 The required serving command shape is:
@@ -115,7 +116,7 @@ The live verified launch on 2026-05-26 exposed:
 API endpoint:       http://10.20.0.14:8000/v1
 served model name:  deepseek-v4-flash
 max_model_len:      1048576
-runtime target:     experiencenow-ai/vllm@75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
+runtime target:     experiencenow-ai/vllm@d523ead071132cd291e66e3dfd68f55446c27357
 HMA:                enabled (disable_hybrid_kv_cache_manager=False)
 KV connector:       SimpleCPUOffloadConnector
 CPU KV offload:     8 GiB total default, 4 GiB per TP rank
