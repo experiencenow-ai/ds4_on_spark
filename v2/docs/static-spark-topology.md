@@ -48,7 +48,7 @@ caller asks to relieve spark5.
 
 The spark4+spark5 DSV4 lane must use the source-built, host-local vLLM runtime
 with vLLM's hybrid KV cache manager enabled. This is not an interchangeable
-implementation detail. Each Spark has one GPU, and the working MTP result uses
+implementation detail. Each Spark has one GPU, and the working DSV4 result uses
 explicit multi-node ranks, not Ray placement groups.
 
 Canonical launch path:
@@ -76,8 +76,8 @@ The runtime must come from the local vLLM fork:
 
 ```text
 vLLM fork:   https://github.com/experiencenow-ai/vllm
-vLLM commit: d523ead071132cd291e66e3dfd68f55446c27357
-runtime:     ~/ds4-vllm-local-d523ead
+vLLM commit: c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34
+runtime:     ~/ds4-vllm-local-c6e55a8
 symlink:     ~/ds4-vllm-local
 ```
 
@@ -91,14 +91,16 @@ The required serving command shape is:
 
 ```text
 TP=2, PP=1, EP enabled
-MTP speculative decoding with 2 tokens
-max_model_len=1048576
-max_num_seqs=2
-max_num_batched_tokens=8192
+MTP speculative decoding enabled: deepseek_mtp, 2 speculative tokens
+max_model_len=262144
+max_num_seqs=1
+max_num_batched_tokens=2048
+gpu_memory_utilization=0.68
 block_size=256
 fp8 KV cache
 hybrid KV cache manager enabled
-SimpleCPUOffloadConnector via --kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8} --kv-offloading-backend native
+SimpleCPUOffloadConnector via --kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-2} --kv-offloading-backend native
+KV cache metrics and iteration details enabled
 VLLM_USE_SIMPLE_KV_OFFLOAD=1
 NCCL_IB_DISABLE=1, NCCL/Gloo/TP sockets pinned to enP7s7
 --enforce-eager
@@ -118,7 +120,7 @@ The live verified launch on 2026-05-26 exposed:
 API endpoint:       http://10.20.0.14:8000/v1
 served model name:  deepseek-v4-flash
 max_model_len:      1048576
-runtime target:     experiencenow-ai/vllm@d523ead071132cd291e66e3dfd68f55446c27357
+runtime target:     experiencenow-ai/vllm@c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34
 HMA:                enabled (disable_hybrid_kv_cache_manager=False)
 KV connector:       SimpleCPUOffloadConnector
 CPU KV offload:     8 GiB total default, 4 GiB per TP rank
@@ -140,9 +142,11 @@ max_model_len:      45,056
 Do not replace this with a Ray vLLM service unless a new benchmark proves the
 Ray path reaches API readiness and matches the source-built local lane.
 
-Do not "simplify" the DSV4 lane by disabling MTP. MTP was present in the
-working config. If a future smoke test needs a smaller shape, record it as a
-temporary diagnostic profile, not as the production DSV4 lane.
+The May 27 2026 requalification showed the 1M-context host-local runtime
+exhausting NVIDIA driver/system memory during a cold request. The production
+lane is therefore capped at 256k while MTP, prefix caching, native
+SimpleCPUOffload, persistent KV hooks, metrics, and `/v1/trim_memory` are
+qualified together.
 
 Antirez's DS4 engine proves that durable, disk-backed DSV4 KV persistence is
 possible when the runtime owns the DS4-specific compressed session payload.

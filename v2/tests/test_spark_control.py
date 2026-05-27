@@ -16,7 +16,7 @@ PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 CONTRACTS = ROOT / "profiles" / "runtime_contracts"
 TOOLS = ROOT / "tools" / "registry.jsonl"
-VLLM_COMMIT = "d523ead071132cd291e66e3dfd68f55446c27357"
+VLLM_COMMIT = "c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34"
 
 
 class _Done:

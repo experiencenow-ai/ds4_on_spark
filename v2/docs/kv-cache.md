@@ -22,7 +22,7 @@ Centaur still sends normal DS4 inference requests. The queue groups lattice
 requests by `shared_prefix_hash`, and `queue-warm-prefixes` can seed a skeleton
 prefix before the real atom suffixes arrive.
 
-## What is proven
+## What Is Proven
 
 The prefix-cache mechanism is live-proven on the experimental spark7 Qwen27
 lane:
@@ -38,6 +38,21 @@ warm request newly computed prompt tokens: 237
 
 This proves the useful part of the design: when the long prefix is
 token-identical, vLLM reuses cached KV and computes only the uncached suffix.
+It does not prove LMCache/external KV for Qwen27.
+
+The 2026-05-27 live Qwen27 LMCache qualification on spark7 did not pass. After
+patching LMCache's vLLM connector to implement the HMA hook, and after allowing
+Qwen's shifted HMA views, the first cold request still crashed inside LMCache:
+
+```text
+AttributeError: 'list' object has no attribute 'device'
+lmcache/v1/gpu_connector/gpu_connectors.py:573
+```
+
+No Qwen27 LMCache speedup number exists yet because the cold request never
+completed. The current Qwen27 answer is therefore APC-only: node-sticky,
+token-identical prefix reuse inside the live vLLM process.
+
 DSV4 has to be measured on the shared spark4+spark5 production lane, so use
 vLLM counters rather than wallclock when other users are active:
 
@@ -65,7 +80,7 @@ The required vLLM fork revision for both DSV4 and Qwen27 is:
 
 ```text
 https://github.com/experiencenow-ai/vllm
-d523ead071132cd291e66e3dfd68f55446c27357
+c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34
 ```
 
 The experimental launch profile is:
@@ -79,7 +94,7 @@ connects vLLM through `LMCacheMPConnector`:
 
 ```text
 Qwen27 vLLM:       http://127.0.0.1:18110
-vLLM runtime:      /home/spark7/ds4-vllm-local from experiencenow-ai/vllm@d523ead071132cd291e66e3dfd68f55446c27357
+vLLM runtime:      /home/spark7/ds4-vllm-local from experiencenow-ai/vllm@c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34
 LMCache data port: 127.0.0.1:5555
 LMCache HTTP port: 127.0.0.1:18080
 L1 CPU cache:      16 GiB, lazy init, LRU
@@ -150,21 +165,24 @@ The production launch body is
 
 ```text
 https://github.com/experiencenow-ai/vllm
-d523ead071132cd291e66e3dfd68f55446c27357
+c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34
 ```
 
 It uses:
 
 ```text
---max-model-len 1048576
+--max-model-len ${DS4_DSV4_MAX_MODEL_LEN:-262144}
 --enable-prefix-caching
 --no-disable-hybrid-kv-cache-manager
---kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8}
+--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-2}
 --kv-offloading-backend native
+--kv-cache-metrics
+--enable-logging-iteration-details
+--speculative-config '{"method":"deepseek_mtp","num_speculative_tokens":2}'
 VLLM_USE_SIMPLE_KV_OFFLOAD=1
 ```
 
-The verified 2026-05-26 launch reported:
+The verified 2026-05-26 1M Docker launch reported:
 
 ```text
 max_model_len:      1048576
@@ -175,18 +193,33 @@ GPU KV cache size:  2,088,846 tokens
 1M concurrency:     1.99x
 ```
 
-`DS4_DSV4_KV_OFFLOAD_SIZE=16` was the first verified value. The default is `8`
-total because a full 1M-token DSV4 cached prefix is roughly 7 GiB across the TP
-lane. `6` total is a cautious mode, and `4` total is the recovery setting when
-Spark nodes are memory-sensitive. NVMe swap can help the OS survive pressure
-long enough to kill vLLM, but swap is not KV capacity and should not be used for
-normal inference.
+`DS4_DSV4_KV_OFFLOAD_SIZE=16` was the first verified value for the 1M Docker
+proof. The current source-built 256k target defaults to `2` total because the
+1M host-local profile exhausted host/NVIDIA driver memory during
+requalification. Larger pools must be requalified live. NVMe swap can help the
+OS survive pressure long enough to kill vLLM, but swap is not KV capacity and
+should not be used for normal inference.
 
 This is external CPU KV offload. It preserves the full-quality HF/vLLM DSV4 path
 and avoids the bad full-KV fallback. Durable restart persistence is handled by
 the native-offload runtime mod in `docs/dsv4-persistent-simple-offload.md`,
 which extends vLLM's HMA-aware `SimpleCPUOffloadConnector` instead of replacing
 it with LMCache.
+
+The DSV4 external-KV benchmark gate is not satisfied by startup logs. A passing
+run must include:
+
+```text
+cold long-prefix request: 200 OK and persisted offload blocks
+restart: both spark4 and spark5 services restarted from the same source runtime
+replay: same prefix returns 200 OK
+evidence: external_kv_transfer or DS4 persistent hit log lines
+result: TTFT/prefill delta versus cold request
+```
+
+The 2026-05-27 requalification attempt could not produce that benchmark because
+spark5 was unreachable from the control host, and spark4 was not serving
+`/health` while waiting on the grouped TP lane.
 
 The `VLLM_USE_SIMPLE_KV_OFFLOAD=1` environment variable is required. Otherwise
 the same native backend can select the generic `OffloadingConnector`; that path
@@ -273,12 +306,24 @@ instructions, tool schemas, and LongMem documents before the variable suffix.
 Changing whitespace, chat template arguments, model profile, adapter, or
 thinking mode can defeat cache hits.
 
-## Why not raw blobs
+## Unified request API
 
-Do not expose raw KV tensors to Centaur. KV layout is tied to model revision,
-tokenizer, dtype, attention backend, tensor-parallel rank, block size, vLLM
-version, and hybrid DeepSeek cache layout. The DS4 API should expose stable
-cache keys and prefix grouping; the vLLM connector should own the bytes.
+Use `docs/kv-cache-api.md` for client-level cache requests. The unified field is
+`input.kv_cache`; it supports:
+
+```text
+push inline:       small opaque bundle inside the JSON request
+push request_blob: side-band blob attached to the one request being routed
+pull remote_uri:   serving node fetches a verified network object
+pull local_store:  serving node reads a local/shared cache key
+store:             write-through or write-back after compute
+```
+
+The API carries opaque bundles or references, not client-interpreted tensor
+layout. KV layout is still tied to model revision, tokenizer, dtype, attention
+backend, tensor-parallel rank, block size, vLLM version, and DSV4 hybrid cache
+state. The serving backend must validate those fingerprints before accepting a
+hit.
 
 ## Acceptance
 
