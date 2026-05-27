@@ -30,7 +30,7 @@ Some lanes may still require SSH execution or an SSH tunnel if their model serve
 ```text
 spark0, spark1, spark2, spark3
   resident Qwen lanes
-  profiles: qwen3_6_27b_fp8_efficient_v1, qwen3_6_35b_a3b_fp8_fastest_v1
+  profiles: qwen3_6_27b_fp8_efficient_v1
 
 spark4 + spark5
   grouped DSV4 vLLM/MTP lane
@@ -38,14 +38,14 @@ spark4 + spark5
 
 spark6
   resident Qwen lane
-  profiles: qwen3_6_27b_fp8_efficient_v1, qwen3_6_35b_a3b_fp8_fastest_v1
+  profiles: qwen3_6_27b_fp8_efficient_v1
 
 spark7
   experimental on-demand lane
   resident profiles: none
 ```
 
-There is no production model ejection code in this plan. The Qwen defaults stay resident on spark0-3 and spark6 after startup; spark7 is the only on-demand experimental lane.
+There is no production model ejection code in this plan. The Qwen27 default stays resident on spark0-3 and spark6 after startup; spark7 is the only on-demand experimental lane. Qwen35/fastest is parked and not part of this live validation for now.
 
 ## Shared Request Files
 
@@ -55,7 +55,6 @@ Qwen lane request file:
 
 ```jsonl
 {"format":"ds4-inference-request-v1","request_id":"qwen-efficient-smoke","capability":"efficient","chat":true,"immediate":false,"job_class":"summary","max_output_tokens":64,"thinking_budget_tokens":0,"temperature":0,"input":{"messages":[{"role":"user","content":"Reply with exactly: qwen efficient ok"}]},"output_contract":{"format":"text"}}
-{"format":"ds4-inference-request-v1","request_id":"qwen-fastest-smoke","capability":"fastest","chat":true,"immediate":false,"job_class":"triage","max_output_tokens":64,"thinking_budget_tokens":0,"temperature":0,"input":{"messages":[{"role":"user","content":"Reply with exactly: qwen fastest ok"}]},"output_contract":{"format":"text"}}
 ```
 
 DSV4 vLLM/MTP request file:
@@ -80,9 +79,9 @@ Repeat with the node name changed for each resident Qwen lane.
 
 Acceptance:
 
-- `completed_count=2`
-- both result records have `status=completed`
-- selected profiles include both Qwen profile IDs
+- `completed_count=1`
+- the result record has `status=completed`
+- selected profile is `qwen3_6_27b_fp8_efficient_v1`
 - capture `/v1/models` and the response JSONL for the handoff
 
 ### 2. Spark4+Spark5 DSV4 vLLM/MTP
@@ -119,9 +118,9 @@ ssh spark6 'cd /path/to/ds4_on_spark/v2 && DS4_VLLM_BASE_URL=http://127.0.0.1:80
 
 Acceptance:
 
-- `completed_count=2`
-- both result records have `status=completed`
-- selected profiles include both Qwen profile IDs
+- `completed_count=1`
+- the result record has `status=completed`
+- selected profile is `qwen3_6_27b_fp8_efficient_v1`
 - capture `/v1/models` and the response JSONL for the handoff
 
 ### 4. Mac Studio Spark Chat

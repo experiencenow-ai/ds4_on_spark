@@ -94,15 +94,17 @@ The harness keeps the topology-derived mix queued for five minutes:
 
 ```text
 spark0-3: qwen3_6_27b_fp8_efficient_v1
-spark0-3: qwen3_6_35b_a3b_fp8_fastest_v1
 spark4+spark5: dsv4_vllm_mtp_smartest_v1, ingress spark5
-spark6: qwen3_6_27b_fp8_efficient_v1, qwen3_6_35b_a3b_fp8_fastest_v1
+spark6: qwen3_6_27b_fp8_efficient_v1
 ```
 
 It writes `plan.json`, `gpu_samples.jsonl`, `summary.json`, and the queue DB
 under `/tmp/ds4_queue_saturation_<run_id>/`. The run passes only if the queue
 drains, no request fails, and every production GPU records the required active
 seconds above the configured threshold.
+
+Qwen35/fastest remains a profile in the registry, but it is parked and should
+not be included in the production saturation mix until its service is restored.
 
 For throughput tuning, run a stress ladder:
 
@@ -124,14 +126,15 @@ Manual chat uses the same path:
 ```bash
 ds4-spark-chat -m ds4v
 ds4-spark-chat -m qwen
-ds4-spark-chat -m fast
 ```
 
 Aliases:
 
 - `ds4v`: DeepSeek V4 Flash vLLM/MTP lane on spark4+spark5.
 - `qwen`: Qwen efficient lane on spark0-3 and spark6.
-- `fast`: fastest Qwen lane on spark0-3 and spark6.
+
+The older `fast`/Qwen35 lane is parked for now and is not part of the
+production queue mix.
 
 The controller keeps the full chat history in the local history file, but each
 model request is executed on the Spark selected by the v2 topology.

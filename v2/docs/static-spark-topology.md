@@ -6,24 +6,26 @@ The production Spark pool is intentionally static. Centaur and DS4 services shou
 
 | Spark | Role | Resident profiles |
 |---|---|---|
-| spark0 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1`, `qwen3_6_35b_a3b_fp8_fastest_v1` |
-| spark1 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1`, `qwen3_6_35b_a3b_fp8_fastest_v1` |
-| spark2 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1`, `qwen3_6_35b_a3b_fp8_fastest_v1` |
-| spark3 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1`, `qwen3_6_35b_a3b_fp8_fastest_v1` |
+| spark0 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1` |
+| spark1 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1` |
+| spark2 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1` |
+| spark3 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1` |
 | spark4 | DSV4 vLLM grouped lane half | `dsv4_vllm_mtp_smartest_v1` |
 | spark5 | DSV4 vLLM grouped lane half | `dsv4_vllm_mtp_smartest_v1` |
-| spark6 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1`, `qwen3_6_35b_a3b_fp8_fastest_v1` |
+| spark6 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1` |
 | spark7 | Experimental on-demand lane | none |
 
 This gives the service a normal production view of:
 
-- 5 Qwen lanes for `efficient` / `fastest` work;
+- 5 Qwen27 lanes for `efficient` work;
 - 1 DSV4 vLLM grouped lane for `smartest` chat/tool/reasoning work, consuming both spark4 and spark5;
 - 1 experimental on-demand lane on spark7.
 
 No model is dynamically ejected from production Sparks. Spark6 is now a normal
 Qwen resident lane. Spark7 is intentionally experimental and may lazy-load
 models for probes without becoming a production resident lane.
+The Qwen35/fastest profile remains in the profile registry for later use, but
+it is parked and is not a documented production resident model for now.
 
 KV-cache experiments should use `ds4_kvcache` deployment files. They do not add
 resident profiles to the topology.
@@ -210,8 +212,8 @@ PYTHONPATH=src python3 -m ds4_infer.cli startup-models \
 ```
 
 The command reads this topology and warms only that node's resident profiles.
-Spark0-3 and spark6 warm both Qwen profiles, spark4 warms the deployed grouped
-DSV4 vLLM lane, spark5 records itself as the secondary half of that group, and
+Spark0-3 and spark6 warm Qwen27 only, spark4 warms the deployed grouped DSV4
+vLLM lane, spark5 records itself as the secondary half of that group, and
 spark7 is a clean no-op because it is on demand. Production lanes use the
 default `127.0.0.1:8000` gateway.
 
