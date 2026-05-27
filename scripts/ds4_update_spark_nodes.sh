@@ -18,6 +18,9 @@ Important environment knobs:
   DS4_FORCE_RESET=0                set 1 to reset dirty remote checkouts
   DS4_INSTALL_RESCUE=1             rerun scripts/ds4_deploy_rescue_agent.sh
   DS4_EXTEND_SWAP=0                install survival swap while deploying monitor
+  DS4_CONFIGURE_QWEN_RUNTIME=1     point Qwen gateways at host-local vLLM
+  DS4_RESTART_QWEN=0               restart Qwen model gateways after env update
+  DS4_QWEN_RUNTIME_TARGET=...      target for ~/ds4-vllm-local on Qwen nodes
   DS4_INSTALL_DSV4_LOCAL=1         install spark4/spark5 local vLLM units
   DS4_RESTART_DSV4=0               set 1 to restart spark5 worker then spark4 head
   DS4_DSV4_KV_OFFLOAD_SIZE=4       recovery-safe total GiB for spark4+spark5
@@ -43,6 +46,9 @@ ssh_opts="${DS4_SSH_OPTS:-}"
 scp_opts="${DS4_SCP_OPTS:-$ssh_opts}"
 install_rescue="${DS4_INSTALL_RESCUE:-1}"
 extend_swap="${DS4_EXTEND_SWAP:-0}"
+configure_qwen_runtime="${DS4_CONFIGURE_QWEN_RUNTIME:-1}"
+restart_qwen="${DS4_RESTART_QWEN:-0}"
+qwen_runtime_target="${DS4_QWEN_RUNTIME_TARGET:-~/standard-runtimes/vllm-0.21.0}"
 install_dsv4_local="${DS4_INSTALL_DSV4_LOCAL:-1}"
 restart_dsv4="${DS4_RESTART_DSV4:-0}"
 dsv4_kv_offload_size="${DS4_DSV4_KV_OFFLOAD_SIZE:-4}"
@@ -130,6 +136,18 @@ node_is_selected()
 	return 1
 }
 
+node_is_qwen_gateway()
+{
+	case "$1" in
+	spark0|spark1|spark2|spark3|spark6)
+		return 0
+		;;
+	*)
+		return 1
+		;;
+	esac
+}
+
 update_remote_repo()
 {
 	local host="$1"
@@ -207,7 +225,49 @@ if [ -e \"\$repo\" ] && [ ! -L \"\$repo\" ]; then
 fi
 ln -sfn \"\$release\" \"\$repo\"
 printf \"%s\\n\" \"\$release\"
-'"
+	'"
+}
+
+configure_qwen_node_runtime()
+{
+	local host="$1"
+	echo "==> $host: configure Qwen host-local vLLM runtime"
+	ssh_cmd "$host" \
+		"DS4_QWEN_RUNTIME_TARGET='$qwen_runtime_target' DS4_RESTART_QWEN='$restart_qwen' bash -s" <<'REMOTE'
+set -euo pipefail
+runtime_target="${DS4_QWEN_RUNTIME_TARGET:-$HOME/standard-runtimes/vllm-0.21.0}"
+runtime_target="${runtime_target/#\~/$HOME}"
+runtime_target="${runtime_target/#\$HOME/$HOME}"
+if [ ! -x "$runtime_target/bin/python" ] || [ ! -x "$runtime_target/bin/vllm" ]; then
+	echo "missing Qwen vLLM runtime: $runtime_target" >&2
+	exit 30
+fi
+ln -sfn "$runtime_target" "$HOME/ds4-vllm-local"
+mkdir -p "$HOME/.config/ds4"
+envfile="$HOME/.config/ds4/model-gateway.env"
+tmp="$envfile.tmp.$$"
+touch "$envfile"
+awk '
+BEGIN { wrote=0 }
+/^VLLM_HOME=/ {
+	if ( wrote == 0 ) {
+		print "VLLM_HOME=~/ds4-vllm-local"
+		wrote=1
+	}
+	next
+}
+{ print }
+END {
+	if ( wrote == 0 )
+		print "VLLM_HOME=~/ds4-vllm-local"
+}
+' "$envfile" > "$tmp"
+mv "$tmp" "$envfile"
+"$HOME/ds4-vllm-local/bin/python" -c 'import vllm; print("vllm=" + vllm.__version__)'
+if [ "$DS4_RESTART_QWEN" = "1" ]; then
+	systemctl --user restart ds4-model-gateway.service
+fi
+REMOTE
 }
 
 update_node_code()
@@ -282,6 +342,15 @@ for node in "${reachable[@]}"
 do
 	update_node_code "$node"
 done
+
+if [ "$configure_qwen_runtime" = "1" ]; then
+	for node in "${reachable[@]}"
+	do
+		if node_is_qwen_gateway "$node"; then
+			configure_qwen_node_runtime "$node"
+		fi
+	done
+fi
 
 if [ "$install_rescue" = "1" ]; then
 	echo "==> reinstall quorum trim monitor on reachable nodes"
