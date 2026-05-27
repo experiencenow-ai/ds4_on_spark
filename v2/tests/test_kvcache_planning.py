@@ -13,7 +13,7 @@ from ds4_tools.registry import ToolRegistry
 ROOT = Path(__file__).resolve().parents[1]
 DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "dsv4_spark45_hma_cpu_offload.json"
 QWEN_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_lmcache_mp_spark7.json"
-VLLM_COMMIT = "d523ead071132cd291e66e3dfd68f55446c27357"
+VLLM_COMMIT = "c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34"
 
 
 class KvCachePlanningTests(unittest.TestCase):
@@ -33,8 +33,12 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["openai_base_url"], "http://spark4:8000")
         self.assertIn("--kv-transfer-config", plan["vllm"]["argv"])
         self.assertIn("--no-disable-hybrid-kv-cache-manager", plan["vllm"]["argv"])
-        self.assertEqual(plan["vllm"]["argv"][plan["vllm"]["argv"].index("--max-num-seqs") + 1], "2")
-        self.assertEqual(plan["vllm"]["argv"][plan["vllm"]["argv"].index("--max-num-batched-tokens") + 1], "8192")
+        self.assertEqual(plan["vllm"]["argv"][plan["vllm"]["argv"].index("--max-model-len") + 1], "262144")
+        self.assertEqual(plan["vllm"]["argv"][plan["vllm"]["argv"].index("--gpu-memory-utilization") + 1], "0.68")
+        self.assertEqual(plan["vllm"]["argv"][plan["vllm"]["argv"].index("--max-num-seqs") + 1], "1")
+        self.assertEqual(plan["vllm"]["argv"][plan["vllm"]["argv"].index("--max-num-batched-tokens") + 1], "2048")
+        self.assertIn("--speculative-config", plan["vllm"]["argv"])
+        self.assertIn("--kv-cache-metrics", plan["vllm"]["argv"])
         self.assertNotIn("LMCacheConnectorV1Dynamic", plan["vllm"]["command"])
         self.assertNotIn("prefiller", plan)
         self.assertNotIn("decoder", plan)
@@ -47,7 +51,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(config["kv_connector"], "SimpleCPUOffloadConnector")
         self.assertEqual(config["kv_role"], "kv_both")
         self.assertEqual(config["kv_connector_extra_config"]["spec_name"], "SimpleCPUOffloadingSpec")
-        self.assertEqual(config["kv_connector_extra_config"]["cpu_bytes_to_use"], "8589934592")
+        self.assertEqual(config["kv_connector_extra_config"]["cpu_bytes_to_use"], "2147483648")
         self.assertTrue(config["kv_connector_extra_config"]["lazy_offload"])
         self.assertNotIn("kv_connector_module_path", config)
         self.assertNotIn("LMCACHE_USE_EXPERIMENTAL", deployment.extra_env)

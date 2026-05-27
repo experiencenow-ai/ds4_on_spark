@@ -3,7 +3,7 @@
   "deployment_id": "qwen27_lmcache_mp_spark7_v1",
   "runtime_contract_id": "qwen27_vllm_trim_v1",
   "vllm_fork": "https://github.com/experiencenow-ai/vllm",
-  "vllm_source_commit": "d523ead071132cd291e66e3dfd68f55446c27357",
+  "vllm_source_commit": "c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34",
   "profile_id": "qwen3_6_27b_fp8_efficient_v1",
   "spark_node": "spark7",
   "worker_nodes": ["spark7"],

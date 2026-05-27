@@ -56,7 +56,7 @@
       "profiles": ["dsv4_vllm_mtp_smartest_v1"],
       "purpose": "Prove the normal DSV4 vLLM profile can be launched with HMA enabled and external CPU KV offload without adding a second DSV4 instance.",
       "command_template": "ssh spark5 'cd {repo}/v2 && systemctl --user restart ds4-dsv4-local-worker.service' && ssh spark4 'cd {repo}/v2 && systemctl --user restart ds4-dsv4-local-head.service && curl -fsS http://127.0.0.1:8000/v1/models'",
-      "acceptance": ["vLLM starts from experiencenow-ai/vllm@d523ead071132cd291e66e3dfd68f55446c27357", "startup logs say SimpleCPUOffloadConnector", "startup logs do not say hybrid KV cache manager is disabled", "model metadata reports max_model_len=1048576", "one DSV4 vLLM server owns both KV load and save", "queue-warm-prefixes records a completed warm for a long shared_prefix", "second same-prefix request has materially lower TTFT/prefill time than cold", "no prefiller/decoder/proxy split is started"]
+      "acceptance": ["vLLM starts from experiencenow-ai/vllm@c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34", "startup logs say SimpleCPUOffloadConnector", "startup logs do not say hybrid KV cache manager is disabled", "model metadata reports max_model_len=262144", "startup logs show speculative_config method deepseek_mtp", "Prometheus metrics expose KV cache/offload counters", "one DSV4 vLLM server owns both KV load and save", "queue-warm-prefixes records a completed warm for a long shared_prefix", "second same-prefix request has materially lower TTFT/prefill time than cold", "no prefiller/decoder/proxy split is started"]
     },
     {
       "task_id": "xhv-007-dsv4-hma-persistent-kv-restart-reload",

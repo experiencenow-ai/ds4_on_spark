@@ -14,9 +14,9 @@
   ],
   "verification_node": "spark7",
   "vllm": {
-    "required_source_commit": "d523ead071132cd291e66e3dfd68f55446c27357",
+    "required_source_commit": "c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34",
     "fork_pr": "experiencenow-ai/vllm#4",
-    "fork_merge_commit": "d523ead071132cd291e66e3dfd68f55446c27357",
+    "fork_merge_commit": "c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34",
     "trim_endpoint": "/v1/trim_memory"
   },
   "model": {
