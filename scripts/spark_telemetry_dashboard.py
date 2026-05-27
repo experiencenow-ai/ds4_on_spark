@@ -28,6 +28,7 @@ HISTORY_METRICS = [
     {"key": "vllm_running", "label": "RUN", "field": "vllm_requests_running", "unit": ""},
     {"key": "vllm_waiting", "label": "WAIT", "field": "vllm_requests_waiting", "unit": ""},
     {"key": "queue_depth", "label": "QUEUE", "field": "local_queue_depth", "unit": ""},
+    {"key": "tok_s", "label": "TOK/S", "field": "vllm_tokens_per_s", "unit": ""},
 ]
 DASHBOARD_HTML = """<!doctype html>
 <html lang="en">
@@ -39,7 +40,7 @@ DASHBOARD_HTML = """<!doctype html>
 :root{color-scheme:dark;--bg:#111316;--panel:#1b1f24;--line:#313943;--text:#f2f5f8;--muted:#a8b1bb;--ok:#53d18a;--busy:#63b3ff;--warn:#f4bf5f;--bad:#ff6b6b}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;letter-spacing:0}
 main{max-width:1280px;margin:0 auto;padding:18px}.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:14px}
-h1{font-size:22px;line-height:1.1;margin:0}.meta{color:var(--muted);text-align:right;line-height:1.5}.summary{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px;margin-bottom:14px}
+h1{font-size:22px;line-height:1.1;margin:0}.meta{color:var(--muted);text-align:right;line-height:1.5}.summary{display:grid;grid-template-columns:repeat(6,minmax(110px,1fr));gap:10px;margin-bottom:14px}
 .metric,.card{background:var(--panel);border:1px solid var(--line);border-radius:8px}.metric{padding:12px}.label{color:var(--muted);font-size:12px}.value{font-size:23px;font-weight:700;margin-top:4px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}.card{padding:12px;min-height:150px;cursor:pointer}.card.selected{border-color:var(--busy);box-shadow:0 0 0 1px var(--busy)}.card header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 .node{font-size:18px;font-weight:700}.pill{border-radius:999px;padding:3px 8px;font-size:12px;font-weight:700;color:#111316;background:var(--muted)}.busy .pill{background:var(--busy)}.idle .pill{background:var(--ok)}.warn .pill,.hot .pill{background:var(--warn)}.down .pill{background:var(--bad)}
@@ -62,23 +63,23 @@ const val=(n,s="")=>Number.isFinite(Number(n))?Number(n).toFixed(1)+s:"n/a";
 let selectedNode="";
 let lastHistory=null;
 let selectedMode="queue";
-const metricModes={queue:["vllm_running","vllm_waiting","queue_depth","cpu_pct"],gpu:["gpu_pct","kv_pct","mem_pct","temp_c","power_w"]};
+const metricModes={queue:["vllm_running","vllm_waiting","queue_depth","tok_s","cpu_pct"],gpu:["gpu_pct","kv_pct","mem_pct","temp_c","power_w"]};
 const modeLabels={queue:"Queue",gpu:"GPU"};
-const modeColors={queue:["#00e5ff","#ff4d4d","#ffe156","#a78bfa"],gpu:["#2f80ed","#ff7a00","#00c853","#e040fb","#f4d35e"]};
+const modeColors={queue:["#00e5ff","#ff4d4d","#ffe156","#53d18a","#a78bfa"],gpu:["#2f80ed","#ff7a00","#00c853","#e040fb","#f4d35e"]};
 function metric(label,value){return `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`}
-function bar(label,value,cls){let width=Math.max(0,Math.min(100,Number(value)||0));return `<div class="barrow ${cls}"><span>${label}</span><div class="track"><div class="fill" style="width:${width}%"></div></div><span>${pct(value)}</span></div>`}
-function card(n){let err=n.error||n.fetch_error||"";return `<article class="card ${n.state} ${n.node===selectedNode?"selected":""}" data-node="${n.node}"><header><div class="node">${n.node}</div><div class="pill">${n.state_label}</div></header><div class="bars">${bar("GPU",n.gpu_pct,"gpu")}${bar("KV",n.kv_pct,"kv")}${bar("MEM",n.mem_pct,"mem")}</div><div class="details"><span>Temp <b>${fmt(n.gpu_temp_c)}C</b></span><span>Power <b>${fmt(n.gpu_power_w)}W</b></span><span>vLLM <b>${fmt(n.vllm_running)}/${fmt(n.vllm_waiting)}</b></span><span>Queue <b>${fmt(n.local_q_depth)}</b></span><span>CPU <b>${pct(n.cpu_pct)}</b></span><span>Gateway <b>${n.gateway_up?"up":"down"}</b></span></div>${err?`<div class="error">${err}</div>`:""}</article>`}
+function bar(label,value,cls,known=true){let width=known?Math.max(0,Math.min(100,Number(value)||0)):0;return `<div class="barrow ${cls}"><span>${label}</span><div class="track"><div class="fill" style="width:${width}%"></div></div><span>${known?pct(value):"n/a"}</span></div>`}
+function card(n){let err=n.error||n.fetch_error||"";return `<article class="card ${n.state} ${n.node===selectedNode?"selected":""}" data-node="${n.node}"><header><div class="node">${n.node}</div><div class="pill">${n.state_label}</div></header><div class="bars">${bar("GPU",n.gpu_pct,"gpu")}${bar("KV",n.kv_pct,"kv",n.kv_known)}${bar("MEM",n.mem_pct,"mem")}</div><div class="details"><span>Temp <b>${fmt(n.gpu_temp_c)}C</b></span><span>Power <b>${fmt(n.gpu_power_w)}W</b></span><span>Run <b>${fmt(n.vllm_running)}/${fmt(n.vllm_waiting)}</b></span><span>Queue <b>${fmt(n.local_q_depth)}</b></span><span>CPU <b>${pct(n.cpu_pct)}</b></span><span>Gateway <b>${n.gateway_up?"up":"down"}</b></span><span>Tok/s <b>${val(n.tok_s)}</b></span></div>${err?`<div class="error">${err}</div>`:""}</article>`}
 function wireCards(){document.querySelectorAll(".card[data-node]").forEach(el=>el.onclick=()=>{selectedNode=el.dataset.node;document.querySelectorAll(".card").forEach(c=>c.classList.toggle("selected",c.dataset.node===selectedNode));refreshHistory()})}
 function modeButtons(){return `<div class="modes">${Object.keys(metricModes).map(k=>`<button class="${k===selectedMode?"active":""}" data-mode="${k}">${modeLabels[k]}</button>`).join("")}</div>`}
 function wireModes(){document.querySelectorAll(".modes button").forEach(el=>el.onclick=()=>{selectedMode=el.dataset.mode;drawHistory(lastHistory)})}
 function activeMetrics(data){let allowed=new Set(metricModes[selectedMode]||metricModes.queue);return data.metrics.filter(m=>allowed.has(m.key))}
 function metricLast(metric,points){let p=points[points.length-1]||{};let v=Number(p[metric.key]);return Number.isFinite(v)?v:null}
-function metricScale(metric,points){let fixed={gpu_pct:100,kv_pct:100,cpu_pct:100,mem_pct:100,temp_c:100,power_w:100,vllm_running:64,vllm_waiting:64,queue_depth:128};return fixed[metric.key]||100}
+function metricScale(metric,points){if(metric.key==="tok_s")return Math.max(50,...points.map(p=>Number(p.tok_s)||0))*1.2;let fixed={gpu_pct:100,kv_pct:100,cpu_pct:100,mem_pct:100,temp_c:100,power_w:100,vllm_running:64,vllm_waiting:64,queue_depth:128};return fixed[metric.key]||100}
 function emaValues(points,key){let out=[],acc=null,alpha=0.34;points.forEach(p=>{let v=Number(p[key]);v=Number.isFinite(v)?v:0;acc=acc===null?v:((alpha*v)+((1-alpha)*acc));out.push(acc)});return out}
 function drawHistory(data){lastHistory=data;let el=document.getElementById("history");if(!data||!data.ok||!data.points.length){el.innerHTML=`<div class="history-head"><div class="history-title">${selectedNode||"spark"}</div>${modeButtons()}</div><div class="empty">no history</div>`;wireModes();return}let metrics=activeMetrics(data);let colors=modeColors[selectedMode]||modeColors.queue;let legend=metrics.map((m,i)=>{let v=metricLast(m,data.points);return `<span><i class="swatch" style="background:${colors[i%colors.length]}"></i>${m.label} <b>${v===null?"n/a":val(v,m.unit)}</b></span>`}).join("");el.innerHTML=`<div class="history-head"><div><div class="history-title">${data.node}</div><div class="label">last hour · ${data.points.length} samples · EMA</div></div>${modeButtons()}</div><div class="legend">${legend}</div><div class="chart-wrap"><canvas id="chart"></canvas></div>`;wireModes();paintChart(data,metrics,colors)}
 function paintChart(data,metrics,colors){let canvas=document.getElementById("chart");if(!canvas)return;metrics=metrics||activeMetrics(data);colors=colors||modeColors[selectedMode]||modeColors.queue;let rect=canvas.getBoundingClientRect();let dpr=window.devicePixelRatio||1;canvas.width=Math.max(1,Math.floor(rect.width*dpr));canvas.height=Math.max(1,Math.floor(rect.height*dpr));let ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);let w=rect.width,h=rect.height,pad=28;ctx.clearRect(0,0,w,h);ctx.strokeStyle="#313943";ctx.lineWidth=1;for(let i=0;i<=4;i++){let y=pad+((h-(pad*2))*i/4);ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(w-pad,y);ctx.stroke()}let points=data.points;metrics.forEach((m,i)=>{let scale=metricScale(m,points);let vals=emaValues(points,m.key);ctx.strokeStyle=colors[i%colors.length];ctx.lineWidth=2.2;ctx.beginPath();vals.forEach((v,idx)=>{let x=pad+((w-(pad*2))*idx/Math.max(1,points.length-1));let y=h-pad-((h-(pad*2))*Math.max(0,Math.min(scale,v))/scale);if(idx===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});ctx.stroke()});ctx.fillStyle="#a8b1bb";ctx.font="12px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif";ctx.fillText("now",w-pad-24,h-8);ctx.fillText("then",pad,h-8)}
 async function refreshHistory(){if(!selectedNode)return;try{let r=await fetch(`/api/history?node=${encodeURIComponent(selectedNode)}`,{cache:"no-store"});drawHistory(await r.json())}catch(e){document.getElementById("history").innerHTML=`<div class="empty">history read failed</div>`}}
-async function refresh(){try{let r=await fetch("/api/summary",{cache:"no-store"});let d=await r.json();if(!selectedNode&&d.nodes&&d.nodes.length)selectedNode=d.nodes[0].node;document.getElementById("updated").textContent="updated "+(d.updated_iso||"unknown");document.getElementById("source").textContent=d.summary_path||"";document.getElementById("summary").innerHTML=[metric("Busy GPUs",`${d.busy_gpu_nodes}/${d.reachable_nodes}`),metric("vLLM Run/Wait",`${fmt(d.vllm_running)}/${fmt(d.vllm_waiting)}`),metric("Max KV",pct(d.max_kv_pct)),metric("Hot Nodes",fmt(d.hot_nodes)),metric("Queue Depth",fmt(d.queue_depth))].join("");document.getElementById("nodes").innerHTML=d.nodes.map(card).join("");wireCards();refreshHistory()}catch(e){document.getElementById("updated").textContent="dashboard read failed: "+e}}
+async function refresh(){try{let r=await fetch("/api/summary",{cache:"no-store"});let d=await r.json();if(!selectedNode&&d.nodes&&d.nodes.length)selectedNode=d.nodes[0].node;document.getElementById("updated").textContent="updated "+(d.updated_iso||"unknown");document.getElementById("source").textContent=d.summary_path||"";document.getElementById("summary").innerHTML=[metric("Busy GPUs",`${d.busy_gpu_nodes}/${d.reachable_nodes}`),metric("Run/Wait",`${fmt(d.vllm_running)}/${fmt(d.vllm_waiting)}`),metric("Max KV",d.kv_known?pct(d.max_kv_pct):"n/a"),metric("Hot Nodes",fmt(d.hot_nodes)),metric("Queue Depth",fmt(d.queue_depth)),metric("Tok/s",val(d.tok_s))].join("");document.getElementById("nodes").innerHTML=d.nodes.map(card).join("");wireCards();refreshHistory()}catch(e){document.getElementById("updated").textContent="dashboard read failed: "+e}}
 window.addEventListener("resize",()=>{if(lastHistory)paintChart(lastHistory)});
 refresh();setInterval(refresh,3000);
 </script></body></html>
@@ -112,7 +113,7 @@ def node_state(row: dict[str,Any]) -> tuple[str,str]:
         return("warn","stale")
     if fnum(row.get("last_gpu_temp_c")) >= 80.0 or fnum(row.get("last_thermal_max_c")) >= 85.0:
         return("hot","hot")
-    if fnum(row.get("last_vllm_waiting")) > 0.0 or fnum(row.get("last_vllm_kv_cache_pct")) >= 90.0:
+    if fnum(row.get("last_vllm_requests_waiting")) > 0.0 or fnum(row.get("last_vllm_kv_cache_pct")) >= 90.0:
         return("warn","queued")
     if fnum(row.get("last_gpu_util_pct")) >= 90.0 or fnum(row.get("last_vllm_requests_running")) > 0.0:
         return("busy","busy")
@@ -136,7 +137,10 @@ def normalize_node(node: str, row: dict[str,Any]) -> dict[str,Any]:
         "mem_pct": fnum(row.get("last_mem_used_pct")),
         "vllm_running": fnum(row.get("last_vllm_requests_running")),
         "vllm_waiting": fnum(row.get("last_vllm_requests_waiting")),
+        "vllm_metrics_up": fnum(row.get("last_vllm_metrics_up")) > 0.0,
         "kv_pct": fnum(row.get("last_vllm_kv_cache_pct")),
+        "kv_known": fnum(row.get("last_vllm_metrics_up")) > 0.0,
+        "tok_s": fnum(row.get("last_vllm_tokens_per_s")),
         "gateway_up": fnum(row.get("last_ds4_gateway_up")) > 0.0,
         "gateway_active": fnum(row.get("last_ds4_gateway_active")) > 0.0,
         "local_q_depth": fnum(row.get("last_local_queue_depth")),
@@ -145,15 +149,41 @@ def normalize_node(node: str, row: dict[str,Any]) -> dict[str,Any]:
     })
 
 
+def node_metric_map(raw: Any) -> dict[str,float]:
+    out: dict[str,float] = {}
+    for item in str(raw or "").split(";"):
+        if ":" not in item:
+            continue
+        key,value = item.split(":",1)
+        key = key.strip()
+        if key:
+            out[key] = fnum(value)
+    return(out)
+
+
 def build_snapshot(summary_path: str) -> dict[str,Any]:
     path = Path(summary_path)
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         return({"ok":False,"summary_path":str(path),"updated_iso":"","error":str(exc),"nodes":[]})
-    nodes = [normalize_node(node,row) for node,row in sorted(raw.get("nodes",{}).items()) if isinstance(row,dict)]
-    reachable = [node for node in nodes if node["state"] != "down"]
     queue = raw.get("queue",{}) if isinstance(raw.get("queue"),dict) else {}
+    queue_depth_by_node = node_metric_map(queue.get("local_queue_by_node",""))
+    queue_running_by_node = node_metric_map(queue.get("local_queue_running_by_node",""))
+    queue_queued_by_node = node_metric_map(queue.get("local_queue_queued_by_node",""))
+    queue_tok_s_by_node = node_metric_map(queue.get("local_queue_completion_tok_s_by_node",""))
+    nodes = [normalize_node(node,row) for node,row in sorted(raw.get("nodes",{}).items()) if isinstance(row,dict)]
+    for node in nodes:
+        name = str(node.get("node",""))
+        if name in queue_depth_by_node:
+            node["local_q_depth"] = queue_depth_by_node[name]
+        if not node.get("vllm_metrics_up"):
+            node["vllm_running"] = max(fnum(node.get("vllm_running")),queue_running_by_node.get(name,0.0))
+            node["vllm_waiting"] = max(fnum(node.get("vllm_waiting")),queue_queued_by_node.get(name,0.0))
+        node["tok_s"] = max(fnum(node.get("tok_s")),queue_tok_s_by_node.get(name,0.0))
+    reachable = [node for node in nodes if node["state"] != "down"]
+    known_kv = [node["kv_pct"] for node in reachable if node.get("kv_known")]
+    tok_s = sum(fnum(node.get("tok_s")) for node in reachable)
     return({
         "ok": True,
         "summary_path": str(path),
@@ -166,8 +196,10 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
         "hot_nodes": sum(1 for node in reachable if node["state"] == "hot"),
         "vllm_running": sum(node["vllm_running"] for node in reachable),
         "vllm_waiting": sum(node["vllm_waiting"] for node in reachable),
-        "max_kv_pct": max([node["kv_pct"] for node in reachable] or [0.0]),
+        "kv_known": len(known_kv) > 0,
+        "max_kv_pct": max(known_kv or [0.0]),
         "queue_depth": fnum(queue.get("local_queue_depth",0.0)),
+        "tok_s": max(tok_s,fnum(queue.get("local_queue_completion_tok_s",0.0))),
     })
 
 
