@@ -18,9 +18,10 @@ The DSV4 lane may use tensor parallel workers across spark4+spark5. That is
 still one model-serving service, not two model instances and not a
 prefiller/decoder split.
 
-Centaur still sends normal DS4 inference requests. The queue groups lattice
-requests by `shared_prefix_hash`, and `queue-warm-prefixes` can seed a skeleton
-prefix before the real atom suffixes arrive.
+Centaur still sends normal DS4 inference requests. The queue records cache
+identity and byte estimates on each request, binds the request to a node during
+readiness, and only claims inference work after that node-local KV reservation
+fits.
 
 ## What Is Proven
 
@@ -296,7 +297,7 @@ The operational rule is therefore:
 
 ```text
 small/normal requests: keep them short and highly batched
-shared long prefixes: group by shared_prefix_hash and warm once per lane
+shared long prefixes: queue cache keys with byte estimates and let readiness prepare one node window ahead
 rare 1M DSV4 contexts: schedule deliberately; do not mix casually with bulk queue traffic
 external CPU KV offload: use it to preserve high-value prefixes beyond normal GPU residency
 ```
@@ -333,8 +334,8 @@ Persistent external KV cache gate:
 1. choose or build a vLLM connector whose class implements SupportsHMA
 2. start DSV4 with --no-disable-hybrid-kv-cache-manager and that connector
 3. verify startup reports HMA enabled and max_model_len=1048576
-4. send one long shared_prefix warm request
-5. send 16-128 suffix requests with the same shared_prefix
+4. queue one node-bound ready window with the shared prefix cache key
+5. queue 16-128 suffix requests with the same shared_prefix
 6. observe external-cache reads and lower TTFT/prefill time on cached requests
 7. verify outputs are unchanged against the same HF/vLLM DSV4 profile
 ```
