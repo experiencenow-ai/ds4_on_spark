@@ -49,6 +49,90 @@ vllm:prompt_tokens_by_source_total{source="local_cache_hit"}
 vllm:prompt_tokens_by_source_total{source="external_kv_transfer"}
 ```
 
+## Qwen27 LMCache path
+
+Qwen uses ordinary vLLM KV tensors, so it can use LMCache directly. Keep this
+separate from DSV4: DSV4 needs its custom/native HMA path, but Qwen27 should
+prove external KV through LMCache MP first.
+
+The shape follows LMCache MP's documented pattern: run `lmcache server`, then
+launch vLLM with `LMCacheMPConnector` and `kv_connector_extra_config` pointing
+at that server. See the LMCache MP quickstart and configuration reference:
+<https://docs.lmcache.ai/mp/quickstart.html> and
+<https://docs.lmcache.ai/mp/configuration.html>.
+
+The required vLLM fork revision for both DSV4 and Qwen27 is:
+
+```text
+https://github.com/experiencenow-ai/vllm
+d523ead071132cd291e66e3dfd68f55446c27357
+```
+
+The experimental launch profile is:
+
+```text
+profiles/kv_cache/qwen27_lmcache_mp_spark7.json
+```
+
+It starts one LMCache MP server on the same Spark as the Qwen vLLM service and
+connects vLLM through `LMCacheMPConnector`:
+
+```text
+Qwen27 vLLM:       http://127.0.0.1:18110
+vLLM runtime:      /home/spark7/ds4-vllm-local from experiencenow-ai/vllm@d523ead071132cd291e66e3dfd68f55446c27357
+LMCache data port: 127.0.0.1:5555
+LMCache HTTP port: 127.0.0.1:18080
+L1 CPU cache:      16 GiB, lazy init, LRU
+L2 store:          /mnt/nvme/ds4_lmcache/qwen27/l2 via POSIX NIXL store
+```
+
+On spark7 the LMCache package currently has to build from source. The generated
+install script builds a pinned `lmcache==0.4.5` wheel with
+`--no-build-isolation --no-deps`, then installs that wheel with `--no-deps` so a
+running vLLM environment does not unexpectedly churn shared dependencies.
+
+Plan it through the same DS4 KV tool used for DSV4:
+
+```bash
+PYTHONPATH=src python3 -m ds4_tools.cli invoke \
+  --registry tools/registry.jsonl \
+  --tool-id tool:ds4.kvcache.plan \
+  --arguments '{"deployment":"profiles/kv_cache/qwen27_lmcache_mp_spark7.json"}'
+```
+
+Write launch scripts:
+
+```bash
+PYTHONPATH=src python3 -m ds4_kvcache.cli write-scripts \
+  --deployment profiles/kv_cache/qwen27_lmcache_mp_spark7.json \
+  --output-dir /tmp/ds4_qwen27_lmcache_mp
+```
+
+Start order:
+
+```bash
+/tmp/ds4_qwen27_lmcache_mp/00_install_kv_cache_deps.sh
+/tmp/ds4_qwen27_lmcache_mp/start_lmcache_server.sh
+/tmp/ds4_qwen27_lmcache_mp/start_vllm_cache.sh
+```
+
+The Qwen acceptance gate is:
+
+```text
+1. launch LMCache MP server and Qwen27 vLLM with LMCacheMPConnector
+2. confirm /v1/models returns Qwen/Qwen3.6-27B-FP8
+3. send one long shared_prefix warm request
+4. send same-prefix suffix requests routed to that Spark
+5. verify external_kv_transfer or LMCache hit counters/logs
+6. restart vLLM while keeping LMCache/L2 intact
+7. repeat the same-prefix request and verify lower TTFT/prefill without full recompute
+```
+
+Use the same high-level request shape for both Qwen and DSV4: clients provide
+stable prefix text or a `kv_cache_ref` to stable prefix text, and DS4 routes the
+request to a compatible backend. The backend owns raw KV bytes. Qwen backs that
+contract with LMCache; DSV4 backs it with the custom/native HMA offload path.
+
 ## DSV4 vLLM cache launch
 
 Use the source-built local vLLM services:
@@ -66,7 +150,7 @@ The production launch body is
 
 ```text
 https://github.com/experiencenow-ai/vllm
-75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
+d523ead071132cd291e66e3dfd68f55446c27357
 ```
 
 It uses:

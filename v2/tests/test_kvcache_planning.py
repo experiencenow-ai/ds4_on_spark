@@ -12,6 +12,8 @@ from ds4_tools.registry import ToolRegistry
 
 ROOT = Path(__file__).resolve().parents[1]
 DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "dsv4_spark45_hma_cpu_offload.json"
+QWEN_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_lmcache_mp_spark7.json"
+VLLM_COMMIT = "d523ead071132cd291e66e3dfd68f55446c27357"
 
 
 class KvCachePlanningTests(unittest.TestCase):
@@ -25,6 +27,8 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["worker_nodes"], ["spark4", "spark5"])
         self.assertEqual(plan["logical_service_count"], 1)
         self.assertEqual(plan["model_instance_count"], 1)
+        self.assertEqual(plan["runtime"]["runtime_contract_id"], "dsv4_spark45_vllm_mtp_v1")
+        self.assertEqual(plan["runtime"]["vllm_source_commit"], VLLM_COMMIT)
         self.assertEqual(plan["listen_base_url"], "http://0.0.0.0:8000")
         self.assertEqual(plan["openai_base_url"], "http://spark4:8000")
         self.assertIn("--kv-transfer-config", plan["vllm"]["argv"])
@@ -82,6 +86,49 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertNotIn("LMCacheConnectorV1Dynamic", start.read_text())
             self.assertTrue((Path(tmp) / "kv_cache_launch_manifest.json").exists())
 
+    def test_qwen_lmcache_mp_plan_uses_external_cache_server(self) -> None:
+        deployment = KvCacheDeployment.load(QWEN_DEPLOYMENT)
+        plan = plan_deployment(deployment)
+        config = plan["connector"]["kv_transfer_config"]
+
+        self.assertEqual(plan["profile_id"], "qwen3_6_27b_fp8_efficient_v1")
+        self.assertEqual(plan["spark_node"], "spark7")
+        self.assertEqual(plan["runtime"]["runtime_contract_id"], "qwen27_vllm_trim_v1")
+        self.assertEqual(plan["runtime"]["vllm_fork"], "https://github.com/experiencenow-ai/vllm")
+        self.assertEqual(plan["runtime"]["vllm_source_commit"], VLLM_COMMIT)
+        self.assertEqual(plan["openai_base_url"], "http://127.0.0.1:18110")
+        self.assertEqual(plan["connector"]["install_packages"], ["lmcache==0.4.5"])
+        self.assertEqual(plan["connector"]["install_args"], ["--no-build-isolation"])
+        self.assertEqual(plan["connector"]["wheel_dir"], "/tmp/ds4_lmcache_wheels")
+        self.assertEqual(config["kv_connector"], "LMCacheMPConnector")
+        self.assertNotIn("kv_connector_module_path", config)
+        self.assertEqual(config["kv_connector_extra_config"]["lmcache.mp.host"], "127.0.0.1")
+        self.assertEqual(config["kv_connector_extra_config"]["lmcache.mp.port"], 5555)
+        self.assertIn("LMCacheMPConnector", plan["vllm"]["command"])
+        self.assertIn("--max-model-len", plan["vllm"]["argv"])
+        self.assertIn("--no-disable-hybrid-kv-cache-manager", plan["vllm"]["argv"])
+        self.assertEqual(plan["cache_server"]["kind"], "lmcache_mp")
+        self.assertEqual(plan["cache_server"]["management_url"], "http://127.0.0.1:18080")
+        self.assertIn("--l2-adapter", plan["cache_server"]["argv"])
+        self.assertIn("/mnt/nvme/ds4_lmcache/qwen27/l2", plan["cache_server"]["command"])
+
+    def test_write_qwen_lmcache_launch_scripts(self) -> None:
+        deployment = KvCacheDeployment.load(QWEN_DEPLOYMENT)
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = write_launch_scripts(deployment, tmp)
+            install = Path(manifest["scripts"]["install"]).read_text()
+            cache_server = Path(manifest["scripts"]["start_cache_server"]).read_text()
+            vllm = Path(manifest["scripts"]["start_vllm"]).read_text()
+
+            self.assertIn("CUDA_HOME=/usr/local/cuda", install)
+            self.assertIn("pip wheel --no-build-isolation --no-deps", install)
+            self.assertIn("lmcache==0.4.5", install)
+            self.assertIn("pip install --no-deps", install)
+            self.assertIn('\"${wheel}\"', install)
+            self.assertIn("mkdir -p /mnt/nvme/ds4_lmcache/qwen27/l2", install)
+            self.assertIn("lmcache server", cache_server)
+            self.assertIn("LMCacheMPConnector", vllm)
+
     def test_kv_cache_is_optional_on_existing_profiles(self) -> None:
         registry = ProfileRegistry.load(ROOT / "profiles" / "models")
         dsv4 = registry.get("dsv4_vllm_mtp_smartest_v1")
@@ -90,7 +137,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(dsv4.backend, "vllm_mtp")
         self.assertEqual(qwen.backend, "vllm")
         self.assertEqual(dsv4.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json"])
-        self.assertNotIn("optional_kv_cache_deployments", qwen.routing)
+        self.assertEqual(qwen.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/qwen27_lmcache_mp_spark7.json"])
         self.assertEqual(registry.resolve(capability="smartest", chat=True, job_class="tool_chat").profile_id, dsv4.profile_id)
 
     def test_tool_registry_has_kvcache_plan_tool(self) -> None:

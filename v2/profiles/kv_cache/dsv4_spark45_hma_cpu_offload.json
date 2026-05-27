@@ -1,6 +1,9 @@
 {
   "format": "ds4-vllm-kv-cache-deployment-v1",
   "deployment_id": "dsv4_spark45_hma_cpu_offload_v1",
+  "runtime_contract_id": "dsv4_spark45_vllm_mtp_v1",
+  "vllm_fork": "https://github.com/experiencenow-ai/vllm",
+  "vllm_source_commit": "d523ead071132cd291e66e3dfd68f55446c27357",
   "profile_id": "dsv4_vllm_mtp_smartest_v1",
   "spark_node": "spark4",
   "worker_nodes": ["spark4", "spark5"],

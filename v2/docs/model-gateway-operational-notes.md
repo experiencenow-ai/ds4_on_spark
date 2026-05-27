@@ -70,6 +70,10 @@ the current Qwen27 launch contract:
 - `--enable-chunked-prefill`
 - `--enable-prefix-caching`
 - `--async-scheduling`
+- Optional external Qwen27 KV cache uses
+  `profiles/kv_cache/qwen27_lmcache_mp_spark7.json` with LMCache MP. That path
+  is Qwen-specific, requires `experiencenow-ai/vllm@d523ead071132cd291e66e3dfd68f55446c27357`,
+  and does not change the DSV4 rule below.
 
 The DeepSeek V4 Flash path also carried parser/backend details:
 
@@ -83,7 +87,7 @@ The DeepSeek V4 Flash path also carried parser/backend details:
   enabled, uses `max_model_len=1048576`, and adds native CPU KV offload with
   `--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8} --kv-offloading-backend native`
   and `VLLM_USE_SIMPLE_KV_OFFLOAD=1`. The current source-built runtime is
-  `experiencenow-ai/vllm@75358b5ef269050fbbf0d34a1e9772d8c56ac7c7` launched by
+  `experiencenow-ai/vllm@d523ead071132cd291e66e3dfd68f55446c27357` launched by
   `scripts/ds4_dsv4_spark45_local_vllm.sh`, not the old Docker recipe.
   Do not add
   `LMCacheConnectorV1Dynamic` to this lane unless a live probe proves the

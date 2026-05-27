@@ -11,7 +11,7 @@
   ],
   "vllm": {
     "runtime_root_template": "/home/{node_id}/ds4-vllm-local",
-    "required_source_commit": "75358b5ef269050fbbf0d34a1e9772d8c56ac7c7",
+    "required_source_commit": "d523ead071132cd291e66e3dfd68f55446c27357",
     "trim_endpoint": "/v1/trim_memory"
   },
   "model": {
