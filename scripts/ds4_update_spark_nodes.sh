@@ -20,7 +20,7 @@ Important environment knobs:
   DS4_EXTEND_SWAP=0                install survival swap while deploying monitor
   DS4_CONFIGURE_QWEN_RUNTIME=1     point Qwen gateways at host-local vLLM
   DS4_RESTART_QWEN=0               restart Qwen model gateways after env update
-  DS4_QWEN_RUNTIME_TARGET=...      target for ~/ds4-vllm-local on Qwen nodes
+  DS4_QWEN_RUNTIME_TARGET=...      trim-capable target for ~/ds4-vllm-local
   DS4_INSTALL_DSV4_LOCAL=1         install spark4/spark5 local vLLM units
   DS4_RESTART_DSV4=0               set 1 to restart spark5 worker then spark4 head
   DS4_DSV4_KV_OFFLOAD_SIZE=4       recovery-safe total GiB for spark4+spark5
@@ -48,7 +48,7 @@ install_rescue="${DS4_INSTALL_RESCUE:-1}"
 extend_swap="${DS4_EXTEND_SWAP:-0}"
 configure_qwen_runtime="${DS4_CONFIGURE_QWEN_RUNTIME:-1}"
 restart_qwen="${DS4_RESTART_QWEN:-0}"
-qwen_runtime_target="${DS4_QWEN_RUNTIME_TARGET:-~/standard-runtimes/vllm-0.21.0}"
+qwen_runtime_target="${DS4_QWEN_RUNTIME_TARGET:-~/standard-runtimes/vllm-main-gdn-nixl/venv}"
 install_dsv4_local="${DS4_INSTALL_DSV4_LOCAL:-1}"
 restart_dsv4="${DS4_RESTART_DSV4:-0}"
 dsv4_kv_offload_size="${DS4_DSV4_KV_OFFLOAD_SIZE:-4}"
@@ -264,6 +264,20 @@ END {
 ' "$envfile" > "$tmp"
 mv "$tmp" "$envfile"
 "$HOME/ds4-vllm-local/bin/python" -c 'import vllm; print("vllm=" + vllm.__version__)'
+"$HOME/ds4-vllm-local/bin/python" - <<'PY'
+import pathlib
+import sys
+import vllm
+root = pathlib.Path(vllm.__file__).resolve().parent
+for path in root.rglob("*.py"):
+    try:
+        if "trim_memory" in path.read_text(errors="ignore"):
+            raise SystemExit(0)
+    except OSError:
+        pass
+print("vLLM runtime lacks trim_memory support", file=sys.stderr)
+raise SystemExit(31)
+PY
 if [ "$DS4_RESTART_QWEN" = "1" ]; then
 	systemctl --user restart ds4-model-gateway.service
 fi
