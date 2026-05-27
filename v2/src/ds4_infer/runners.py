@@ -10,6 +10,7 @@ from typing import Any, Protocol
 from urllib import error, request as urlrequest
 
 from .builders import model_batch_payload, request_messages, request_prompt
+from .kv_cache import kv_cache_extra_body
 from .profiles import ModelProfile
 from .schemas import InferenceRequest, make_result
 
@@ -197,6 +198,7 @@ class OpenAICompatibleRunner:
             if request.chat:
                 payload = _openai_payload(request, profile)
                 _merge_extra_body(payload, self.default_extra_body)
+                _merge_extra_body(payload, kv_cache_extra_body(request.input))
                 data = self._post_json(self.chat_endpoint, payload)
                 text = extract_openai_chat_text(data)
             else:
@@ -209,6 +211,7 @@ class OpenAICompatibleRunner:
                 if request.thinking_budget_tokens > 0:
                     payload["extra_body"] = {"thinking_budget_tokens": request.thinking_budget_tokens}
                 _merge_extra_body(payload, self.default_extra_body)
+                _merge_extra_body(payload, kv_cache_extra_body(request.input))
                 data = self._post_json(self.completion_endpoint, payload)
                 text = extract_openai_completion_text(data)
             result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)

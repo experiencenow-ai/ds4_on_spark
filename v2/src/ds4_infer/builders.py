@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from .kv_cache import kv_cache_extra_body
 from .profiles import ModelProfile, ProfileRegistry
 from .schemas import InferenceRequest
 
@@ -217,6 +218,10 @@ def model_batch_item(request: InferenceRequest, profile: ModelProfile) -> dict[s
         item["messages"] = request_messages(request)
     else:
         item["prompt"] = request_prompt(request)
+    extra_body = kv_cache_extra_body(request.input)
+    if extra_body:
+        item["kv_cache"] = extra_body["ds4_kv_cache"]
+        item["extra_body"] = dict(item.get("extra_body", {}), **extra_body)
     return item
 
 

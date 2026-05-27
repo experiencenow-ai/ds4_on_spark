@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from contextlib import closing
+from contextlib import redirect_stdout
 import hashlib
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -10,6 +12,7 @@ import time
 import unittest
 from unittest.mock import patch
 
+from ds4_infer import cli
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.queue import CPU_QUEUE_TIMEOUT_KEY, InferenceQueue, request_batch_key
 from ds4_infer.runners import FakeRunner
@@ -79,6 +82,8 @@ class BatchCapableDelayedRunner:
 
     def run_many_on_node(self, requests, profile, node_id, *, concurrency=1):
         self.batch_calls.append([request.request_id for request in requests])
+        if requests:
+            time.sleep(max(self.delays.get(request.request_id, 0.0) for request in requests))
         return {request.request_id: make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=f"batched {request.request_id}") for request in requests}
 
 
@@ -103,6 +108,14 @@ def wait_for_notice(root: Path, request_id: str, timeout_s: float = 1.0) -> bool
 
 def _submit_ids(queue: InferenceQueue, request_ids: list[str]) -> None:
     queue.submit_requests(requests=[make_request(request_id) for request_id in request_ids], registry=ProfileRegistry.load(PROFILES), batch_id="batch-a")
+
+
+def _node_profile_ids(node_id: str) -> tuple[str, ...]:
+    topology = SparkTopology.load(TOPOLOGY)
+    for node in topology.nodes:
+        if node.node_id == node_id:
+            return tuple(node.resident_profiles)
+    raise AssertionError(f"missing test node {node_id}")
 
 
 def _work_thread(queue: InferenceQueue, runner, *, limit: int, concurrency: int) -> tuple[threading.Thread, dict[str, object]]:
@@ -236,10 +249,80 @@ class InferenceQueueTests(unittest.TestCase):
                 batch_id="batch-a",
             )
             self.assertEqual(result["request_count"], 2)
-            self.assertEqual(result["selected_nodes"], {"spark0": 1, "spark1": 1})
+            self.assertEqual(result["selected_nodes"], {})
+            self.assertEqual(result["metadata"]["late_bound_count"], 2)
             self.assertEqual(queue.status(batch_id="batch-a")["queued_count"], 2)
             self.assertEqual(queue.status(request_id="r0")["state"], "queued")
-            self.assertEqual(queue.status(request_id="r0")["selected_node_id"], "spark0")
+            self.assertIsNone(queue.status(request_id="r0")["selected_node_id"])
+
+    def test_submit_existing_batch_id_is_idempotent_for_retries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            requests = [make_request("r0"), make_request("r1")]
+            first = queue.submit_requests(requests=requests, registry=registry, topology=SparkTopology.load(TOPOLOGY), batch_id="retry-batch")
+            second = queue.submit_requests(requests=requests, registry=registry, topology=SparkTopology.load(TOPOLOGY), batch_id="retry-batch")
+            self.assertEqual(second["batch_id"], first["batch_id"])
+            self.assertEqual(second["request_ids"], first["request_ids"])
+            self.assertEqual(queue.status(batch_id="retry-batch")["queued_count"], 2)
+            with self.assertRaisesRegex(ValueError, "different requests"):
+                queue.submit_requests(requests=[make_request("other")], registry=registry, topology=SparkTopology.load(TOPOLOGY), batch_id="retry-batch")
+            with self.assertRaisesRegex(ValueError, "different priority"):
+                queue.submit_requests(requests=requests, registry=registry, topology=SparkTopology.load(TOPOLOGY), batch_id="retry-batch", priority=1)
+
+    def test_priority_claims_experiment_before_background_regression(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(requests=[make_request("background", output_tokens=2048)], registry=registry, batch_id="full500")
+            queue.submit_requests(requests=[make_request("experiment", output_tokens=128)], registry=registry, batch_id="experiment", priority=1)
+            self.assertEqual(queue.status(request_id="background")["priority"], 10)
+            self.assertEqual(queue.status(request_id="experiment")["priority"], 1)
+            claim = queue.claim_requests(leased_by="worker", lease_ttl_s=30, limit=4)
+            self.assertEqual([item.request_id for item in claim], ["experiment"])
+            self.assertTrue(queue.finish_request(request_id="experiment", lease_id=claim[0].lease_id, state="completed", result={"status": "completed"}))
+            claim = queue.claim_requests(leased_by="worker", lease_ttl_s=30, limit=4)
+            self.assertEqual([item.request_id for item in claim], ["background"])
+
+    def test_request_json_priority_is_used_unless_submit_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            raw = make_request("json-priority").raw
+            raw["priority"] = 2
+            queue.submit_requests(requests=[InferenceRequest.from_json(raw)], registry=registry, batch_id="json")
+            self.assertEqual(queue.status(request_id="json-priority")["priority"], 2)
+            raw = make_request("override-priority").raw
+            raw["priority"] = 9
+            queue.submit_requests(requests=[InferenceRequest.from_json(raw)], registry=registry, batch_id="override", priority=1)
+            self.assertEqual(queue.status(request_id="override-priority")["priority"], 1)
+
+    def test_cli_queue_submit_priority_flag_records_auditable_priority(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            requests_path = root / "requests.jsonl"
+            requests_path.write_text(json.dumps(make_request("cli-priority").raw) + "\n", encoding="utf-8")
+            queue_dir = root / "queue"
+            with redirect_stdout(io.StringIO()):
+                rc = cli.main(
+                    [
+                        "queue-submit",
+                        "--queue-dir",
+                        str(queue_dir),
+                        "--profiles-dir",
+                        str(PROFILES),
+                        "--topology",
+                        str(TOPOLOGY),
+                        "--requests",
+                        str(requests_path),
+                        "--batch-id",
+                        "cli-batch",
+                        "--priority",
+                        "1",
+                    ]
+                )
+            self.assertEqual(rc, 0)
+            self.assertEqual(InferenceQueue(queue_dir).status(request_id="cli-priority")["priority"], 1)
 
     def test_worker_completes_only_the_requested_node_and_writes_notice(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -250,7 +333,7 @@ class InferenceQueueTests(unittest.TestCase):
                 topology=SparkTopology.load(TOPOLOGY),
                 batch_id="batch-a",
             )
-            worked = queue.work(registry=ProfileRegistry.load(PROFILES), runner=FakeRunner(), node_id="spark0", limit=10)
+            worked = queue.work(registry=ProfileRegistry.load(PROFILES), runner=FakeRunner(), node_id="spark0", node_profile_ids=_node_profile_ids("spark0"), limit=1)
             self.assertEqual(worked["claimed_count"], 1)
             self.assertEqual(worked["completed_count"], 1)
             self.assertEqual(queue.status(request_id="r0")["state"], "completed")
@@ -258,6 +341,25 @@ class InferenceQueueTests(unittest.TestCase):
             notice = json.loads((Path(tmp) / "notices" / "r0.json").read_text())
             self.assertEqual(notice["state"], "completed")
             self.assertIn("centaur-atom-edit-v1", notice["result"]["output"]["text"])
+
+    def test_node_worker_claim_respects_max_node_depth(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(
+                requests=[make_request("r0"), make_request("r1"), make_request("r2")],
+                registry=registry,
+                topology=SparkTopology.load(TOPOLOGY),
+                batch_id="batch-a",
+            )
+            first = queue.claim_requests(node_id="spark0", include_unassigned=True, eligible_profile_ids=_node_profile_ids("spark0"), max_node_depth=2, limit=3, leased_by="w0", lease_ttl_s=30)
+            self.assertEqual([claim.request_id for claim in first], ["r0", "r1"])
+            self.assertEqual(queue.status(request_id="r0")["selected_node_id"], "spark0")
+            self.assertEqual(queue.status(request_id="r1")["selected_node_id"], "spark0")
+            self.assertEqual(queue.claim_requests(node_id="spark0", include_unassigned=True, eligible_profile_ids=_node_profile_ids("spark0"), max_node_depth=2, limit=1, leased_by="w0", lease_ttl_s=30), [])
+            self.assertTrue(queue.finish_request(request_id="r0", lease_id=first[0].lease_id, state="completed", result={"status": "completed"}))
+            second = queue.claim_requests(node_id="spark0", include_unassigned=True, eligible_profile_ids=_node_profile_ids("spark0"), max_node_depth=2, limit=3, leased_by="w0", lease_ttl_s=30)
+            self.assertEqual([claim.request_id for claim in second], ["r2"])
 
     def test_cancel_queued_request_prevents_worker_claim_and_writes_notice(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -291,7 +393,7 @@ class InferenceQueueTests(unittest.TestCase):
                 topology=SparkTopology.load(TOPOLOGY),
                 batch_id="batch-a",
             )
-            queue.work(registry=ProfileRegistry.load(PROFILES), runner=FakeRunner(), node_id="spark0", limit=1)
+            queue.work(registry=ProfileRegistry.load(PROFILES), runner=FakeRunner(), node_id="spark0", node_profile_ids=_node_profile_ids("spark0"), limit=1)
             cancelled = queue.cancel(batch_id="batch-a", reason="stop remaining")
             self.assertEqual(cancelled["cancelled_request_ids"], ["r1"])
             self.assertEqual(cancelled["skipped_state_counts"], {"completed": 1})
@@ -348,12 +450,61 @@ class InferenceQueueTests(unittest.TestCase):
             queue = InferenceQueue(root)
             _assert_refill(self, root, queue, DelayedRunner({"a_fast": 0.05, "b_slow": 1.0, "c_refill": 0.05, "d_refill": 0.05}))
 
-    def test_batch_capable_model_runner_still_refills_and_notices_per_item(self) -> None:
+    def test_batch_capable_model_runner_finishes_fast_claims_before_slow_tail(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             queue = InferenceQueue(root)
             runner = BatchCapableDelayedRunner({"a_fast": 0.05, "b_slow": 1.0, "c_refill": 0.05, "d_refill": 0.05})
-            _assert_refill(self, root, queue, runner)
+            _submit_ids(queue, ["a_fast", "b_slow", "c_refill", "d_refill"])
+            first_poll = queue.poll()
+            thread, worked = _work_thread(queue, runner, limit=4, concurrency=4)
+            self.assertTrue(wait_for_notice(root, "a_fast", timeout_s=0.4))
+            self.assertTrue(wait_for_notice(root, "c_refill", timeout_s=0.4))
+            self.assertTrue(wait_for_notice(root, "d_refill", timeout_s=0.4))
+            self.assertFalse((root / "notices" / "b_slow.json").exists())
+            second_poll = queue.poll(after_event_id=first_poll["newest_event_id"])
+            self.assertIn("completed", [event["event_type"] for event in second_poll["events"]])
+            _assert_done(self, thread, worked, 4)
+            self.assertEqual(worked["claimed_count"], 4)
+            self.assertEqual(worked["completed_count"], 4)
+            self.assertEqual(worked["batch_dispatch_count"], 4)
+            self.assertEqual(worked["batch_dispatch_mode"], "per_request")
+            self.assertEqual(set(runner.one_calls), {"a_fast", "b_slow", "c_refill", "d_refill"})
+            self.assertEqual(runner.batch_calls, [])
+
+    def test_batch_capable_model_worker_fills_batch_across_batch_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            requests = [
+                make_request("small-a", output_tokens=128),
+                make_request("large-a", output_tokens=2048),
+                make_prefixed_request("prefixed-a", "prefix-b"),
+                make_request("small-b", output_tokens=128),
+            ]
+            queue.submit_requests(requests=requests, registry=registry, batch_id="batch-a")
+            runner = BatchCapableDelayedRunner({})
+            worked = queue.work(registry=registry, runner=runner, limit=4, concurrency=4, lease_ttl_s=5, heartbeat_interval_s=0.05)
+            self.assertEqual(worked["claimed_count"], 4)
+            self.assertEqual(worked["completed_count"], 4)
+            self.assertEqual(worked["batch_dispatch_count"], 4)
+            self.assertEqual(worked["batch_dispatch_mode"], "per_request")
+            self.assertEqual(len(worked["groups"]), 3)
+            self.assertEqual(set(runner.one_calls), {"small-a", "large-a", "prefixed-a", "small-b"})
+            self.assertEqual(runner.batch_calls, [])
+
+    def test_batch_worker_late_binds_unassigned_model_refill_to_active_node(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(requests=[make_request("bound")], registry=registry, topology=SparkTopology.load(TOPOLOGY), batch_id="bound-batch")
+            queue.submit_requests(requests=[make_request("loose")], registry=registry, batch_id="loose-batch")
+            runner = BatchCapableDelayedRunner({})
+            worked = queue.work(registry=registry, runner=runner, node_id="spark0", node_profile_ids=_node_profile_ids("spark0"), limit=2, concurrency=2, lease_ttl_s=5, heartbeat_interval_s=0.05)
+            self.assertEqual(worked["claimed_count"], 2)
+            self.assertEqual(worked["completed_count"], 2)
+            self.assertEqual(queue.status(request_id="loose")["selected_node_id"], "spark0")
+            self.assertEqual(set(runner.one_calls), {"bound", "loose"})
             self.assertEqual(runner.batch_calls, [])
 
     def test_cpu_service_jobs_use_same_durable_queue_and_notices(self) -> None:
@@ -364,8 +515,11 @@ class InferenceQueueTests(unittest.TestCase):
                 service="text_metrics",
                 items=[{"custom_id": "cpu-a", "text": "one two"}, {"custom_id": "cpu-b", "text": "three"}],
                 batch_id="cpu-batch",
+                priority=1,
             )
             self.assertEqual(submitted["selected_services"], {"text_metrics": 2})
+            self.assertEqual(submitted["priority_counts"], {"1": 2})
+            self.assertEqual(queue.status(request_id="cpu-a")["priority"], 1)
             worked = queue.work(registry=ProfileRegistry.load(PROFILES), runner=FakeRunner(), limit=2, concurrency=1)
             self.assertEqual(worked["completed_count"], 2)
             collected = queue.collect(batch_id="cpu-batch")

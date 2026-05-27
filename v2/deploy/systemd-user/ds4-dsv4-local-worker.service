@@ -1,5 +1,5 @@
 [Unit]
-Description=DS4 DSV4 local vLLM worker service on spark5
+Description=DS4 DSV4 local vLLM worker service
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=1800

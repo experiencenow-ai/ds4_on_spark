@@ -64,12 +64,22 @@ command warms only the resident profiles assigned to that Spark by topology;
 spark7 stays on demand.
 
 KV cache is launch plumbing, not a separate production model variant. The
-normal DSV4 service is the source-built local vLLM runtime from
-`experiencenow-ai/vllm@75358b5ef269050fbbf0d34a1e9772d8c56ac7c7`, launched by
-`scripts/ds4_dsv4_spark45_local_vllm.sh` with native SimpleCPUOffload. The live
-spark4+spark5 shape reports `max_model_len=1048576`, a 2,088,846-token GPU KV
-pool, and roughly two 1M-token full-context request slots. See
-`docs/kv-cache.md`.
+normal DSV4 service is the host-local vLLM runtime installed from
+`experiencenow-ai/vllm@d240cdbcf3de175be57c108fd9cbfce04009ec29`, based on the
+known-working Docker commit `jasl/vllm@dda4668b59567416f86956cfe7bbc1eab371a61e`.
+Launch it with `scripts/ds4_dsv4_spark45_local_vllm.sh`; the Docker recipe is a
+fallback/repro build path for the same source lineage. The live target is
+`max_model_len=262144` with HMA, MTP, metrics, persistent KV hooks, and
+`/v1/trim_memory` enabled. Treat startup logs as insufficient: the external-KV
+acceptance gate is a cold/warm/restart/replay benchmark with external-hit
+evidence and a TTFT/prefill delta. See `docs/kv-cache.md` and
+`docs/kv-cache-live-validation.md`.
+
+Decoded external KV uses the unified `input.kv_cache` request API documented in
+`docs/kv-cache-api.md`. It can push an inline or side-band request blob, tell
+the serving Spark to pull a verified network object, or store cache data after
+compute. The same high-level field is forwarded through Spark batch items and
+OpenAI-compatible `extra_body.ds4_kv_cache`.
 
 ## Inference queue
 
@@ -96,7 +106,7 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-poll \
   --after-event-id 0
 ```
 
-The queue internally groups requests by model/profile, Spark node, chat mode, job class, input/output/thinking buckets, and shared prefix hash. Workers claim one compatible group, commit the lease, and batch-capable runners submit that group to `/ds4/batches` as one request. Centaur does not need to know batch-size folklore.
+The queue internally groups requests by model/profile, Spark node, chat mode, job class, input/output/thinking buckets, and shared prefix hash. Workers claim compatible model work for one profile/node window, commit leases immediately, and dispatch each claim independently so fast completions are written without waiting for a slow tail. The Spark runner still uses `/ds4/batches` for execution, but queue completion is per request. Centaur does not need to know batch-size folklore.
 
 For Centaur lattice and LongMem batches, workers can prewarm vLLM Automatic
 Prefix Caching for repeated skeletons:

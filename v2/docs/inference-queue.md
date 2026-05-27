@@ -27,10 +27,21 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-submit \
   --profiles-dir profiles/models \
   --topology profiles/topology/static_sparks.json \
   --requests requests.jsonl \
-  --batch-id centaur-run-001
+  --batch-id centaur-run-001 \
+  --priority 10
 ```
 
-Each request is resolved to a model profile, Spark node, and `batch_key` at submission time. The `batch_key` includes:
+Priority is an explicit queueing field. Lower numbers run first. Use the
+default normal priority `10` for background regression queues and `1` for
+interactive/experiment batches that should be claimed as soon as an existing
+lease finishes. Immediate requests still default to priority `0` unless the
+submitter explicitly passes another value. The chosen priority is visible in
+`queue-submit`, request status, and submitted events.
+
+Each request is resolved to a model profile and `batch_key` at submission time.
+Normal queued model requests are late-bound to a Spark node when a node worker
+has an open slot. Immediate requests may still bind to a node at submission
+time. The `batch_key` includes:
 
 ```text
 node
@@ -73,7 +84,7 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-worker \
   --loop
 ```
 
-`queue-worker` claims one shape-compatible `batch_key` and commits the claim immediately. Batch-capable runners send the claimed group as one `/ds4/batches` call with the requested concurrency; non-batch test runners keep the per-request fallback used by local tests.
+`queue-worker` claims compatible model work for one profile/node window and commits the leases immediately. Batch-capable model runners dispatch each claim independently, so a fast request can finish, emit an event, and write its notice without waiting for the slowest request in the window. CPU service jobs still use their service batch call.
 
 CPU services use the same durable queue:
 
@@ -246,6 +257,11 @@ Disk `kv_cache_ref` prefix blobs are durable prefix text, not proof that decoded
 KV blocks are resident. Use them to rebuild and warm the active window; do not
 assume the whole benchmark is resident in unified memory unless the serving
 backend exposes a fail-closed disk-KV load contract.
+
+For decoded external KV, use `input.kv_cache` from `docs/kv-cache-api.md`.
+`queue-submit` validates it into `input.kv_cache_plan`, and the queue includes
+the plan hash in the batch key so different cache sources cannot be grouped as
+if they were the same resident prefix.
 
 Status:
 

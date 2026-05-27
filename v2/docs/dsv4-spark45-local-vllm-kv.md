@@ -1,8 +1,12 @@
 # DSV4 Spark4/5 Local vLLM KV Recipe
 
-This is the live-verified local install recipe for DeepSeek V4 Flash on
-spark4/spark5. It replaces the earlier Docker-backed service with a host-local
-vLLM runtime and keeps native DSV4 KV offload enabled.
+Status: current requalification path. The production DSV4 lane is the
+host-local vLLM runtime installed from
+`experiencenow-ai/vllm@d240cdbcf3de175be57c108fd9cbfce04009ec29` on top of
+the known-working Docker commit
+`jasl/vllm@dda4668b59567416f86956cfe7bbc1eab371a61e`. The Docker recipe is a
+fallback/repro build path for this same source lineage, not the primary
+runtime requirement.
 
 The host-local service was first verified live on 2026-05-26 with the same
 launch shape below:
@@ -22,51 +26,68 @@ marking the source-built runtime healthy.
 
 ## Current Requalification Status
 
-The 2026-05-27 requalification did not complete the external-KV benchmark.
-Observed live state:
+The 2026-05-28 requalification ran with spark7 as the worker while spark5
+needed a physical reset. Observed live state after the cold/warm replay
+benchmark:
 
 ```text
-spark4 service: active and launching DSV4
-spark4 runtime: /home/spark4/ds4-vllm-local-8c4e588
-spark4 /health: not serving yet
-spark5 ssh: timeout
-spark5 ping: 100% packet loss
+spark4 service: active head, RSS about 15.0G, peak 35.8G
+spark7 service: active worker, RSS about 14.2G, peak 34.6G
+spark4 runtime source: /home/spark4/src/vllm-b55c3b6-docker-lineage
+spark7 runtime source: /home/spark7/src/vllm-b55c3b6-docker-lineage
+spark4 /health: HTTP 200
+spark4 /v1/models: deepseek-v4-flash, max_model_len=262144
+route list: POST /v1/trim_memory present
+persistent store: 2.8G on spark4 and 2.8G on spark7
 ```
 
-The spark4 launch did show the earlier 1M long-context shape, but that shape
-later exhausted host/NVIDIA driver memory during a cold request:
+The validation run used the 256k long-context shape:
 
 ```text
-max_model_len=1048576
+max_model_len=262144
 kv_offloading_size=8
 kv_cache_dtype=fp8
-disable_hybrid_kv_cache_manager=False
-DeepSeek fp8_ds_mla KV cache format
-FP8 indexer cache for Lightning Indexer
+max_num_seqs=2
+max_num_batched_tokens=8192
+gpu_memory_utilization=0.8
+MTP deepseek_mtp, num_speculative_tokens=2
+SimpleCPUOffload persistence enabled
 ```
 
-That is not enough. A valid proof still requires spark5 online, both ranks
-running the same pinned source runtime, `max_model_len=262144`, MTP enabled,
-KV metrics enabled, a cold request, a restart, a replay request, and log/metric
-evidence that replay loaded external persistent KV with lower TTFT or prefill
-time.
+Externally driven KV replay result:
+
+```text
+prompt_tokens=6733
+cold elapsed=31.621346s
+warm elapsed=3.455483s
+speedup=9.151064x
+DS4 persistent SimpleCPUOffload scheduler hit: tokens=6144 raw_tokens=6400 guard_tokens=256
+warm replay computed 589 context tokens
+External prefix cache hit rate: 45.6%
+```
+
+This qualifies the host-local 256k lane for live external SimpleCPUOffload
+replay speedup. A restart-persistent replay is still a separate gate. The
+`/v1/trim_memory` endpoint is installed and callable; it performs local prefix
+reset and `malloc_trim`, and it returns an explicit warning that
+SimpleCPUOffload connector-level reset/release is not yet implemented.
 
 ## Source-Controlled Local Runtime
 
 Runtime paths:
 
 ```text
-/home/spark4/ds4-vllm-local-75358b5
-/home/spark5/ds4-vllm-local-75358b5
-/home/spark4/ds4-vllm-local -> ds4-vllm-local-75358b5
-/home/spark5/ds4-vllm-local -> ds4-vllm-local-75358b5
+/home/spark4/src/vllm-b55c3b6-docker-lineage
+/home/spark7/src/vllm-b55c3b6-docker-lineage
+/home/spark4/ds4-vllm-local
+/home/spark7/ds4-vllm-local
 ```
 
 The durable runtime must be built or installed from the local vLLM fork commit:
 
 ```text
 https://github.com/experiencenow-ai/vllm
-75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
+d240cdbcf3de175be57c108fd9cbfce04009ec29
 ```
 
 That commit includes the DS4 persistent SimpleCPUOffload API commits,
@@ -94,16 +115,16 @@ prefix, then atomically move the `ds4-vllm-local` symlink after the install
 succeeds:
 
 ```bash
-git clone https://github.com/experiencenow-ai/vllm.git ~/src/vllm-dsv4-75358b5
-cd ~/src/vllm-dsv4-75358b5
-git checkout 75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
-python3.12 -m venv ~/ds4-vllm-local-75358b5
+git clone https://github.com/experiencenow-ai/vllm.git ~/src/vllm-b55c3b6-docker-lineage
+cd ~/src/vllm-b55c3b6-docker-lineage
+git checkout d240cdbcf3de175be57c108fd9cbfce04009ec29
+python3.12 -m venv ~/ds4-vllm-local-b55c3b6
 export CUDA_HOME=/usr/local/cuda
 export TORCH_CUDA_ARCH_LIST=12.1a
 export CPATH="$HOME/standard-runtimes/python3.12-dev-extract/usr/include:$HOME/standard-runtimes/python3.12-dev-extract/usr/include/python3.12:${CPATH:-}"
-~/ds4-vllm-local-75358b5/bin/python -m pip install -U pip wheel setuptools
-~/ds4-vllm-local-75358b5/bin/python -m pip install -e .
-ln -sfn ~/ds4-vllm-local-75358b5 ~/ds4-vllm-local
+~/ds4-vllm-local-b55c3b6/bin/python -m pip install -U pip wheel setuptools
+~/ds4-vllm-local-b55c3b6/bin/python -m pip install -e .
+ln -sfn ~/ds4-vllm-local-b55c3b6 ~/ds4-vllm-local
 ```
 
 Keep the previous runtime directory intact until the new source-built service
@@ -133,7 +154,7 @@ The critical launch settings are:
 --block-size 256
 --kv-cache-dtype fp8
 --enable-prefix-caching
---kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-2}
+--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8}
 --kv-offloading-backend native
 --kv-cache-metrics
 --enable-logging-iteration-details
@@ -143,12 +164,10 @@ VLLM_USE_SIMPLE_KV_OFFLOAD=1
 --enforce-eager
 ```
 
-Do not lower `--max-model-len` to save RAM. The observed HMA launch can expose
-1M context because DSV4's model-native compressed/sliding KV layout keeps the
-GPU pool around two full 1M requests. If the node is under host-memory pressure,
-reduce avoidable host allocations first: use SimpleCPUOffload, lower
-`DS4_DSV4_KV_OFFLOAD_SIZE`, disable nonessential services, and keep swap as a
-survival rail.
+Keep the production stabilization target at `--max-model-len 262144` until the
+lane passes the restart-persistent replay gate. The 1M shape exposed a much
+larger live KV residency target and repeatedly pushed the Spark nodes into host
+or driver memory failure during requalification.
 
 `DS4_DSV4_KV_OFFLOAD_SIZE` is GiB of CPU KV offload buffer summed across TP
 ranks. The default is `8`, which is `4 GiB` on spark4 and `4 GiB` on spark5.

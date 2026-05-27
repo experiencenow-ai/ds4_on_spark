@@ -57,6 +57,7 @@ def _add_submit_args(sub: argparse._SubParsersAction) -> None:
     queue_submit.add_argument("--requests", required=True)
     queue_submit.add_argument("--topology", required=True)
     queue_submit.add_argument("--batch-id")
+    queue_submit.add_argument("--priority", type=int, help="Lower numbers run first. Default is 10 for normal queued requests and 0 for immediate requests.")
 
     queue_submit_cpu = sub.add_parser("queue-submit-cpu")
     queue_submit_cpu.add_argument("--queue-dir", required=True)
@@ -66,6 +67,7 @@ def _add_submit_args(sub: argparse._SubParsersAction) -> None:
     queue_submit_cpu.add_argument("--node-id")
     queue_submit_cpu.add_argument("--timeout-s", type=float)
     queue_submit_cpu.add_argument("--immediate", action="store_true")
+    queue_submit_cpu.add_argument("--priority", type=int, help="Lower numbers run first. Default is 10 for normal queued requests and 0 for immediate requests.")
 
 
 def _add_queue_work_args(sub: argparse._SubParsersAction) -> None:
@@ -211,7 +213,7 @@ def _cmd_queue_submit(args: argparse.Namespace) -> int:
     registry = ProfileRegistry.load(args.profiles_dir)
     topology = SparkTopology.load(args.topology) if args.topology else None
     requests = load_requests_jsonl(args.requests)
-    _emit(queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id=args.batch_id))
+    _emit(queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id=args.batch_id, priority=args.priority))
     return 0
 
 
@@ -225,6 +227,7 @@ def _cmd_queue_submit_cpu(args: argparse.Namespace) -> int:
             immediate=args.immediate,
             node_id=args.node_id,
             timeout_s=args.timeout_s,
+            priority=args.priority,
         )
     )
     return 0
@@ -263,7 +266,19 @@ def _queue_work_once(queue: InferenceQueue, registry: ProfileRegistry, runner: o
         warm_max_output_tokens=args.warm_max_output_tokens,
         warm_max_groups=args.warm_max_groups,
         warm_max_groups_per_node=args.warm_max_groups_per_node,
+        node_profile_ids=_node_profile_ids(args.topology, args.node_id),
+        max_node_depth=args.max_node_depth,
     )
+
+
+def _node_profile_ids(topology_path: str | None, node_id: str | None) -> tuple[str, ...] | None:
+    if not topology_path or not node_id:
+        return None
+    topology = SparkTopology.load(topology_path)
+    for node in topology.nodes:
+        if node.node_id == node_id:
+            return tuple(node.resident_profiles)
+    raise ValueError(f"node {node_id!r} not found in topology")
 
 
 def _cmd_queue_reap(args: argparse.Namespace) -> int:
@@ -335,10 +350,12 @@ def _add_queue_worker_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--runner-timeout-s", type=int, default=300)
     parser.add_argument("--command", nargs="*")
     parser.add_argument("--node-id")
+    parser.add_argument("--topology")
     parser.add_argument("--batch-id")
     parser.add_argument("--batch-key")
     parser.add_argument("--limit", type=int, default=1)
     parser.add_argument("--concurrency", type=int, default=1)
+    parser.add_argument("--max-node-depth", type=int, default=0, help="For node workers, cap queued+running model claims on this node; 0 disables the cap.")
     parser.add_argument("--worker-id")
     parser.add_argument("--lease-ttl-s", type=int, default=900)
     parser.add_argument("--heartbeat-interval-s", type=float, default=5.0)

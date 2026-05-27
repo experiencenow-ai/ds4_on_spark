@@ -14,7 +14,7 @@ import uuid
 from typing import Any, Callable, Iterable
 
 from .builders import new_id, safe_request_id
-from .kv_cache import ensure_cache_refs_resolved
+from .kv_cache import ensure_cache_refs_resolved, request_kv_cache_batch_key
 from .profiles import ModelProfile, ProfileRegistry
 from .runners import Runner
 from .schemas import InferenceRequest, make_result
@@ -29,6 +29,8 @@ PREFIX_WARM_REPORT_FORMAT = "ds4-prefix-warm-report-v1"
 PREFIX_WARM_STATUS_FORMAT = "ds4-prefix-warm-status-v1"
 TERMINAL_STATES = {"completed", "failed", "cancelled"}
 CPU_QUEUE_TIMEOUT_KEY = "__ds4_queue_timeout_s"
+DEFAULT_QUEUE_PRIORITY = 10
+IMMEDIATE_QUEUE_PRIORITY = 0
 REQUEST_COLUMNS_SQL = """
 create table if not exists requests(
     request_id text primary key,
@@ -111,10 +113,12 @@ class QueueSubmission:
     request_ids: tuple[str, ...]
     selected_profiles: dict[str, int]
     selected_nodes: dict[str, int]
+    priority_counts: dict[int, int] | None = None
     selected_services: dict[str, int] | None = None
+    metadata: dict[str, Any] | None = None
 
     def to_public_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "format": QUEUE_FORMAT,
             "batch_id": self.batch_id,
             "state": "queued",
@@ -122,8 +126,12 @@ class QueueSubmission:
             "request_ids": list(self.request_ids),
             "selected_profiles": self.selected_profiles,
             "selected_nodes": self.selected_nodes,
+            "priority_counts": {str(priority): count for priority, count in sorted((self.priority_counts or {}).items())},
             "selected_services": self.selected_services or {},
         }
+        if self.metadata:
+            payload["metadata"] = self.metadata
+        return payload
 
 
 @dataclass(frozen=True)
@@ -156,14 +164,21 @@ class InferenceQueue:
         registry: ProfileRegistry,
         topology: SparkTopology | None = None,
         batch_id: str | None = None,
+        priority: int | None = None,
     ) -> dict[str, Any]:
+        priority_override = _validated_priority(priority)
         request_list = list(requests)
         if not request_list:
             raise ValueError("cannot submit an empty request set")
         batch_id = batch_id or new_id("batch")
+        existing = self._existing_submission(batch_id, request_list, priority_override=priority_override)
+        if existing is not None:
+            return existing
         request_ids: list[str] = []
         selected_profiles: dict[str, int] = {}
         selected_nodes: dict[str, int] = {}
+        priority_counts: dict[int, int] = {}
+        late_bound_count = 0
         node_load = self._queued_and_running_node_load()
         now = time.time()
         with closing(self._connect()) as conn, conn:
@@ -180,12 +195,16 @@ class InferenceQueue:
                     model_pin=request.model_pin,
                 )
                 assignment = None
-                if topology is not None:
+                if topology is not None and request.immediate:
                     assignment = topology.assign_profile(profile, immediate=request.immediate, current_load=node_load)
                     node_load[assignment.node_id] = node_load.get(assignment.node_id, 0) + 1
                     selected_nodes[assignment.node_id] = selected_nodes.get(assignment.node_id, 0) + 1
+                elif topology is not None:
+                    late_bound_count += 1
                 selected_profiles[profile.profile_id] = selected_profiles.get(profile.profile_id, 0) + 1
                 batch_key = request_batch_key(request, profile, assignment)
+                request_priority = _request_priority(request, priority_override=priority_override)
+                priority_counts[request_priority] = priority_counts.get(request_priority, 0) + 1
                 conn.execute(
                     """
                     insert into requests(
@@ -197,7 +216,7 @@ class InferenceQueue:
                     (
                         request.request_id,
                         batch_id,
-                        0 if request.immediate else 10,
+                        request_priority,
                         1 if request.immediate else 0,
                         batch_key,
                         profile.profile_id,
@@ -217,6 +236,8 @@ class InferenceQueue:
                         "batch_key": batch_key,
                         "selected_profile_id": profile.profile_id,
                         "selected_node_id": assignment.node_id if assignment is not None else None,
+                        "priority": request_priority,
+                        "node_binding": "submit" if assignment is not None else "lease",
                     },
                 )
                 request_ids.append(request.request_id)
@@ -226,6 +247,46 @@ class InferenceQueue:
             request_ids=tuple(request_ids),
             selected_profiles=selected_profiles,
             selected_nodes=selected_nodes,
+            priority_counts=priority_counts,
+            metadata={"late_bound_count": late_bound_count},
+        ).to_public_dict()
+
+    def _existing_submission(self, batch_id: str, requests: list[InferenceRequest], *, priority_override: int | None) -> dict[str, Any] | None:
+        with closing(self._connect()) as conn:
+            batch = conn.execute("select batch_id from batches where batch_id = ?", (batch_id,)).fetchone()
+            if batch is None:
+                return None
+            rows = conn.execute(
+                "select request_id, selected_profile_id, selected_node_id, priority from requests where batch_id = ? order by created_at, request_id",
+                (batch_id,),
+            ).fetchall()
+        existing_ids = [str(row["request_id"]) for row in rows]
+        requested_ids = [request.request_id for request in requests]
+        if set(existing_ids) != set(requested_ids):
+            raise ValueError(f"batch_id already exists with different requests: {batch_id}")
+        expected_priorities = {request.request_id: _request_priority(request, priority_override=priority_override) for request in requests if priority_override is not None or request.priority is not None}
+        if expected_priorities:
+            existing_priorities = {str(row["request_id"]): int(row["priority"]) for row in rows}
+            mismatches = sorted(request_id for request_id, expected in expected_priorities.items() if existing_priorities.get(request_id) != expected)
+            if mismatches:
+                raise ValueError(f"batch_id already exists with different priority for requests: {mismatches}")
+        selected_profiles: dict[str, int] = {}
+        selected_nodes: dict[str, int] = {}
+        priority_counts: dict[int, int] = {}
+        for row in rows:
+            profile_id = str(row["selected_profile_id"])
+            selected_profiles[profile_id] = selected_profiles.get(profile_id, 0) + 1
+            row_priority = int(row["priority"])
+            priority_counts[row_priority] = priority_counts.get(row_priority, 0) + 1
+            if row["selected_node_id"] is not None:
+                node_id = str(row["selected_node_id"])
+                selected_nodes[node_id] = selected_nodes.get(node_id, 0) + 1
+        return QueueSubmission(
+            batch_id=batch_id,
+            request_ids=tuple(existing_ids),
+            selected_profiles=selected_profiles,
+            selected_nodes=selected_nodes,
+            priority_counts=priority_counts,
         ).to_public_dict()
 
     def submit_cpu_requests(
@@ -237,7 +298,9 @@ class InferenceQueue:
         immediate: bool = False,
         node_id: str | None = None,
         timeout_s: float | None = None,
+        priority: int | None = None,
     ) -> dict[str, Any]:
+        request_priority = _validated_priority(priority, immediate=immediate)
         batch_id = batch_id or new_id("cpu-batch")
         service, item_list = _validated_cpu_items(service, items, timeout_s)
         now = time.time()
@@ -256,11 +319,12 @@ class InferenceQueue:
                     service=service,
                     item=item,
                     immediate=immediate,
+                    priority=request_priority,
                     batch_key=batch_key,
                     node_id=node_id,
                     now=now,
                 )
-                event = {"batch_id": batch_id, "batch_key": batch_key, "service": service, "selected_node_id": node_id}
+                event = {"batch_id": batch_id, "batch_key": batch_key, "service": service, "selected_node_id": node_id, "priority": request_priority}
                 self._insert_event(conn, request_id, "submitted", "queued", event)
                 request_ids.append(request_id)
             self._refresh_batch_row(conn, batch_id)
@@ -269,6 +333,7 @@ class InferenceQueue:
             request_ids=tuple(request_ids),
             selected_profiles={},
             selected_nodes={node_id: len(request_ids)} if node_id else {},
+            priority_counts={request_priority: len(request_ids)},
             selected_services={service: len(request_ids)},
         ).to_public_dict()
 
@@ -281,6 +346,7 @@ class InferenceQueue:
         service: str,
         item: dict[str, Any],
         immediate: bool,
+        priority: int,
         batch_key: str,
         node_id: str | None,
         now: float,
@@ -296,7 +362,7 @@ class InferenceQueue:
                 request_id,
                 batch_id,
                 service,
-                0 if immediate else 10,
+                priority,
                 1 if immediate else 0,
                 batch_key,
                 f"cpu:{service}",
@@ -325,6 +391,8 @@ class InferenceQueue:
         warm_max_output_tokens: int = 1,
         warm_max_groups: int | None = None,
         warm_max_groups_per_node: int | None = None,
+        node_profile_ids: Iterable[str] | None = None,
+        max_node_depth: int = 0,
         on_result: Callable[[QueueClaim, dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
         from .worker import BatchWorker
@@ -356,6 +424,8 @@ class InferenceQueue:
             batch_key=batch_key,
             limit=limit,
             concurrency=concurrency,
+            node_profile_ids=tuple(node_profile_ids) if node_profile_ids is not None else None,
+            max_node_depth=max_node_depth,
             on_result=on_result,
         )
         if warm_report is not None:
@@ -368,6 +438,12 @@ class InferenceQueue:
         node_id: str | None = None,
         batch_id: str | None = None,
         batch_key: str | None = None,
+        request_kind: str | None = None,
+        profile_id: str | None = None,
+        service_name: str | None = None,
+        include_unassigned: bool = False,
+        eligible_profile_ids: Iterable[str] | None = None,
+        max_node_depth: int = 0,
         limit: int = 1,
         leased_by: str,
         lease_ttl_s: int = 900,
@@ -376,20 +452,28 @@ class InferenceQueue:
             raise ValueError("limit must be positive")
         if lease_ttl_s < 1:
             raise ValueError("lease_ttl_s must be positive")
+        if max_node_depth < 0:
+            raise ValueError("max_node_depth must not be negative")
         now = time.time()
         conn = self._connect()
         claims: list[QueueClaim] = []
         try:
             conn.execute("begin immediate")
-            selected_key = batch_key or self._select_next_batch_key(conn, node_id=node_id, batch_id=batch_id)
+            if node_id is not None and max_node_depth > 0 and request_kind in (None, "model"):
+                limit = min(limit, self._node_model_depth_allowance(conn, node_id=node_id, max_node_depth=max_node_depth))
+                if limit < 1:
+                    conn.commit()
+                    return []
+            selected_key = batch_key or self._select_next_batch_key(conn, node_id=node_id, batch_id=batch_id, request_kind=request_kind, profile_id=profile_id, service_name=service_name, include_unassigned=include_unassigned, eligible_profile_ids=eligible_profile_ids)
             if selected_key is None:
                 conn.commit()
                 return []
-            rows = self._select_work_rows(conn, node_id=node_id, batch_id=batch_id, batch_key=selected_key, limit=limit)
+            rows = self._select_work_rows(conn, node_id=node_id, batch_id=batch_id, batch_key=selected_key, request_kind=request_kind, profile_id=profile_id, service_name=service_name, include_unassigned=include_unassigned, eligible_profile_ids=eligible_profile_ids, limit=limit)
             batch_ids = set()
             for row in rows:
                 request_id = str(row["request_id"])
                 lease_id = f"{leased_by}:{uuid.uuid4().hex}"
+                assigned_node_id = node_id if node_id is not None and row["selected_node_id"] is None else None
                 updated = self._lease_row(
                     conn,
                     request_id=request_id,
@@ -397,13 +481,16 @@ class InferenceQueue:
                     leased_by=leased_by,
                     lease_ttl_s=lease_ttl_s,
                     now=now,
+                    selected_node_id=assigned_node_id,
                 )
                 if updated != 1:
                     continue
                 batch_ids.add(str(row["batch_id"]))
                 event = {"batch_id": row["batch_id"], "batch_key": row["batch_key"], "lease_id": lease_id, "leased_by": leased_by}
+                if assigned_node_id is not None:
+                    event["selected_node_id"] = assigned_node_id
                 self._insert_event(conn, request_id, "started", "running", event)
-                claims.append(_row_claim(row, request_id=request_id, lease_id=lease_id))
+                claims.append(_row_claim(row, request_id=request_id, lease_id=lease_id, selected_node_id=assigned_node_id))
             for batch_id_value in batch_ids:
                 self._refresh_batch_row(conn, batch_id_value)
             conn.commit()
@@ -414,6 +501,17 @@ class InferenceQueue:
         finally:
             conn.close()
 
+    def _node_model_depth_allowance(self, conn: sqlite3.Connection, *, node_id: str, max_node_depth: int) -> int:
+        row = conn.execute(
+            """
+            select count(*) n
+            from requests
+            where state in ('queued','running') and selected_node_id = ? and request_kind = 'model'
+            """,
+            (node_id,),
+        ).fetchone()
+        return max(0, max_node_depth - int(row["n"] if row is not None else 0))
+
     def _lease_row(
         self,
         conn: sqlite3.Connection,
@@ -423,16 +521,17 @@ class InferenceQueue:
         leased_by: str,
         lease_ttl_s: int,
         now: float,
+        selected_node_id: str | None = None,
     ) -> int:
         return conn.execute(
             """
             update requests
             set state = 'running', lease_id = ?, leased_by = ?, lease_expires_at = ?,
                 heartbeat_at = ?, attempt_count = attempt_count + 1,
-                started_at = ?, updated_at = ?
+                started_at = ?, updated_at = ?, selected_node_id = coalesce(selected_node_id, ?)
             where request_id = ? and state = 'queued'
             """,
-            (lease_id, leased_by, now + lease_ttl_s, now, now, now, request_id),
+            (lease_id, leased_by, now + lease_ttl_s, now, now, now, selected_node_id, request_id),
         ).rowcount
 
     def finish_request(
@@ -815,6 +914,7 @@ class InferenceQueue:
     def _ensure_request_columns(self, conn: sqlite3.Connection) -> None:
         existing = {str(row["name"]) for row in conn.execute("pragma table_info(requests)").fetchall()}
         columns = {
+            "priority": "integer not null default 10",
             "lease_id": "text",
             "leased_by": "text",
             "lease_expires_at": "real",
@@ -836,21 +936,57 @@ class InferenceQueue:
             if name not in existing:
                 conn.execute(f"alter table batches add column {name} {spec}")
 
+    def _append_node_claim_filter(
+        self,
+        clauses: list[str],
+        params: list[Any],
+        *,
+        node_id: str | None,
+        include_unassigned: bool,
+        eligible_profile_ids: Iterable[str] | None,
+    ) -> None:
+        if node_id is None:
+            return
+        eligible = tuple(str(profile_id) for profile_id in (eligible_profile_ids or ()) if str(profile_id))
+        if include_unassigned and eligible:
+            placeholders = ",".join("?" for _ in eligible)
+            clauses.append(f"(selected_node_id = ? or (selected_node_id is null and selected_profile_id in ({placeholders})))")
+            params.append(node_id)
+            params.extend(eligible)
+        elif include_unassigned and eligible_profile_ids is None:
+            clauses.append("(selected_node_id = ? or selected_node_id is null)")
+            params.append(node_id)
+        else:
+            clauses.append("selected_node_id = ?")
+            params.append(node_id)
+
     def _select_next_batch_key(
         self,
         conn: sqlite3.Connection,
         *,
         node_id: str | None,
         batch_id: str | None,
+        request_kind: str | None = None,
+        profile_id: str | None = None,
+        service_name: str | None = None,
+        include_unassigned: bool = False,
+        eligible_profile_ids: Iterable[str] | None = None,
     ) -> str | None:
         clauses = ["state = 'queued'"]
         params: list[Any] = []
-        if node_id is not None:
-            clauses.append("selected_node_id = ?")
-            params.append(node_id)
+        self._append_node_claim_filter(clauses, params, node_id=node_id, include_unassigned=include_unassigned, eligible_profile_ids=eligible_profile_ids)
         if batch_id is not None:
             clauses.append("batch_id = ?")
             params.append(batch_id)
+        if request_kind is not None:
+            clauses.append("request_kind = ?")
+            params.append(request_kind)
+        if profile_id is not None:
+            clauses.append("selected_profile_id = ?")
+            params.append(profile_id)
+        if service_name is not None:
+            clauses.append("service_name = ?")
+            params.append(service_name)
         row = conn.execute(
             f"""
             select batch_key
@@ -870,19 +1006,31 @@ class InferenceQueue:
         node_id: str | None,
         batch_id: str | None,
         batch_key: str | None,
+        request_kind: str | None = None,
+        profile_id: str | None = None,
+        service_name: str | None = None,
+        include_unassigned: bool = False,
+        eligible_profile_ids: Iterable[str] | None = None,
         limit: int,
     ) -> list[sqlite3.Row]:
         clauses = ["state = 'queued'"]
         params: list[Any] = []
-        if node_id is not None:
-            clauses.append("selected_node_id = ?")
-            params.append(node_id)
+        self._append_node_claim_filter(clauses, params, node_id=node_id, include_unassigned=include_unassigned, eligible_profile_ids=eligible_profile_ids)
         if batch_id is not None:
             clauses.append("batch_id = ?")
             params.append(batch_id)
         if batch_key is not None:
             clauses.append("batch_key = ?")
             params.append(batch_key)
+        if request_kind is not None:
+            clauses.append("request_kind = ?")
+            params.append(request_kind)
+        if profile_id is not None:
+            clauses.append("selected_profile_id = ?")
+            params.append(profile_id)
+        if service_name is not None:
+            clauses.append("service_name = ?")
+            params.append(service_name)
         params.append(limit)
         return conn.execute(
             f"""
@@ -959,7 +1107,7 @@ class InferenceQueue:
         clauses = ["state = 'queued'", "request_kind = 'model'"]
         params: list[Any] = []
         if node_id is not None:
-            clauses.append("selected_node_id = ?")
+            clauses.append("(selected_node_id = ? or selected_node_id is null)")
             params.append(node_id)
         if batch_id is not None:
             clauses.append("batch_id = ?")
@@ -984,7 +1132,7 @@ class InferenceQueue:
             shared_prefix_hash = _sha256_text(shared_prefix)
             system_hash = _sha256_text(str(input_data.get("system", "")))
             profile_id = str(row["selected_profile_id"])
-            group_node_id = str(row["selected_node_id"]) if row["selected_node_id"] is not None else None
+            group_node_id = str(row["selected_node_id"]) if row["selected_node_id"] is not None else node_id
             chat = bool(raw.get("chat", False))
             warm_key = _prefix_warm_key(node_id=group_node_id, profile_id=profile_id, chat=chat, skeleton_hash=skeleton_hash, shared_prefix_hash=shared_prefix_hash, system_hash=system_hash)
             group = groups.setdefault(
@@ -1088,6 +1236,7 @@ class InferenceQueue:
             "format": REQUEST_STATUS_FORMAT,
             "service_name": row["service_name"],
             "immediate": bool(row["immediate"]),
+            "priority": int(row["priority"]),
             "selected_node_id": row["selected_node_id"],
             "created_at": float(row["created_at"]),
             "updated_at": float(row["updated_at"]),
@@ -1210,6 +1359,10 @@ def _limit_prefix_warm_groups(
 
 
 def request_batch_key(request: InferenceRequest, profile: ModelProfile, assignment: SparkAssignment | None) -> str:
+    prefix_key = str(request.input.get("shared_prefix_hash") or request.input.get("skeleton_hash") or "no_prefix")
+    kv_key = request_kv_cache_batch_key(request.input)
+    if kv_key is not None:
+        prefix_key = prefix_key + "|kv=" + kv_key
     return "|".join(
         [
             assignment.node_id if assignment is not None else "unassigned",
@@ -1219,7 +1372,7 @@ def request_batch_key(request: InferenceRequest, profile: ModelProfile, assignme
             input_bucket(request),
             output_bucket(request.max_output_tokens),
             thinking_bucket(request.thinking_budget_tokens),
-            str(request.input.get("shared_prefix_hash") or request.input.get("skeleton_hash") or "no_prefix"),
+            prefix_key,
             "immediate" if request.immediate else "queued",
         ]
     )
@@ -1327,14 +1480,15 @@ def _lease_failure(request_id: str, attempts: int) -> dict[str, Any]:
     }
 
 
-def _row_claim(row: sqlite3.Row, *, request_id: str, lease_id: str) -> QueueClaim:
+def _row_claim(row: sqlite3.Row, *, request_id: str, lease_id: str, selected_node_id: str | None = None) -> QueueClaim:
+    node_id = selected_node_id if selected_node_id is not None else (str(row["selected_node_id"]) if row["selected_node_id"] else None)
     return QueueClaim(
         request_id=request_id,
         batch_id=str(row["batch_id"]),
         batch_key=str(row["batch_key"]),
         request_kind=str(row["request_kind"]),
         selected_profile_id=str(row["selected_profile_id"]),
-        selected_node_id=str(row["selected_node_id"]) if row["selected_node_id"] else None,
+        selected_node_id=node_id,
         lease_id=lease_id,
         request=_row_request(row),
         service_name=str(row["service_name"]) if row["service_name"] else None,
@@ -1346,6 +1500,25 @@ def _row_request(row: sqlite3.Row) -> InferenceRequest | None:
     if str(row["request_kind"]) != "model":
         return None
     return InferenceRequest.from_json(json.loads(str(row["request_json"])))
+
+
+def _validated_priority(priority: int | None, *, immediate: bool | None = None) -> int | None:
+    if priority is None:
+        if immediate is None:
+            return None
+        return IMMEDIATE_QUEUE_PRIORITY if immediate else DEFAULT_QUEUE_PRIORITY
+    value = int(priority)
+    if value < 0:
+        raise ValueError("priority must be non-negative")
+    return value
+
+
+def _request_priority(request: InferenceRequest, *, priority_override: int | None) -> int:
+    if priority_override is not None:
+        return priority_override
+    if request.priority is not None:
+        return _validated_priority(request.priority)
+    return IMMEDIATE_QUEUE_PRIORITY if request.immediate else DEFAULT_QUEUE_PRIORITY
 
 
 def input_bucket(request: InferenceRequest) -> str:

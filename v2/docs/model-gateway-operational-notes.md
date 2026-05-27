@@ -81,10 +81,11 @@ The DeepSeek V4 Flash path also carried parser/backend details:
   `--headless` for the worker rank. Keep that shape for the production DSV4
   lane. The current requalification target keeps vLLM's hybrid KV cache manager
   enabled, uses `max_model_len=262144`, and adds native CPU KV offload with
-  `--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-2} --kv-offloading-backend native`
-  and `VLLM_USE_SIMPLE_KV_OFFLOAD=1`. The current source-built runtime is
-  `experiencenow-ai/vllm@75358b5ef269050fbbf0d34a1e9772d8c56ac7c7` launched by
-  `scripts/ds4_dsv4_spark45_local_vllm.sh`, not the old Docker recipe.
+  `--kv-offloading-size 8 --kv-offloading-backend native` and
+  `VLLM_USE_SIMPLE_KV_OFFLOAD=1`. The current runtime is the Docker-lineage
+  fork `experiencenow-ai/vllm@d240cdbcf3de175be57c108fd9cbfce04009ec29`, based
+  on known-working `jasl/vllm@dda4668b59567416f86956cfe7bbc1eab371a61e`, and
+  launched by `scripts/ds4_dsv4_recipe_spark45.sh`.
   MTP speculative decoding, KV cache metrics, and iteration-detail logs are
   enabled for the 256k proof.
   Do not add

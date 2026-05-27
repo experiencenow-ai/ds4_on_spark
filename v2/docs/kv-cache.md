@@ -66,22 +66,22 @@ vllm:prompt_tokens_by_source_total{source="external_kv_transfer"}
 
 ## DSV4 vLLM cache launch
 
-Use the source-built local vLLM services:
+Use the Docker-lineage vLLM service:
 
 ```bash
-ssh spark5 systemctl --user start ds4-dsv4-local-worker.service
-ssh spark4 systemctl --user start ds4-dsv4-local-head.service
+ssh spark4 systemctl --user start ds4-dsv4-docker-legacy.service
 ```
 
-The compatibility `ds4-dsv4-vllm.service` on spark4 launches the same local
-head script. `ds4-dsv4-docker-legacy.service` is rollback-only.
+The filename still contains `legacy` for compatibility with deployed unit
+names, but this is the production DSV4 lane.
 
 The production launch body is
-`scripts/ds4_dsv4_spark45_local_vllm.sh`, built from:
+`scripts/ds4_dsv4_recipe_spark45.sh`, built from:
 
 ```text
 https://github.com/experiencenow-ai/vllm
-75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
+d240cdbcf3de175be57c108fd9cbfce04009ec29
+base: jasl/vllm@dda4668b59567416f86956cfe7bbc1eab371a61e
 ```
 
 It uses:
@@ -90,7 +90,7 @@ It uses:
 --max-model-len ${DS4_DSV4_MAX_MODEL_LEN:-262144}
 --enable-prefix-caching
 --no-disable-hybrid-kv-cache-manager
---kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-2}
+--kv-offloading-size 8
 --kv-offloading-backend native
 --kv-cache-metrics
 --enable-logging-iteration-details
@@ -109,12 +109,13 @@ GPU KV cache size:  2,088,846 tokens
 1M concurrency:     1.99x
 ```
 
-`DS4_DSV4_KV_OFFLOAD_SIZE=16` was the first verified value for the 1M Docker
-proof. The current source-built 256k target defaults to `2` total because the
-1M host-local profile exhausted host/NVIDIA driver memory during
-requalification. Larger pools must be requalified live. NVMe swap can help the
-OS survive pressure long enough to kill vLLM, but swap is not KV capacity and
-should not be used for normal inference.
+The production stabilization target keeps the Docker offload pool at 8 GiB
+total while lowering context to 256k. The failed source-built mainline path is
+not evidence that the Docker lineage cannot run this shape; it pulled in a
+large DeepSeek/MoE/MTP rewrite and failed before API readiness. Larger pools
+must be requalified live. NVMe swap can help the OS survive pressure long enough
+to kill vLLM, but swap is not KV capacity and should not be used for normal
+inference.
 
 This is external CPU KV offload. It preserves the full-quality HF/vLLM DSV4 path
 and avoids the bad full-KV fallback. Durable restart persistence is handled by

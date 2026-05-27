@@ -14,7 +14,8 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-submit \
   --profiles-dir profiles/models \
   --topology profiles/topology/static_sparks.json \
   --requests /tmp/requests.jsonl \
-  --batch-id smoke-001
+  --batch-id smoke-001 \
+  --priority 10
 
 PYTHONPATH=src python3 -m ds4_infer.cli queue-worker \
   --queue-dir /tmp/ds4_v2_queue \
@@ -27,9 +28,16 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-worker \
 ```
 
 `queue-worker` claims a compatible `batch_key`, commits the lease immediately,
-then sends the compatible group through one batch-capable runner call. The
-Spark runner posts one `/ds4/batches` payload with multiple items when the
-worker claims multiple same-shape model requests.
+then runs a concurrency window of compatible model claims for the same
+profile/node. Each claimed model request is dispatched independently so queue
+events and notices land as each request finishes instead of waiting for the
+slowest request in the window. The Spark runner still uses `/ds4/batches` for
+execution.
+
+Queue priorities are numeric and lower values run first. Keep full500
+regression queues at normal priority `10`; submit experiment batches at
+priority `1` so they jump ahead of queued background work after the current
+lease window finishes.
 
 ## Qwen Throughput Policy
 

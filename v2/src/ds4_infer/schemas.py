@@ -12,6 +12,7 @@ class InferenceRequest:
     capability: str | None
     chat: bool
     immediate: bool
+    priority: int | None
     job_class: str
     max_output_tokens: int
     thinking_budget_tokens: int
@@ -35,11 +36,17 @@ class InferenceRequest:
             raise ValueError("max_output_tokens must be positive")
         if thinking_budget_tokens < 0:
             raise ValueError("thinking_budget_tokens must be non-negative")
+        priority = None
+        if "priority" in data:
+            priority = int(data["priority"])
+            if priority < 0:
+                raise ValueError("priority must be non-negative")
         return InferenceRequest(
             request_id=str(data["request_id"]),
             capability=data.get("capability"),
             chat=bool(data["chat"]),
             immediate=bool(data["immediate"]),
+            priority=priority,
             job_class=str(data["job_class"]),
             max_output_tokens=max_output_tokens,
             thinking_budget_tokens=thinking_budget_tokens,

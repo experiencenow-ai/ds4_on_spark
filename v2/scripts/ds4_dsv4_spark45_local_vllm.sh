@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Durable source runtime:
-# https://github.com/experiencenow-ai/vllm
-# 75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
+# Host-local source runtime path for the DSV4 two-node lane.
 
 role="${1:-}"
 if [ "$role" != "head" ] && [ "$role" != "worker" ]; then
@@ -13,28 +11,28 @@ fi
 
 if [ "$role" = "head" ]; then
 	node_rank="${DS4_DSV4_NODE_RANK:-0}"
-	local_ip="${DS4_DSV4_LOCAL_IP:-10.20.0.14}"
+	local_ip="${DS4_DSV4_LOCAL_IP:-${DS4_DSV4_HEAD_IP:-10.20.0.14}}"
 	extra_args=()
 else
 	node_rank="${DS4_DSV4_NODE_RANK:-1}"
-	local_ip="${DS4_DSV4_LOCAL_IP:-10.20.0.15}"
+	local_ip="${DS4_DSV4_LOCAL_IP:-${DS4_DSV4_WORKER_IP:-10.20.0.15}}"
 	extra_args=(--headless)
 fi
 
 runtime="${DS4_DSV4_LOCAL_RUNTIME:-$HOME/ds4-vllm-local}"
-model_path="${DS4_DSV4_MODEL_PATH:-/home/spark4/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-V4-Flash/snapshots/6976c7ff1b30a1b2cb7805021b8ba4684041f136}"
+model_path="${DS4_DSV4_MODEL_PATH:-$HOME/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-V4-Flash/snapshots/6976c7ff1b30a1b2cb7805021b8ba4684041f136}"
 port="${DS4_DSV4_PORT:-8000}"
-master_addr="${DS4_DSV4_MASTER_ADDR:-10.20.0.14}"
+master_addr="${DS4_DSV4_MASTER_ADDR:-${DS4_DSV4_HEAD_IP:-10.20.0.14}}"
 master_port="${DS4_DSV4_MASTER_PORT:-29511}"
 persistent_store="${DS4_DSV4_PERSIST_STORE:-/var/tmp/ds4_hma_store/dsv4/simple_cpu_offload}"
 repo_root="${DS4_DSV4_REPO_ROOT:-$HOME/ds4_on_spark}"
 persistent_mod_source="${DS4_DSV4_PERSIST_MOD_SOURCE:-$repo_root/v2/runtime_mods/dsv4_persistent_simple_offload}"
 apply_runtime_mods="${DS4_DSV4_APPLY_RUNTIME_MODS:-0}"
 max_model_len="${DS4_DSV4_MAX_MODEL_LEN:-262144}"
-kv_offload_size="${DS4_DSV4_KV_OFFLOAD_SIZE:-2}"
-gpu_memory_utilization="${DS4_DSV4_GPU_MEMORY_UTILIZATION:-0.68}"
-max_num_batched_tokens="${DS4_DSV4_MAX_NUM_BATCHED_TOKENS:-2048}"
-max_num_seqs="${DS4_DSV4_MAX_NUM_SEQS:-1}"
+kv_offload_size="${DS4_DSV4_KV_OFFLOAD_SIZE:-8}"
+gpu_memory_utilization="${DS4_DSV4_GPU_MEMORY_UTILIZATION:-0.8}"
+max_num_batched_tokens="${DS4_DSV4_MAX_NUM_BATCHED_TOKENS:-8192}"
+max_num_seqs="${DS4_DSV4_MAX_NUM_SEQS:-2}"
 enable_mtp="${DS4_DSV4_ENABLE_MTP:-1}"
 mtp_tokens="${DS4_DSV4_MTP_TOKENS:-2}"
 python_dev_include="${DS4_DSV4_PYTHON_DEV_INCLUDE:-$HOME/standard-runtimes/python3.12-dev-extract/usr/include}"
@@ -120,6 +118,7 @@ exec "$runtime/bin/python" "$runtime/bin/vllm" serve "$model_path" \
 	--kv-offloading-backend native \
 	--kv-cache-metrics \
 	--enable-logging-iteration-details \
+	--distributed-executor-backend mp \
 	--no-enable-flashinfer-autotune \
 	--enforce-eager \
 	"${speculative_args[@]}" \

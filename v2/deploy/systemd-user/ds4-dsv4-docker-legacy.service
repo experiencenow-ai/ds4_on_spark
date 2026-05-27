@@ -1,7 +1,8 @@
 [Unit]
-Description=LEGACY DS4 DSV4 Docker recipe service on spark4+spark5
+Description=DS4 DSV4 Docker-lineage recipe service on spark4+worker
 After=network-online.target
 Wants=network-online.target
+Conflicts=ds4-dsv4-local-head.service ds4-dsv4-vllm.service
 StartLimitIntervalSec=1800
 StartLimitBurst=2
 

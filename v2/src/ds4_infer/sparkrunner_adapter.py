@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     response_path.write_text("", encoding="utf-8")
     record_by_request_id = {request.request_id: records[idx] for idx, request in enumerate(requests)}
     batch_id = args.batch_id or new_id("sparkrunner")
-    queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id=batch_id)
+    queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id=batch_id, priority=args.priority)
     runner = make_runner(args.runner, timeout_s=args.timeout_s)
     while True:
         queue.work(
@@ -63,6 +63,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--timeout-s", type=int, default=600)
     parser.add_argument("--work-limit", type=int, default=16)
     parser.add_argument("--concurrency", type=int, default=1)
+    parser.add_argument("--priority", type=int, help="Lower numbers run first. Default is 10 for normal queued requests and 0 for immediate requests.")
     parser.add_argument("--poll-s", type=float, default=0.2)
     args = parser.parse_args(argv)
     args.deadline = time.time() + max(1, args.timeout_s)

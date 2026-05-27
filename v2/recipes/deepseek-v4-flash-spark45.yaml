@@ -1,19 +1,14 @@
-# LEGACY Docker fallback recipe.
-# Current DSV4 launch is the source-built local runtime in:
-#   scripts/ds4_dsv4_spark45_local_vllm.sh
-#   docs/dsv4-spark45-local-vllm-kv.md
-# Do not use this file to recreate the current production lane.
 recipe_version: "1"
-name: DeepSeek V4 Flash spark4+spark5 legacy Docker HMA KV offload
-description: Legacy Docker fallback for the spark4+spark5 DSV4 lane. The current production lane is source-built local vLLM from experiencenow-ai/vllm@75358b5ef269050fbbf0d34a1e9772d8c56ac7c7.
+name: DeepSeek V4 Flash spark4+worker Docker fallback HMA KV offload
+description: Fallback/repro Docker build for the two-node DSV4 lane. Rebuilds the same source lineage used by the host-local runtime: jasl/vllm@dda4668b59567416f86956cfe7bbc1eab371a61e plus the narrow DS4 KV/trim source PR.
 model: deepseek-ai/DeepSeek-V4-Flash
 container: vllm-node-dsv4-lmcache-rankfix
 cluster_only: true
 build_args:
   - --vllm-repo
-  - https://github.com/jasl/vllm.git
+  - https://github.com/experiencenow-ai/vllm.git
   - --vllm-ref
-  - dda4668b59567416f86956cfe7bbc1eab371a61e
+  - d240cdbcf3de175be57c108fd9cbfce04009ec29
   - --rebuild-vllm
 defaults:
   port: 8000
@@ -21,10 +16,11 @@ defaults:
   tensor_parallel: 2
   pipeline_parallel: 1
   gpu_memory_utilization: 0.8
-  max_model_len: 1048576
+  max_model_len: 262144
   max_num_batched_tokens: 8192
   max_num_seqs: 2
   block_size: 256
+  kv_offloading_size: 8
   served_model_name: deepseek-v4-flash
 env:
   TORCH_CUDA_ARCH_LIST: 12.1a
@@ -58,8 +54,10 @@ command: |
     --max-num-batched-tokens {max_num_batched_tokens} \
     --gpu-memory-utilization {gpu_memory_utilization} \
     --no-disable-hybrid-kv-cache-manager \
-    --kv-offloading-size 8 \
+    --kv-offloading-size {kv_offloading_size} \
     --kv-offloading-backend native \
+    --kv-cache-metrics \
+    --enable-logging-iteration-details \
     --distributed-executor-backend mp \
     --no-enable-flashinfer-autotune \
     --enforce-eager \
