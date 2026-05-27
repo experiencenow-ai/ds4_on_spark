@@ -19,6 +19,8 @@ TRANSFER_RESULT_FORMAT = "ds4-transfer-result-v1"
 class TransferNode:
     node_id: str
     host: str
+    fabric_host: str
+    fabric_ip: str
     root_allowlist: tuple[str, ...]
 
     @staticmethod
@@ -30,7 +32,14 @@ class TransferNode:
         roots = tuple(_normalize_root(str(root)) for root in data["root_allowlist"])
         if not roots:
             raise ValueError("transfer node requires at least one root_allowlist entry")
-        return TransferNode(node_id=str(data["node_id"]), host=str(data["host"]), root_allowlist=roots)
+        node_id = str(data["node_id"])
+        return TransferNode(
+            node_id=node_id,
+            host=str(data["host"]),
+            fabric_host=str(data.get("fabric_host", f"{node_id}-200g")),
+            fabric_ip=str(data.get("fabric_ip", "")),
+            root_allowlist=roots,
+        )
 
 
 @dataclass(frozen=True)
@@ -38,7 +47,10 @@ class TransferTopology:
     fabric_id: str
     fabric_hint: str
     nodes: dict[str, TransferNode]
-    rsync_options: tuple[str, ...]
+    bulk_method: str
+    default_jobs_per_edge: int
+    port_base: int
+    fanout_stages: tuple[tuple[tuple[str, str], ...], ...]
     ssh_options: tuple[str, ...]
 
     @staticmethod
@@ -54,7 +66,10 @@ class TransferTopology:
             fabric_id=str(data.get("fabric_id", "unnamed")),
             fabric_hint=str(data.get("fabric_hint", "unknown")),
             nodes=nodes,
-            rsync_options=tuple(str(item) for item in data.get("rsync_options", _default_rsync_options())),
+            bulk_method=str(data.get("bulk_method", "parallel_nc_fanout_200g_v1")),
+            default_jobs_per_edge=int(data.get("default_jobs_per_edge", 16)),
+            port_base=int(data.get("port_base", 49300)),
+            fanout_stages=_load_fanout_stages(data.get("fanout_stages", [])),
             ssh_options=tuple(str(item) for item in data.get("ssh_options", _default_ssh_options())),
         )
 
@@ -106,34 +121,26 @@ def plan_transfer(topology: TransferTopology, request: TransferRequest) -> dict[
     _validate_allowed_path(source, request.source_path)
     _validate_allowed_path(destination, request.destination_path)
 
-    source_path = _source_path_for_rsync(request.source_path, request.recursive)
-    destination_spec = f"{destination.host}:{request.destination_path}"
-    remote_rsync = ["rsync", *topology.rsync_options]
-    if request.delete_extra:
-        remote_rsync.append("--delete")
-    if request.dry_run:
-        remote_rsync.append("--dry-run")
-    remote_rsync.extend([source_path, destination_spec])
-    argv = ["ssh", *topology.ssh_options, source.host, *remote_rsync]
+    argv = _fast_copy_argv(topology, request)
     return {
         "format": TRANSFER_PLAN_FORMAT,
         "request_id": request.request_id,
         "fabric_id": topology.fabric_id,
         "fabric_hint": topology.fabric_hint,
-        "method": "source_initiated_rsync_over_ssh_no_compress",
+        "method": topology.bulk_method,
         "source_node": request.source_node,
         "destination_node": request.destination_node,
         "source_host": source.host,
         "destination_host": destination.host,
+        "source_fabric": source.fabric_host,
+        "destination_fabric": destination.fabric_host,
+        "destination_fabric_ip": destination.fabric_ip,
         "source_path": request.source_path,
         "destination_path": request.destination_path,
-        "direct_data_path": f"{source.host} -> {destination.host}",
+        "direct_data_path": f"{source.fabric_host} -> {destination.fabric_host}",
         "argv": argv,
         "argv_shell": " ".join(shlex.quote(item) for item in argv),
-        "notes": [
-            "Run rsync on the source Spark so payload flows source->destination over the Spark fabric instead of through the controller.",
-            "Compression is disabled by default because 200Gbps LAN transfer should spend CPU on checksums and I/O, not compression.",
-        ],
+        "notes": _fast_copy_notes(),
     }
 
 
@@ -174,25 +181,36 @@ def run_transfer(topology: TransferTopology, request: TransferRequest, *, timeou
     }
 
 
-def _default_rsync_options() -> list[str]:
-    return [
-        "-a",
-        "--whole-file",
-        "--inplace",
-        "--partial",
-        "--numeric-ids",
-        "--no-compress",
-        "--info=stats2,progress2",
-        "--protect-args",
-    ]
-
-
 def _default_ssh_options() -> list[str]:
     return [
         "-T",
         "-o", "Compression=no",
         "-o", "BatchMode=yes",
         "-x",
+    ]
+
+
+def _fast_copy_argv(topology: TransferTopology, request: TransferRequest) -> list[str]:
+    argv = [
+        "python3", "-m", "ds4_transfer.fast_copy",
+        "--topology", "profiles/transfer/spark_200g.json",
+        "--source-node", request.source_node,
+        "--source-path", request.source_path,
+        "--destination-node", request.destination_node,
+        "--destination-path", request.destination_path,
+        "--jobs-per-edge", str(topology.default_jobs_per_edge),
+        "--port-base", str(topology.port_base),
+    ]
+    if request.dry_run:
+        argv.append("--dry-run")
+    return argv
+
+
+def _fast_copy_notes() -> list[str]:
+    return [
+        "Use the sparkN-200g / 10.10.100.N fabric for bulk payloads; plain sparkN names are control-plane only.",
+        "The copier discovers both ring next-hops and binds parallel unencrypted streams per rail.",
+        "The Mac Studio starts and monitors the job only; model bytes flow Spark-to-Spark.",
     ]
 
 
@@ -212,7 +230,11 @@ def _validate_allowed_path(node: TransferNode, path: str) -> None:
     raise ValueError(f"path {path!r} is outside allowlist for {node.node_id}")
 
 
-def _source_path_for_rsync(path: str, recursive: bool) -> str:
-    if recursive and path.endswith("/"):
-        return path
-    return path
+def _load_fanout_stages(raw: Any) -> tuple[tuple[tuple[str, str], ...], ...]:
+    stages: list[tuple[tuple[str, str], ...]] = []
+    for stage in raw:
+        edges: list[tuple[str, str]] = []
+        for edge in stage:
+            edges.append((str(edge["source_node"]), str(edge["destination_node"])))
+        stages.append(tuple(edges))
+    return tuple(stages)
