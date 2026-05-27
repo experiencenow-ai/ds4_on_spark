@@ -35,6 +35,8 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(node_mon.CSV_FIELDS, telemetry.CSV_FIELDS)
         self.assertIn("vllm_requests_running", telemetry.CSV_FIELDS)
         self.assertIn("local_queue_depth", telemetry.CSV_FIELDS)
+        self.assertIn("vllm_tokens_per_s", telemetry.CSV_FIELDS)
+        self.assertIn("local_queue_completion_tok_s", telemetry.CSV_FIELDS)
 
     def test_cpu_pct_uses_idle_delta(self):
         self.assertEqual(node_mon.cpu_pct((100,40),(200,70)),70.0)
@@ -96,6 +98,32 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(metrics["vllm_kv_cache_pct"],25.0)
         self.assertEqual(metrics["vllm_generation_tokens_total"],456.0)
 
+    def test_vllm_metrics_parser_handles_source_tokens_and_rates(self):
+        text = "\n".join([
+            'vllm:num_requests_running 3.0',
+            'vllm:num_requests_waiting 2.0',
+            'vllm:gpu_cache_usage_perc{model_name="m"} 45.0',
+            'vllm:prompt_tokens_by_source_total{source="local_compute"} 10.0',
+            'vllm:prompt_tokens_by_source_total{source="local_cache_hit"} 20.0',
+            'vllm:prompt_tokens_by_source_total{source="external_kv_transfer"} 5.0',
+            'vllm:generation_tokens_total{model_name="m"} 40.0',
+        ])
+        old = node_mon.read_text_url
+        try:
+            node_mon.read_text_url = lambda url,timeout: (text,"")
+            metrics = node_mon.read_vllm_metrics("http://x/metrics",1.0,{"unix_ts":90.0,"vllm_tokens_total":20.0,"vllm_generation_tokens_total":10.0},100.0)
+        finally:
+            node_mon.read_text_url = old
+        self.assertEqual(metrics["vllm_metrics_up"],1)
+        self.assertEqual(metrics["vllm_requests_running"],3.0)
+        self.assertEqual(metrics["vllm_requests_waiting"],2.0)
+        self.assertEqual(metrics["vllm_kv_cache_pct"],45.0)
+        self.assertEqual(metrics["vllm_prompt_tokens_total"],35.0)
+        self.assertEqual(metrics["vllm_prompt_tokens_local_cache_hit_total"],20.0)
+        self.assertEqual(metrics["vllm_tokens_total"],75.0)
+        self.assertEqual(metrics["vllm_tokens_per_s"],5.5)
+        self.assertEqual(metrics["vllm_generation_tokens_per_s"],3.0)
+
     def test_local_queue_depth_reads_sqlite_counts(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = os.path.join(tmp,"queue.sqlite3")
@@ -114,6 +142,33 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(q["local_queue_cpu_depth"],1)
         self.assertEqual(q["local_queue_completed"],1)
         self.assertIn("spark0:2", q["local_queue_by_node"])
+        self.assertIn("spark0:1", q["local_queue_running_by_node"])
+
+    def test_local_queue_prefers_active_db_and_reports_recent_tok_s(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            empty = os.path.join(tmp,"empty.sqlite3")
+            active = os.path.join(tmp,"active.sqlite3")
+            with sqlite3.connect(empty) as conn:
+                conn.execute("create table requests (state text, request_kind text, selected_node_id text)")
+                conn.execute("insert into requests values (?,?,?)", ("completed","model","spark0"))
+            with sqlite3.connect(active) as conn:
+                conn.execute("create table requests (state text, request_kind text, selected_node_id text, completed_at real, result_json text)")
+                conn.execute("insert into requests values (?,?,?,?,?)", ("queued","model","spark0",None,None))
+                conn.execute("insert into requests values (?,?,?,?,?)", ("running","model","spark1",None,None))
+                conn.execute("insert into requests values (?,?,?,?,?)", ("completed","model","spark1",100.0,'{"usage":{"completion_tokens":120}}'))
+            os.utime(empty,(200.0,200.0))
+            os.utime(active,(100.0,100.0))
+            old = telemetry.time.time
+            try:
+                telemetry.time.time = lambda: 150.0
+                q = telemetry.read_local_queue("", "%s,%s" % (empty,active), rate_window_s=60.0)
+            finally:
+                telemetry.time.time = old
+        self.assertEqual(q["local_queue_db"],active)
+        self.assertEqual(q["local_queue_depth"],2)
+        self.assertEqual(q["local_queue_completion_tokens_recent"],120)
+        self.assertEqual(q["local_queue_completion_tok_s"],2.0)
+        self.assertIn("spark1:2", q["local_queue_completion_tok_s_by_node"])
 
 
 if __name__ == "__main__":
