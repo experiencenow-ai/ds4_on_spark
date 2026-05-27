@@ -15,39 +15,30 @@ def load_module():
 
 
 class Ds4PeerSshHeartbeatTest(unittest.TestCase):
-    def test_safe_name_removes_path_characters(self) -> None:
+    def test_safe_removes_path_characters(self) -> None:
         mod = load_module()
-        self.assertEqual(mod.safe_name("../spark6;rm"), "spark6rm")
+        self.assertEqual(mod.safe("../spark6;rm"), "spark6rm")
 
     def test_parse_peers_excludes_observer_and_duplicates(self) -> None:
         mod = load_module()
         self.assertEqual(mod.parse_peers("spark0,spark1,spark0,spark2", "spark1"), [("spark0", "spark0"), ("spark2", "spark2")])
 
-    def test_parse_peers_keeps_label_for_ip_target(self) -> None:
+    def test_quorum_threshold_uses_two_n_over_three(self) -> None:
         mod = load_module()
-        self.assertEqual(mod.parse_peers("spark6=spark6@10.20.0.16", "spark0"), [("spark6", "spark6@10.20.0.16")])
+        self.assertEqual(mod.quorum_threshold(8), 5)
+        self.assertEqual(mod.quorum_threshold(3), 2)
 
-    def test_build_record_carries_fresh_and_control_status(self) -> None:
+    def test_remote_trim_requires_quorum(self) -> None:
         mod = load_module()
-        rec = mod.build_record("spark0", "spark6", {"ok": False, "rc": 255, "stderr": "banner timeout", "seconds": 5.1}, {"ok": True, "rc": 0, "seconds": 0.2})
-        self.assertEqual(rec["schema"], "ds4.peer_ssh_observation.v1")
-        self.assertEqual(rec["observer"], "spark0")
-        self.assertEqual(rec["target"], "spark6")
-        self.assertEqual(rec["probe_mode"], "fresh_ssh_plus_persistent_control")
-        self.assertFalse(rec["ssh_exec_ok"])
-        self.assertTrue(rec["control_exec_ok"])
-        self.assertFalse(rec["remote_rescue_attempted"])
-        self.assertEqual(rec["ssh_rc"], 255)
-        self.assertIn("banner timeout", rec["ssh_stderr"])
+        votes = [{"observer": "spark%d" % i, "targets": {"spark4": {"ssh_exec_ok": False}}} for i in range(5)]
+        self.assertFalse(mod.quorum("spark4", votes[:4], 8)["met"])
+        self.assertTrue(mod.quorum("spark4", votes, 8)["met"])
 
-    def test_remote_rescue_requires_owner_control_and_failed_fresh_probe(self) -> None:
+    def test_trim_urls_use_peer_host_and_trim_memory_endpoint(self) -> None:
         mod = load_module()
-        self.assertTrue(mod.should_attempt_remote_rescue("spark0", "spark0", {"ok": False}, {"ok": True}))
-        self.assertTrue(mod.should_attempt_remote_rescue("spark1", "any", {"ok": False}, {"ok": True}))
-        self.assertTrue(mod.should_attempt_remote_rescue("spark2", "spark0,spark2", {"ok": False}, {"ok": True}))
-        self.assertFalse(mod.should_attempt_remote_rescue("spark1", "spark0", {"ok": False}, {"ok": True}))
-        self.assertFalse(mod.should_attempt_remote_rescue("spark0", "spark0", {"ok": True}, {"ok": True}))
-        self.assertFalse(mod.should_attempt_remote_rescue("spark0", "spark0", {"ok": False}, {"ok": False}))
+        urls = mod.trim_urls("spark4@10.20.0.14", "8000,18110")
+        self.assertEqual(urls[0].split("?",1)[0], "http://10.20.0.14:8000/v1/trim_memory")
+        self.assertIn("release_offload_memory=true", urls[1])
 
 
 if __name__ == "__main__":
