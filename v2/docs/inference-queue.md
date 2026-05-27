@@ -27,10 +27,21 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-submit \
   --profiles-dir profiles/models \
   --topology profiles/topology/static_sparks.json \
   --requests requests.jsonl \
-  --batch-id centaur-run-001
+  --batch-id centaur-run-001 \
+  --priority 10
 ```
 
-Each request is resolved to a model profile, Spark node, and `batch_key` at submission time. The `batch_key` includes:
+Priority is an explicit queueing field. Lower numbers run first. Use normal
+priority `10` for background regression queues and priority `1` for experiment
+batches that should be claimed as soon as an existing lease window finishes.
+Immediate requests still default to priority `0` unless the submitter
+explicitly passes another value. The chosen priority is visible in
+`queue-submit`, request status, and submitted events.
+
+Each request is resolved to a model profile and `batch_key` at submission time.
+Normal queued model requests are late-bound to a Spark node when a node worker
+has an open slot. Immediate requests may still bind to a node at submission
+time. The `batch_key` includes:
 
 ```text
 node
@@ -140,12 +151,12 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-cancel \
   --reason 'superseded by a newer run'
 ```
 
-To cancel the remaining queued work in a batch:
+To cancel the remaining queued work in a batch/job:
 
 ```bash
 PYTHONPATH=src python3 -m ds4_infer.cli queue-cancel \
   --queue-dir /tmp/ds4_queue \
-  --batch-id centaur-run-001
+  --job-id centaur-run-001
 ```
 
 Cancellation is deliberately conservative. It only marks requests still in
