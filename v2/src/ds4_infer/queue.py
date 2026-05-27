@@ -161,6 +161,9 @@ class InferenceQueue:
         if not request_list:
             raise ValueError("cannot submit an empty request set")
         batch_id = batch_id or new_id("batch")
+        existing = self._existing_submission(batch_id, request_list)
+        if existing is not None:
+            return existing
         request_ids: list[str] = []
         selected_profiles: dict[str, int] = {}
         selected_nodes: dict[str, int] = {}
@@ -224,6 +227,34 @@ class InferenceQueue:
         return QueueSubmission(
             batch_id=batch_id,
             request_ids=tuple(request_ids),
+            selected_profiles=selected_profiles,
+            selected_nodes=selected_nodes,
+        ).to_public_dict()
+
+    def _existing_submission(self, batch_id: str, requests: list[InferenceRequest]) -> dict[str, Any] | None:
+        with closing(self._connect()) as conn:
+            batch = conn.execute("select batch_id from batches where batch_id = ?", (batch_id,)).fetchone()
+            if batch is None:
+                return None
+            rows = conn.execute(
+                "select request_id, selected_profile_id, selected_node_id from requests where batch_id = ? order by created_at, request_id",
+                (batch_id,),
+            ).fetchall()
+        existing_ids = [str(row["request_id"]) for row in rows]
+        requested_ids = [request.request_id for request in requests]
+        if set(existing_ids) != set(requested_ids):
+            raise ValueError(f"batch_id already exists with different requests: {batch_id}")
+        selected_profiles: dict[str, int] = {}
+        selected_nodes: dict[str, int] = {}
+        for row in rows:
+            profile_id = str(row["selected_profile_id"])
+            selected_profiles[profile_id] = selected_profiles.get(profile_id, 0) + 1
+            if row["selected_node_id"] is not None:
+                node_id = str(row["selected_node_id"])
+                selected_nodes[node_id] = selected_nodes.get(node_id, 0) + 1
+        return QueueSubmission(
+            batch_id=batch_id,
+            request_ids=tuple(existing_ids),
             selected_profiles=selected_profiles,
             selected_nodes=selected_nodes,
         ).to_public_dict()
@@ -368,6 +399,10 @@ class InferenceQueue:
         node_id: str | None = None,
         batch_id: str | None = None,
         batch_key: str | None = None,
+        request_kind: str | None = None,
+        profile_id: str | None = None,
+        service_name: str | None = None,
+        include_unassigned: bool = False,
         limit: int = 1,
         leased_by: str,
         lease_ttl_s: int = 900,
@@ -381,15 +416,16 @@ class InferenceQueue:
         claims: list[QueueClaim] = []
         try:
             conn.execute("begin immediate")
-            selected_key = batch_key or self._select_next_batch_key(conn, node_id=node_id, batch_id=batch_id)
+            selected_key = batch_key or self._select_next_batch_key(conn, node_id=node_id, batch_id=batch_id, request_kind=request_kind, profile_id=profile_id, service_name=service_name, include_unassigned=include_unassigned)
             if selected_key is None:
                 conn.commit()
                 return []
-            rows = self._select_work_rows(conn, node_id=node_id, batch_id=batch_id, batch_key=selected_key, limit=limit)
+            rows = self._select_work_rows(conn, node_id=node_id, batch_id=batch_id, batch_key=selected_key, request_kind=request_kind, profile_id=profile_id, service_name=service_name, include_unassigned=include_unassigned, limit=limit)
             batch_ids = set()
             for row in rows:
                 request_id = str(row["request_id"])
                 lease_id = f"{leased_by}:{uuid.uuid4().hex}"
+                assigned_node_id = node_id if node_id is not None and row["selected_node_id"] is None else None
                 updated = self._lease_row(
                     conn,
                     request_id=request_id,
@@ -397,13 +433,16 @@ class InferenceQueue:
                     leased_by=leased_by,
                     lease_ttl_s=lease_ttl_s,
                     now=now,
+                    selected_node_id=assigned_node_id,
                 )
                 if updated != 1:
                     continue
                 batch_ids.add(str(row["batch_id"]))
                 event = {"batch_id": row["batch_id"], "batch_key": row["batch_key"], "lease_id": lease_id, "leased_by": leased_by}
+                if assigned_node_id is not None:
+                    event["selected_node_id"] = assigned_node_id
                 self._insert_event(conn, request_id, "started", "running", event)
-                claims.append(_row_claim(row, request_id=request_id, lease_id=lease_id))
+                claims.append(_row_claim(row, request_id=request_id, lease_id=lease_id, selected_node_id=assigned_node_id))
             for batch_id_value in batch_ids:
                 self._refresh_batch_row(conn, batch_id_value)
             conn.commit()
@@ -423,16 +462,17 @@ class InferenceQueue:
         leased_by: str,
         lease_ttl_s: int,
         now: float,
+        selected_node_id: str | None = None,
     ) -> int:
         return conn.execute(
             """
             update requests
             set state = 'running', lease_id = ?, leased_by = ?, lease_expires_at = ?,
                 heartbeat_at = ?, attempt_count = attempt_count + 1,
-                started_at = ?, updated_at = ?
+                started_at = ?, updated_at = ?, selected_node_id = coalesce(selected_node_id, ?)
             where request_id = ? and state = 'queued'
             """,
-            (lease_id, leased_by, now + lease_ttl_s, now, now, now, request_id),
+            (lease_id, leased_by, now + lease_ttl_s, now, now, now, selected_node_id, request_id),
         ).rowcount
 
     def finish_request(
@@ -842,15 +882,28 @@ class InferenceQueue:
         *,
         node_id: str | None,
         batch_id: str | None,
+        request_kind: str | None = None,
+        profile_id: str | None = None,
+        service_name: str | None = None,
+        include_unassigned: bool = False,
     ) -> str | None:
         clauses = ["state = 'queued'"]
         params: list[Any] = []
         if node_id is not None:
-            clauses.append("selected_node_id = ?")
+            clauses.append("(selected_node_id = ? or selected_node_id is null)" if include_unassigned else "selected_node_id = ?")
             params.append(node_id)
         if batch_id is not None:
             clauses.append("batch_id = ?")
             params.append(batch_id)
+        if request_kind is not None:
+            clauses.append("request_kind = ?")
+            params.append(request_kind)
+        if profile_id is not None:
+            clauses.append("selected_profile_id = ?")
+            params.append(profile_id)
+        if service_name is not None:
+            clauses.append("service_name = ?")
+            params.append(service_name)
         row = conn.execute(
             f"""
             select batch_key
@@ -870,12 +923,16 @@ class InferenceQueue:
         node_id: str | None,
         batch_id: str | None,
         batch_key: str | None,
+        request_kind: str | None = None,
+        profile_id: str | None = None,
+        service_name: str | None = None,
+        include_unassigned: bool = False,
         limit: int,
     ) -> list[sqlite3.Row]:
         clauses = ["state = 'queued'"]
         params: list[Any] = []
         if node_id is not None:
-            clauses.append("selected_node_id = ?")
+            clauses.append("(selected_node_id = ? or selected_node_id is null)" if include_unassigned else "selected_node_id = ?")
             params.append(node_id)
         if batch_id is not None:
             clauses.append("batch_id = ?")
@@ -883,6 +940,15 @@ class InferenceQueue:
         if batch_key is not None:
             clauses.append("batch_key = ?")
             params.append(batch_key)
+        if request_kind is not None:
+            clauses.append("request_kind = ?")
+            params.append(request_kind)
+        if profile_id is not None:
+            clauses.append("selected_profile_id = ?")
+            params.append(profile_id)
+        if service_name is not None:
+            clauses.append("service_name = ?")
+            params.append(service_name)
         params.append(limit)
         return conn.execute(
             f"""
@@ -1327,14 +1393,15 @@ def _lease_failure(request_id: str, attempts: int) -> dict[str, Any]:
     }
 
 
-def _row_claim(row: sqlite3.Row, *, request_id: str, lease_id: str) -> QueueClaim:
+def _row_claim(row: sqlite3.Row, *, request_id: str, lease_id: str, selected_node_id: str | None = None) -> QueueClaim:
+    node_id = selected_node_id if selected_node_id is not None else (str(row["selected_node_id"]) if row["selected_node_id"] else None)
     return QueueClaim(
         request_id=request_id,
         batch_id=str(row["batch_id"]),
         batch_key=str(row["batch_key"]),
         request_kind=str(row["request_kind"]),
         selected_profile_id=str(row["selected_profile_id"]),
-        selected_node_id=str(row["selected_node_id"]) if row["selected_node_id"] else None,
+        selected_node_id=node_id,
         lease_id=lease_id,
         request=_row_request(row),
         service_name=str(row["service_name"]) if row["service_name"] else None,

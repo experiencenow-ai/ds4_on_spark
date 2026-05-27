@@ -73,7 +73,7 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-worker \
   --loop
 ```
 
-`queue-worker` claims one shape-compatible `batch_key` and commits the claim immediately. Batch-capable runners send the claimed group as one `/ds4/batches` call with the requested concurrency; non-batch test runners keep the per-request fallback used by local tests.
+`queue-worker` claims compatible model work for one profile/node window and commits the leases immediately. Batch-capable model runners dispatch each claim independently, so a fast request can finish, emit an event, and write its notice without waiting for the slowest request in the window. CPU service jobs still use their service batch call.
 
 CPU services use the same durable queue:
 
