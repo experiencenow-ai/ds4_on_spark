@@ -1,257 +1,100 @@
 #!/usr/bin/env python3
-"""Publish peer-observed SSH health records onto Spark nodes."""
-
-from __future__ import annotations
-
-import argparse
-import datetime as dt
-import json
-import os
-import socket
-import subprocess
-import tempfile
-import time
+"""Tiny Spark quorum trim monitor."""
+import argparse,json,os,shlex,socket,subprocess,time,urllib.request
 from pathlib import Path
-from typing import Any
-
-
-DEFAULT_PEERS = ",".join("spark%d" % i for i in range(8))
-DEFAULT_REMOTE_DIR = ".ds4-rescue/peer-heartbeats"
-DEFAULT_CONTROL_DIR = ".ds4-rescue/ssh-control"
-DEFAULT_RESCUE_STATE_DIR = ".ds4-rescue/remote-rescue-state"
-
-
-def safe_name(value: str) -> str:
-    out = "".join(ch for ch in value if ch.isalnum() or ch in "-_")
-    return(out or "unknown")
-
-
-def run_cmd(argv: list[str], timeout: float, stdin: str | None = None) -> dict[str,Any]:
-    start = time.time()
+PEERS = ",".join("spark%d" % i for i in range(8)); PORTS = "8000,18000,18100,18101,18110"; VOTES = "~/.ds4-rescue/peer-trim-votes"; STATE = "~/.ds4-rescue/trim-state"
+QUERY = "mode=abort&reset_external=true&release_offload_memory=true&malloc_trim=true&resume=true"
+SWAP_KIB = 8 * 1024 * 1024; COOLDOWN = 300
+def safe(s): return("".join(c for c in str(s) if c.isalnum() or c in "-_") or "unknown")
+def run(argv,timeout,stdin=None):
+    started = time.time()
     try:
         cp = subprocess.run(argv,input=stdin,text=True,capture_output=True,timeout=timeout)
-        return({
-            "argv": argv,
-            "rc": cp.returncode,
-            "stdout": cp.stdout[-2000:],
-            "stderr": cp.stderr[-2000:],
-            "seconds": round(time.time() - start,3),
-        })
+        return({"rc":cp.returncode,"out":cp.stdout[-300:],"err":cp.stderr[-300:],"sec":round(time.time() - started,3)})
     except Exception as exc:
-        return({"argv":argv,"error":repr(exc),"seconds":round(time.time() - start,3)})
-
-
-def ssh_base(timeout: float) -> list[str]:
-    seconds = str(max(1,int(timeout)))
-    return([
-        "ssh",
-        "-o","BatchMode=yes",
-        "-o","ConnectTimeout=%s" % seconds,
-        "-o","ServerAliveInterval=2",
-        "-o","ServerAliveCountMax=1",
-        "-o","StrictHostKeyChecking=no",
-        "-o","UserKnownHostsFile=/dev/null",
-    ])
-
-
-def control_options(control_dir: str, persist_seconds: int) -> list[str]:
-    if persist_seconds <= 0:
-        return([])
-    return([
-        "-o","ControlMaster=auto",
-        "-o","ControlPersist=%ds" % persist_seconds,
-        "-o","ControlPath=%s/ds4-peer-%%C" % control_dir.rstrip("/"),
-    ])
-
-
-def ssh_exec(peer: str, timeout: float) -> dict[str,Any]:
-    cmd = ssh_base(timeout) + [peer,"printf ds4-peer-ok"]
-    result = run_cmd(cmd,timeout + 2.0)
-    result["ok"] = result.get("rc") == 0 and "ds4-peer-ok" in str(result.get("stdout",""))
-    return(result)
-
-
-def ssh_control_exec(peer: str, timeout: float, control_dir: str, persist_seconds: int) -> dict[str,Any]:
-    if persist_seconds <= 0:
-        return({"ok":False,"disabled":True})
-    Path(control_dir).expanduser().mkdir(parents=True,exist_ok=True)
-    cmd = ssh_base(timeout) + control_options(control_dir,persist_seconds) + [peer,"printf ds4-peer-control-ok"]
-    result = run_cmd(cmd,timeout + 2.0)
-    result["ok"] = result.get("rc") == 0 and "ds4-peer-control-ok" in str(result.get("stdout",""))
-    return(result)
-
-
-def rescue_owner_matches(observer: str, owner: str) -> bool:
-    for item in owner.replace(";",",").split(","):
-        name = safe_name(item.strip())
-        if name in ("any","all","star") or item.strip() == "*":
-            return(True)
-        if name == observer:
-            return(True)
-    return(False)
-
-
-def should_attempt_remote_rescue(observer: str, owner: str, ssh_result: dict[str,Any], control_result: dict[str,Any]) -> bool:
-    if owner == "" or not rescue_owner_matches(observer,owner):
-        return(False)
-    return(bool(control_result.get("ok",False)) and not bool(ssh_result.get("ok",False)))
-
-
-def remote_rescue_state_path(state_dir: str, peer: str) -> Path:
-    return(Path(state_dir).expanduser() / ("%s.json" % safe_name(peer)))
-
-
-def remote_rescue_in_cooldown(path: Path, now: float, cooldown_seconds: int) -> bool:
-    if cooldown_seconds <= 0 or not path.exists():
-        return(False)
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        attempted_at = float(data.get("attempted_at_unix",0))
-    except Exception:
-        return(False)
-    return((now - attempted_at) < cooldown_seconds)
-
-
-def trigger_remote_rescue(peer: str, observer: str, target: str, timeout: float, control_dir: str, persist_seconds: int, state_dir: str, cooldown_seconds: int) -> dict[str,Any]:
-    now = time.time()
-    path = remote_rescue_state_path(state_dir,target)
-    path.parent.mkdir(parents=True,exist_ok=True)
-    if remote_rescue_in_cooldown(path,now,cooldown_seconds):
-        return({"ok":False,"skipped":"cooldown","state_path":str(path)})
-    cmd = ssh_base(timeout) + control_options(control_dir,persist_seconds) + [peer,"sudo -n /usr/local/sbin/ds4-sshd-watchdog --peer-force"]
-    result = run_cmd(cmd,timeout + 35.0)
-    result["ok"] = result.get("rc") == 0
-    path.write_text(json.dumps({
-        "observer": observer,
-        "target": target,
-        "attempted_at_unix": int(now),
-        "ok": bool(result.get("ok",False)),
-        "rc": result.get("rc"),
-    },sort_keys=True) + "\n",encoding="utf-8")
-    return(result)
-
-
-def write_record(peer: str, observer: str, remote_dir: str, record: dict[str,Any], timeout: float, control_dir: str, persist_seconds: int) -> dict[str,Any]:
-    name = safe_name(observer)
-    remote_tmp = "%s/%s.json.tmp" % (remote_dir.rstrip("/"),name)
-    remote_final = "%s/%s.json" % (remote_dir.rstrip("/"),name)
-    with tempfile.NamedTemporaryFile("w",encoding="utf-8",delete=False) as fp:
-        tmp_path = fp.name
-        json.dump(record,fp,sort_keys=True)
-        fp.write("\n")
-    try:
-        batch = "put %s %s\nrename %s %s\n" % (tmp_path,remote_tmp,remote_tmp,remote_final)
-        cmd = [
-            "sftp",
-            "-q",
-            "-o","BatchMode=yes",
-            "-o","ConnectTimeout=%s" % max(1,int(timeout)),
-            "-o","StrictHostKeyChecking=no",
-            "-o","UserKnownHostsFile=/dev/null",
-        ] + control_options(control_dir,persist_seconds) + ["-b","-",peer]
-        result = run_cmd(cmd,timeout + 2.0,batch)
-        result["ok"] = result.get("rc") == 0
-        result["remote_path"] = remote_final
-        return(result)
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-
-
-def build_record(observer: str, target: str, ssh_result: dict[str,Any], control_result: dict[str,Any] | None = None, rescue_result: dict[str,Any] | None = None) -> dict[str,Any]:
-    now = time.time()
-    control_result = control_result or {}
-    rescue_result = rescue_result or {}
-    return({
-        "schema": "ds4.peer_ssh_observation.v1",
-        "observer": observer,
-        "target": target,
-        "checked_at_unix": int(now),
-        "checked_at_iso": dt.datetime.fromtimestamp(now,dt.timezone.utc).isoformat(),
-        "probe_mode": "fresh_ssh_plus_persistent_control",
-        "ssh_exec_ok": bool(ssh_result.get("ok",False)),
-        "ssh_rc": ssh_result.get("rc"),
-        "ssh_seconds": ssh_result.get("seconds"),
-        "ssh_error": ssh_result.get("error",""),
-        "ssh_stderr": str(ssh_result.get("stderr",""))[-500:],
-        "control_exec_ok": bool(control_result.get("ok",False)),
-        "control_rc": control_result.get("rc"),
-        "control_seconds": control_result.get("seconds"),
-        "control_error": control_result.get("error",""),
-        "control_stderr": str(control_result.get("stderr",""))[-500:],
-        "remote_rescue_attempted": "argv" in rescue_result,
-        "remote_rescue_ok": bool(rescue_result.get("ok",False)),
-        "remote_rescue_skipped": rescue_result.get("skipped",""),
-    })
-
-
-def parse_peers(raw: str, observer: str) -> list[tuple[str,str]]:
-    out: list[tuple[str,str]] = []
-    seen = set()
-    aliases = {observer,socket.gethostname(),socket.gethostname().split(".")[0]}
+        return({"err":repr(exc),"sec":round(time.time() - started,3)})
+def ssh(target,script,timeout,stdin=None):
+    t = str(max(1,int(timeout)))
+    opts = ["-o","BatchMode=yes","-o","ConnectTimeout=%s" % t,"-o","ServerAliveInterval=2","-o","ServerAliveCountMax=1","-o","StrictHostKeyChecking=no","-o","UserKnownHostsFile=/dev/null"]
+    return(run(["ssh"] + opts + [target,script],timeout + 2,stdin))
+def parse_peers(raw,observer):
+    out,aliases = {},{observer,socket.gethostname(),socket.gethostname().split(".")[0]}
     for item in raw.replace(";",",").split(","):
-        spec = item.strip()
-        if spec == "":
+        item = item.strip()
+        if item == "":
             continue
-        if "=" in spec:
-            label,target = spec.split("=",1)
-        elif "@" in spec:
-            label,target = spec.split("@",1)[0],spec
-        else:
-            label,target = spec,spec
-        label = safe_name(label.strip())
-        target = target.strip()
-        if label == "" or target == "" or label in aliases or label in seen:
-            continue
-        seen.add(label)
-        out.append((label,target))
+        label,target = item.split("=",1) if "=" in item else (item.split("@",1)[0] if "@" in item else item,item)
+        label = safe(label)
+        if label not in aliases:
+            out.setdefault(label,target.strip())
+    return(list(out.items()))
+def save(path,obj):
+    path.parent.mkdir(parents=True,exist_ok=True); tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj,sort_keys=True) + "\n",encoding="utf-8"); tmp.replace(path)
+def probe(target,timeout):
+    r = ssh(target,"printf ds4-ok",timeout); r["ok"] = r.get("rc") == 0 and "ds4-ok" in str(r.get("out",""))
+    return(r)
+def push_vote(target,observer,ballot,timeout):
+    root = ".ds4-rescue/peer-trim-votes"; tmp = shlex.quote("%s/%s.json.tmp" % (root,safe(observer))); dst = shlex.quote("%s/%s.json" % (root,safe(observer)))
+    return(ssh(target,"mkdir -p %s && cat > %s && mv %s %s" % (shlex.quote(root),tmp,tmp,dst),timeout,json.dumps(ballot,sort_keys=True) + "\n"))
+def load_votes(root,max_age):
+    now,out = int(time.time()),[]
+    for path in root.glob("*.json") if root.exists() else []:
+        try:
+            vote = json.loads(path.read_text(encoding="utf-8"))
+            if (now - int(vote.get("checked_at_unix",0))) <= max_age:
+                out.append(vote)
+        except Exception:
+            pass
     return(out)
-
-
-def parse_args() -> argparse.Namespace:
+def quorum_threshold(n): return(max(1,(2 * max(1,n)) // 3))
+def quorum(peer,votes,n):
+    voters = sorted({safe(v.get("observer","")) for v in votes if not v.get("targets",{}).get(peer,{"ssh_exec_ok":True}).get("ssh_exec_ok",True)})
+    need = quorum_threshold(n)
+    return({"met":len(voters) >= need,"votes":len(voters),"threshold":need,"cluster_size":n,"voters":voters})
+def trim_urls(target,ports=PORTS):
+    host = "127.0.0.1" if target == "local" else target.rsplit("@",1)[-1]
+    host = host[1:].split("]",1)[0] if host.startswith("[") and "]" in host else (host.rsplit(":",1)[0] if host.count(":") == 1 else host)
+    return(["http://%s:%s/v1/trim_memory?%s" % (host,p.strip(),QUERY) for p in ports.replace(";",",").split(",") if p.strip().isdigit()])
+def post(url,timeout):
+    started = time.time()
+    try:
+        resp = urllib.request.urlopen(urllib.request.Request(url,method="POST"),timeout=timeout)
+        return({"ok":200 <= resp.status < 300,"status":resp.status,"body":resp.read(300).decode("utf-8","replace"),"sec":round(time.time() - started,3)})
+    except Exception as exc:
+        return({"ok":False,"err":repr(exc),"sec":round(time.time() - started,3)})
+def trim(label,target,reason,timeout):
+    state = Path(STATE).expanduser() / ("%s.json" % safe(label))
+    try:
+        if (time.time() - float(json.loads(state.read_text()).get("at",0))) < COOLDOWN:
+            return({"attempted":False,"skipped":"cooldown","reason":reason})
+    except Exception:
+        pass
+    results = [{"url":url,**post(url,timeout)} for url in trim_urls(target)]
+    save(state,{"at":int(time.time()),"target":target,"reason":reason,"results":results})
+    return({"attempted":True,"ok":any(r.get("ok") for r in results),"reason":reason,"results":results})
+def swap_used_kib():
+    vals = {}
+    try:
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith(("SwapTotal:","SwapFree:")):
+                vals[line.split(":")[0]] = int(line.split()[1])
+    except Exception:
+        return(0)
+    return(max(0,vals.get("SwapTotal",0) - vals.get("SwapFree",0)))
+def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--node", default=os.environ.get("USER","") or socket.gethostname().split(".")[0])
-    p.add_argument("--peers", default=DEFAULT_PEERS)
-    p.add_argument("--remote-dir", default=DEFAULT_REMOTE_DIR)
-    p.add_argument("--timeout", type=float, default=5.0)
-    p.add_argument("--control-dir", default=DEFAULT_CONTROL_DIR)
-    p.add_argument("--control-persist-seconds", type=int, default=86400)
-    p.add_argument("--remote-rescue-owner", default="any")
-    p.add_argument("--remote-rescue-state-dir", default=DEFAULT_RESCUE_STATE_DIR)
-    p.add_argument("--remote-rescue-cooldown-seconds", type=int, default=300)
-    return(p.parse_args())
-
-
-def main() -> int:
-    args = parse_args()
-    observer = safe_name(args.node)
-    results = []
-    for peer,target in parse_peers(args.peers,observer):
-        control_result = ssh_control_exec(target,args.timeout,args.control_dir,args.control_persist_seconds)
-        ssh_result = ssh_exec(target,args.timeout)
-        rescue_result: dict[str,Any] = {}
-        if should_attempt_remote_rescue(observer,args.remote_rescue_owner,ssh_result,control_result):
-            rescue_result = trigger_remote_rescue(target,observer,peer,args.timeout,args.control_dir,args.control_persist_seconds,args.remote_rescue_state_dir,args.remote_rescue_cooldown_seconds)
-        record = build_record(observer,peer,ssh_result,control_result,rescue_result)
-        write_result = write_record(target,observer,args.remote_dir,record,args.timeout,args.control_dir,args.control_persist_seconds)
-        results.append({
-            "peer": peer,
-            "target": target,
-            "control_exec_ok": bool(control_result.get("ok",False)),
-            "ssh_exec_ok": bool(ssh_result.get("ok",False)),
-            "remote_rescue_ok": bool(rescue_result.get("ok",False)),
-            "remote_rescue_skipped": rescue_result.get("skipped",""),
-            "write_ok": bool(write_result.get("ok",False)),
-            "control_error": control_result.get("error","") or control_result.get("stderr",""),
-            "ssh_error": ssh_result.get("error","") or ssh_result.get("stderr",""),
-            "remote_rescue_error": rescue_result.get("error","") or rescue_result.get("stderr",""),
-            "write_error": write_result.get("error","") or write_result.get("stderr",""),
-        })
-    print(json.dumps({"schema":"ds4.peer_ssh_heartbeat.run.v1","observer":observer,"results":results},sort_keys=True),flush=True)
+    p.add_argument("--node", default=os.environ.get("USER","") or socket.gethostname().split(".")[0]); p.add_argument("--peers", default=PEERS); p.add_argument("--timeout", type=float, default=5.0); p.add_argument("--vote-seconds", type=int, default=180); p.add_argument("--no-remote-trim", action="store_true")
+    args = p.parse_args(); me = safe(args.node); peers = parse_peers(args.peers,me); root = Path(VOTES).expanduser()
+    status = {peer:{"target":target,"ssh_exec_ok":probe(target,args.timeout).get("ok",False)} for peer,target in peers}
+    ballot = {"schema":"ds4.peer_trim_ballot.v1","observer":me,"checked_at_unix":int(time.time()),"targets":status}; save(root / ("%s.json" % me),ballot)
+    pushes = {peer:push_vote(status[peer]["target"],me,ballot,args.timeout) for peer in status if status[peer]["ssh_exec_ok"]}
+    votes,remote = load_votes(root,args.vote_seconds),{}
+    for peer,target in peers:
+        reason = quorum(peer,votes,len(peers) + 1); remote[peer] = trim("remote-%s" % peer,target,reason,args.timeout) if reason["met"] and not args.no_remote_trim else {"attempted":False,"skipped":"quorum","reason":reason}
+    used = swap_used_kib(); local_reason = {"swap_used_kib":used,"threshold_kib":SWAP_KIB}
+    local = trim("self","local",local_reason,args.timeout) if used >= SWAP_KIB else {"attempted":False,"reason":local_reason}
+    print(json.dumps({"schema":"ds4.quorum_trim.run.v1","observer":me,"status":status,"pushes":pushes,"remote_trims":remote,"self_trim":local},sort_keys=True),flush=True)
     return(0)
-
-
 if __name__ == "__main__":
     raise SystemExit(main())

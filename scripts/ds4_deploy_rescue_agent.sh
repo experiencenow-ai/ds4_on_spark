@@ -3,7 +3,7 @@ set -eu
 
 usage()
 {
-	echo "usage: DS4_RESCUE_ROOT=1 $0 spark2 spark3 ..." >&2
+	echo "usage: $0 spark2 spark3 ..." >&2
 	exit 1
 }
 
@@ -13,19 +13,9 @@ then
 fi
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-token_file="${DS4_RESCUE_TOKEN_FILE:-/private/tmp/ds4_rescue_token}"
 sudo_password="${DS4_SUDO_PASSWORD:-}"
 ssh_opts="${DS4_SSH_OPTS:-}"
 scp_opts="${DS4_SCP_OPTS:-$ssh_opts}"
-if [ ! -s "$token_file" ]
-then
-	umask 077
-	python3 - <<'PY' > "$token_file"
-import secrets
-
-print(secrets.token_urlsafe(48))
-PY
-fi
 keys_file="$(mktemp)"
 cleanup()
 {
@@ -49,42 +39,17 @@ copy_payload()
 {
 	host="$1"
 	ssh $ssh_opts "$host" 'mkdir -p "$HOME/.ds4-rescue" "$HOME/.config/systemd/user"'
-	scp $scp_opts "$repo_dir/scripts/ds4_rescue_agent.py" "$host:.ds4-rescue/ds4_rescue_agent.py"
-	scp $scp_opts "$repo_dir/scripts/ds4_rescue_agent.service" "$host:.config/systemd/user/ds4-rescue-agent.service"
-	scp $scp_opts "$repo_dir/scripts/ds4_rescue_client.py" "$host:.ds4-rescue/ds4_rescue_client.py"
 	scp $scp_opts "$repo_dir/scripts/ds4_peer_ssh_heartbeat.py" "$host:.ds4-rescue/ds4_peer_ssh_heartbeat.py"
 	scp $scp_opts "$repo_dir/scripts/spark_memory_launch_guard.py" "$host:.ds4-rescue/spark_memory_launch_guard.py"
 	scp $scp_opts "$repo_dir/scripts/spark_extend_swap.sh" "$host:.ds4-rescue/spark_extend_swap.sh"
 	scp $scp_opts "$repo_dir/scripts/ds4-peer-ssh-heartbeat.service" "$host:.config/systemd/user/ds4-peer-ssh-heartbeat.service"
 	scp $scp_opts "$repo_dir/scripts/ds4-peer-ssh-heartbeat.timer" "$host:.config/systemd/user/ds4-peer-ssh-heartbeat.timer"
-	scp $scp_opts "$repo_dir/scripts/ds4_sshd_watchdog.sh" "$host:.ds4-rescue/ds4_sshd_watchdog.sh"
-	scp $scp_opts "$repo_dir/scripts/ds4_install_sshd_watchdog.sh" "$host:.ds4-rescue/ds4_install_sshd_watchdog.sh"
-	scp $scp_opts "$repo_dir/scripts/ds4_root_watchdog_install_root_once.sh" "$host:.ds4-rescue/ds4_root_watchdog_install_root_once.sh"
-	scp $scp_opts "$repo_dir/scripts/ds4-sshd-watchdog.service" "$host:.ds4-rescue/ds4-sshd-watchdog.service"
-	scp $scp_opts "$repo_dir/scripts/ds4-sshd-watchdog.timer" "$host:.ds4-rescue/ds4-sshd-watchdog.timer"
-	scp $scp_opts "$repo_dir/scripts/ds4-sshd-rescue.sudoers" "$host:.ds4-rescue/ds4-sshd-rescue.sudoers"
-	scp $scp_opts "$repo_dir/scripts/ds4-sshd-rescue.conf" "$host:.ds4-rescue/ds4-sshd-rescue.conf"
-	scp $scp_opts "$token_file" "$host:.ds4-rescue/token"
 }
 
 start_user_service()
 {
 	host="$1"
-	ssh $ssh_opts "$host" 'chmod 700 "$HOME/.ds4-rescue"; mkdir -p "$HOME/.ds4-rescue/peer-heartbeats"; chmod 700 "$HOME/.ds4-rescue/peer-heartbeats"; chmod 600 "$HOME/.ds4-rescue/token"; chmod 755 "$HOME/.ds4-rescue/"*.sh "$HOME/.ds4-rescue/"*.py; systemctl --user daemon-reload; systemctl --user enable ds4-rescue-agent ds4-peer-ssh-heartbeat.timer; systemctl --user restart ds4-rescue-agent; systemctl --user restart ds4-peer-ssh-heartbeat.timer; systemctl --user --no-pager --plain status ds4-rescue-agent | sed -n "1,8p"; systemctl --user --no-pager --plain list-timers ds4-peer-ssh-heartbeat.timer'
-}
-
-install_root_watchdog()
-{
-	host="$1"
-	if [ "${DS4_REMOTE_SUDO_TTY:-0}" = "1" ]
-	then
-		ssh $ssh_opts -tt "$host" 'sudo "$HOME/.ds4-rescue/ds4_root_watchdog_install_root_once.sh"'
-	elif [ "$sudo_password" = "" ]
-	then
-		ssh $ssh_opts "$host" 'sudo -n "$HOME/.ds4-rescue/ds4_root_watchdog_install_root_once.sh"'
-	else
-		printf '%s\n' "$sudo_password" | ssh $ssh_opts "$host" 'sudo -S -p "" "$HOME/.ds4-rescue/ds4_root_watchdog_install_root_once.sh"'
-	fi
+	ssh $ssh_opts "$host" 'chmod 700 "$HOME/.ds4-rescue"; mkdir -p "$HOME/.ds4-rescue/peer-trim-votes" "$HOME/.ds4-rescue/trim-state"; chmod 700 "$HOME/.ds4-rescue/peer-trim-votes" "$HOME/.ds4-rescue/trim-state"; chmod 755 "$HOME/.ds4-rescue/"*.sh "$HOME/.ds4-rescue/"*.py; systemctl --user daemon-reload; systemctl --user disable --now ds4-rescue-agent 2>/dev/null || true; systemctl --user enable ds4-peer-ssh-heartbeat.timer; systemctl --user restart ds4-peer-ssh-heartbeat.timer; systemctl --user --no-pager --plain list-timers ds4-peer-ssh-heartbeat.timer'
 }
 
 extend_swap()
@@ -105,27 +70,6 @@ extend_swap()
 	fi
 }
 
-can_install_root_watchdog()
-{
-	host="$1"
-	case "${DS4_RESCUE_ROOT:-0}" in
-	1)
-		return 0
-		;;
-	auto)
-		if [ "${DS4_REMOTE_SUDO_TTY:-0}" = "1" ] || [ "$sudo_password" != "" ]
-		then
-			return 0
-		fi
-		ssh $ssh_opts "$host" 'sudo -n true' >/dev/null 2>&1
-		return $?
-		;;
-	*)
-		return 1
-		;;
-	esac
-}
-
 echo "==> preparing peer SSH key mesh"
 for host in "$@"
 do
@@ -140,20 +84,10 @@ done
 
 for host in "$@"
 do
-	echo "==> $host: copy rescue payload"
+	echo "==> $host: copy quorum monitor payload"
 	copy_payload "$host"
-	echo "==> $host: start user rescue agent"
+	echo "==> $host: start user quorum monitor"
 	start_user_service "$host"
-	if can_install_root_watchdog "$host"
-	then
-		echo "==> $host: install root watchdog and enable linger"
-		install_root_watchdog "$host"
-		echo "==> $host: extend persistent swap if requested"
-		extend_swap "$host"
-	elif [ "${DS4_RESCUE_ROOT:-0}" = "auto" ]
-	then
-		echo "WARN: $host: skipped root watchdog; passwordless sudo unavailable"
-	else
-		echo "==> $host: skipped root watchdog; rerun with DS4_RESCUE_ROOT=1"
-	fi
+	echo "==> $host: extend persistent swap if requested"
+	extend_swap "$host"
 done
