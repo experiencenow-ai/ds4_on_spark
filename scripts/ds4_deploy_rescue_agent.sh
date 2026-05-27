@@ -105,6 +105,27 @@ extend_swap()
 	fi
 }
 
+can_install_root_watchdog()
+{
+	host="$1"
+	case "${DS4_RESCUE_ROOT:-0}" in
+	1)
+		return 0
+		;;
+	auto)
+		if [ "${DS4_REMOTE_SUDO_TTY:-0}" = "1" ] || [ "$sudo_password" != "" ]
+		then
+			return 0
+		fi
+		ssh $ssh_opts "$host" 'sudo -n true' >/dev/null 2>&1
+		return $?
+		;;
+	*)
+		return 1
+		;;
+	esac
+}
+
 echo "==> preparing peer SSH key mesh"
 for host in "$@"
 do
@@ -123,12 +144,15 @@ do
 	copy_payload "$host"
 	echo "==> $host: start user rescue agent"
 	start_user_service "$host"
-	if [ "${DS4_RESCUE_ROOT:-0}" = "1" ]
+	if can_install_root_watchdog "$host"
 	then
 		echo "==> $host: install root watchdog and enable linger"
 		install_root_watchdog "$host"
 		echo "==> $host: extend persistent swap if requested"
 		extend_swap "$host"
+	elif [ "${DS4_RESCUE_ROOT:-0}" = "auto" ]
+	then
+		echo "WARN: $host: skipped root watchdog; passwordless sudo unavailable"
 	else
 		echo "==> $host: skipped root watchdog; rerun with DS4_RESCUE_ROOT=1"
 	fi

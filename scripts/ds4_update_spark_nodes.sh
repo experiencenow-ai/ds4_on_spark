@@ -17,7 +17,7 @@ Important environment knobs:
   DS4_REMOTE_UPDATE_MODE=auto      auto, git, or sync-local
   DS4_FORCE_RESET=0                set 1 to reset dirty remote checkouts
   DS4_INSTALL_RESCUE=1             rerun scripts/ds4_deploy_rescue_agent.sh
-  DS4_RESCUE_ROOT=1                install root watchdog while deploying rescue
+  DS4_RESCUE_ROOT=auto             install root watchdog when sudo works
   DS4_EXTEND_SWAP=1                install survival swap while deploying rescue
   DS4_INSTALL_DSV4_LOCAL=1         install spark4/spark5 local vLLM units
   DS4_RESTART_DSV4=0               set 1 to restart spark5 worker then spark4 head
@@ -43,6 +43,8 @@ connect_timeout="${DS4_CONNECT_TIMEOUT:-8}"
 ssh_opts="${DS4_SSH_OPTS:-}"
 scp_opts="${DS4_SCP_OPTS:-$ssh_opts}"
 install_rescue="${DS4_INSTALL_RESCUE:-1}"
+rescue_root="${DS4_RESCUE_ROOT:-auto}"
+extend_swap="${DS4_EXTEND_SWAP:-1}"
 install_dsv4_local="${DS4_INSTALL_DSV4_LOCAL:-1}"
 restart_dsv4="${DS4_RESTART_DSV4:-0}"
 dsv4_kv_offload_size="${DS4_DSV4_KV_OFFLOAD_SIZE:-4}"
@@ -285,7 +287,7 @@ done
 
 if [ "$install_rescue" = "1" ]; then
 	echo "==> reinstall rescue/watchdog payload on reachable nodes"
-	DS4_RESCUE_ROOT="${DS4_RESCUE_ROOT:-1}" DS4_EXTEND_SWAP="${DS4_EXTEND_SWAP:-1}" \
+	DS4_RESCUE_ROOT="$rescue_root" DS4_EXTEND_SWAP="$extend_swap" \
 		"$repo_dir/scripts/ds4_deploy_rescue_agent.sh" "${reachable[@]}"
 fi
 
