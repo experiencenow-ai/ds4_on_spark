@@ -40,6 +40,8 @@ class BatchWorker:
         batch_key: str | None = None,
         limit: int = 1,
         concurrency: int = 1,
+        node_profile_ids: tuple[str, ...] | None = None,
+        max_node_depth: int = 0,
         on_result: Callable[[QueueClaim, dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
         if limit < 1:
@@ -55,7 +57,7 @@ class BatchWorker:
             nonlocal active_batch_key, claimed
             if wanted < 1 or claimed >= limit:
                 return []
-            claims = self.queue.claim_requests(node_id=node_id, batch_id=batch_id, batch_key=active_batch_key, limit=min(wanted, (limit - claimed)), leased_by=self.worker_id, lease_ttl_s=self.lease_ttl_s)
+            claims = self.queue.claim_requests(node_id=node_id, batch_id=batch_id, batch_key=active_batch_key, include_unassigned=(node_id is not None and node_profile_ids is not None), eligible_profile_ids=node_profile_ids, max_node_depth=max_node_depth, limit=min(wanted, (limit - claimed)), leased_by=self.worker_id, lease_ttl_s=self.lease_ttl_s)
             if claims and active_batch_key is None:
                 active_batch_key = claims[0].batch_key
             _record_claims(groups, claims)
@@ -76,6 +78,8 @@ class BatchWorker:
                     request_kind="model",
                     profile_id=template.selected_profile_id,
                     include_unassigned=claim_node_id is not None,
+                    eligible_profile_ids=node_profile_ids,
+                    max_node_depth=max_node_depth,
                     limit=min(wanted, (limit - claimed)),
                     leased_by=self.worker_id,
                     lease_ttl_s=self.lease_ttl_s,

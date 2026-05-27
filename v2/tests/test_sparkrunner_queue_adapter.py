@@ -102,6 +102,20 @@ class SparkRunnerQueueAdapterTests(unittest.TestCase):
         self.assertEqual(row["format"], "ds4-inference-result-v1")
         self.assertEqual(row["status"], "completed")
 
+    def test_adapter_priority_flag_is_passed_to_queue(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            queue_dir = root / "queue"
+            requests = root / "requests.jsonl"
+            responses = root / "responses.jsonl"
+            _write_jsonl(requests, {"custom_id": "prio", "prompt": "return ok", "max_tokens": 8})
+            rc = sparkrunner_adapter.main(
+                _adapter_args(root, requests, responses, "--model", "qwen", "--runner", "fake", "--timeout-s", "30", "--priority", "1", queue_dir=queue_dir)
+            )
+            status = InferenceQueue(queue_dir).status(request_id="prio")
+        self.assertEqual(rc, 0)
+        self.assertEqual(status["priority"], 1)
+
     def test_adapter_appends_each_response_as_soon_as_it_finishes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
