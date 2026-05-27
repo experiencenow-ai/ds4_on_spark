@@ -3,6 +3,7 @@
   "profile_id": "dsv4_vllm_mtp_smartest_v1",
   "model_id": "deepseek-ai/DeepSeek-V4-Flash",
   "backend": "vllm_mtp",
+  "runtime_contract_id": "dsv4_spark45_vllm_mtp_v1",
   "capability_classes": ["smart", "smartest"],
   "supported_job_classes": ["atom_edit", "analysis", "debug", "cluster_synthesis", "tool_chat"],
   "supports_chat": true,

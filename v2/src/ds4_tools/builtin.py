@@ -96,6 +96,34 @@ def spark7_run_command(arguments: dict[str, Any]) -> dict[str, Any]:
     return {"ok": completed.returncode == 0, "execute": True, "node": "spark7", "returncode": completed.returncode, "stdout_tail": completed.stdout[-8000:], "stderr_tail": completed.stderr[-8000:]}
 
 
+def spark_trim_memory(arguments: dict[str, Any]) -> dict[str, Any]:
+    from ds4_infer.control import trim_spark_memory
+    node = str(arguments["node"])
+    return trim_spark_memory(
+        node_id=node,
+        topology_path=str(arguments.get("topology") or _default_v2_path("profiles/topology/static_sparks.json")),
+        profiles_dir=str(arguments.get("profiles_dir") or _default_v2_path("profiles/models")),
+        contracts_dir=str(arguments.get("contracts_dir") or _default_v2_path("profiles/runtime_contracts")),
+        profile_id=str(arguments["profile_id"]) if arguments.get("profile_id") else None,
+        base_url=str(arguments["base_url"]) if arguments.get("base_url") else None,
+        execute=bool(arguments.get("execute", False)),
+        timeout_s=int(arguments.get("timeout_s", 60)),
+        mode=str(arguments.get("mode", "abort")),
+        reset_external=bool(arguments.get("reset_external", True)),
+        release_offload_memory=bool(arguments.get("release_offload_memory", True)),
+        malloc_trim=bool(arguments.get("malloc_trim", True)),
+        resume=bool(arguments.get("resume", True)),
+    )
+
+
+def _default_v2_path(relative: str) -> str:
+    path = Path(relative)
+    if path.exists():
+        return str(path)
+    v2_path = Path("v2") / relative
+    return str(v2_path if v2_path.exists() else path)
+
+
 def transfer_plan(arguments: dict[str, Any]) -> dict[str, Any]:
     from ds4_transfer.service import TransferRequest, TransferTopology, plan_transfer
     topology = TransferTopology.load(Path(str(arguments.get("topology", "profiles/transfer/spark_200g.json"))))

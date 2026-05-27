@@ -3,6 +3,7 @@
   "profile_id": "qwen3_6_27b_fp8_efficient_v1",
   "model_id": "Qwen/Qwen3.6-27B-FP8",
   "backend": "vllm",
+  "runtime_contract_id": "qwen27_vllm_trim_v1",
   "capability_classes": ["efficient"],
   "supported_job_classes": ["atom_edit", "summary", "json_repair", "triage"],
   "supports_chat": true,
@@ -18,7 +19,7 @@
     "measured_output_tps": 98.7,
     "long_single_request_latency_class": "slow",
     "latency_rank": 1.0,
-    "measurement_notes": "Qwen27 headline throughput is aggregate batched decode, not per-request decode. Keep efficient workers near 16-32 running sequences per Spark for throughput-sensitive queues."
+    "measurement_notes": "Qwen27 headline throughput is aggregate batched decode, not per-request decode. The production launch cap is max_num_seqs=12; do not revive the old 64-way gateway default."
   },
   "routing": {
     "default_for": ["efficient"],

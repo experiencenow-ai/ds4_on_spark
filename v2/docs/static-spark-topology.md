@@ -28,6 +28,20 @@ models for probes without becoming a production resident lane.
 KV-cache experiments should use `ds4_kvcache` deployment files. They do not add
 resident profiles to the topology.
 
+## Memory Trim Control
+
+Client-level memory relief must go through the topology-aware API documented in
+`docs/spark-trim-memory-api.md`. Use `tool:spark.trim_memory` or
+`ds4_infer.cli trim-spark-memory`; do not bake raw Spark-local curl commands
+into clients.
+
+The topology declares `trim_default_profiles_by_node` so a request like
+`{"node":"spark0","execute":true}` resolves to the Qwen27 trim contract without
+asking the caller to know the local port. Spark7 has no resident default, so
+experimental trims must pass `profile_id` or `base_url`. The spark4+spark5 DSV4
+group resolves trim traffic to the contract head node, spark4, even when the
+caller asks to relieve spark5.
+
 ## DSV4 Launch Rule
 
 The spark4+spark5 DSV4 lane must use the source-built, host-local vLLM runtime
@@ -172,10 +186,10 @@ non-production profile. Dynamic loading is allowed only for unmatched
 experimental requests routed to spark7, not for production model ejection.
 
 Qwen capacity planning uses aggregate batched decode. Single-stream Qwen27
-decode is about 8 generated tok/s on this Spark shape, while 16-32 running
-sequences recover roughly 100-187 generated tok/s aggregate per Spark. Keep
-batch workers deep enough to feed vLLM continuous batching before judging lane
-throughput.
+decode is about 8 generated tok/s on this Spark shape, while the production
+launch cap is `max_num_seqs=12`. Do not revive the old 64-way gateway default.
+Keep batch workers deep enough to feed vLLM continuous batching before judging
+lane throughput.
 
 The topology is stored in:
 

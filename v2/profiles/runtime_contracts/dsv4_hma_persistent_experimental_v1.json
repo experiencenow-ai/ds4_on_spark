@@ -1,0 +1,22 @@
+{
+  "format": "ds4-runtime-contract-v1",
+  "contract_id": "dsv4_hma_persistent_experimental_v1",
+  "description": "Pinned-only DSV4 HMA persistent KV connector profile; trim resolves to the spark4 grouped-lane head when explicitly pinned.",
+  "profile_ids": [
+    "dsv4_vllm_hma_persistent_experimental_v1"
+  ],
+  "required_nodes": [
+    "spark4",
+    "spark5"
+  ],
+  "vllm": {
+    "trim_endpoint": "/v1/trim_memory"
+  },
+  "launch": {
+    "head_node": "spark4",
+    "worker_nodes": [
+      "spark5"
+    ],
+    "api_base_url": "http://127.0.0.1:8000"
+  }
+}
