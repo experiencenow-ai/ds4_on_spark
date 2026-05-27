@@ -281,7 +281,7 @@ def _plan_notes() -> list[str]:
     return [
         "Single-service KV cache: one vLLM serving lane owns model execution, batching, and external KV load/store.",
         "Tensor parallel workers may span multiple Sparks, but this is not a prefiller/decoder split.",
-        "Use queue-warm-prefixes or normal repeated shared_prefix requests to seed reusable prompt skeletons.",
+        "Use the queue readiness stage and external KV connector to prepare reusable prompt skeletons.",
         "No second model-serving instance is required for this path.",
     ]
 

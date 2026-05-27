@@ -5,229 +5,168 @@ import socket
 from typing import Any, Callable
 
 from .profiles import ProfileRegistry
-from .queue import CPU_QUEUE_TIMEOUT_KEY, QUEUE_FORMAT, InferenceQueue, QueueClaim
+from .queue import CPU_QUEUE_TIMEOUT_KEY, QueueClaim
 from .runners import Runner
 
-_CPU_SERVICE: Any | None = None
 FinishHook = Callable[[QueueClaim, dict[str, Any]], None]
+_CPU_SERVICE: Any | None = None
 
 
 class BatchWorker:
-    def __init__(
-        self,
-        *,
-        queue: InferenceQueue,
-        registry: ProfileRegistry,
-        runner: Runner,
-        worker_id: str | None = None,
-        lease_ttl_s: int = 900,
-        heartbeat_interval_s: float = 5.0,
-        cpu_service: Any | None = None,
-    ) -> None:
+    def __init__(self, *, queue: Any, registry: ProfileRegistry, runner: Runner, worker_id: str | None = None, lease_ttl_s: int = 900, heartbeat_interval_s: float = 5.0) -> None:
         self.queue = queue
         self.registry = registry
         self.runner = runner
         self.worker_id = worker_id or f"{socket.gethostname()}:{id(self)}"
         self.lease_ttl_s = lease_ttl_s
         self.heartbeat_interval_s = heartbeat_interval_s
-        self.cpu_service = cpu_service
 
     def run_once(
         self,
         *,
         node_id: str | None = None,
         batch_id: str | None = None,
-        batch_key: str | None = None,
         limit: int = 1,
         concurrency: int = 1,
         node_profile_ids: tuple[str, ...] | None = None,
         max_node_depth: int = 0,
-        on_result: Callable[[QueueClaim, dict[str, Any]], None] | None = None,
+        batch_linger_s: float = 0.0,
+        kv_capacity_bytes: int = 0,
+        on_result: FinishHook | None = None,
     ) -> dict[str, Any]:
-        if limit < 1:
-            raise ValueError("limit must be positive")
-        if concurrency < 1:
-            raise ValueError("concurrency must be positive")
+        if limit < 1 or concurrency < 1:
+            raise ValueError("limit and concurrency must be positive")
         reap = self.queue.requeue_expired_leases()
-        groups: dict[str, dict[str, int]] = {}
-        claimed = completed = failed = lost = heartbeats = 0
-        active_batch_key = batch_key
+        prefilled = self.queue.prepare_ready(
+            node_id=node_id,
+            eligible_profile_ids=node_profile_ids or (),
+            batch_id=batch_id,
+            limit=limit,
+            leased_by=self.worker_id,
+            lease_ttl_s=self.lease_ttl_s,
+            max_node_depth=max_node_depth,
+            kv_capacity_bytes=kv_capacity_bytes,
+        )
+        claims = self.queue.claim_ready_batch(
+            node_id=node_id,
+            batch_id=batch_id,
+            limit=min(limit, concurrency),
+            leased_by=self.worker_id,
+            lease_ttl_s=self.lease_ttl_s,
+            batch_linger_s=batch_linger_s,
+        )
+        if not claims:
+            return _summary(0, 0, 0, reap, prefilled_count=prefilled, batch_dispatch_count=0)
+        if claims[0].request_kind == "cpu":
+            pairs = self._run_cpu_claims(claims, concurrency)
+            mode = "cpu_batch"
+        elif _can_batch_models(self.runner, claims):
+            pairs = self._run_model_batch(claims, concurrency)
+            mode = "batch"
+        else:
+            completed, failed = self._run_stream(claims, concurrency, on_result)
+            return _summary(len(claims), completed, failed, reap, prefilled_count=prefilled, batch_dispatch_count=len(claims), batch_dispatch_mode="per_request")
+        completed = failed = 0
+        for claim, result in pairs:
+            item_completed, item_failed = self._finish_pair(claim, result, on_result)
+            completed += item_completed
+            failed += item_failed
+        return _summary(len(claims), completed, failed, reap, prefilled_count=prefilled, batch_dispatch_count=1, batch_dispatch_mode=mode)
 
-        def claim_more(wanted: int) -> list[QueueClaim]:
-            nonlocal active_batch_key, claimed
-            if wanted < 1 or claimed >= limit:
-                return []
-            claims = self.queue.claim_requests(node_id=node_id, batch_id=batch_id, batch_key=active_batch_key, include_unassigned=(node_id is not None and node_profile_ids is not None), eligible_profile_ids=node_profile_ids, max_node_depth=max_node_depth, limit=min(wanted, (limit - claimed)), leased_by=self.worker_id, lease_ttl_s=self.lease_ttl_s)
-            if claims and active_batch_key is None:
-                active_batch_key = claims[0].batch_key
-            _record_claims(groups, claims)
-            claimed += len(claims)
-            return claims
+    def _finish_pair(self, claim: QueueClaim, result: dict[str, Any], on_result: FinishHook | None) -> tuple[int, int]:
+        state = "completed" if result.get("status") == "completed" else "failed"
+        if not self.queue.finish_request(request_id=claim.request_id, lease_id=claim.lease_id, state=state, result=result, error=None if state == "completed" else str(result.get("status", "failed"))):
+            return (0, 0)
+        if on_result is not None:
+            on_result(claim, result)
+        return (1, 0) if state == "completed" else (0, 1)
 
-        def claim_more_model_batch(wanted: int, template: QueueClaim) -> list[QueueClaim]:
-            nonlocal claimed
-            if wanted < 1 or claimed >= limit:
-                return []
-            out: list[QueueClaim] = []
-            claim_node_id = node_id if node_id is not None else template.selected_node_id
-            while wanted > 0 and claimed < limit:
-                claims = self.queue.claim_requests(
-                    node_id=claim_node_id,
-                    batch_id=batch_id,
-                    batch_key=batch_key,
-                    request_kind="model",
-                    profile_id=template.selected_profile_id,
-                    include_unassigned=claim_node_id is not None,
-                    eligible_profile_ids=node_profile_ids,
-                    max_node_depth=max_node_depth,
-                    limit=min(wanted, (limit - claimed)),
-                    leased_by=self.worker_id,
-                    lease_ttl_s=self.lease_ttl_s,
-                )
-                if not claims:
-                    break
-                _record_claims(groups, claims)
-                claimed += len(claims)
-                wanted -= len(claims)
-                out.extend(claims)
-            return out
+    def _run_model_batch(self, claims: list[QueueClaim], concurrency: int) -> list[tuple[QueueClaim, dict[str, Any]]]:
+        profile = self.registry.get(claims[0].selected_profile_id)
+        requests = [claim.request for claim in claims if claim.request is not None]
+        try:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(self.runner.run_many_on_node, requests, profile, claims[0].selected_node_id, concurrency=concurrency)  # type: ignore[attr-defined]
+                results = self._await_with_heartbeat(future, claims)
+        except Exception as exc:
+            return [(claim, _failure(claim, str(exc))) for claim in claims]
+        return [(claim, _result_for_claim(claim, results.get(claim.request_id))) for claim in claims]
 
-        initial_claims = claim_more(1 if _runner_supports_model_batch(self.runner) else concurrency)
-        if not initial_claims:
-            return _summary(0, 0, 0, 0, groups, reap)
-        if _claims_use_batch_runner(self.runner, initial_claims):
-            if initial_claims[0].request_kind == "cpu":
-                if claimed < limit:
-                    initial_claims.extend(claim_more(limit - claimed))
-                payload = self._run_claim_batch(initial_claims, concurrency=concurrency, groups=groups, reap=reap, on_result=on_result)
-                return payload
-            if initial_claims[0].request_kind == "model" and claimed < min(limit, concurrency):
-                initial_claims.extend(claim_more_model_batch(min(limit, concurrency) - claimed, initial_claims[0]))
-            template = initial_claims[0]
-            stream = self._run_streaming_claims(initial_claims, claim_more=lambda wanted: claim_more_model_batch(wanted, template), concurrency=concurrency, groups=groups, on_result=on_result)
-            completed += stream["completed_count"]
-            failed += stream["failed_count"]
-            lost += stream["lost_lease_count"]
-            heartbeats += stream["heartbeat_count"]
-            payload = _summary(claimed, completed, failed, lost, groups, reap)
-            payload["heartbeat_count"] = heartbeats
-            payload["batch_dispatch_count"] = claimed
-            payload["batch_dispatch_mode"] = "per_request"
-            return payload
-        stream = self._run_streaming_claims(initial_claims, claim_more=claim_more, concurrency=concurrency, groups=groups, on_result=on_result)
-        completed += stream["completed_count"]
-        failed += stream["failed_count"]
-        lost += stream["lost_lease_count"]
-        heartbeats += stream["heartbeat_count"]
-        payload = _summary(claimed, completed, failed, lost, groups, reap)
-        payload["heartbeat_count"] = heartbeats
-        return payload
-
-    def _run_streaming_claims(self, initial_claims: list[QueueClaim], *, claim_more: Callable[[int], list[QueueClaim]], concurrency: int, groups: dict[str, dict[str, int]], on_result: FinishHook | None) -> dict[str, int]:
-        completed = failed = lost = heartbeats = 0
+    def _run_stream(self, claims: list[QueueClaim], concurrency: int, on_result: FinishHook | None) -> tuple[int, int]:
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
-            futures = {pool.submit(self._run_claim, claim): claim for claim in initial_claims}
+            futures = {pool.submit(self._run_one, claim): claim for claim in claims}
             pending = set(futures)
+            completed = failed = 0
             while pending:
                 done, pending = wait(pending, timeout=self.heartbeat_interval_s, return_when=FIRST_COMPLETED)
-                if not done:
-                    heartbeats += self.queue.heartbeat(lease_ids=(futures[future].lease_id for future in pending), lease_ttl_s=self.lease_ttl_s)
-                    continue
                 for future in done:
-                    claim = futures.pop(future)
-                    state = self._finish_claim_result(claim, _future_result(future, claim), groups, on_result)
-                    completed += 1 if state == "completed" else 0
-                    failed += 1 if state == "failed" else 0
-                    lost += 1 if state == "lost" else 0
-                for claim in claim_more(concurrency - len(pending)):
-                    future = pool.submit(self._run_claim, claim)
-                    futures[future] = claim
-                    pending.add(future)
-        return {"completed_count": completed, "failed_count": failed, "lost_lease_count": lost, "heartbeat_count": heartbeats}
+                    item_completed, item_failed = self._finish_pair(futures[future], _future_result(future, futures[future]), on_result)
+                    completed += item_completed
+                    failed += item_failed
+                if pending:
+                    self._heartbeat([futures[future] for future in pending])
+            return completed, failed
 
-    def _run_claim(self, claim: QueueClaim) -> dict[str, Any]:
+    def _await_with_heartbeat(self, future: Any, claims: list[QueueClaim]) -> dict[str, dict]:
+        while not future.done():
+            wait([future], timeout=self.heartbeat_interval_s)
+            if not future.done():
+                self._heartbeat(claims)
+        return future.result()
+
+    def _heartbeat(self, claims: list[QueueClaim]) -> None:
+        count = self.queue.heartbeat(lease_ids=[claim.lease_id for claim in claims], lease_ttl_s=self.lease_ttl_s)
+        if count != len(claims):
+            raise RuntimeError(f"lost queue lease during heartbeat: refreshed {count}/{len(claims)}")
+
+    def _run_one(self, claim: QueueClaim) -> dict[str, Any]:
         if claim.request_kind != "model" or claim.request is None:
-            return _failure(claim, "worker cannot run CPU claim without batch path")
+            return _failure(claim, "worker cannot run CPU claim without CPU batch path")
         profile = self.registry.get(claim.selected_profile_id)
         if hasattr(self.runner, "run_one_on_node"):
             result = self.runner.run_one_on_node(claim.request, profile, claim.selected_node_id)  # type: ignore[attr-defined]
-        elif hasattr(self.runner, "run_many_on_node"):
-            results = self.runner.run_many_on_node([claim.request], profile, claim.selected_node_id, concurrency=1)  # type: ignore[attr-defined]
-            result = results.get(claim.request_id) or _failure(claim, "batch runner omitted request result")
         else:
             result = self.runner.run_one(claim.request, profile)
-        if claim.selected_node_id:
-            result["selected_node"] = {"node_id": claim.selected_node_id}
-        result["batch_key"] = claim.batch_key
-        return result
-
-    def _run_claim_batch(self, claims: list[QueueClaim], *, concurrency: int, groups: dict[str, dict[str, int]], reap: dict[str, Any], on_result: Callable[[QueueClaim, dict[str, Any]], None] | None) -> dict[str, Any]:
-        completed = failed = lost = heartbeats = 0
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(self._run_claims_as_batch, claims, concurrency)
-            while True:
-                done, _ = wait({future}, timeout=self.heartbeat_interval_s, return_when=FIRST_COMPLETED)
-                if done:
-                    break
-                heartbeats += self.queue.heartbeat(lease_ids=(claim.lease_id for claim in claims), lease_ttl_s=self.lease_ttl_s)
-            results = future.result()
-        for claim, result in results:
-            state = self._finish_claim_result(claim, result, groups, on_result)
-            completed += 1 if state == "completed" else 0
-            failed += 1 if state == "failed" else 0
-            lost += 1 if state == "lost" else 0
-        payload = _summary(len(claims), completed, failed, lost, groups, reap)
-        payload["heartbeat_count"] = heartbeats
-        payload["batch_dispatch_count"] = 1
-        return payload
-
-    def _finish_claim_result(self, claim: QueueClaim, result: dict[str, Any], groups: dict[str, dict[str, int]], on_result: FinishHook | None) -> str:
-        state = "completed" if result.get("status") == "completed" else "failed"
-        error = None if state == "completed" else str(result.get("status", "failed"))
-        accepted = self.queue.finish_request(request_id=claim.request_id, lease_id=claim.lease_id, state=state, result=result, error=error)
-        if not accepted:
-            return "lost"
-        groups[claim.batch_key]["completed_count" if state == "completed" else "failed_count"] += 1
-        if on_result is not None:
-            on_result(claim, result)
-        return state
-
-    def _run_claims_as_batch(self, claims: list[QueueClaim], concurrency: int) -> list[tuple[QueueClaim, dict[str, Any]]]:
-        if claims[0].request_kind == "cpu":
-            return self._run_cpu_claims(claims, concurrency)
-        return [(claim, _failure(claim, "model batch claims use per-request dispatch")) for claim in claims]
+        return _result_for_claim(claim, result)
 
     def _run_cpu_claims(self, claims: list[QueueClaim], concurrency: int) -> list[tuple[QueueClaim, dict[str, Any]]]:
         service = claims[0].service_name or ""
-        if self.cpu_service is None:
-            self.cpu_service = _default_cpu_service()
         items, timeout_s = _cpu_items_and_timeout(claims, self.lease_ttl_s)
-        payload = {"service": service, "items": items, "concurrency": concurrency, "timeout_s": timeout_s}
         try:
-            batch = self.cpu_service.run_batch(payload)
-            rows = batch.get("results", []) if isinstance(batch, dict) else []
+            rows = _cpu_service().run_batch({"service": service, "items": items, "concurrency": concurrency, "timeout_s": timeout_s}).get("results", [])
         except Exception as exc:
             rows = [{"ok": False, "error": str(exc)} for _ in claims]
-        out: list[tuple[QueueClaim, dict[str, Any]]] = []
+        out = []
         for index, claim in enumerate(claims):
             row = rows[index] if index < len(rows) and isinstance(rows[index], dict) else {"ok": False, "error": "CPU batch omitted result"}
-            status = "completed" if row.get("ok") else "failed"
-            out.append((claim, {"format": "ds4-cpu-service-result-v1", "request_id": claim.request_id, "status": status, "service": service, "output": row, "batch_key": claim.batch_key}))
+            out.append((claim, {"format": "ds4-cpu-service-result-v1", "request_id": claim.request_id, "status": "completed" if row.get("ok") else "failed", "service": service, "output": row}))
         return out
 
 
-def _record_claims(groups: dict[str, dict[str, int]], claims: list[QueueClaim]) -> None:
-    for claim in claims:
-        group = groups.setdefault(claim.batch_key, {"claimed_count": 0, "completed_count": 0, "failed_count": 0})
-        group["claimed_count"] += 1
+def _can_batch_models(runner: Runner, claims: list[QueueClaim]) -> bool:
+    return bool(claims and claims[0].request_kind == "model" and hasattr(runner, "run_many_on_node") and all(claim.request_kind == "model" and claim.selected_profile_id == claims[0].selected_profile_id and claim.selected_node_id == claims[0].selected_node_id for claim in claims))
 
 
-def _claims_use_batch_runner(runner: Runner, claims: list[QueueClaim]) -> bool:
-    return bool(claims and (claims[0].request_kind == "cpu" or (claims[0].request_kind == "model" and _runner_supports_model_batch(runner))))
+def _result_for_claim(claim: QueueClaim, result: dict[str, Any] | None) -> dict[str, Any]:
+    out = result or _failure(claim, "batch runner omitted request result")
+    if claim.selected_node_id:
+        out["selected_node"] = {"node_id": claim.selected_node_id}
+    return out
 
 
-def _runner_supports_model_batch(runner: Runner) -> bool:
-    return hasattr(runner, "run_many_on_node")
+def _future_result(future: Any, claim: QueueClaim) -> dict[str, Any]:
+    try:
+        return _result_for_claim(claim, future.result())
+    except Exception as exc:
+        return _failure(claim, str(exc))
+
+
+def _failure(claim: QueueClaim, error: str) -> dict[str, Any]:
+    return {"format": "ds4-inference-failure-v1", "request_id": claim.request_id, "status": "failed", "error": error}
+
+
+def _summary(claimed: int, completed: int, failed: int, reap: dict[str, Any], **extra: Any) -> dict[str, Any]:
+    return dict({"format": "ds4-inference-queue-v1", "state": "worked" if claimed else "idle", "claimed_count": claimed, "completed_count": completed, "failed_count": failed, "lost_lease_count": 0, "reaped": reap}, **extra)
 
 
 def _cpu_items_and_timeout(claims: list[QueueClaim], default_timeout_s: int) -> tuple[list[dict[str, Any]], float]:
@@ -242,45 +181,9 @@ def _cpu_items_and_timeout(claims: list[QueueClaim], default_timeout_s: int) -> 
     return items, max(timeouts) if timeouts else float(default_timeout_s)
 
 
-def _default_cpu_service() -> Any:
+def _cpu_service() -> Any:
     global _CPU_SERVICE
     if _CPU_SERVICE is None:
         from ds4_tools.cpu_batch import CpuBatchService
         _CPU_SERVICE = CpuBatchService()
     return _CPU_SERVICE
-
-
-def _future_result(future: Any, claim: QueueClaim) -> dict[str, Any]:
-    try:
-        return future.result()
-    except Exception as exc:
-        return {
-            "format": "ds4-inference-failure-v1",
-            "request_id": claim.request_id,
-            "status": "runner_exception",
-            "error": str(exc),
-            "batch_key": claim.batch_key,
-        }
-
-
-def _failure(claim: QueueClaim, error: str) -> dict[str, Any]:
-    return {
-        "format": "ds4-inference-failure-v1",
-        "request_id": claim.request_id,
-        "status": "runner_exception",
-        "error": error,
-        "batch_key": claim.batch_key,
-    }
-
-
-def _summary(claimed: int, completed: int, failed: int, lost: int, groups: dict[str, dict[str, int]], reap: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "format": QUEUE_FORMAT,
-        "claimed_count": claimed,
-        "completed_count": completed,
-        "failed_count": failed,
-        "lost_lease_count": lost,
-        "state": "worked" if claimed else "idle",
-        "reaped": {"requeued_count": reap.get("requeued_count", 0), "failed_count": reap.get("failed_count", 0)},
-        "groups": [dict({"batch_key": key}, **value) for key, value in sorted(groups.items())],
-    }

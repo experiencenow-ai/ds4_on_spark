@@ -27,12 +27,10 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-worker \
   --loop
 ```
 
-`queue-worker` claims a compatible `batch_key`, commits the lease immediately,
-then runs a concurrency window of compatible model claims for the same
-profile/node. Each claimed model request is dispatched independently so queue
-events and notices land as each request finishes instead of waiting for the
-slowest request in the window. The Spark runner still uses `/ds4/batches` for
-execution.
+`queue-worker` prepares work for its node, claims the highest-priority ready
+requests for one profile/node window, commits the leases immediately, and sends
+that window through `/ds4/batches`. Results are still persisted per request, so
+Centaur can score and cancel by request or by job id.
 
 Queue priorities are numeric and lower values run first. Keep full500
 regression jobs at priority `10`; submit experiment groups at priority `1` so

@@ -96,10 +96,14 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-poll \
   --after-event-id 0
 ```
 
-The queue internally groups requests by model/profile, Spark node, chat mode, job class, input/output/thinking buckets, and shared prefix hash. Workers claim compatible model work for one profile/node window, commit leases immediately, and dispatch each claim independently so fast completions are written without waiting for a slow tail. The Spark runner still uses `/ds4/batches` for execution, but queue completion is per request. Centaur does not need to know batch-size folklore.
+The queue resolves the model profile at submit time, but Spark node binding is
+late. A node worker prepares the highest-priority queued work for its own lane,
+claims one profile/node window, and sends it through `/ds4/batches`. Partial
+batches dispatch after `--batch-linger-s`, so a few requests do not wait
+forever for a full batch.
 
-For Centaur lattice and LongMem batches, workers can prewarm vLLM Automatic
-Prefix Caching for repeated skeletons:
+For Centaur lattice and LongMem batches, put cache identity on the request and
+let the worker readiness stage manage node-local KV reservation:
 
 ```bash
 PYTHONPATH=src python3 -m ds4_infer.cli queue-work \
@@ -107,14 +111,15 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-work \
   --profiles-dir profiles/models \
   --runner spark \
   --node-id spark0 \
-  --warm-prefixes \
-  --limit 128
+  --limit 12 \
+  --concurrency 12 \
+  --max-node-depth 14 \
+  --kv-capacity-bytes 120000000000
 ```
 
-This is best-effort cache warming. On normal vLLM lanes it warms automatic
-prefix cache; when the same profile was launched with an external KV connector,
-it also seeds that connector so later requests with byte-identical
-`shared_prefix` text can skip the long prefill.
+Completed KV entries stay resident as idle cache. The queue only deletes
+least-recently-used idle KV when a new readiness reservation would exceed the
+node cap.
 
 Qwen27 now has a concrete experimental LMCache MP deployment at
 `profiles/kv_cache/qwen27_lmcache_mp_spark7.json`. DSV4 remains on the
