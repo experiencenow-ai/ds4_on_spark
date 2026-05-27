@@ -8,10 +8,10 @@
       "task_id": "xhv-001-qwen-vllm-resident-lanes",
       "runner": "vllm",
       "target_nodes": ["spark0", "spark1", "spark2", "spark3", "spark6"],
-      "profiles": ["qwen3_6_27b_fp8_efficient_v1", "qwen3_6_35b_a3b_fp8_fastest_v1"],
-      "purpose": "Prove --runner vllm works against each resident Qwen lane with both static Qwen profiles loaded.",
+      "profiles": ["qwen3_6_27b_fp8_efficient_v1"],
+      "purpose": "Prove --runner vllm works against each resident Qwen27 lane. Qwen35/fastest is parked and not part of live validation for now.",
       "command_template": "ssh {node} 'cd {repo}/v2 && DS4_VLLM_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests {requests_jsonl} --out {out_dir}/{node}-qwen-vllm --runner vllm --runner-timeout-s 600 --run'",
-      "acceptance": ["all target nodes return completed_count=2", "each result status is completed", "selected profiles include both Qwen profile ids", "capture /v1/models and runner output", "spark6 is included as the fifth Qwen production lane"]
+      "acceptance": ["all target nodes return completed_count=1", "each result status is completed", "selected profile is qwen3_6_27b_fp8_efficient_v1", "capture /v1/models and runner output", "spark6 is included as the fifth Qwen production lane"]
     },
     {
       "task_id": "xhv-002-dsv4-vllm-mtp-spark45",
@@ -26,10 +26,10 @@
       "task_id": "xhv-003-spark6-qwen-vllm",
       "runner": "vllm",
       "target_nodes": ["spark6"],
-      "profiles": ["qwen3_6_27b_fp8_efficient_v1", "qwen3_6_35b_a3b_fp8_fastest_v1"],
+      "profiles": ["qwen3_6_27b_fp8_efficient_v1"],
       "purpose": "Prove --runner vllm works against spark6 after converting it from antirez/support into the fifth resident Qwen lane.",
       "command_template": "ssh spark6 'cd {repo}/v2 && DS4_VLLM_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests {requests_jsonl} --out {out_dir}/spark6-qwen-vllm --runner vllm --runner-timeout-s 600 --run'",
-      "acceptance": ["completed_count=2", "selected profiles include both Qwen profile ids", "response records are non-empty", "capture /v1/models and runner output"]
+      "acceptance": ["completed_count=1", "selected profile is qwen3_6_27b_fp8_efficient_v1", "response records are non-empty", "capture /v1/models and runner output"]
     },
     {
       "task_id": "xhv-004-mac-studio-ds4-spark-chat",

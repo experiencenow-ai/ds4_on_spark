@@ -41,7 +41,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         topology = SparkTopology.load(TOPOLOGY)
         capacity = topology.estimate_capacity_by_profile()
         self.assertEqual(capacity["qwen3_6_27b_fp8_efficient_v1"], 5)
-        self.assertEqual(capacity["qwen3_6_35b_a3b_fp8_fastest_v1"], 5)
+        self.assertNotIn("qwen3_6_35b_a3b_fp8_fastest_v1", capacity)
         self.assertEqual(capacity["dsv4_vllm_mtp_smartest_v1"], 1)
         self.assertNotIn("dsv4_antirez_smart_v1", capacity)
 
@@ -88,7 +88,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
                 out_dir=tmp,
                 topology=SparkTopology.load(TOPOLOGY),
             )
-            self.assertEqual(manifest["topology_id"], "static_sparks_2026_05_26_v8")
+            self.assertEqual(manifest["topology_id"], "static_sparks_2026_05_27_v9")
             self.assertEqual(manifest["selected_nodes"]["spark0"], 1)
             self.assertEqual(manifest["selected_nodes"]["spark5"], 1)
             responses = [json.loads(line) for line in (Path(tmp) / "responses.jsonl").read_text().splitlines()]
@@ -136,7 +136,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(qwen_task["runner"], "vllm")
         self.assertEqual(qwen_task["target_nodes"], ["spark0", "spark1", "spark2", "spark3", "spark6"])
         self.assertIn("qwen3_6_27b_fp8_efficient_v1", qwen_task["profiles"])
-        self.assertIn("qwen3_6_35b_a3b_fp8_fastest_v1", qwen_task["profiles"])
+        self.assertNotIn("qwen3_6_35b_a3b_fp8_fastest_v1", qwen_task["profiles"])
 
     def test_startup_plan_warms_resident_models_and_skips_spark7(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
@@ -146,7 +146,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         spark5 = startup_plan(topology=topology, registry=registry, node_id="spark5")
         spark6 = startup_plan(topology=topology, registry=registry, node_id="spark6")
         spark7 = startup_plan(topology=topology, registry=registry, node_id="spark7")
-        self.assertEqual([item["model_id"] for item in spark0["items"]], ["Qwen/Qwen3.6-27B-FP8", "Qwen/Qwen3.6-35B-A3B-FP8"])
+        self.assertEqual([item["model_id"] for item in spark0["items"]], ["Qwen/Qwen3.6-27B-FP8"])
         self.assertEqual(spark4["items"][0]["action"], "group_primary_warm")
         self.assertEqual(len(spark4["items"]), 1)
         self.assertEqual(
@@ -155,7 +155,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
                 {"profile_id": "dsv4_vllm_mtp_smartest_v1", "action": "group_secondary", "primary_node": "spark4"},
             ],
         )
-        self.assertEqual([item["model_id"] for item in spark6["items"]], ["Qwen/Qwen3.6-27B-FP8", "Qwen/Qwen3.6-35B-A3B-FP8"])
+        self.assertEqual([item["model_id"] for item in spark6["items"]], ["Qwen/Qwen3.6-27B-FP8"])
         self.assertEqual(spark7["items"], [])
 
     def test_startup_warm_posts_only_executable_items(self) -> None:
@@ -170,9 +170,9 @@ class StaticSparkTopologyTests(unittest.TestCase):
 
         result = warm_startup_models(plan=plan, base_url="http://spark.local:8000", timeout_s=3, poster=poster)
         self.assertEqual(result["status"], "completed")
-        self.assertEqual(result["warm_count"], 2)
+        self.assertEqual(result["warm_count"], 1)
         self.assertEqual(calls[0], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-27B-FP8"))
-        self.assertEqual(calls[1], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-35B-A3B-FP8"))
+        self.assertEqual(len(calls), 1)
 
     def test_startup_warm_posts_to_spark6_qwen_lane(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
@@ -187,7 +187,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         result = warm_startup_models(plan=plan, base_url="http://spark.local:8000", timeout_s=3, poster=poster)
         self.assertEqual(result["status"], "completed")
         self.assertEqual(calls[0], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-27B-FP8"))
-        self.assertEqual(calls[1], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-35B-A3B-FP8"))
+        self.assertEqual(len(calls), 1)
 
 
 if __name__ == "__main__":
