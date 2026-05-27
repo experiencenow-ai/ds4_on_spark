@@ -28,15 +28,18 @@ the Spark-local vLLM endpoint. The returned payload includes both `node_id` and
 ## Modes
 
 `mode=abort` is the default emergency mode. vLLM pauses generation, blocks new
-work, aborts in-flight requests at the scheduler boundary, then resets prefix
-and connector caches, releases SimpleCPUOffload CPU tensors, trims allocators,
-and resumes generation. A running CUDA kernel is not interrupted mid-kernel;
-the abort is handled when the engine reaches its next safe scheduling point.
+work, aborts in-flight requests at the scheduler boundary, resets local prefix
+state, asks connector-managed caches to reset when the runtime supports that
+hook, trims allocators, and resumes generation. A running CUDA kernel is not
+interrupted mid-kernel; the abort is handled when the engine reaches its next
+safe scheduling point.
 
 `mode=wait` is the graceful mode. vLLM pauses new work, lets current requests
 finish, then performs the same trim. Use it for planned maintenance. Use
 `abort` for watchdog or swap-pressure recovery where preserving current
-requests matters less than keeping the Spark alive.
+requests matters less than keeping the Spark alive. Runtimes without a direct
+SimpleCPUOffload release hook return `status: ok` with a warning instead of
+failing the control path after the abort/local-reset step.
 
 ## Exact Resolutions
 
@@ -112,3 +115,10 @@ Execute calls wrap the vLLM response as:
 The low-level endpoint is still `POST /v1/trim_memory`; it is only for manual
 debugging. Client code should use `tool:spark.trim_memory` or
 `ds4_infer.cli trim-spark-memory`.
+
+## Runtime Installation
+
+The endpoint belongs in the `experiencenow-ai/vllm` fork, not in a Spark-side
+startup patcher. Production DSV4 and Qwen runtimes must be built from a fork
+revision that registers `vllm.entrypoints.serve.trim_memory_api`; otherwise the
+contract path will 404 even though the DS4 control layer resolves it correctly.

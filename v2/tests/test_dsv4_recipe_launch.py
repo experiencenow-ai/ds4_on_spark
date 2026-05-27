@@ -6,26 +6,40 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class Dsv4RecipeLaunchTests(unittest.TestCase):
-    def test_local_source_launch_preserves_known_good_no_ray_mtp_shape(self) -> None:
+    def test_local_source_launch_preserves_known_good_no_ray_hma_shape(self) -> None:
         script = (ROOT / "scripts" / "ds4_dsv4_spark45_local_vllm.sh").read_text()
         self.assertIn("75358b5ef269050fbbf0d34a1e9772d8c56ac7c7", script)
-        self.assertIn("kv_offload_size=\"${DS4_DSV4_KV_OFFLOAD_SIZE:-8}\"", script)
+        self.assertIn("max_model_len=\"${DS4_DSV4_MAX_MODEL_LEN:-262144}\"", script)
+        self.assertIn("kv_offload_size=\"${DS4_DSV4_KV_OFFLOAD_SIZE:-2}\"", script)
+        self.assertIn("gpu_memory_utilization=\"${DS4_DSV4_GPU_MEMORY_UTILIZATION:-0.68}\"", script)
+        self.assertIn("max_num_batched_tokens=\"${DS4_DSV4_MAX_NUM_BATCHED_TOKENS:-2048}\"", script)
+        self.assertIn("max_num_seqs=\"${DS4_DSV4_MAX_NUM_SEQS:-1}\"", script)
+        self.assertIn("enable_mtp=\"${DS4_DSV4_ENABLE_MTP:-1}\"", script)
+        self.assertIn("mtp_tokens=\"${DS4_DSV4_MTP_TOKENS:-2}\"", script)
+        self.assertIn("DS4_DSV4_PYTHONHASHSEED", script)
+        self.assertIn("DS4_DSV4_PERSIST_STRICT", script)
         self.assertIn("VLLM_USE_SIMPLE_KV_OFFLOAD", script)
         self.assertIn("VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT", script)
-        self.assertIn("--max-model-len 1048576", script)
-        self.assertIn("--max-num-seqs 2", script)
-        self.assertIn("--max-num-batched-tokens 8192", script)
+        self.assertIn("apply_runtime_mods=\"${DS4_DSV4_APPLY_RUNTIME_MODS:-0}\"", script)
+        self.assertIn("persistent_simple_offload_installed", script)
+        self.assertIn("persistent SimpleCPUOffload already installed", script)
+        self.assertIn("--max-model-len \"$max_model_len\"", script)
+        self.assertIn("--max-num-seqs \"$max_num_seqs\"", script)
+        self.assertIn("--max-num-batched-tokens \"$max_num_batched_tokens\"", script)
         self.assertIn("--block-size 256", script)
         self.assertIn("--kv-cache-dtype fp8", script)
         self.assertIn("--enable-prefix-caching", script)
         self.assertIn("--no-disable-hybrid-kv-cache-manager", script)
         self.assertIn("--kv-offloading-size \"$kv_offload_size\"", script)
         self.assertIn("--kv-offloading-backend native", script)
+        self.assertIn("--kv-cache-metrics", script)
+        self.assertIn("--enable-logging-iteration-details", script)
         self.assertIn("--enforce-eager", script)
+        self.assertIn("--speculative-config", script)
+        self.assertIn("deepseek_mtp", script)
         self.assertIn("--nnodes 2", script)
         self.assertIn("--node-rank \"$node_rank\"", script)
         self.assertIn("--headless", script)
-        self.assertIn("deepseek_mtp", script)
         self.assertIn("NCCL_IB_DISABLE=1", script)
         self.assertNotIn("--kv-transfer-config", script)
         self.assertNotIn("LMCacheConnectorV1Dynamic", script)
@@ -99,7 +113,7 @@ class Dsv4RecipeLaunchTests(unittest.TestCase):
         self.assertIn("tp_size > num_gpus", rankfix)
         self.assertIn("local_worker_id = global_rank % num_gpus", rankfix)
 
-    def test_topology_doc_warns_against_ray_and_no_mtp_regressions(self) -> None:
+    def test_topology_doc_records_256k_feature_complete_target(self) -> None:
         doc = (ROOT / "docs" / "static-spark-topology.md").read_text()
         self.assertIn("experiencenow-ai/vllm", doc)
         self.assertIn("75358b5ef269050fbbf0d34a1e9772d8c56ac7c7", doc)
@@ -107,7 +121,9 @@ class Dsv4RecipeLaunchTests(unittest.TestCase):
         self.assertIn("LMCacheConnectorV1Dynamic", doc)
         self.assertIn("turns off vLLM's hybrid KV cache manager", doc)
         self.assertIn("Do not replace this with a Ray vLLM service", doc)
-        self.assertIn('Do not "simplify" the DSV4 lane by disabling MTP', doc)
+        self.assertIn("max_model_len=262144", doc)
+        self.assertIn("MTP speculative decoding enabled", doc)
+        self.assertIn("KV cache metrics and iteration details enabled", doc)
 
 
 if __name__ == "__main__":

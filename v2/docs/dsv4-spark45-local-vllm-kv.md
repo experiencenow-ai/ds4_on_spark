@@ -11,7 +11,7 @@ launch shape below:
 - spark5: `ds4-dsv4-local-worker.service` active
 - API: `http://127.0.0.1:8000`
 - model: `deepseek-v4-flash`
-- reported `max_model_len`: `1048576`
+- reported `max_model_len`: `1048576` in the first 1M proof; current target is `262144`
 - `/health` and `/v1/models`: 200 OK
 - `/v1/chat/completions`: 200 OK
 
@@ -19,6 +19,37 @@ The durable source target in this document replaces the emergency image-copy
 runtime patch used during that first proof run. After rebuilding from the pinned
 vLLM commit, re-run the validation commands at the end of this file before
 marking the source-built runtime healthy.
+
+## Current Requalification Status
+
+The 2026-05-27 requalification did not complete the external-KV benchmark.
+Observed live state:
+
+```text
+spark4 service: active and launching DSV4
+spark4 runtime: /home/spark4/ds4-vllm-local-8c4e588
+spark4 /health: not serving yet
+spark5 ssh: timeout
+spark5 ping: 100% packet loss
+```
+
+The spark4 launch did show the earlier 1M long-context shape, but that shape
+later exhausted host/NVIDIA driver memory during a cold request:
+
+```text
+max_model_len=1048576
+kv_offloading_size=8
+kv_cache_dtype=fp8
+disable_hybrid_kv_cache_manager=False
+DeepSeek fp8_ds_mla KV cache format
+FP8 indexer cache for Lightning Indexer
+```
+
+That is not enough. A valid proof still requires spark5 online, both ranks
+running the same pinned source runtime, `max_model_len=262144`, MTP enabled,
+KV metrics enabled, a cold request, a restart, a replay request, and log/metric
+evidence that replay loaded external persistent KV with lower TTFT or prefill
+time.
 
 ## Source-Controlled Local Runtime
 
@@ -98,12 +129,15 @@ ssh spark4 systemctl --user start ds4-dsv4-local-head.service
 The critical launch settings are:
 
 ```text
---max-model-len 1048576
+--max-model-len ${DS4_DSV4_MAX_MODEL_LEN:-262144}
 --block-size 256
 --kv-cache-dtype fp8
 --enable-prefix-caching
---kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8}
+--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-2}
 --kv-offloading-backend native
+--kv-cache-metrics
+--enable-logging-iteration-details
+--speculative-config '{"method":"deepseek_mtp","num_speculative_tokens":2}'
 VLLM_USE_SIMPLE_KV_OFFLOAD=1
 --no-disable-hybrid-kv-cache-manager
 --enforce-eager

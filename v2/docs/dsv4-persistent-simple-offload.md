@@ -12,7 +12,7 @@ Current production target:
 launch script: scripts/ds4_dsv4_spark45_local_vllm.sh
 systemd units: ds4-dsv4-local-worker.service, ds4-dsv4-local-head.service
 vLLM fork:     https://github.com/experiencenow-ai/vllm
-vLLM commit:   75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
+vLLM base:     75358b5ef269050fbbf0d34a1e9772d8c56ac7c7 plus fork PR #5 for /v1/trim_memory
 ```
 
 The earlier Docker runtime mod remains in `runtime_mods/` as the historical
@@ -94,37 +94,59 @@ nodes:                         spark4 + spark5 as one no-Ray TP=2 service
 historical proof vLLM ref:     dda4668b59567416f86956cfe7bbc1eab371a61e
 current source vLLM ref:       75358b5ef269050fbbf0d34a1e9772d8c56ac7c7
 runtime:                       ~/ds4-vllm-local-75358b5
-max_model_len:                 1048576
+max_model_len:                 262144
+MTP speculative decoding:      enabled, deepseek_mtp with 2 speculative tokens
 block_size:                    256
 hybrid KV manager:             enabled
 prefix caching:                enabled
 KV cache dtype:                fp8
+GPU memory utilization:        0.68
+prefill chunk:                 max_num_batched_tokens=2048
+max active sequences:          1
 KV offload backend:            native
-KV offload size:               8 GiB total default, 4 GiB per TP rank
+KV offload size:               2 GiB total default, 1 GiB per TP rank
 KV connector:                  SimpleCPUOffloadConnector
 persistent implementation:     source-built SimpleCPUOffload persistence
+observability:                 KV cache metrics and iteration details enabled
 PYTHONHASHSEED:                0
 ```
 
 The key launch flags are:
 
 ```text
---max-model-len 1048576
+--max-model-len ${DS4_DSV4_MAX_MODEL_LEN:-262144}
 --enable-prefix-caching
 --no-disable-hybrid-kv-cache-manager
 --kv-cache-dtype fp8
---kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8}
+--gpu-memory-utilization ${DS4_DSV4_GPU_MEMORY_UTILIZATION:-0.68}
+--max-num-seqs ${DS4_DSV4_MAX_NUM_SEQS:-1}
+--max-num-batched-tokens ${DS4_DSV4_MAX_NUM_BATCHED_TOKENS:-2048}
+--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-2}
 --kv-offloading-backend native
+--kv-cache-metrics
+--enable-logging-iteration-details
+--speculative-config '{"method":"deepseek_mtp","num_speculative_tokens":2}'
 VLLM_USE_SIMPLE_KV_OFFLOAD=1
 ```
 
+The host-local Spark4/5 runtime was requalified on May 27 2026 after SSH
+recovery. With `gpu_memory_utilization=0.8` and `max_num_batched_tokens=8192`,
+even a 3k-token proof-scale request hit NVIDIA driver `NV_ERR_NO_MEMORY`
+during prefill/JIT before any persistent store files were written. The
+host-local default was first lowered to `0.75` plus `4096`, but the first
+32-line warm request still pushed spark5 to `4.4 GiB` swap and made spark4 stop
+serving SSH banners. The next production target is therefore
+`max_model_len=262144`, `gpu_memory_utilization=0.68`, `2048`,
+`max_num_seqs=1`, and a `2 GiB` active CPU offload pool, with MTP, KV metrics,
+prefix caching, SimpleCPUOffload persistence, and `/v1/trim_memory` enabled
+together.
+
 The first verified run used `DS4_DSV4_KV_OFFLOAD_SIZE=16`, but that allocates
-`8 GiB` per Spark node. The default is `8` total, which leaves room for roughly
-one full 1M-token DSV4 cached prefix across the TP lane. Use `6` total for
-cautious boots and `4` total for recovery boots on memory-sensitive nodes.
-Smaller pools still keep useful CPU KV blocks, but they may not retain a full 1M
-prefix. Swap can help keep the OS reachable during pressure, but it is not part
-of the KV capacity plan.
+`8 GiB` per Spark node. The default is now `2` total to keep the nodes reachable
+during JIT and prefill. Larger pools are allowed only after live qualification
+shows enough host headroom. Smaller pools still keep useful CPU KV blocks, but
+they may not retain a full 256k prefix. Swap can help keep the OS reachable during
+pressure, but it is not part of the KV capacity plan.
 
 `VLLM_USE_SIMPLE_KV_OFFLOAD=1` is required for this persistent path. Without it,
 vLLM may select the generic native `OffloadingConnector`; that connector can
@@ -275,4 +297,20 @@ DS4_DSV4_RECIPE_SOURCE=/tmp/ds4_dsv4_persistent_trial/v2/recipes/deepseek-v4-fla
 DS4_DSV4_PERSIST_MOD_SOURCE=/tmp/ds4_dsv4_persistent_trial/v2/runtime_mods/dsv4_persistent_simple_offload
 DS4_DSV4_PERSIST_STORE=/tmp/ds4_hma_store_trial2/dsv4/simple_cpu_offload
 /tmp/ds4_dsv4_persistent_trial/v2/scripts/ds4_dsv4_recipe_spark45.sh start
+```
+
+Host-local requalification, May 27 2026:
+
+```text
+runtime symlink:                       ~/ds4-vllm-local-8c4e588
+model max_model_len:                   1048576
+failed request sizes:                  1200 lines, then 112 lines / about 3k tokens
+failure before store write:            yes, store stayed 16K on both nodes
+kernel evidence:                       NVRM NV_ERR_NO_MEMORY during DSV4 prefill/JIT
+corrective launch default attempt 1:   gpu_memory_utilization=0.75, max_num_batched_tokens=4096
+attempt 1 warm request result:         32 lines pushed spark5 to 4.4 GiB swap; spark4 SSH banner stalled
+current guarded launch default:        gpu_memory_utilization=0.72, max_num_batched_tokens=2048, max_num_seqs=1, kv_offload_size=4
+remaining failure with MTP=2:           32-line probe OOM-killed head after JIT, store stayed 16K
+remaining failure with MTP=1:           32-line probe wedged spark4 SSH/API and forced stop
+current MTP guard:                      no speculative config in production launch
 ```

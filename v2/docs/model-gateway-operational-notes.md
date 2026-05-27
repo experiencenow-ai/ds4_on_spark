@@ -53,7 +53,7 @@ PYTHONPATH=src python3 -m ds4_infer.cli startup-models \
 
 That posts one tiny request per resident profile to the Spark-local
 OpenAI-compatible endpoint. It warms spark0-3 and spark6 Qwen profiles plus
-spark4's grouped DSV4 vLLM/MTP lane. Spark5 is a grouped-lane secondary and
+spark4's grouped DSV4 vLLM lane. Spark5 is a grouped-lane secondary and
 spark7 is experimental/on-demand, so neither gets a production warmup request.
 
 ## Tuning defaults
@@ -79,12 +79,14 @@ The DeepSeek V4 Flash path also carried parser/backend details:
 - DeepSeek V4 Flash on spark4+spark5 used no-Ray multi-node vLLM, not Ray:
   `--distributed-executor-backend mp` plus `--nnodes`, `--node-rank`, and
   `--headless` for the worker rank. Keep that shape for the production DSV4
-  MTP lane. The currently verified launch keeps vLLM's hybrid KV cache manager
-  enabled, uses `max_model_len=1048576`, and adds native CPU KV offload with
-  `--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-8} --kv-offloading-backend native`
+  lane. The current requalification target keeps vLLM's hybrid KV cache manager
+  enabled, uses `max_model_len=262144`, and adds native CPU KV offload with
+  `--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-2} --kv-offloading-backend native`
   and `VLLM_USE_SIMPLE_KV_OFFLOAD=1`. The current source-built runtime is
   `experiencenow-ai/vllm@75358b5ef269050fbbf0d34a1e9772d8c56ac7c7` launched by
   `scripts/ds4_dsv4_spark45_local_vllm.sh`, not the old Docker recipe.
+  MTP speculative decoding, KV cache metrics, and iteration-detail logs are
+  enabled for the 256k proof.
   Do not add
   `LMCacheConnectorV1Dynamic` to this lane unless a live probe proves the
   connector implements HMA support; the tested generic LMCache path disabled
