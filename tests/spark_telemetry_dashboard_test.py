@@ -21,14 +21,12 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
                 "local_queue_queued_by_node": "spark0:1;spark1:3",
                 "local_queue_prompt_tok_s": 11,
                 "local_queue_prompt_tok_s_by_node": "spark0:8;spark1:3",
-                "local_queue_completion_req_s": 0.5,
-                "local_queue_completion_req_s_by_node": "spark0:0.3;spark1:0.2",
                 "local_queue_completion_tok_s": 9.5,
                 "local_queue_completion_tok_s_by_node": "spark0:6.5;spark1:3",
             },
             "nodes": {
-                "spark0": {"sample_count": 2, "last_gpu_util_pct": 96, "last_vllm_metrics_up": 1, "last_vllm_requests_running": 4, "last_vllm_requests_waiting": 0, "last_vllm_kv_cache_pct": 50, "last_vllm_requests_per_s": 0.1, "last_vllm_tokens_per_s": 2, "last_vllm_prompt_tokens_per_s": 7, "last_vllm_generation_tokens_per_s": 2, "last_vllm_prompt_tokens_cached_per_s": 3, "last_vllm_prompt_cache_hit_pct": 42},
-                "spark1": {"sample_count": 2, "last_gpu_util_pct": 96, "last_gpu_temp_c": 72, "last_vllm_requests_running": 0, "last_vllm_requests_waiting": 0, "last_vllm_kv_cache_pct": 50},
+                "spark0": {"sample_count": 2, "last_gpu_util_pct": 96, "last_cpu_util_pct": 40, "last_vllm_metrics_up": 1, "last_vllm_requests_running": 4, "last_vllm_requests_waiting": 0, "last_vllm_kv_cache_pct": 50, "last_vllm_tokens_per_s": 2, "last_vllm_prompt_tokens_per_s": 7, "last_vllm_generation_tokens_per_s": 2, "last_vllm_prompt_tokens_cached_per_s": 3, "last_vllm_prompt_cache_hit_pct": 42},
+                "spark1": {"sample_count": 2, "last_gpu_util_pct": 96, "last_gpu_temp_c": 82, "last_vllm_requests_running": 0, "last_vllm_requests_waiting": 0, "last_vllm_kv_cache_pct": 92},
                 "spark2": {"sample_count": 2, "stale_data": 1, "fetch_error": "ssh timed out", "last_gpu_util_pct": 10},
                 "spark6": {"sample_count": 0, "error": "ssh timed out"},
             },
@@ -40,23 +38,22 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertTrue(snap["ok"])
         self.assertEqual(snap["reachable_nodes"], 4)
         self.assertEqual(snap["busy_gpu_nodes"], 2)
-        self.assertEqual(snap["hot_nodes"], 0)
+        self.assertEqual(snap["hot_nodes"], 1)
         self.assertEqual(snap["vllm_running"], 5)
         self.assertEqual(snap["vllm_waiting"], 3)
         self.assertEqual(snap["queue_depth"], 12)
-        self.assertEqual(snap["req_s"], 0.5)
         self.assertEqual(snap["input_tok_s"], 11)
         self.assertEqual(snap["output_tok_s"], 9.5)
         self.assertEqual(snap["tok_s"], 20.5)
         self.assertEqual(snap["active_nodes"], 2)
         self.assertTrue(snap["kv_known"])
         self.assertTrue(snap["cache_known"])
-        self.assertEqual([node["state"] for node in snap["nodes"]], ["busy", "busy", "warn", "warn"])
+        self.assertEqual([node["state"] for node in snap["nodes"]], ["busy", "hot", "warn", "warn"])
         self.assertEqual(snap["nodes"][2]["state_label"], "stale")
         self.assertEqual(snap["nodes"][3]["state_label"], "checking")
         self.assertEqual(snap["nodes"][0]["local_q_depth"], 5)
-        self.assertEqual(snap["nodes"][0]["req_s"], 0.3)
         self.assertEqual(snap["nodes"][1]["tok_s"], 6)
+        self.assertEqual(snap["nodes"][0]["cpu_pct"], 800)
 
     def test_node_down_requires_three_distinct_error_snapshots(self):
         payload = {
@@ -88,10 +85,10 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "spark2.csv"
             path.write_text(
-                "unix_ts,iso_ts,node,gpu_util_pct,gpu_temp_c,gpu_power_w,cpu_util_pct,mem_used_pct,vllm_requests_running,vllm_requests_waiting,vllm_kv_cache_pct,local_queue_depth,vllm_requests_per_s,vllm_tokens_per_s,vllm_prompt_tokens_per_s,vllm_generation_tokens_per_s,vllm_prompt_cache_hit_pct,vllm_external_prefix_cache_hit_pct\n"
-                "1,2026-05-26T00:00:01+00:00,spark2,10,40,20,5,30,1,0,3,7,0.1,0.5,0.2,0.3,10,0\n"
-                "2,2026-05-26T00:00:02+00:00,spark2,20,41,21,6,31,2,1,4,8,0.2,1.5,0.6,0.9,20,5\n"
-                "3,2026-05-26T00:00:03+00:00,spark2,30,42,22,7,32,3,2,5,9,0.3,2.5,1.1,1.4,30,10\n",
+                "unix_ts,iso_ts,node,gpu_util_pct,gpu_temp_c,gpu_power_w,cpu_util_pct,mem_used_pct,vllm_requests_running,vllm_requests_waiting,vllm_kv_cache_pct,local_queue_depth,vllm_tokens_per_s,vllm_prompt_tokens_per_s,vllm_generation_tokens_per_s,vllm_prompt_cache_hit_pct,vllm_external_prefix_cache_hit_pct\n"
+                "1,2026-05-26T00:00:01+00:00,spark2,10,40,20,5,30,1,0,3,7,0.5,0.2,0.3,10,0\n"
+                "2,2026-05-26T00:00:02+00:00,spark2,20,41,21,6,31,2,1,4,8,1.5,0.6,0.9,20,5\n"
+                "3,2026-05-26T00:00:03+00:00,spark2,30,42,22,7,32,3,2,5,9,2.5,1.1,1.4,30,10\n",
                 encoding="utf-8",
             )
             hist = dashboard.build_history(tmp, "spark2", 2)
@@ -101,24 +98,68 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(hist["points"][0]["iso_ts"], "2026-05-26T00:00:02+00:00")
         self.assertEqual(hist["points"][1]["gpu_pct"], 30)
         self.assertEqual(hist["points"][1]["queue_depth"], 9)
-        self.assertEqual(hist["points"][1]["req_s"], 0.3)
         self.assertEqual(hist["points"][1]["tok_s"], 2.5)
         self.assertEqual(hist["points"][1]["input_tok_s"], 1.1)
         self.assertEqual(hist["points"][1]["output_tok_s"], 1.4)
         self.assertEqual(hist["points"][1]["cache_hit_pct"], 30)
+        self.assertEqual(hist["points"][1]["cpu_pct"], 140)
 
     def test_history_rejects_invalid_node_name(self):
         hist = dashboard.build_history("/tmp", "../spark2", 2)
         self.assertFalse(hist["ok"])
         self.assertEqual(hist["error"], "invalid node")
 
+    def test_history_skips_repeated_csv_headers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "spark2.csv"
+            path.write_text(
+                "unix_ts,iso_ts,node,gpu_util_pct,gpu_temp_c,gpu_power_w,cpu_util_pct,mem_used_pct,vllm_requests_running,vllm_requests_waiting,vllm_kv_cache_pct,local_queue_depth,vllm_tokens_per_s,vllm_prompt_tokens_per_s,vllm_generation_tokens_per_s,vllm_prompt_cache_hit_pct,vllm_external_prefix_cache_hit_pct\n"
+                "unix_ts,iso_ts,node,gpu_util_pct,gpu_temp_c,gpu_power_w,cpu_util_pct,mem_used_pct,vllm_requests_running,vllm_requests_waiting,vllm_kv_cache_pct,local_queue_depth,vllm_tokens_per_s,vllm_prompt_tokens_per_s,vllm_generation_tokens_per_s,vllm_prompt_cache_hit_pct,vllm_external_prefix_cache_hit_pct\n"
+                "1,2026-05-26T00:00:01+00:00,spark2,10,40,20,5,30,1,0,3,7,0.5,0.2,0.3,10,0\n",
+                encoding="utf-8",
+            )
+            hist = dashboard.build_history(tmp, "spark2", 10)
+        self.assertEqual(len(hist["points"]), 1)
+        self.assertEqual(hist["points"][0]["iso_ts"], "2026-05-26T00:00:01+00:00")
+
     def test_default_history_limit_is_one_hour(self):
         self.assertEqual(dashboard.history_limit(None), 720)
         self.assertEqual(dashboard.history_limit(""), 720)
 
-    def test_dashboard_refreshes_every_five_seconds(self):
-        self.assertIn("const REFRESH_MS=5000", dashboard.DASHBOARD_HTML)
-        self.assertIn("setInterval(refresh,REFRESH_MS)", dashboard.DASHBOARD_HTML)
+    def test_dashboard_uses_persistent_event_stream(self):
+        self.assertIn("new EventSource(`/api/stream?node=${node}`)", dashboard.DASHBOARD_HTML)
+        self.assertIn('addEventListener("telemetry"', dashboard.DASHBOARD_HTML)
+        self.assertNotIn("const REFRESH_MS", dashboard.DASHBOARD_HTML)
+        self.assertNotIn("setInterval(", dashboard.DASHBOARD_HTML)
+
+    def test_stream_payload_includes_summary_and_selected_history(self):
+        payload = {
+            "updated_iso": "2026-05-26T00:00:00+00:00",
+            "updated_unix": 1,
+            "nodes": {"spark2": {"sample_count": 1, "last_cpu_util_pct": 40}},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            summary_path = Path(tmp) / "summary.json"
+            nodes_dir = Path(tmp) / "nodes"
+            nodes_dir.mkdir()
+            summary_path.write_text(json.dumps(payload), encoding="utf-8")
+            (nodes_dir / "spark2.csv").write_text(
+                "unix_ts,iso_ts,node,gpu_util_pct,gpu_temp_c,gpu_power_w,cpu_util_pct,mem_used_pct,vllm_requests_running,vllm_requests_waiting,vllm_kv_cache_pct,local_queue_depth,vllm_tokens_per_s,vllm_prompt_tokens_per_s,vllm_generation_tokens_per_s,vllm_prompt_cache_hit_pct,vllm_external_prefix_cache_hit_pct\n"
+                "1,2026-05-26T00:00:01+00:00,spark2,10,40,20,40,30,1,0,3,7,0.5,0.2,0.3,10,0\n",
+                encoding="utf-8",
+            )
+            stream = dashboard.stream_payload(str(summary_path), str(nodes_dir), "", 10)
+        self.assertEqual(stream["summary"]["selected_node"], "spark2")
+        self.assertEqual(stream["summary"]["nodes"][0]["cpu_pct"], 800)
+        self.assertEqual(stream["history"]["node"], "spark2")
+        self.assertEqual(stream["history"]["points"][0]["cpu_pct"], 800)
+
+    def test_dashboard_cpu_display_uses_twenty_core_range(self):
+        self.assertEqual(dashboard.DISPLAY_CPU_PCT_MAX, 2000)
+        self.assertEqual(dashboard.display_cpu_pct(40), 800)
+        self.assertIn('"cpu_pct"', dashboard.DASHBOARD_HTML)
+        self.assertIn("const CPU_PCT_MAX=2000", dashboard.DASHBOARD_HTML)
+        self.assertIn("cpu_pct:CPU_PCT_MAX", dashboard.DASHBOARD_HTML)
 
 
 if __name__ == "__main__":
