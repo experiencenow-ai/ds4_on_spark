@@ -45,6 +45,9 @@ def _add_basic_args(sub: argparse._SubParsersAction) -> None:
     trim.add_argument("--malloc-trim", action=argparse.BooleanOptionalAction, default=True)
     trim.add_argument("--resume", action=argparse.BooleanOptionalAction, default=True)
     trim.add_argument("--execute", action="store_true")
+    preconnect = sub.add_parser("spark-ssh-preconnect")
+    preconnect.add_argument("--nodes", default="spark0,spark1,spark2,spark3,spark4,spark5,spark6,spark7")
+    preconnect.add_argument("--runner-timeout-s", type=int, default=300)
 
 
 def _add_submit_args(sub: argparse._SubParsersAction) -> None:
@@ -115,6 +118,7 @@ def _run(args: argparse.Namespace) -> int:
         "profiles": _cmd_profiles,
         "topology": _cmd_topology,
         "trim-spark-memory": _cmd_trim_spark_memory,
+        "spark-ssh-preconnect": _cmd_spark_ssh_preconnect,
         "submit": _cmd_submit,
         "queue-submit": _cmd_queue_submit,
         "queue-submit-cpu": _cmd_queue_submit_cpu,
@@ -166,6 +170,12 @@ def _cmd_trim_spark_memory(args: argparse.Namespace) -> int:
             resume=args.resume,
         )
     )
+    return 0
+
+
+def _cmd_spark_ssh_preconnect(args: argparse.Namespace) -> int:
+    nodes = [node.strip() for node in str(args.nodes).split(",") if node.strip()]
+    _emit(SparkHttpRunner(timeout_s=args.runner_timeout_s).preconnect(nodes))
     return 0
 
 
@@ -239,6 +249,7 @@ def _queue_work_once(queue: InferenceQueue, registry: ProfileRegistry, runner: o
         max_node_depth=args.max_node_depth,
         batch_linger_s=args.batch_linger_s,
         kv_capacity_bytes=args.kv_capacity_bytes,
+        transport_max_attempts=args.transport_max_attempts,
     )
 
 
@@ -291,6 +302,7 @@ def _add_queue_worker_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-node-depth", type=int, default=0, help="For node workers, cap queued+running model claims on this node; 0 disables the cap.")
     parser.add_argument("--batch-linger-s", type=float, default=0.0, help="Wait this long after the newest ready request before dispatching a partial batch.")
     parser.add_argument("--kv-capacity-bytes", type=int, default=0, help="Node-local KV reservation cap; 0 disables the cap.")
+    parser.add_argument("--transport-max-attempts", type=int, default=3, help="Requeue transient transport failures until this attempt count, then fail.")
     parser.add_argument("--worker-id")
     parser.add_argument("--lease-ttl-s", type=int, default=900)
     parser.add_argument("--heartbeat-interval-s", type=float, default=5.0)

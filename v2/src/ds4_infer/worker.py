@@ -13,13 +13,14 @@ _CPU_SERVICE: Any | None = None
 
 
 class BatchWorker:
-    def __init__(self, *, queue: Any, registry: ProfileRegistry, runner: Runner, worker_id: str | None = None, lease_ttl_s: int = 900, heartbeat_interval_s: float = 5.0) -> None:
+    def __init__(self, *, queue: Any, registry: ProfileRegistry, runner: Runner, worker_id: str | None = None, lease_ttl_s: int = 900, heartbeat_interval_s: float = 5.0, transport_max_attempts: int = 3) -> None:
         self.queue = queue
         self.registry = registry
         self.runner = runner
         self.worker_id = worker_id or f"{socket.gethostname()}:{id(self)}"
         self.lease_ttl_s = lease_ttl_s
         self.heartbeat_interval_s = heartbeat_interval_s
+        self.transport_max_attempts = transport_max_attempts
 
     def run_once(
         self,
@@ -64,22 +65,30 @@ class BatchWorker:
             pairs = self._run_model_batch(claims, concurrency)
             mode = "batch"
         else:
-            completed, failed = self._run_stream(claims, concurrency, on_result)
-            return _summary(len(claims), completed, failed, reap, prefilled_count=prefilled, batch_dispatch_count=len(claims), batch_dispatch_mode="per_request")
-        completed = failed = 0
+            completed, failed, retried = self._run_stream(claims, concurrency, on_result)
+            return _summary(len(claims), completed, failed, reap, prefilled_count=prefilled, retried_count=retried, batch_dispatch_count=len(claims), batch_dispatch_mode="per_request")
+        completed = failed = retried = 0
         for claim, result in pairs:
-            item_completed, item_failed = self._finish_pair(claim, result, on_result)
+            item_completed, item_failed, item_retried = self._finish_pair(claim, result, on_result)
             completed += item_completed
             failed += item_failed
-        return _summary(len(claims), completed, failed, reap, prefilled_count=prefilled, batch_dispatch_count=1, batch_dispatch_mode=mode)
+            retried += item_retried
+        return _summary(len(claims), completed, failed, reap, prefilled_count=prefilled, retried_count=retried, batch_dispatch_count=1, batch_dispatch_mode=mode)
 
-    def _finish_pair(self, claim: QueueClaim, result: dict[str, Any], on_result: FinishHook | None) -> tuple[int, int]:
+    def _finish_pair(self, claim: QueueClaim, result: dict[str, Any], on_result: FinishHook | None) -> tuple[int, int, int]:
+        if result.get("status") == "transport_failed":
+            retry_state = self.queue.retry_transport_failure(request_id=claim.request_id, lease_id=claim.lease_id, result=result, max_attempts=self.transport_max_attempts)
+            if retry_state == "requeued":
+                return (0, 0, 1)
+            if retry_state in {"failed", "cancelled"} and on_result is not None:
+                on_result(claim, result)
+            return (0, 1, 0) if retry_state == "failed" else (0, 0, 0)
         state = "completed" if result.get("status") == "completed" else "failed"
         if not self.queue.finish_request(request_id=claim.request_id, lease_id=claim.lease_id, state=state, result=result, error=None if state == "completed" else str(result.get("status", "failed"))):
-            return (0, 0)
+            return (0, 0, 0)
         if on_result is not None:
             on_result(claim, result)
-        return (1, 0) if state == "completed" else (0, 1)
+        return (1, 0, 0) if state == "completed" else (0, 1, 0)
 
     def _run_model_batch(self, claims: list[QueueClaim], concurrency: int) -> list[tuple[QueueClaim, dict[str, Any]]]:
         profile = self.registry.get(claims[0].selected_profile_id)
@@ -92,20 +101,21 @@ class BatchWorker:
             return [(claim, _failure(claim, str(exc))) for claim in claims]
         return [(claim, _result_for_claim(claim, results.get(claim.request_id))) for claim in claims]
 
-    def _run_stream(self, claims: list[QueueClaim], concurrency: int, on_result: FinishHook | None) -> tuple[int, int]:
+    def _run_stream(self, claims: list[QueueClaim], concurrency: int, on_result: FinishHook | None) -> tuple[int, int, int]:
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
             futures = {pool.submit(self._run_one, claim): claim for claim in claims}
             pending = set(futures)
-            completed = failed = 0
+            completed = failed = retried = 0
             while pending:
                 done, pending = wait(pending, timeout=self.heartbeat_interval_s, return_when=FIRST_COMPLETED)
                 for future in done:
-                    item_completed, item_failed = self._finish_pair(futures[future], _future_result(future, futures[future]), on_result)
+                    item_completed, item_failed, item_retried = self._finish_pair(futures[future], _future_result(future, futures[future]), on_result)
                     completed += item_completed
                     failed += item_failed
+                    retried += item_retried
                 if pending:
                     self._heartbeat([futures[future] for future in pending])
-            return completed, failed
+            return completed, failed, retried
 
     def _await_with_heartbeat(self, future: Any, claims: list[QueueClaim]) -> dict[str, dict]:
         while not future.done():

@@ -165,7 +165,8 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         request = make_request(chat=True)
         result = SparkHttpRunner(timeout_s=30, command_runner=_json_runner(calls, payload)).run_one_on_node(request, profile, "spark4+spark5")
         self.assertEqual(result["output"]["text"], "ok")
-        self.assertEqual(calls[0]["command"][5], "spark5")
+        self.assertEqual(calls[0]["command"][-2], "spark5")
+        self.assertIn("ControlMaster=auto", calls[0]["command"])
         payload = json.loads(calls[0]["input"])
         self.assertEqual(payload["batch_payload"]["model"], "deepseek-ai/DeepSeek-V4-Flash")
         self.assertEqual(payload["batch_payload"]["items"][0]["thinking"], {"type": "disabled"})
@@ -220,7 +221,7 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         profile = ProfileRegistry.load(PROFILES).get("dsv4_vllm_mtp_smartest_v1")
         with patch.dict(os.environ, {"DS4_SPARK_NODE_MAP_JSON": json.dumps({"spark4+spark5": "spark5"})}):
             SparkHttpRunner(command_runner=_json_runner(calls, _chat_payload(), capture="command")).run_one_on_node(make_request(chat=True), profile, "spark4+spark5")
-        self.assertEqual(calls[0][5], "spark5")
+        self.assertEqual(calls[0][-2], "spark5")
 
     def test_spark_http_runner_rejects_failed_ds4_batch_item(self) -> None:
         with _local_json_server({"results": [{"ok": False, "status": 500, "response": {"error": "backend down"}}]}) as url:
@@ -234,6 +235,32 @@ class LlmRunnersWebChatTests(unittest.TestCase):
             result = SparkHttpRunner(timeout_s=5, command_runner=runner).run_one_on_node(make_request(chat=True), profile, "spark0")
         self.assertEqual(result["status"], "transport_failed")
         self.assertIn("backend down", result["transport"]["error"])
+
+    def test_spark_http_runner_reports_empty_ssh_failure(self) -> None:
+        def runner(command, **kwargs):
+            return subprocess.CompletedProcess(command, 255, stdout="", stderr="")
+
+        profile = ProfileRegistry.load(PROFILES).get("qwen3_6_27b_fp8_efficient_v1")
+        result = SparkHttpRunner(timeout_s=5, command_runner=runner).run_one_on_node(make_request(chat=True), profile, "spark0")
+        self.assertEqual(result["status"], "transport_failed")
+        self.assertIn("ssh to spark0 exited 255", result["transport"]["error"])
+
+    def test_spark_http_runner_can_preconnect_control_master(self) -> None:
+        calls = []
+
+        def runner(command, **kwargs):
+            calls.append(command)
+            if "-O" in command:
+                return subprocess.CompletedProcess(command, 255, stdout="", stderr="No ControlPath")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        result = SparkHttpRunner(timeout_s=5, command_runner=runner).preconnect(["spark0"])
+        self.assertEqual(result["results"]["spark0"]["state"], "started")
+        self.assertEqual(calls[0][-1], "spark0")
+        self.assertIn("ControlMaster=no", calls[0])
+        self.assertIn("-M", calls[1])
+        self.assertIn("ControlMaster=yes", calls[1])
+        self.assertEqual(calls[1][-1], "spark0")
 
     def test_completion_extractor_accepts_chat_shaped_response(self) -> None:
         data = {"choices": [{"message": {"content": "dsv4 antirez ok", "reasoning_content": "hidden"}}]}

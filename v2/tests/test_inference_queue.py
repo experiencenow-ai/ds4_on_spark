@@ -46,7 +46,22 @@ class BatchRunner:
         self.calls.append((node_id, [r.request_id for r in requests], concurrency))
         out = {}
         for request in requests:
-            out[request.request_id] = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=request.request_id, status="transport_failed" if request.request_id in self.fail else "completed")
+            out[request.request_id] = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=request.request_id, status="failed" if request.request_id in self.fail else "completed")
+        return out
+
+
+class TransportFlakyBatchRunner:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str | None, list[str]]] = []
+
+    def run_many_on_node(self, requests, profile, node_id, *, concurrency=1):
+        self.calls.append((node_id, [r.request_id for r in requests]))
+        out = {}
+        for request in requests:
+            status = "transport_failed" if len(self.calls) == 1 else "completed"
+            out[request.request_id] = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=request.request_id, status=status)
+            if status == "transport_failed":
+                out[request.request_id]["transport"] = {"error": f"{node_id} transient transport failure"}
         return out
 
 
@@ -172,6 +187,32 @@ class InferenceQueueTests(unittest.TestCase):
             self.assertEqual(worked["failed_count"], 1)
             self.assertEqual(queue.status(request_id="ok")["state"], "completed")
             self.assertEqual(queue.status(request_id="bad")["state"], "failed")
+
+    def test_transport_failure_requeues_and_clears_node_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(requests=[req("a")], registry=registry, batch_id="job")
+            runner = TransportFlakyBatchRunner()
+            first = queue.work(registry=registry, runner=runner, node_id="spark0", node_profile_ids=(QWEN,), limit=1, concurrency=1, transport_max_attempts=3)
+            self.assertEqual(first["retried_count"], 1)
+            self.assertEqual(queue.status(request_id="a")["state"], "queued")
+            self.assertIsNone(queue.status(request_id="a")["selected_node_id"])
+            second = queue.work(registry=registry, runner=runner, node_id="spark1", node_profile_ids=(QWEN,), limit=1, concurrency=1, transport_max_attempts=3)
+            self.assertEqual(second["completed_count"], 1)
+            self.assertEqual(queue.status(request_id="a")["state"], "completed")
+            self.assertEqual(runner.calls, [("spark0", ["a"]), ("spark1", ["a"])])
+
+    def test_transport_failure_fails_after_attempt_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(requests=[req("a")], registry=registry, batch_id="job")
+            runner = TransportFlakyBatchRunner()
+            worked = queue.work(registry=registry, runner=runner, node_id="spark0", node_profile_ids=(QWEN,), limit=1, concurrency=1, transport_max_attempts=1)
+            self.assertEqual(worked["failed_count"], 1)
+            self.assertEqual(queue.status(request_id="a")["state"], "failed")
+            self.assertIn("spark0 transient transport failure", queue.status(request_id="a")["error"])
 
 
 if __name__ == "__main__":
