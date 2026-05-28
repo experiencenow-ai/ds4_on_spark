@@ -36,6 +36,10 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertIn("vllm_requests_running", telemetry.CSV_FIELDS)
         self.assertIn("local_queue_depth", telemetry.CSV_FIELDS)
         self.assertIn("vllm_tokens_per_s", telemetry.CSV_FIELDS)
+        self.assertIn("vllm_prompt_tokens_per_s", telemetry.CSV_FIELDS)
+        self.assertIn("vllm_prompt_cache_hit_pct", telemetry.CSV_FIELDS)
+        self.assertIn("vllm_external_prefix_cache_hit_pct", telemetry.CSV_FIELDS)
+        self.assertIn("local_queue_prompt_tok_s", telemetry.CSV_FIELDS)
         self.assertIn("local_queue_completion_tok_s", telemetry.CSV_FIELDS)
 
     def test_cpu_pct_uses_idle_delta(self):
@@ -106,12 +110,28 @@ class SparkTelemetryTest(unittest.TestCase):
             'vllm:prompt_tokens_by_source_total{source="local_compute"} 10.0',
             'vllm:prompt_tokens_by_source_total{source="local_cache_hit"} 20.0',
             'vllm:prompt_tokens_by_source_total{source="external_kv_transfer"} 5.0',
+            'vllm:prompt_tokens_cached_total{model_name="m"} 25.0',
+            'vllm:prefix_cache_queries_total{model_name="m"} 100.0',
+            'vllm:prefix_cache_hits_total{model_name="m"} 40.0',
+            'vllm:external_prefix_cache_queries_total{model_name="m"} 20.0',
+            'vllm:external_prefix_cache_hits_total{model_name="m"} 10.0',
             'vllm:generation_tokens_total{model_name="m"} 40.0',
         ])
         old = node_mon.read_text_url
         try:
             node_mon.read_text_url = lambda url,timeout: (text,"")
-            metrics = node_mon.read_vllm_metrics("http://x/metrics",1.0,{"unix_ts":90.0,"vllm_tokens_total":20.0,"vllm_generation_tokens_total":10.0},100.0)
+            prev = {
+                "unix_ts": 90.0,
+                "vllm_tokens_total": 20.0,
+                "vllm_prompt_tokens_total": 10.0,
+                "vllm_generation_tokens_total": 10.0,
+                "vllm_prompt_tokens_cached_total": 5.0,
+                "vllm_prefix_cache_queries_total": 80.0,
+                "vllm_prefix_cache_hits_total": 30.0,
+                "vllm_external_prefix_cache_queries_total": 15.0,
+                "vllm_external_prefix_cache_hits_total": 5.0,
+            }
+            metrics = node_mon.read_vllm_metrics("http://x/metrics",1.0,prev,100.0)
         finally:
             node_mon.read_text_url = old
         self.assertEqual(metrics["vllm_metrics_up"],1)
@@ -122,7 +142,12 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(metrics["vllm_prompt_tokens_local_cache_hit_total"],20.0)
         self.assertEqual(metrics["vllm_tokens_total"],75.0)
         self.assertEqual(metrics["vllm_tokens_per_s"],5.5)
+        self.assertEqual(metrics["vllm_prompt_tokens_per_s"],2.5)
         self.assertEqual(metrics["vllm_generation_tokens_per_s"],3.0)
+        self.assertEqual(metrics["vllm_prompt_tokens_cached_per_s"],2.0)
+        self.assertEqual(metrics["vllm_prompt_cache_hit_pct"],80.0)
+        self.assertEqual(metrics["vllm_prefix_cache_hit_pct"],50.0)
+        self.assertEqual(metrics["vllm_external_prefix_cache_hit_pct"],100.0)
 
     def test_local_queue_depth_reads_sqlite_counts(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -155,7 +180,7 @@ class SparkTelemetryTest(unittest.TestCase):
                 conn.execute("create table requests (state text, request_kind text, selected_node_id text, completed_at real, result_json text)")
                 conn.execute("insert into requests values (?,?,?,?,?)", ("queued","model","spark0",None,None))
                 conn.execute("insert into requests values (?,?,?,?,?)", ("running","model","spark1",None,None))
-                conn.execute("insert into requests values (?,?,?,?,?)", ("completed","model","spark1",100.0,'{"usage":{"completion_tokens":120}}'))
+                conn.execute("insert into requests values (?,?,?,?,?)", ("completed","model","spark1",100.0,'{"usage":{"prompt_tokens":300,"completion_tokens":120}}'))
             os.utime(empty,(200.0,200.0))
             os.utime(active,(100.0,100.0))
             old = telemetry.time.time
@@ -166,6 +191,9 @@ class SparkTelemetryTest(unittest.TestCase):
                 telemetry.time.time = old
         self.assertEqual(q["local_queue_db"],active)
         self.assertEqual(q["local_queue_depth"],2)
+        self.assertEqual(q["local_queue_prompt_tokens_recent"],300)
+        self.assertEqual(q["local_queue_prompt_tok_s"],5.0)
+        self.assertIn("spark1:5", q["local_queue_prompt_tok_s_by_node"])
         self.assertEqual(q["local_queue_completion_tokens_recent"],120)
         self.assertEqual(q["local_queue_completion_tok_s"],2.0)
         self.assertIn("spark1:2", q["local_queue_completion_tok_s_by_node"])

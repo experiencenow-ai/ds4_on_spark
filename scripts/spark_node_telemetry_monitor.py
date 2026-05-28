@@ -353,9 +353,22 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
         "vllm_prompt_tokens_local_compute_total": 0.0,
         "vllm_prompt_tokens_local_cache_hit_total": 0.0,
         "vllm_prompt_tokens_external_kv_transfer_total": 0.0,
+        "vllm_prompt_tokens_cached_total": 0.0,
+        "vllm_prefix_cache_queries_total": 0.0,
+        "vllm_prefix_cache_hits_total": 0.0,
+        "vllm_external_prefix_cache_queries_total": 0.0,
+        "vllm_external_prefix_cache_hits_total": 0.0,
         "vllm_tokens_total": 0.0,
         "vllm_tokens_per_s": 0.0,
+        "vllm_prompt_tokens_per_s": 0.0,
         "vllm_generation_tokens_per_s": 0.0,
+        "vllm_prompt_tokens_cached_per_s": 0.0,
+        "vllm_prompt_tokens_local_compute_per_s": 0.0,
+        "vllm_prompt_tokens_local_cache_hit_per_s": 0.0,
+        "vllm_prompt_tokens_external_kv_transfer_per_s": 0.0,
+        "vllm_prompt_cache_hit_pct": 0.0,
+        "vllm_prefix_cache_hit_pct": 0.0,
+        "vllm_external_prefix_cache_hit_pct": 0.0,
         "vllm_metrics_sources": "",
     }
     sources: List[str] = []
@@ -384,6 +397,21 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
             elif name in ("vllm:generation_tokens_total","vllm:generation_tokens"):
                 out["vllm_generation_tokens_total"] = float(out["vllm_generation_tokens_total"]) + prometheus_value(line)
                 found = True
+            elif name == "vllm:prompt_tokens_cached_total":
+                out["vllm_prompt_tokens_cached_total"] = float(out["vllm_prompt_tokens_cached_total"]) + prometheus_value(line)
+                found = True
+            elif name == "vllm:prefix_cache_queries_total":
+                out["vllm_prefix_cache_queries_total"] = float(out["vllm_prefix_cache_queries_total"]) + prometheus_value(line)
+                found = True
+            elif name == "vllm:prefix_cache_hits_total":
+                out["vllm_prefix_cache_hits_total"] = float(out["vllm_prefix_cache_hits_total"]) + prometheus_value(line)
+                found = True
+            elif name == "vllm:external_prefix_cache_queries_total":
+                out["vllm_external_prefix_cache_queries_total"] = float(out["vllm_external_prefix_cache_queries_total"]) + prometheus_value(line)
+                found = True
+            elif name == "vllm:external_prefix_cache_hits_total":
+                out["vllm_external_prefix_cache_hits_total"] = float(out["vllm_external_prefix_cache_hits_total"]) + prometheus_value(line)
+                found = True
             elif name in ("vllm:prompt_tokens_by_source","vllm:prompt_tokens_by_source_total"):
                 value = prometheus_value(line)
                 source = prometheus_label(line,"source")
@@ -403,14 +431,41 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
     out["vllm_kv_cache_pct"] = round(max(kv_vals),2) if kv_vals else 0.0
     if float(out["vllm_prompt_tokens_total"]) <= 0.0 and source_prompt_total > 0.0:
         out["vllm_prompt_tokens_total"] = source_prompt_total
+    source_cached_total = float(out["vllm_prompt_tokens_local_cache_hit_total"]) + float(out["vllm_prompt_tokens_external_kv_transfer_total"])
+    if float(out["vllm_prompt_tokens_cached_total"]) <= 0.0 and source_cached_total > 0.0:
+        out["vllm_prompt_tokens_cached_total"] = source_cached_total
     out["vllm_tokens_total"] = float(out["vllm_prompt_tokens_total"]) + float(out["vllm_generation_tokens_total"])
+    def pct(num: float, den: float) -> float:
+        return(round((100.0 * num / den),2) if den > 0.0 else 0.0)
+    out["vllm_prompt_cache_hit_pct"] = pct(float(out["vllm_prompt_tokens_cached_total"]),float(out["vllm_prompt_tokens_total"]))
+    out["vllm_prefix_cache_hit_pct"] = pct(float(out["vllm_prefix_cache_hits_total"]),float(out["vllm_prefix_cache_queries_total"]))
+    out["vllm_external_prefix_cache_hit_pct"] = pct(float(out["vllm_external_prefix_cache_hits_total"]),float(out["vllm_external_prefix_cache_queries_total"]))
     if prev is not None and now is not None:
         elapsed = now - float(prev.get("unix_ts",0.0))
         if elapsed > 0.0:
-            total_delta = max(0.0,float(out["vllm_tokens_total"]) - float(prev.get("vllm_tokens_total",0.0)))
-            gen_delta = max(0.0,float(out["vllm_generation_tokens_total"]) - float(prev.get("vllm_generation_tokens_total",0.0)))
+            def delta(key: str) -> float:
+                return(max(0.0,float(out.get(key,0.0)) - float(prev.get(key,0.0))))
+            total_delta = delta("vllm_tokens_total")
+            prompt_delta = delta("vllm_prompt_tokens_total") if "vllm_prompt_tokens_total" in prev else max(0.0,total_delta - delta("vllm_generation_tokens_total"))
+            gen_delta = delta("vllm_generation_tokens_total")
+            cached_delta = delta("vllm_prompt_tokens_cached_total")
+            prefix_query_delta = delta("vllm_prefix_cache_queries_total")
+            prefix_hit_delta = delta("vllm_prefix_cache_hits_total")
+            external_query_delta = delta("vllm_external_prefix_cache_queries_total")
+            external_hit_delta = delta("vllm_external_prefix_cache_hits_total")
             out["vllm_tokens_per_s"] = round(total_delta / elapsed,3)
+            out["vllm_prompt_tokens_per_s"] = round(prompt_delta / elapsed,3)
             out["vllm_generation_tokens_per_s"] = round(gen_delta / elapsed,3)
+            out["vllm_prompt_tokens_cached_per_s"] = round(cached_delta / elapsed,3)
+            out["vllm_prompt_tokens_local_compute_per_s"] = round(delta("vllm_prompt_tokens_local_compute_total") / elapsed,3)
+            out["vllm_prompt_tokens_local_cache_hit_per_s"] = round(delta("vllm_prompt_tokens_local_cache_hit_total") / elapsed,3)
+            out["vllm_prompt_tokens_external_kv_transfer_per_s"] = round(delta("vllm_prompt_tokens_external_kv_transfer_total") / elapsed,3)
+            if prompt_delta > 0.0:
+                out["vllm_prompt_cache_hit_pct"] = pct(cached_delta,prompt_delta)
+            if prefix_query_delta > 0.0:
+                out["vllm_prefix_cache_hit_pct"] = pct(prefix_hit_delta,prefix_query_delta)
+            if external_query_delta > 0.0:
+                out["vllm_external_prefix_cache_hit_pct"] = pct(external_hit_delta,external_query_delta)
     out["vllm_metrics_sources"] = ";".join(sources)[:240]
     return(out)
 
@@ -470,7 +525,12 @@ def write_summary(path: str, rows: Deque[Dict[str,object]], total_samples: int) 
             "vllm_requests_waiting": telemetry.stats(float(r.get("vllm_requests_waiting",0.0)) for r in system_rows),
             "vllm_kv_cache_pct": telemetry.stats(float(r.get("vllm_kv_cache_pct",0.0)) for r in system_rows),
             "vllm_tokens_per_s": telemetry.stats(float(r.get("vllm_tokens_per_s",0.0)) for r in system_rows),
+            "vllm_prompt_tokens_per_s": telemetry.stats(float(r.get("vllm_prompt_tokens_per_s",0.0)) for r in system_rows),
             "vllm_generation_tokens_per_s": telemetry.stats(float(r.get("vllm_generation_tokens_per_s",0.0)) for r in system_rows),
+            "vllm_prompt_tokens_cached_per_s": telemetry.stats(float(r.get("vllm_prompt_tokens_cached_per_s",0.0)) for r in system_rows),
+            "vllm_prompt_cache_hit_pct": telemetry.stats(float(r.get("vllm_prompt_cache_hit_pct",0.0)) for r in system_rows),
+            "vllm_prefix_cache_hit_pct": telemetry.stats(float(r.get("vllm_prefix_cache_hit_pct",0.0)) for r in system_rows),
+            "vllm_external_prefix_cache_hit_pct": telemetry.stats(float(r.get("vllm_external_prefix_cache_hit_pct",0.0)) for r in system_rows),
             "local_queue_depth": telemetry.stats(float(r.get("local_queue_depth",0.0)) for r in system_rows),
             "local_queue_running": telemetry.stats(float(r.get("local_queue_running",0.0)) for r in system_rows),
             "gpu_util_pct": telemetry.stats(gpu_vals),
@@ -498,7 +558,16 @@ def build_rows(args: argparse.Namespace, prev_cpu: Optional[Tuple[int,int]], pre
         next_vllm = {
             "unix_ts": now,
             "vllm_tokens_total": float(vllm.get("vllm_tokens_total",0.0)),
+            "vllm_prompt_tokens_total": float(vllm.get("vllm_prompt_tokens_total",0.0)),
             "vllm_generation_tokens_total": float(vllm.get("vllm_generation_tokens_total",0.0)),
+            "vllm_prompt_tokens_local_compute_total": float(vllm.get("vllm_prompt_tokens_local_compute_total",0.0)),
+            "vllm_prompt_tokens_local_cache_hit_total": float(vllm.get("vllm_prompt_tokens_local_cache_hit_total",0.0)),
+            "vllm_prompt_tokens_external_kv_transfer_total": float(vllm.get("vllm_prompt_tokens_external_kv_transfer_total",0.0)),
+            "vllm_prompt_tokens_cached_total": float(vllm.get("vllm_prompt_tokens_cached_total",0.0)),
+            "vllm_prefix_cache_queries_total": float(vllm.get("vllm_prefix_cache_queries_total",0.0)),
+            "vllm_prefix_cache_hits_total": float(vllm.get("vllm_prefix_cache_hits_total",0.0)),
+            "vllm_external_prefix_cache_queries_total": float(vllm.get("vllm_external_prefix_cache_queries_total",0.0)),
+            "vllm_external_prefix_cache_hits_total": float(vllm.get("vllm_external_prefix_cache_hits_total",0.0)),
         }
     queue = telemetry.read_local_queue(args.queue_db,args.queue_db_glob)
     gpus,error = poll_gpus(args.nvidia_smi_timeout)
