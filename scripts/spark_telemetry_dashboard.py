@@ -228,6 +228,9 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
         node["input_tok_s"] = max(fnum(node.get("input_tok_s")),queue_prompt_tok_s_by_node.get(name,0.0))
         node["output_tok_s"] = max(fnum(node.get("output_tok_s")),queue_tok_s_by_node.get(name,0.0))
         node["tok_s"] = max(fnum(node.get("tok_s")),fnum(node.get("input_tok_s")) + fnum(node.get("output_tok_s")),queue_tok_s_by_node.get(name,0.0))
+        if node["state"] == "idle" and (fnum(node.get("input_tok_s")) > 0.0 or fnum(node.get("output_tok_s")) > 0.0 or fnum(node.get("vllm_running")) > 0.0):
+            node["state"] = "busy"
+            node["state_label"] = "busy"
     reachable = [node for node in nodes if node["state"] != "down"]
     known_kv = [node["kv_pct"] for node in reachable if node.get("kv_known")]
     known_cache = [node["cache_hit_pct"] for node in reachable if node.get("vllm_metrics_up")]
