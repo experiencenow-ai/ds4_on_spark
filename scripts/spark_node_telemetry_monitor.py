@@ -347,6 +347,8 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
         "vllm_metrics_up": 0,
         "vllm_requests_running": 0.0,
         "vllm_requests_waiting": 0.0,
+        "vllm_requests_total": 0.0,
+        "vllm_requests_per_s": 0.0,
         "vllm_kv_cache_pct": 0.0,
         "vllm_prompt_tokens_total": 0.0,
         "vllm_generation_tokens_total": 0.0,
@@ -374,6 +376,8 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
     sources: List[str] = []
     kv_vals: List[float] = []
     source_prompt_total = 0.0
+    request_counter_total = 0.0
+    http_request_counter_total = 0.0
     for url in [item.strip() for item in raw_urls.split(",") if item.strip()]:
         text,error = read_text_url(url,timeout)
         if error != "":
@@ -387,6 +391,15 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
             elif name == "vllm:num_requests_waiting":
                 out["vllm_requests_waiting"] = float(out["vllm_requests_waiting"]) + prometheus_value(line)
                 found = True
+            elif name in ("vllm:request_success_total","vllm:request_failure_total","vllm:requests_total"):
+                request_counter_total += prometheus_value(line)
+                found = True
+            elif name == "http_requests_total":
+                handler = prometheus_label(line,"handler")
+                method = prometheus_label(line,"method")
+                if method == "POST" and handler in ("/v1/completions","/v1/chat/completions"):
+                    http_request_counter_total += prometheus_value(line)
+                    found = True
             elif name in ("vllm:kv_cache_usage_perc","vllm:gpu_cache_usage_perc"):
                 value = prometheus_value(line)
                 kv_vals.append(value * 100.0 if value <= 1.0 else value)
@@ -428,6 +441,7 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
         if found:
             sources.append(url)
     out["vllm_metrics_up"] = 1 if sources else 0
+    out["vllm_requests_total"] = request_counter_total if request_counter_total > 0.0 else http_request_counter_total
     out["vllm_kv_cache_pct"] = round(max(kv_vals),2) if kv_vals else 0.0
     if float(out["vllm_prompt_tokens_total"]) <= 0.0 and source_prompt_total > 0.0:
         out["vllm_prompt_tokens_total"] = source_prompt_total
@@ -453,6 +467,7 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
             prefix_hit_delta = delta("vllm_prefix_cache_hits_total")
             external_query_delta = delta("vllm_external_prefix_cache_queries_total")
             external_hit_delta = delta("vllm_external_prefix_cache_hits_total")
+            out["vllm_requests_per_s"] = round(delta("vllm_requests_total") / elapsed,3)
             out["vllm_tokens_per_s"] = round(total_delta / elapsed,3)
             out["vllm_prompt_tokens_per_s"] = round(prompt_delta / elapsed,3)
             out["vllm_generation_tokens_per_s"] = round(gen_delta / elapsed,3)
@@ -523,6 +538,7 @@ def write_summary(path: str, rows: Deque[Dict[str,object]], total_samples: int) 
             "ds4_gateway_cpu_active": telemetry.stats(float(r.get("ds4_gateway_cpu_active",0.0)) for r in system_rows),
             "vllm_requests_running": telemetry.stats(float(r.get("vllm_requests_running",0.0)) for r in system_rows),
             "vllm_requests_waiting": telemetry.stats(float(r.get("vllm_requests_waiting",0.0)) for r in system_rows),
+            "vllm_requests_per_s": telemetry.stats(float(r.get("vllm_requests_per_s",0.0)) for r in system_rows),
             "vllm_kv_cache_pct": telemetry.stats(float(r.get("vllm_kv_cache_pct",0.0)) for r in system_rows),
             "vllm_tokens_per_s": telemetry.stats(float(r.get("vllm_tokens_per_s",0.0)) for r in system_rows),
             "vllm_prompt_tokens_per_s": telemetry.stats(float(r.get("vllm_prompt_tokens_per_s",0.0)) for r in system_rows),
@@ -557,6 +573,7 @@ def build_rows(args: argparse.Namespace, prev_cpu: Optional[Tuple[int,int]], pre
     if int(vllm.get("vllm_metrics_up",0)) != 0:
         next_vllm = {
             "unix_ts": now,
+            "vllm_requests_total": float(vllm.get("vllm_requests_total",0.0)),
             "vllm_tokens_total": float(vllm.get("vllm_tokens_total",0.0)),
             "vllm_prompt_tokens_total": float(vllm.get("vllm_prompt_tokens_total",0.0)),
             "vllm_generation_tokens_total": float(vllm.get("vllm_generation_tokens_total",0.0)),
