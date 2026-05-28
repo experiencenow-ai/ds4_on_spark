@@ -29,6 +29,7 @@ class QueueClaim:
     selected_profile_id: str
     selected_node_id: str | None
     lease_id: str
+    attempt_count: int
     request: InferenceRequest | None
     service_name: str | None = None
     payload: dict[str, Any] | None = None
@@ -148,9 +149,9 @@ class InferenceQueue:
             self._refresh_batch(conn, batch_id)
         return {"format": QUEUE_FORMAT, "state": "queued", "batch_id": batch_id, "job_id": batch_id, "request_ids": ids, "request_count": len(ids), "selected_profiles": {}, "selected_nodes": {node_id: len(ids)} if node_id else {}, "selected_services": {service: len(ids)}, "priority_counts": {str(prio): len(ids)}}
 
-    def work(self, *, registry: ProfileRegistry, runner: Runner, node_id: str | None = None, batch_id: str | None = None, limit: int = 1, concurrency: int = 1, worker_id: str | None = None, lease_ttl_s: int = 900, heartbeat_interval_s: float = 5.0, node_profile_ids: Iterable[str] | None = None, max_node_depth: int = 0, batch_linger_s: float = 0.0, kv_capacity_bytes: int = 0, on_result: Callable[[QueueClaim, dict[str, Any]], None] | None = None) -> dict[str, Any]:
+    def work(self, *, registry: ProfileRegistry, runner: Runner, node_id: str | None = None, batch_id: str | None = None, limit: int = 1, concurrency: int = 1, worker_id: str | None = None, lease_ttl_s: int = 900, heartbeat_interval_s: float = 5.0, node_profile_ids: Iterable[str] | None = None, max_node_depth: int = 0, batch_linger_s: float = 0.0, kv_capacity_bytes: int = 0, transport_max_attempts: int = 3, on_result: Callable[[QueueClaim, dict[str, Any]], None] | None = None) -> dict[str, Any]:
         from .worker import BatchWorker
-        return BatchWorker(queue=self, registry=registry, runner=runner, worker_id=worker_id, lease_ttl_s=lease_ttl_s, heartbeat_interval_s=heartbeat_interval_s).run_once(node_id=node_id, batch_id=batch_id, limit=limit, concurrency=concurrency, node_profile_ids=tuple(node_profile_ids or ()), max_node_depth=max_node_depth, batch_linger_s=batch_linger_s, kv_capacity_bytes=kv_capacity_bytes, on_result=on_result)
+        return BatchWorker(queue=self, registry=registry, runner=runner, worker_id=worker_id, lease_ttl_s=lease_ttl_s, heartbeat_interval_s=heartbeat_interval_s, transport_max_attempts=transport_max_attempts).run_once(node_id=node_id, batch_id=batch_id, limit=limit, concurrency=concurrency, node_profile_ids=tuple(node_profile_ids or ()), max_node_depth=max_node_depth, batch_linger_s=batch_linger_s, kv_capacity_bytes=kv_capacity_bytes, on_result=on_result)
 
     def prepare_ready(self, *, node_id: str | None, eligible_profile_ids: Iterable[str], batch_id: str | None, limit: int, leased_by: str, lease_ttl_s: int, max_node_depth: int = 0, kv_capacity_bytes: int = 0) -> int:
         eligible = tuple(str(x) for x in eligible_profile_ids if str(x))
@@ -233,6 +234,42 @@ class InferenceQueue:
             self._refresh_batch(conn, str(row["batch_id"]))
         self._write_notice(request_id, final, final_result)
         return True
+
+    def retry_transport_failure(self, *, request_id: str, lease_id: str, result: dict[str, Any], max_attempts: int) -> str:
+        now = time.time()
+        with closing(self._connect()) as conn, conn:
+            row = conn.execute("select * from requests where request_id=? and lease_id=? and state='running'", (request_id, lease_id)).fetchone()
+            if row is None:
+                return "lost"
+            attempts = int(row["attempt_count"] or 0)
+            error = _result_error(result) or "transport_failed"
+            if int(row["cancel_requested"] or 0):
+                final = dict(result, status="cancelled", ignored_result=True)
+                conn.execute("update requests set state='cancelled', result_json=?, error=?, completed_at=?, updated_at=?, lease_id=null, leased_by=null, lease_expires_at=null, heartbeat_at=null where request_id=? and lease_id=? and state='running'", (json.dumps(final, sort_keys=True), "cancelled", now, now, request_id, lease_id))
+                conn.execute("delete from kv_entries where request_id=?", (request_id,))
+                self._event(conn, request_id, "cancelled", "cancelled", {"batch_id": row["batch_id"], "after_transport_error": error})
+                self._refresh_batch(conn, str(row["batch_id"]))
+                self._write_notice(request_id, "cancelled", final)
+                return "cancelled"
+            if attempts < max_attempts:
+                conn.execute("delete from kv_entries where request_id=?", (request_id,))
+                conn.execute(
+                    """
+                    update requests set state='queued', selected_node_id=null, ready_at=null, result_json=null, error=?,
+                        lease_id=null, leased_by=null, lease_expires_at=null, heartbeat_at=null, updated_at=?
+                    where request_id=? and lease_id=? and state='running'
+                    """,
+                    (error, now, request_id, lease_id),
+                )
+                self._event(conn, request_id, "transport_requeued", "queued", {"batch_id": row["batch_id"], "attempt_count": attempts, "max_attempts": max_attempts, "error": error})
+                self._refresh_batch(conn, str(row["batch_id"]))
+                return "requeued"
+            conn.execute("update requests set state='failed', result_json=?, error=?, completed_at=?, updated_at=?, lease_id=null, leased_by=null, lease_expires_at=null, heartbeat_at=null where request_id=? and lease_id=? and state='running'", (json.dumps(result, sort_keys=True), error, now, now, request_id, lease_id))
+            conn.execute("delete from kv_entries where request_id=?", (request_id,))
+            self._event(conn, request_id, "failed", "failed", {"batch_id": row["batch_id"], "attempt_count": attempts, "error": error})
+            self._refresh_batch(conn, str(row["batch_id"]))
+        self._write_notice(request_id, "failed", result)
+        return "failed"
 
     def cancel(self, *, request_id: str | None = None, batch_id: str | None = None, job_id: str | None = None, reason: str = "cancelled by operator") -> dict[str, Any]:
         batch_id = job_batch_id(batch_id=batch_id, job_id=job_id)
@@ -419,7 +456,7 @@ def _ready_rows(conn: sqlite3.Connection, *, node_id: str | None, batch_id: str 
 
 
 def _claim(row: sqlite3.Row, lease_id: str) -> QueueClaim:
-    return QueueClaim(request_id=str(row["request_id"]), batch_id=str(row["batch_id"]), request_kind=str(row["request_kind"]), selected_profile_id=str(row["selected_profile_id"]), selected_node_id=str(row["selected_node_id"]) if row["selected_node_id"] else None, lease_id=lease_id, request=InferenceRequest.from_json(json.loads(str(row["request_json"]))) if row["request_kind"] == "model" else None, service_name=str(row["service_name"]) if row["service_name"] else None, payload=json.loads(str(row["request_json"])))
+    return QueueClaim(request_id=str(row["request_id"]), batch_id=str(row["batch_id"]), request_kind=str(row["request_kind"]), selected_profile_id=str(row["selected_profile_id"]), selected_node_id=str(row["selected_node_id"]) if row["selected_node_id"] else None, lease_id=lease_id, attempt_count=int(row["attempt_count"] or 0) + 1, request=InferenceRequest.from_json(json.loads(str(row["request_json"]))) if row["request_kind"] == "model" else None, service_name=str(row["service_name"]) if row["service_name"] else None, payload=json.loads(str(row["request_json"])))
 
 
 def _request_status(row: sqlite3.Row) -> dict[str, Any]:
@@ -448,6 +485,23 @@ def _kv_need(request: InferenceRequest) -> tuple[str | None, int]:
 
 def _failure(request_id: str, error: str) -> dict[str, Any]:
     return {"format": "ds4-inference-failure-v1", "request_id": request_id, "status": "failed", "error": error}
+
+
+def _result_error(result: dict[str, Any]) -> str:
+    transport = result.get("transport")
+    if isinstance(transport, dict) and transport.get("error"):
+        return str(transport.get("error"))
+    if result.get("error"):
+        return str(result.get("error"))
+    output = result.get("output")
+    if isinstance(output, dict) and output.get("text"):
+        try:
+            parsed = json.loads(str(output.get("text")))
+        except json.JSONDecodeError:
+            return str(output.get("text"))[:4000]
+        if isinstance(parsed, dict) and parsed.get("error"):
+            return str(parsed.get("error"))
+    return ""
 
 
 def _count(values: Iterable[Any]) -> dict[Any, int]:

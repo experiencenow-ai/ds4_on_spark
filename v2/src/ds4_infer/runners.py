@@ -70,6 +70,9 @@ class SparkHttpRunner:
         self.command_runner = command_runner or subprocess.run
         self.base_url = os.environ.get("DS4_SPARK_HTTP_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
         self.node_map = _json_env("DS4_SPARK_NODE_MAP_JSON")
+        self.ssh_control_dir = Path(os.environ.get("DS4_SPARK_SSH_CONTROL_DIR", "/tmp/ds4_spark_ssh_control"))
+        self.ssh_control_persist_s = int(os.environ.get("DS4_SPARK_SSH_CONTROL_PERSIST_S", "1800") or "1800")
+        self.ssh_connect_timeout_s = int(os.environ.get("DS4_SPARK_SSH_CONNECT_TIMEOUT_S", "8") or "8")
 
     def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
         return self.run_one_on_node(request, profile, None)
@@ -89,6 +92,29 @@ class SparkHttpRunner:
             return self._batch_results(request_list, profile, host, batch, started, concurrency)
         except Exception as exc:
             return {request.request_id: self._transport_failure(request, profile, node_id, started, str(exc)) for request in request_list}
+
+    def preconnect(self, nodes: list[str]) -> dict[str, Any]:
+        results = {}
+        for node in nodes:
+            host = self._host(node)
+            results[node] = self.ensure_persistent_connection(host)
+        return {"format": "ds4-spark-ssh-preconnect-v1", "results": results}
+
+    def ensure_persistent_connection(self, host: str) -> dict[str, Any]:
+        self.ssh_control_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            check = self.command_runner(self._ssh_argv(host, control_master="no", control_command="check"), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=self.ssh_connect_timeout_s + 5, check=False)
+        except subprocess.TimeoutExpired:
+            check = None
+        if check is not None and int(check.returncode) == 0:
+            return {"host": host, "state": "connected"}
+        try:
+            started = self.command_runner(self._ssh_master_argv(host), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=self.ssh_connect_timeout_s + 5, check=False)
+        except subprocess.TimeoutExpired:
+            return {"host": host, "state": "failed", "error": f"ssh to {host} timed out starting persistent connection"}
+        if int(started.returncode) != 0:
+            return {"host": host, "state": "failed", "error": _completed_error(started, host)}
+        return {"host": host, "state": "started"}
 
     def _host(self, node_id: str | None) -> str:
         raw = node_id or os.environ.get("DS4_SPARK_DEFAULT_NODE")
@@ -129,18 +155,71 @@ except urllib.error.HTTPError as exc:
     detail = exc.read().decode("utf-8", errors="replace")[-4000:]
     raise SystemExit("HTTP %%s: %%s" %% (exc.code, detail))
 ''' % self.timeout_s
-        completed = self.command_runner(
-            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", host, "python3 -c " + shlex.quote(remote)],
-            input=json.dumps(payload),
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=self.timeout_s + 15,
-            check=False,
-        )
+        self.ssh_control_dir.mkdir(parents=True, exist_ok=True)
+        argv = self._ssh_argv(host, remote_command="python3 -c " + shlex.quote(remote))
+        try:
+            completed = self.command_runner(
+                argv,
+                input=json.dumps(payload),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=self.timeout_s + 15,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"ssh to {host} timed out after {self.timeout_s + 15}s while posting /ds4/batches") from exc
         if int(completed.returncode) != 0:
-            raise RuntimeError(str(completed.stderr)[-4000:])
+            raise RuntimeError(_completed_error(completed, host))
         return json.loads(str(completed.stdout))
+
+    def _ssh_argv(self, host: str, *, control_master: str = "auto", control_command: str | None = None, remote_command: str | None = None) -> list[str]:
+        argv = [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            f"ConnectTimeout={max(1, self.ssh_connect_timeout_s)}",
+            "-o",
+            f"ControlMaster={control_master}",
+            "-o",
+            f"ControlPath={self.ssh_control_dir / '%C'}",
+            "-o",
+            f"ControlPersist={max(1, self.ssh_control_persist_s)}",
+            "-o",
+            "ServerAliveInterval=15",
+            "-o",
+            "ServerAliveCountMax=3",
+        ]
+        if control_command:
+            argv.extend(["-O", control_command])
+        argv.append(host)
+        if remote_command is not None:
+            argv.append(remote_command)
+        return argv
+
+    def _ssh_master_argv(self, host: str) -> list[str]:
+        return [
+            "ssh",
+            "-M",
+            "-N",
+            "-f",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            f"ConnectTimeout={max(1, self.ssh_connect_timeout_s)}",
+            "-o",
+            "ControlMaster=yes",
+            "-o",
+            f"ControlPath={self.ssh_control_dir / '%C'}",
+            "-o",
+            f"ControlPersist={max(1, self.ssh_control_persist_s)}",
+            "-o",
+            "ServerAliveInterval=15",
+            "-o",
+            "ServerAliveCountMax=3",
+            host,
+        ]
 
     def _batch_results(self, requests: list[InferenceRequest], profile: ModelProfile, host: str, batch: dict[str, Any], started: float, concurrency: int) -> dict[str, dict]:
         rows = batch.get("results")
@@ -421,6 +500,13 @@ def _json_env(name: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _completed_error(completed: Any, host: str) -> str:
+    detail = str(getattr(completed, "stderr", "") or getattr(completed, "stdout", "") or "").strip()[-4000:]
+    if not detail:
+        return f"ssh to {host} exited {getattr(completed, 'returncode', 'unknown')} with empty stdout/stderr"
+    return f"ssh to {host} exited {getattr(completed, 'returncode', 'unknown')}: {detail}"
 
 
 def _merge_extra_body(payload: dict[str, Any], extra_body: dict[str, Any]) -> None:

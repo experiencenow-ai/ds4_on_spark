@@ -56,8 +56,18 @@ live calibration updates the runtime contract. Comparing single-stream latency
 to aggregate batched throughput is invalid for capacity planning.
 
 `--runner spark` SSHes to the selected Spark and posts to that Spark's local
-`http://127.0.0.1:8000` DS4 endpoint. The Spark runner uses `/ds4/batches`;
-legacy `/v1/*` endpoints are not part of readiness or production routing.
+`http://127.0.0.1:8000` DS4 endpoint. The Spark runner uses persistent SSH
+control sockets by default; pre-open them before a long run so request
+submission does not depend on creating a fresh SSH connection while GPUs are
+busy:
+
+```bash
+PYTHONPATH=src python3 -m ds4_infer.cli spark-ssh-preconnect \
+  --nodes spark0,spark1,spark2,spark3,spark4,spark5,spark6,spark7
+```
+
+The request endpoint is `/ds4/batches`; legacy `/v1/*` endpoints are not part
+of readiness or production routing.
 
 Recommended first deployment:
 
