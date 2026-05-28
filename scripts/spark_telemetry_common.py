@@ -89,9 +89,22 @@ CSV_FIELDS = [
     "vllm_prompt_tokens_local_compute_total",
     "vllm_prompt_tokens_local_cache_hit_total",
     "vllm_prompt_tokens_external_kv_transfer_total",
+    "vllm_prompt_tokens_cached_total",
+    "vllm_prefix_cache_queries_total",
+    "vllm_prefix_cache_hits_total",
+    "vllm_external_prefix_cache_queries_total",
+    "vllm_external_prefix_cache_hits_total",
     "vllm_tokens_total",
     "vllm_tokens_per_s",
+    "vllm_prompt_tokens_per_s",
     "vllm_generation_tokens_per_s",
+    "vllm_prompt_tokens_cached_per_s",
+    "vllm_prompt_tokens_local_compute_per_s",
+    "vllm_prompt_tokens_local_cache_hit_per_s",
+    "vllm_prompt_tokens_external_kv_transfer_per_s",
+    "vllm_prompt_cache_hit_pct",
+    "vllm_prefix_cache_hit_pct",
+    "vllm_external_prefix_cache_hit_pct",
     "vllm_metrics_sources",
     "local_queue_db",
     "local_queue_total",
@@ -105,6 +118,9 @@ CSV_FIELDS = [
     "local_queue_by_node",
     "local_queue_queued_by_node",
     "local_queue_running_by_node",
+    "local_queue_prompt_tokens_recent",
+    "local_queue_prompt_tok_s",
+    "local_queue_prompt_tok_s_by_node",
     "local_queue_completion_tokens_recent",
     "local_queue_completion_tok_s",
     "local_queue_completion_tok_s_by_node",
@@ -246,7 +262,7 @@ def format_node_map(values: Dict[str,float]) -> str:
     return(";".join(parts)[:240])
 
 
-def result_completion_tokens(raw: object) -> int:
+def result_usage_tokens(raw: object, key: str) -> int:
     try:
         data = json.loads(str(raw or "{}"))
     except Exception:
@@ -260,7 +276,15 @@ def result_completion_tokens(raw: object) -> int:
         usage = result.get("usage") if isinstance(result,dict) else None
     if not isinstance(usage,dict):
         return(0)
-    return(int(num(usage.get("completion_tokens",0))))
+    return(int(num(usage.get(key,0))))
+
+
+def result_prompt_tokens(raw: object) -> int:
+    return(result_usage_tokens(raw,"prompt_tokens"))
+
+
+def result_completion_tokens(raw: object) -> int:
+    return(result_usage_tokens(raw,"completion_tokens"))
 
 
 def read_local_queue(raw_path: str, raw_globs: str, rate_window_s: float = QUEUE_RATE_WINDOW_S) -> Dict[str,object]:
@@ -277,6 +301,9 @@ def read_local_queue(raw_path: str, raw_globs: str, rate_window_s: float = QUEUE
         "local_queue_by_node": "",
         "local_queue_queued_by_node": "",
         "local_queue_running_by_node": "",
+        "local_queue_prompt_tokens_recent": 0,
+        "local_queue_prompt_tok_s": 0.0,
+        "local_queue_prompt_tok_s_by_node": "",
         "local_queue_completion_tokens_recent": 0,
         "local_queue_completion_tok_s": 0.0,
         "local_queue_completion_tok_s_by_node": "",
@@ -295,14 +322,19 @@ def read_local_queue(raw_path: str, raw_globs: str, rate_window_s: float = QUEUE
                 active_updated_at = 0.0
                 if "updated_at" in cols:
                     active_updated_at = num(conn.execute("select max(updated_at) from requests where state in ('queued','running')").fetchone()[0])
+                recent_prompt_tokens = 0
                 recent_tokens = 0
+                recent_prompt_by_node: Dict[str,float] = {}
                 recent_by_node: Dict[str,float] = {}
                 if "completed_at" in cols and "result_json" in cols:
                     cutoff = time.time() - max(1.0,rate_window_s)
                     for node,raw_result in conn.execute("select selected_node_id,result_json from requests where state = 'completed' and completed_at is not null and completed_at >= ?", (cutoff,)).fetchall():
+                        prompt_tokens = result_prompt_tokens(raw_result)
                         tokens = result_completion_tokens(raw_result)
+                        recent_prompt_tokens += prompt_tokens
                         recent_tokens += tokens
                         if node is not None:
+                            recent_prompt_by_node[str(node)] = recent_prompt_by_node.get(str(node),0.0) + float(prompt_tokens)
                             recent_by_node[str(node)] = recent_by_node.get(str(node),0.0) + float(tokens)
         except Exception:
             continue
@@ -323,6 +355,9 @@ def read_local_queue(raw_path: str, raw_globs: str, rate_window_s: float = QUEUE
             "local_queue_by_node": format_node_map({str(node):float(count) for node,count in nodes}),
             "local_queue_queued_by_node": format_node_map({str(node):float(count) for node,count in queued_nodes}),
             "local_queue_running_by_node": format_node_map({str(node):float(count) for node,count in running_nodes}),
+            "local_queue_prompt_tokens_recent": recent_prompt_tokens,
+            "local_queue_prompt_tok_s": round(float(recent_prompt_tokens) / window,3),
+            "local_queue_prompt_tok_s_by_node": format_node_map({node:tokens / window for node,tokens in recent_prompt_by_node.items()}),
             "local_queue_completion_tokens_recent": recent_tokens,
             "local_queue_completion_tok_s": round(float(recent_tokens) / window,3),
             "local_queue_completion_tok_s_by_node": format_node_map({node:tokens / window for node,tokens in recent_by_node.items()}),

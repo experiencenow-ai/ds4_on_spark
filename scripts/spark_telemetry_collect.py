@@ -137,9 +137,22 @@ def summarize_node(rows: List[Dict[str,str]], error: str, fetch_error: str = "",
         "last_vllm_prompt_tokens_local_compute_total": telemetry.fnum(latest,"vllm_prompt_tokens_local_compute_total"),
         "last_vllm_prompt_tokens_local_cache_hit_total": telemetry.fnum(latest,"vllm_prompt_tokens_local_cache_hit_total"),
         "last_vllm_prompt_tokens_external_kv_transfer_total": telemetry.fnum(latest,"vllm_prompt_tokens_external_kv_transfer_total"),
+        "last_vllm_prompt_tokens_cached_total": telemetry.fnum(latest,"vllm_prompt_tokens_cached_total"),
+        "last_vllm_prefix_cache_queries_total": telemetry.fnum(latest,"vllm_prefix_cache_queries_total"),
+        "last_vllm_prefix_cache_hits_total": telemetry.fnum(latest,"vllm_prefix_cache_hits_total"),
+        "last_vllm_external_prefix_cache_queries_total": telemetry.fnum(latest,"vllm_external_prefix_cache_queries_total"),
+        "last_vllm_external_prefix_cache_hits_total": telemetry.fnum(latest,"vllm_external_prefix_cache_hits_total"),
         "last_vllm_tokens_total": telemetry.fnum(latest,"vllm_tokens_total"),
         "last_vllm_tokens_per_s": telemetry.fnum(latest,"vllm_tokens_per_s"),
+        "last_vllm_prompt_tokens_per_s": telemetry.fnum(latest,"vllm_prompt_tokens_per_s"),
         "last_vllm_generation_tokens_per_s": telemetry.fnum(latest,"vllm_generation_tokens_per_s"),
+        "last_vllm_prompt_tokens_cached_per_s": telemetry.fnum(latest,"vllm_prompt_tokens_cached_per_s"),
+        "last_vllm_prompt_tokens_local_compute_per_s": telemetry.fnum(latest,"vllm_prompt_tokens_local_compute_per_s"),
+        "last_vllm_prompt_tokens_local_cache_hit_per_s": telemetry.fnum(latest,"vllm_prompt_tokens_local_cache_hit_per_s"),
+        "last_vllm_prompt_tokens_external_kv_transfer_per_s": telemetry.fnum(latest,"vllm_prompt_tokens_external_kv_transfer_per_s"),
+        "last_vllm_prompt_cache_hit_pct": telemetry.fnum(latest,"vllm_prompt_cache_hit_pct"),
+        "last_vllm_prefix_cache_hit_pct": telemetry.fnum(latest,"vllm_prefix_cache_hit_pct"),
+        "last_vllm_external_prefix_cache_hit_pct": telemetry.fnum(latest,"vllm_external_prefix_cache_hit_pct"),
         "last_vllm_metrics_sources": latest.get("vllm_metrics_sources",""),
         "last_local_queue_db": latest.get("local_queue_db",""),
         "last_local_queue_total": telemetry.fnum(latest,"local_queue_total"),
@@ -153,6 +166,9 @@ def summarize_node(rows: List[Dict[str,str]], error: str, fetch_error: str = "",
         "last_local_queue_by_node": latest.get("local_queue_by_node",""),
         "last_local_queue_queued_by_node": latest.get("local_queue_queued_by_node",""),
         "last_local_queue_running_by_node": latest.get("local_queue_running_by_node",""),
+        "last_local_queue_prompt_tokens_recent": telemetry.fnum(latest,"local_queue_prompt_tokens_recent"),
+        "last_local_queue_prompt_tok_s": telemetry.fnum(latest,"local_queue_prompt_tok_s"),
+        "last_local_queue_prompt_tok_s_by_node": latest.get("local_queue_prompt_tok_s_by_node",""),
         "last_local_queue_completion_tokens_recent": telemetry.fnum(latest,"local_queue_completion_tokens_recent"),
         "last_local_queue_completion_tok_s": telemetry.fnum(latest,"local_queue_completion_tok_s"),
         "last_local_queue_completion_tok_s_by_node": latest.get("local_queue_completion_tok_s_by_node",""),
@@ -175,9 +191,15 @@ def summarize_node(rows: List[Dict[str,str]], error: str, fetch_error: str = "",
         "vllm_requests_waiting": telemetry.stats(telemetry.fnum(r,"vllm_requests_waiting") for r in rows),
         "vllm_kv_cache_pct": telemetry.stats(telemetry.fnum(r,"vllm_kv_cache_pct") for r in rows),
         "vllm_tokens_per_s": telemetry.stats(telemetry.fnum(r,"vllm_tokens_per_s") for r in rows),
+        "vllm_prompt_tokens_per_s": telemetry.stats(telemetry.fnum(r,"vllm_prompt_tokens_per_s") for r in rows),
         "vllm_generation_tokens_per_s": telemetry.stats(telemetry.fnum(r,"vllm_generation_tokens_per_s") for r in rows),
+        "vllm_prompt_tokens_cached_per_s": telemetry.stats(telemetry.fnum(r,"vllm_prompt_tokens_cached_per_s") for r in rows),
+        "vllm_prompt_cache_hit_pct": telemetry.stats(telemetry.fnum(r,"vllm_prompt_cache_hit_pct") for r in rows),
+        "vllm_prefix_cache_hit_pct": telemetry.stats(telemetry.fnum(r,"vllm_prefix_cache_hit_pct") for r in rows),
+        "vllm_external_prefix_cache_hit_pct": telemetry.stats(telemetry.fnum(r,"vllm_external_prefix_cache_hit_pct") for r in rows),
         "local_queue_depth": telemetry.stats(telemetry.fnum(r,"local_queue_depth") for r in rows),
         "local_queue_running": telemetry.stats(telemetry.fnum(r,"local_queue_running") for r in rows),
+        "local_queue_prompt_tok_s": telemetry.stats(telemetry.fnum(r,"local_queue_prompt_tok_s") for r in rows),
         "local_queue_completion_tok_s": telemetry.stats(telemetry.fnum(r,"local_queue_completion_tok_s") for r in rows),
         "gpu_util_pct": telemetry.stats(gpu_vals),
         "gpu_temp_c": telemetry.stats(gpu_temps),
@@ -219,12 +241,13 @@ def write_combined(out_dir: str, all_rows: Dict[str,List[Dict[str,str]]], errors
     telemetry.write_json_atomic(summary_path,summary)
     lines = ["# Spark telemetry summary",""]
     if str(queue.get("local_queue_db","")):
-        lines.append("Queue: depth=%s queued=%s running=%s model=%s cpu=%s tok/s=%s db=%s" % (
+        lines.append("Queue: depth=%s queued=%s running=%s model=%s cpu=%s in tok/s=%s out tok/s=%s db=%s" % (
             queue.get("local_queue_depth",0),
             queue.get("local_queue_queued",0),
             queue.get("local_queue_running",0),
             queue.get("local_queue_model_depth",0),
             queue.get("local_queue_cpu_depth",0),
+            queue.get("local_queue_prompt_tok_s",0),
             queue.get("local_queue_completion_tok_s",0),
             queue.get("local_queue_db",""),
         ))
@@ -235,9 +258,10 @@ def write_combined(out_dir: str, all_rows: Dict[str,List[Dict[str,str]]], errors
     queue_depth_by_node = telemetry.node_metric_map(queue.get("local_queue_by_node",""))
     queue_queued_by_node = telemetry.node_metric_map(queue.get("local_queue_queued_by_node",""))
     queue_running_by_node = telemetry.node_metric_map(queue.get("local_queue_running_by_node",""))
+    queue_prompt_tok_s_by_node = telemetry.node_metric_map(queue.get("local_queue_prompt_tok_s_by_node",""))
     queue_tok_s_by_node = telemetry.node_metric_map(queue.get("local_queue_completion_tok_s_by_node",""))
-    lines.append("| node | samples | gpu % | gpu C | vLLM run/wait | KV % | local q | gateway cpu q | disk % | rx Mbps | tx Mbps | cpu % | mem % | model | error | tok/s |")
-    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|")
+    lines.append("| node | samples | gpu % | gpu C | vLLM run/wait | KV % | local q | gateway cpu q | disk % | rx Mbps | tx Mbps | cpu % | mem % | model | error | in tok/s | out tok/s | cache hit % | ext hit % |")
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|")
     for node,row in summary["nodes"].items():
         vllm_running = float(row.get("last_vllm_requests_running",0.0))
         vllm_waiting = float(row.get("last_vllm_requests_waiting",0.0))
@@ -246,8 +270,11 @@ def write_combined(out_dir: str, all_rows: Dict[str,List[Dict[str,str]]], errors
             vllm_running = max(vllm_running,float(queue_running_by_node.get(node,0.0)))
             vllm_waiting = max(vllm_waiting,float(queue_queued_by_node.get(node,0.0)))
         kv_text = "%.2f" % float(row.get("last_vllm_kv_cache_pct",0.0)) if float(row.get("last_vllm_metrics_up",0.0)) > 0.0 else "n/a"
-        tok_s = max(float(row.get("last_vllm_tokens_per_s",0.0)),float(queue_tok_s_by_node.get(node,0.0)))
-        lines.append("| %s | %s | %.2f | %.2f | %.0f/%.0f | %s | %.0f | %.0f/%.0f | %.2f | %.4f | %.4f | %.2f | %.2f | %s | %s | %.3f |" % (
+        in_tok_s = max(float(row.get("last_vllm_prompt_tokens_per_s",0.0)),float(queue_prompt_tok_s_by_node.get(node,0.0)))
+        out_tok_s = max(float(row.get("last_vllm_generation_tokens_per_s",0.0)),float(queue_tok_s_by_node.get(node,0.0)))
+        cache_hit_pct = float(row.get("last_vllm_prompt_cache_hit_pct",0.0))
+        ext_hit_pct = float(row.get("last_vllm_external_prefix_cache_hit_pct",0.0))
+        lines.append("| %s | %s | %.2f | %.2f | %.0f/%.0f | %s | %.0f | %.0f/%.0f | %.2f | %.4f | %.4f | %.2f | %.2f | %s | %s | %.3f | %.3f | %.2f | %.2f |" % (
             node,
             row.get("sample_count",0),
             float(row.get("last_gpu_util_pct",0.0)),
@@ -265,7 +292,10 @@ def write_combined(out_dir: str, all_rows: Dict[str,List[Dict[str,str]]], errors
             float(row.get("last_mem_used_pct",0.0)),
             str(row.get("last_ds4_gateway_current_model","")).replace("|","/")[:40],
             str(row.get("error","")).replace("|","/"),
-            tok_s,
+            in_tok_s,
+            out_tok_s,
+            cache_hit_pct,
+            ext_hit_pct,
         ))
     telemetry.write_text_atomic(md_path,"\n".join(lines) + "\n")
     return(summary)
