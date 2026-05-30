@@ -39,7 +39,7 @@
   "port": 8300,
   "profile_id": "dsv4_vllm_hma_persistent_experimental_v1",
   "spark_node": "spark4+spark5",
-  "store_root": "/mnt/nvme/ds4_hma_store/dsv4",
+  "store_root": "/home/$USER/ds4_hma_store/dsv4",
   "tensor_parallel_size": 2,
   "tokenizer_hash": "deepseek-ai/DeepSeek-V4-Flash"
 }

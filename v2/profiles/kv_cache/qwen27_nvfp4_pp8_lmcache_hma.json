@@ -1,0 +1,108 @@
+{
+  "cache_directories": [
+    "/home/{node_id}/ds4_lmcache/qwen27_nvfp4_pp8"
+  ],
+  "cache_sharding": "pipeline_layers",
+  "connector": {
+    "connector_id": "lmcache",
+    "install_args": [
+      "--no-build-isolation"
+    ],
+    "install_packages": [
+      "lmcache==0.4.5"
+    ],
+    "kv_connector_extra_config": {
+      "discard_partial_chunks": false,
+      "lmcache_kv_cache_group_id": "auto",
+      "use_native": true
+    },
+    "kv_role": "kv_both",
+    "wheel_dir": "/tmp/ds4_lmcache_wheels"
+  },
+  "deployment_id": "qwen27_nvfp4_pp8_lmcache_hma_v1",
+  "extra_args": [
+    "--distributed-executor-backend",
+    "mp",
+    "--trust-remote-code",
+    "--max-model-len",
+    "262144",
+    "--max-num-seqs",
+    "24",
+    "--max-num-batched-tokens",
+    "65536",
+    "--gpu-memory-utilization",
+    "0.40",
+    "--quantization",
+    "modelopt",
+    "--linear-backend",
+    "flashinfer-cutlass",
+    "--attention-backend",
+    "TRITON_ATTN",
+    "--kv-cache-dtype",
+    "fp8",
+    "--language-model-only",
+    "--enable-chunked-prefill",
+    "--enable-prefix-caching",
+    "--async-scheduling",
+    "--reasoning-parser",
+    "qwen3",
+    "--no-disable-hybrid-kv-cache-manager",
+    "--mamba-cache-mode",
+    "align",
+    "--no-enable-flashinfer-autotune"
+  ],
+  "extra_env": {
+    "LMCACHE_CONFIG_FILE": "/tmp/lmcache_qwen27_nvfp4_pp8.yaml",
+    "LMCACHE_LOG_LEVEL": "INFO",
+    "LMCACHE_MAX_LOCAL_CPU_SIZE": "4.0",
+    "LMCACHE_ROOT": "/home/{node_id}/ds4_lmcache/qwen27_nvfp4_pp8",
+    "PYTHONHASHSEED": "0",
+    "VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1",
+    "VLLM_DS4_STRICT_NATIVE_FP4": "1",
+    "VLLM_MXFP4_USE_MARLIN": "0",
+    "VLLM_TEST_FORCE_FP8_MARLIN": "0"
+  },
+  "format": "ds4-vllm-kv-cache-deployment-v1",
+  "host": "0.0.0.0",
+  "http_port": 8103,
+  "layer_partition": [
+    9,
+    9,
+    9,
+    8,
+    8,
+    8,
+    8,
+    5
+  ],
+  "master_addr": "spark0",
+  "master_port": 29537,
+  "model_id": "sakamakismile/Qwen3.6-27B-Text-NVFP4-MTP",
+  "pipeline_parallel_size": 8,
+  "profile_id": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+  "python_bin": "python3",
+  "pythonpath": "/home/spark0/ds4_on_spark/v2/src",
+  "runtime_contract_id": "qwen27_nvfp4_pp8_v1",
+  "served_model_name": "qwen27-nvfp4-pp8",
+  "spark_node": "spark0",
+  "speculative_decoding": {
+    "enabled_by_default": false,
+    "reason": "External KV/cache-primary pipeline commits only verified base-model state until Qwen MTP under PP has a dedicated correctness pass."
+  },
+  "tensor_parallel_size": 1,
+  "text_only": true,
+  "vllm_bin": "vllm",
+  "vllm_fork": "https://github.com/experiencenow-ai/vllm",
+  "vllm_source_commit": "ds4-local-qwen27-nvfp4-pp8-cache-primary",
+  "worker_nodes": [
+    "spark0",
+    "spark1",
+    "spark2",
+    "spark3",
+    "spark4",
+    "spark5",
+    "spark6",
+    "spark7"
+  ],
+  "working_directory": "/home/spark0/ds4_on_spark/v2"
+}

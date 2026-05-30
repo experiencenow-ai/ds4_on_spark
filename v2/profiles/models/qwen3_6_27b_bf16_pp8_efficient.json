@@ -1,0 +1,54 @@
+{
+  "backend": "vllm_pipeline",
+  "capability_classes": [
+    "efficient",
+    "world_model",
+    "qwen",
+    "qwen16",
+    "quality"
+  ],
+  "format": "ds4-model-profile-v1",
+  "model_id": "Qwen/Qwen3.6-27B",
+  "performance": {
+    "latency_rank": 0.9,
+    "target": "8-stage layer pipeline, large-batch throughput target near 3-5B per-stage cost"
+  },
+  "production_eligible": true,
+  "profile_id": "qwen3_6_27b_bf16_pp8_efficient_v1",
+  "quality": {
+    "baseline": "Qwen3.6-27B BF16 PP8 quality lane; compare against pushed Qwen27 FP8 76/92 ds4_eval and NVFP4 fast lane."
+  },
+  "routing": {
+    "chat_template_thinking_key": "enable_thinking",
+    "default_for": [
+      "efficient",
+      "world_model",
+      "qwen",
+      "qwen16",
+      "quality"
+    ],
+    "optional_kv_cache_deployments": [
+      "profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json"
+    ],
+    "pipeline": {
+      "api_base_url": "http://127.0.0.1:8101",
+      "compute_domain": "spark-fleet-0",
+      "entry_node_id": "spark0",
+      "service_id": "qwen27_bf16_pp8"
+    },
+    "rank": 60
+  },
+  "runtime_contract_id": "qwen27_bf16_pp8_v1",
+  "supported_job_classes": [
+    "atom_edit",
+    "summary",
+    "json_repair",
+    "triage",
+    "analysis",
+    "world_model_extract",
+    "event_extract"
+  ],
+  "supports_chat": true,
+  "supports_completion": true,
+  "supports_thinking": true
+}

@@ -99,7 +99,7 @@ vLLM runtime:      /home/spark7/ds4-vllm-local from experiencenow-ai/vllm@c6e55a
 LMCache data port: 127.0.0.1:5555
 LMCache HTTP port: 127.0.0.1:18080
 L1 CPU cache:      16 GiB, lazy init, LRU
-L2 store:          /mnt/nvme/ds4_lmcache/qwen27/l2 via POSIX NIXL store
+L2 store:          /home/spark7/ds4_lmcache/qwen27/l2 via POSIX NIXL store
 ```
 
 On spark7 the LMCache package currently has to build from source. The generated

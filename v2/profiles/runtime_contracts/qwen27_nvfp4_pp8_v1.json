@@ -1,0 +1,148 @@
+{
+  "contract_id": "qwen27_nvfp4_pp8_v1",
+  "format": "ds4-runtime-contract-v1",
+  "model_profile_id": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+  "runtime": "vllm",
+  "placement": {
+    "kind": "distributed_pipeline",
+    "entry_node_id": "spark0",
+    "compute_domain": "spark-fleet-0",
+    "pipeline_parallel_size": 8,
+    "tensor_parallel_size": 1,
+    "node_ids": [
+      "spark0",
+      "spark1",
+      "spark2",
+      "spark3",
+      "spark4",
+      "spark5",
+      "spark6",
+      "spark7"
+    ],
+    "layer_partition": [
+      9,
+      9,
+      9,
+      8,
+      8,
+      8,
+      8,
+      5
+    ]
+  },
+  "precision": {
+    "weights": "modelopt-nvfp4",
+    "kv_cache": "fp8",
+    "strict_native_fp4": true,
+    "forbidden_backends": [
+      "marlin",
+      "emulation",
+      "cpu"
+    ]
+  },
+  "external_kv": {
+    "connector": "LMCacheConnectorV1",
+    "sharding": "pipeline_layers",
+    "expected_fraction_per_node": 0.125,
+    "commit_semantics": "verified_base_model_state_only"
+  },
+  "speculative_decoding": {
+    "enabled_by_default": false,
+    "notes": "The checkpoint contains MTP weights, but MTP is intentionally disabled for the cache-primary PP service until speculative cache correctness is validated."
+  },
+  "launch": {
+    "api_base_url": "http://127.0.0.1:8103",
+    "host": "0.0.0.0",
+    "port": 8103,
+    "master_addr": "spark0",
+    "master_port": 29537,
+    "args": [
+      "--pipeline-parallel-size",
+      "8",
+      "--tensor-parallel-size",
+      "1",
+      "--distributed-executor-backend",
+      "mp",
+      "--nnodes",
+      "8",
+      "--quantization",
+      "modelopt",
+      "--linear-backend",
+      "flashinfer-cutlass",
+      "--attention-backend",
+      "TRITON_ATTN",
+      "--kv-cache-dtype",
+      "fp8",
+      "--language-model-only",
+      "--enable-chunked-prefill",
+      "--enable-prefix-caching",
+      "--max-model-len",
+      "262144",
+      "--max-num-seqs",
+      "24",
+      "--max-num-batched-tokens",
+      "65536",
+      "--gpu-memory-utilization",
+      "0.40",
+      "--no-disable-hybrid-kv-cache-manager",
+      "--mamba-cache-mode",
+      "align",
+      "--no-enable-flashinfer-autotune"
+    ]
+  },
+  "model": {
+    "model_id": "sakamakismile/Qwen3.6-27B-Text-NVFP4-MTP",
+    "served_model_name": "qwen27-nvfp4-pp8"
+  },
+  "pipeline": {
+    "dtype": "modelopt-nvfp4",
+    "entry_base_url": "http://127.0.0.1:8103",
+    "head_node": "spark0",
+    "layer_partition": [
+      9,
+      9,
+      9,
+      8,
+      8,
+      8,
+      8,
+      5
+    ],
+    "pipeline_parallel_size": 8,
+    "tensor_parallel_size": 1,
+    "text_only": true,
+    "total_layers": 64,
+    "worker_nodes": [
+      "spark1",
+      "spark2",
+      "spark3",
+      "spark4",
+      "spark5",
+      "spark6",
+      "spark7"
+    ]
+  },
+  "trim_request": {
+    "method": "POST",
+    "path": "/v1/trim_memory",
+    "query": "mode=abort&reset_external=true&release_offload_memory=true&malloc_trim=true&resume=true"
+  },
+  "vllm": {
+    "required_source": "experiencenow-ai/vllm PR #21 native DS4/Qwen pipeline branch",
+    "required_source_commit": "codex/ds4-sm12x-mqa-fallbacks",
+    "trim_endpoint": "/v1/trim_memory"
+  },
+  "profile_ids": [
+    "qwen3_6_27b_nvfp4_pp8_fast_cache_v1"
+  ],
+  "required_nodes": [
+    "spark0",
+    "spark1",
+    "spark2",
+    "spark3",
+    "spark4",
+    "spark5",
+    "spark6",
+    "spark7"
+  ]
+}

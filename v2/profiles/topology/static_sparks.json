@@ -1,146 +1,331 @@
 {
+  "description": "All-Spark multi-pipeline topology. spark0 is the only queue/API ingress. qwen-fast NVFP4, qwen BF16, and DSV4 Flash are resident pipeline services across spark0-7; external KV is sharded by local stage ownership instead of replicated.",
   "format": "ds4-spark-topology-v1",
-  "topology_id": "static_sparks_2026_05_27_v9",
-  "description": "Static Spark allocation: Qwen27 resident lanes on spark0-3 and spark6, one DSV4 vLLM grouped lane consuming spark4+spark5, and spark7 kept on-demand for experiments. Qwen35/fastest is parked and not production resident for now. KV cache is an optional launch mode, not a separate model profile. No production model ejection.",
   "nodes": [
     {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
       "node_id": "spark0",
-      "roles": [
-        "qwen_static",
-        "production"
-      ],
       "resident_profiles": [
-        "qwen3_6_27b_fp8_efficient_v1"
+        "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+        "qwen3_6_27b_bf16_pp8_efficient_v1",
+        "dsv4_vllm_mtp_pp8_smartest_v1"
       ],
-      "default_capacity": 1,
-      "immediate_reserved": false,
-      "dynamic_load": false
+      "roles": [
+        "queue_ingress",
+        "api_ingress",
+        "pipeline_stage",
+        "production"
+      ]
     },
     {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
       "node_id": "spark1",
-      "roles": [
-        "qwen_static",
-        "production"
-      ],
       "resident_profiles": [
-        "qwen3_6_27b_fp8_efficient_v1"
+        "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+        "qwen3_6_27b_bf16_pp8_efficient_v1",
+        "dsv4_vllm_mtp_pp8_smartest_v1"
       ],
-      "default_capacity": 1,
-      "immediate_reserved": false,
-      "dynamic_load": false
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
     },
     {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
       "node_id": "spark2",
-      "roles": [
-        "qwen_static",
-        "production"
-      ],
       "resident_profiles": [
-        "qwen3_6_27b_fp8_efficient_v1"
+        "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+        "qwen3_6_27b_bf16_pp8_efficient_v1",
+        "dsv4_vllm_mtp_pp8_smartest_v1"
       ],
-      "default_capacity": 1,
-      "immediate_reserved": false,
-      "dynamic_load": false
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
     },
     {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
       "node_id": "spark3",
-      "roles": [
-        "qwen_static",
-        "production"
-      ],
       "resident_profiles": [
-        "qwen3_6_27b_fp8_efficient_v1"
+        "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+        "qwen3_6_27b_bf16_pp8_efficient_v1",
+        "dsv4_vllm_mtp_pp8_smartest_v1"
       ],
-      "default_capacity": 1,
-      "immediate_reserved": false,
-      "dynamic_load": false
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
     },
     {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
       "node_id": "spark4",
-      "roles": [
-        "dsv4_vllm_static",
-        "production",
-        "chat_mtp"
-      ],
       "resident_profiles": [
-        "dsv4_vllm_mtp_smartest_v1",
-        "dsv4_vllm_hma_persistent_experimental_v1"
+        "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+        "qwen3_6_27b_bf16_pp8_efficient_v1",
+        "dsv4_vllm_mtp_pp8_smartest_v1"
       ],
-      "default_capacity": 1,
-      "immediate_reserved": false,
-      "dynamic_load": false
-    },
-    {
-      "node_id": "spark5",
       "roles": [
-        "dsv4_vllm_static",
-        "production",
-        "chat_mtp"
-      ],
-      "resident_profiles": [
-        "dsv4_vllm_mtp_smartest_v1",
-        "dsv4_vllm_hma_persistent_experimental_v1"
-      ],
-      "default_capacity": 1,
-      "immediate_reserved": false,
-      "dynamic_load": false
-    },
-    {
-      "node_id": "spark6",
-      "roles": [
-        "qwen_static",
+        "pipeline_stage",
         "production"
-      ],
-      "resident_profiles": [
-        "qwen3_6_27b_fp8_efficient_v1"
-      ],
-      "default_capacity": 1,
-      "immediate_reserved": false,
-      "dynamic_load": false
+      ]
     },
     {
-      "node_id": "spark7",
-      "roles": [
-        "experimental",
-        "on_demand"
-      ],
-      "resident_profiles": [],
       "default_capacity": 1,
+      "dynamic_load": false,
       "immediate_reserved": false,
-      "dynamic_load": true
+      "node_id": "spark5",
+      "resident_profiles": [
+        "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+        "qwen3_6_27b_bf16_pp8_efficient_v1",
+        "dsv4_vllm_mtp_pp8_smartest_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark6",
+      "resident_profiles": [
+        "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+        "qwen3_6_27b_bf16_pp8_efficient_v1",
+        "dsv4_vllm_mtp_pp8_smartest_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark7",
+      "resident_profiles": [
+        "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+        "qwen3_6_27b_bf16_pp8_efficient_v1",
+        "dsv4_vllm_mtp_pp8_smartest_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
     }
   ],
   "routing_policy": {
-    "normal_requests_prefer_roles": [
-      "production"
-    ],
+    "allow_dynamic_load_for_unmatched_profiles": false,
+    "bind_on_submit": true,
     "immediate_requests_prefer_roles": [
       "production"
     ],
-    "allow_dynamic_load_for_unmatched_profiles": true,
-    "experimental_node_id": "spark7",
-    "profile_node_groups": {
-      "dsv4_vllm_mtp_smartest_v1": [
-        "spark4",
-        "spark5"
-      ],
-      "dsv4_vllm_hma_persistent_experimental_v1": [
-        "spark4",
-        "spark5"
-      ]
+    "model_aliases": {
+      "ds4v": "dsv4_vllm_mtp_pp8_smartest_v1",
+      "dsv4": "dsv4_vllm_mtp_pp8_smartest_v1",
+      "fast": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+      "qwen": "qwen3_6_27b_bf16_pp8_efficient_v1",
+      "qwen-16": "qwen3_6_27b_bf16_pp8_efficient_v1",
+      "qwen-bf16": "qwen3_6_27b_bf16_pp8_efficient_v1",
+      "qwen-fast": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+      "qwen16": "qwen3_6_27b_bf16_pp8_efficient_v1",
+      "qwen27": "qwen3_6_27b_bf16_pp8_efficient_v1",
+      "qwen27-fast": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1"
     },
-    "profile_node_group_ingress": {
-      "dsv4_vllm_mtp_smartest_v1": "spark5",
-      "dsv4_vllm_hma_persistent_experimental_v1": "spark4"
+    "normal_requests_prefer_roles": [
+      "production"
+    ],
+    "pipeline_services": {
+      "dsv4_flash_pp8": {
+        "api_base_url": "http://127.0.0.1:8102",
+        "compute_domain": "spark-fleet-0",
+        "dtype": "mixed-fp4-fp8",
+        "entry_node_id": "spark0",
+        "kv_cache": {
+          "cache_root": "/home/{node_id}/ds4_hma_store/dsv4_flash_pp8",
+          "expected_entry_fraction_per_node": 0.125,
+          "sharding": "pipeline_layers"
+        },
+        "layer_partition": [
+          6,
+          6,
+          6,
+          5,
+          5,
+          5,
+          5,
+          5
+        ],
+        "max_batch_size": 8,
+        "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+        "node_ids": [
+          "spark0",
+          "spark1",
+          "spark2",
+          "spark3",
+          "spark4",
+          "spark5",
+          "spark6",
+          "spark7"
+        ],
+        "pipeline_parallel_size": 8,
+        "profile_id": "dsv4_vllm_mtp_pp8_smartest_v1",
+        "scheduler": {
+          "admission_mode": "single_active_batch_per_compute_domain",
+          "batch_linger_s": 0.03,
+          "max_running_batches_per_compute_domain": 1,
+          "notes": "DSV4 PP8 no longer carries the old 2x Spark single-request safety cap; keep vLLM max_num_seqs lower than DS4 inflight window so PP stays filled.",
+          "queue_concurrency": 32,
+          "queue_limit": 32,
+          "refill_low_watermark": 24
+        },
+        "service_id": "dsv4_flash_pp8",
+        "telemetry": {
+          "expected_stage_count": 8,
+          "stage_report_command": "ds4-infer pipeline-telemetry-report",
+          "stage_state": "prod"
+        },
+        "tensor_parallel_size": 1,
+        "total_layers": 43
+      },
+      "qwen27_bf16_pp8": {
+        "api_base_url": "http://127.0.0.1:8101",
+        "compute_domain": "spark-fleet-0",
+        "dtype": "bf16",
+        "entry_node_id": "spark0",
+        "kv_cache": {
+          "cache_root": "/home/{node_id}/ds4_lmcache/qwen27_bf16_pp8",
+          "commit_semantics": "verified_base_model_state_only",
+          "expected_entry_fraction_per_node": 0.125,
+          "sharding": "pipeline_layers"
+        },
+        "layer_partition": [
+          9,
+          9,
+          9,
+          8,
+          8,
+          8,
+          8,
+          5
+        ],
+        "max_batch_size": 32,
+        "model_id": "Qwen/Qwen3.6-27B",
+        "node_ids": [
+          "spark0",
+          "spark1",
+          "spark2",
+          "spark3",
+          "spark4",
+          "spark5",
+          "spark6",
+          "spark7"
+        ],
+        "pipeline_parallel_size": 8,
+        "profile_id": "qwen3_6_27b_bf16_pp8_efficient_v1",
+        "scheduler": {
+          "admission_mode": "single_active_batch_per_compute_domain",
+          "batch_linger_s": 0.04,
+          "max_running_batches_per_compute_domain": 1,
+          "notes": "Qwen BF16 PP8 quality lane; cache-primary pipeline sharing the same spark-fleet-0 compute domain.",
+          "queue_concurrency": 32,
+          "queue_limit": 32,
+          "refill_low_watermark": 24
+        },
+        "service_id": "qwen27_bf16_pp8",
+        "telemetry": {
+          "expected_stage_count": 8,
+          "stage_report_command": "ds4-infer pipeline-telemetry-report",
+          "stage_state": "prod"
+        },
+        "tensor_parallel_size": 1,
+        "total_layers": 64
+      },
+      "qwen27_nvfp4_pp8": {
+        "api_base_url": "http://127.0.0.1:8103",
+        "compute_domain": "spark-fleet-0",
+        "dtype": "modelopt-nvfp4",
+        "entry_node_id": "spark0",
+        "kv_cache": {
+          "cache_root": "/home/{node_id}/ds4_lmcache/qwen27_nvfp4_pp8",
+          "commit_semantics": "verified_base_model_state_only",
+          "expected_entry_fraction_per_node": 0.125,
+          "sharding": "pipeline_layers"
+        },
+        "layer_partition": [
+          9,
+          9,
+          9,
+          8,
+          8,
+          8,
+          8,
+          5
+        ],
+        "max_batch_size": 48,
+        "model_id": "sakamakismile/Qwen3.6-27B-Text-NVFP4-MTP",
+        "node_ids": [
+          "spark0",
+          "spark1",
+          "spark2",
+          "spark3",
+          "spark4",
+          "spark5",
+          "spark6",
+          "spark7"
+        ],
+        "pipeline_parallel_size": 8,
+        "profile_id": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+        "scheduler": {
+          "admission_mode": "single_active_batch_per_compute_domain",
+          "batch_linger_s": 0.04,
+          "max_running_batches_per_compute_domain": 1,
+          "notes": "Qwen NVFP4 PP8 fast lane; cache-primary, MTP disabled by default, shares spark-fleet-0 compute domain.",
+          "queue_concurrency": 48,
+          "queue_limit": 48,
+          "refill_low_watermark": 36
+        },
+        "service_id": "qwen27_nvfp4_pp8",
+        "speculative_decoding": {
+          "enabled_by_default": false,
+          "reason": "external KV pipeline commits only verified base-model state"
+        },
+        "telemetry": {
+          "expected_stage_count": 8,
+          "stage_report_command": "ds4-infer pipeline-telemetry-report",
+          "stage_state": "prod"
+        },
+        "tensor_parallel_size": 1,
+        "total_layers": 64
+      }
     },
+    "profile_node_group_ingress": {},
+    "profile_node_groups": {},
+    "queue_entry_node_id": "spark0",
+    "shared_compute_domains": [
+      "spark-fleet-0"
+    ],
     "trim_default_profiles_by_node": {
-      "spark0": "qwen3_6_27b_fp8_efficient_v1",
-      "spark1": "qwen3_6_27b_fp8_efficient_v1",
-      "spark2": "qwen3_6_27b_fp8_efficient_v1",
-      "spark3": "qwen3_6_27b_fp8_efficient_v1",
-      "spark4": "dsv4_vllm_mtp_smartest_v1",
-      "spark5": "dsv4_vllm_mtp_smartest_v1",
-      "spark6": "qwen3_6_27b_fp8_efficient_v1"
+      "spark0": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+      "spark1": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+      "spark2": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+      "spark3": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+      "spark4": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+      "spark5": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+      "spark6": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+      "spark7": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1"
     }
-  }
+  },
+  "topology_id": "static_sparks_2026_05_30_three_pp_v1"
 }

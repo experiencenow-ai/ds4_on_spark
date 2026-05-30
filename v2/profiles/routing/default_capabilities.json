@@ -1,1 +1,12 @@
-{"format":"ds4-capability-routing-v1","capabilities":{"smartest":"highest measured correctness profile","smart":"performant DSV4 profile","efficient":"Qwen 27B FP8 for mechanical atom edits","fastest":"fast Qwen profile for triage and summaries"}}
+{
+  "capabilities": {
+    "efficient": "Qwen27 BF16 PP8 quality/efficient lane",
+    "fast": "Qwen27 NVFP4 PP8 fast lane",
+    "fastest": "fast Qwen profile for triage and summaries",
+    "qwen_fast": "Qwen27 NVFP4 PP8 fast lane",
+    "smart": "DSV4 Flash pipeline lane",
+    "smartest": "DSV4 Flash pipeline lane",
+    "world_model": "Qwen27 BF16 PP8 world-model extraction lane"
+  },
+  "format": "ds4-capability-routing-v1"
+}

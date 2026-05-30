@@ -38,6 +38,8 @@ def main(argv: list[str] | None = None) -> int:
             batch_id=batch_id,
             limit=max(1, args.work_limit),
             concurrency=max(1, args.concurrency),
+            kv_shard_layouts_by_profile=dict(topology.profile_pipeline_services),
+            batch_limits_by_service={service.service_id: service.max_batch_size for service in topology.pipeline_services.values()},
             on_result=lambda claim, result: _append_response(response_path, record_by_request_id, args.model, args.response_format, claim.request_id, result),
         )
         status = queue.status(batch_id=batch_id)
