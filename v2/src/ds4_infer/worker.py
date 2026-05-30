@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import socket
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
+from .pipeline import PipelineProfile
 from .profiles import ProfileRegistry
 from .queue import CPU_QUEUE_TIMEOUT_KEY, QueueClaim
 from .runners import Runner
@@ -33,6 +34,8 @@ class BatchWorker:
         max_node_depth: int = 0,
         batch_linger_s: float = 0.0,
         kv_capacity_bytes: int = 0,
+        kv_shard_layouts_by_profile: Mapping[str, PipelineProfile] | None = None,
+        batch_limits_by_service: Mapping[str, int] | None = None,
         on_result: FinishHook | None = None,
     ) -> dict[str, Any]:
         if limit < 1 or concurrency < 1:
@@ -47,6 +50,7 @@ class BatchWorker:
             lease_ttl_s=self.lease_ttl_s,
             max_node_depth=max_node_depth,
             kv_capacity_bytes=kv_capacity_bytes,
+            kv_shard_layouts_by_profile=kv_shard_layouts_by_profile or {},
         )
         claims = self.queue.claim_ready_batch(
             node_id=node_id,
@@ -55,6 +59,8 @@ class BatchWorker:
             leased_by=self.worker_id,
             lease_ttl_s=self.lease_ttl_s,
             batch_linger_s=batch_linger_s,
+            kv_shard_layouts_by_profile=kv_shard_layouts_by_profile or {},
+            batch_limits_by_service=batch_limits_by_service or {},
         )
         if not claims:
             return _summary(0, 0, 0, reap, prefilled_count=prefilled, batch_dispatch_count=0)
@@ -154,13 +160,18 @@ class BatchWorker:
 
 
 def _can_batch_models(runner: Runner, claims: list[QueueClaim]) -> bool:
-    return bool(claims and claims[0].request_kind == "model" and hasattr(runner, "run_many_on_node") and all(claim.request_kind == "model" and claim.selected_profile_id == claims[0].selected_profile_id and claim.selected_node_id == claims[0].selected_node_id for claim in claims))
+    return bool(claims and claims[0].request_kind == "model" and hasattr(runner, "run_many_on_node") and all(claim.request_kind == "model" and claim.selected_profile_id == claims[0].selected_profile_id and claim.selected_node_id == claims[0].selected_node_id and claim.selected_service_id == claims[0].selected_service_id for claim in claims))
 
 
 def _result_for_claim(claim: QueueClaim, result: dict[str, Any] | None) -> dict[str, Any]:
     out = result or _failure(claim, "batch runner omitted request result")
     if claim.selected_node_id:
-        out["selected_node"] = {"node_id": claim.selected_node_id}
+        out["selected_node"] = {
+            "node_id": claim.selected_node_id,
+            "node_ids": list(claim.selected_node_ids or (claim.selected_node_id,)),
+            "service_id": claim.selected_service_id,
+            "compute_domain": claim.selected_compute_domain,
+        }
     return out
 
 

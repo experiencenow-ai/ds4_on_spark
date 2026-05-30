@@ -216,7 +216,7 @@ tokens per request.
 Set a persistent store path in spark4's service environment:
 
 ```bash
-DS4_DSV4_PERSIST_STORE=/mnt/nvme/ds4_hma_store/dsv4/simple_cpu_offload
+DS4_DSV4_PERSIST_STORE=/home/$USER/ds4_hma_store/dsv4/simple_cpu_offload
 DS4_DSV4_PERSIST_STRICT=1
 DS4_DSV4_PYTHONHASHSEED=0
 ```

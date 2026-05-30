@@ -1,0 +1,54 @@
+{
+  "backend": "vllm_pipeline",
+  "capability_classes": [
+    "fast",
+    "qwen_fast",
+    "summary_fast",
+    "world_model_fast"
+  ],
+  "format": "ds4-model-profile-v1",
+  "model_id": "sakamakismile/Qwen3.6-27B-Text-NVFP4-MTP",
+  "performance": {
+    "latency_rank": 0.95,
+    "target": "8-stage text-only NVFP4 layer pipeline for cache-local fleet balancing; fast lane with lower precision than BF16 Qwen."
+  },
+  "production_eligible": true,
+  "profile_id": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+  "quality": {
+    "baseline": "cache-primary NVFP4 pipeline candidate; compare against pushed Qwen27 FP8 76/92 ds4_eval and BF16 PP8 before promoting for quality-sensitive WM extraction"
+  },
+  "routing": {
+    "chat_template_thinking_key": "enable_thinking",
+    "default_for": [
+      "fast",
+      "qwen_fast",
+      "summary_fast",
+      "world_model_fast"
+    ],
+    "optional_kv_cache_deployments": [
+      "profiles/kv_cache/qwen27_nvfp4_pp8_lmcache_hma.json"
+    ],
+    "pipeline": {
+      "api_base_url": "http://127.0.0.1:8103",
+      "compute_domain": "spark-fleet-0",
+      "entry_node_id": "spark0",
+      "service_id": "qwen27_nvfp4_pp8"
+    },
+    "rank": 40
+  },
+  "runtime_contract_id": "qwen27_nvfp4_pp8_v1",
+  "supported_job_classes": [
+    "atom_edit",
+    "summary",
+    "json_repair",
+    "triage",
+    "analysis",
+    "world_model_extract",
+    "event_extract",
+    "longmem_attach",
+    "diamondize"
+  ],
+  "supports_chat": true,
+  "supports_completion": true,
+  "supports_thinking": true
+}

@@ -7,9 +7,16 @@ from .profiles import ModelProfile, ProfileRegistry
 from .schemas import InferenceRequest
 
 MODEL_ALIASES = {
-    "ds4v": "dsv4_vllm_mtp_smartest_v1",
-    "qwen": "qwen3_6_27b_fp8_efficient_v1",
-    "fast": "qwen3_6_35b_a3b_fp8_fastest_v1",
+    "ds4v": "dsv4_vllm_mtp_pp8_smartest_v1",
+    "dsv4": "dsv4_vllm_mtp_pp8_smartest_v1",
+    "qwen": "qwen3_6_27b_bf16_pp8_efficient_v1",
+    "qwen27": "qwen3_6_27b_bf16_pp8_efficient_v1",
+    "qwen-16": "qwen3_6_27b_bf16_pp8_efficient_v1",
+    "qwen16": "qwen3_6_27b_bf16_pp8_efficient_v1",
+    "qwen-bf16": "qwen3_6_27b_bf16_pp8_efficient_v1",
+    "qwen-fast": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+    "qwen27-fast": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
+    "fast": "qwen3_6_27b_nvfp4_pp8_fast_cache_v1",
 }
 
 
