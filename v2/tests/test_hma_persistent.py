@@ -76,20 +76,19 @@ class HmaPersistentTests(unittest.TestCase):
             self.assertTrue(path.exists())
             self.assertIn("DS4HmaPersistentConnector", path.read_text())
 
-    def test_hma_profile_is_pinned_only_and_grouped(self) -> None:
+    def test_hma_profile_remains_pinned_only_and_not_resident_in_dual_pipeline_topology(self) -> None:
         registry = ProfileRegistry.load(ROOT / "profiles" / "models")
         profile = registry.get("dsv4_vllm_hma_persistent_experimental_v1")
         topology = SparkTopology.load(ROOT / "profiles" / "topology" / "static_sparks.json")
-        assignment = topology.assign_profile(profile, immediate=False, current_load={})
 
         self.assertFalse(profile.production_eligible)
         self.assertEqual(profile.backend, "vllm_hma")
         self.assertEqual(profile.model_id, "deepseek-ai/DeepSeek-V4-Flash")
-        self.assertEqual(assignment.node_id, "spark4")
-        self.assertEqual(assignment.node_ids, ("spark4", "spark5"))
-        self.assertEqual(topology.estimate_capacity_by_profile()["dsv4_vllm_hma_persistent_experimental_v1"], 1)
+        with self.assertRaisesRegex(ValueError, "no spark node has resident profile"):
+            topology.assign_profile(profile, immediate=False, current_load={})
+        self.assertNotIn(profile.profile_id, topology.estimate_capacity_by_profile())
         default = registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
-        self.assertNotEqual(default.profile_id, profile.profile_id)
+        self.assertEqual(default.profile_id, "dsv4_vllm_mtp_pp8_smartest_v1")
         pinned = registry.resolve(capability=None, chat=True, job_class="longmem", model_pin={"profile_id": profile.profile_id})
         self.assertEqual(pinned.profile_id, profile.profile_id)
 
