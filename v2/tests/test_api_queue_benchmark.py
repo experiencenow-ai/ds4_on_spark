@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
 from ds4_infer.profiles import ProfileRegistry
@@ -62,6 +63,23 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         payload = _openai_payload(request, profile)
         self.assertEqual(payload["ignore_eos"], True)
         self.assertEqual(payload["min_tokens"], 256)
+
+    def test_file_driven_request_jsonl_round_trip(self) -> None:
+        args = argparse.Namespace(input_tokens=8, output_tokens=128, temperature=0.0, job_class="analysis", ignore_eos=True)
+        requests = [bench._request_json(args, "batch-file", "profile-a", idx) for idx in range(3)]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "requests.jsonl"
+            bench._write_requests_jsonl(path, requests)
+            loaded = bench._load_requests_jsonl(path)
+        self.assertEqual([item["request_id"] for item in loaded], ["batch-file-000000", "batch-file-000001", "batch-file-000002"])
+        self.assertEqual(bench._target_completion_tokens(loaded), 384)
+
+    def test_file_driven_manifest_marks_external_worker(self) -> None:
+        args = argparse.Namespace(base_url="http://127.0.0.1:8700", model="dsv4", input_tokens=128, output_tokens=256, concurrency=256, limit=256, drive_worker=False, ignore_eos=True)
+        manifest = bench._manifest_json(args, "batch-file", [{"request_id": "a"}])
+        self.assertEqual(manifest["format"], "ds4-api-file-driven-benchmark-manifest-v1")
+        self.assertEqual(manifest["worker_mode"], "external_worker")
+        self.assertEqual(manifest["requests_jsonl"], "requests.jsonl")
 
 
 if __name__ == "__main__":

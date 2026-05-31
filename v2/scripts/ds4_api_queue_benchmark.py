@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from pathlib import Path
 from typing import Any
 from urllib import error, parse, request
 import uuid
@@ -15,20 +16,37 @@ TERMINAL = {"completed", "completed_with_failures", "completed_with_cancelled", 
 def main() -> int:
     args = _parse_args()
     batch_id = args.batch_id or f"bench-{uuid.uuid4().hex[:16]}"
-    profile_id = _profile_id_for_model(args.base_url, args.model)
+    out_dir = Path(args.out_dir) if args.out_dir else None
+    if out_dir is not None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    if args.requests_jsonl:
+        requests_payload = _load_requests_jsonl(Path(args.requests_jsonl))
+    else:
+        profile_id = _profile_id_for_model(args.base_url, args.model)
+        requests_payload = [_request_json(args, batch_id, profile_id, idx) for idx in range(args.batch_size)]
+    if out_dir is not None:
+        _write_requests_jsonl(out_dir / "requests.jsonl", requests_payload)
+        _write_json(out_dir / "manifest.json", _manifest_json(args, batch_id, requests_payload))
+    if args.write_only:
+        summary = {"format": "ds4-api-queue-benchmark-plan-v1", "batch_id": batch_id, "request_count": len(requests_payload), "out_dir": str(out_dir) if out_dir else None}
+        print(json.dumps(summary, sort_keys=True))
+        return 0
     started_submit = time.time()
-    _post(
+    submit_response = _post(
         args.base_url,
         "/ds4/queue/submit",
         {
             "batch_id": batch_id,
             "priority": args.priority,
-            "requests": [_request_json(args, batch_id, profile_id, idx) for idx in range(args.batch_size)],
+            "requests": requests_payload,
         },
     )
     submit_s = time.time() - started_submit
+    if out_dir is not None:
+        _write_json(out_dir / "submit.json", submit_response)
     started_run = time.time()
     newest_event_id = 0
+    status: dict[str, Any] = {}
     while True:
         if args.drive_worker:
             _post(args.base_url, "/ds4/queue/work", {"batch_id": batch_id, "limit": args.limit, "concurrency": args.concurrency, "timeout_s": args.timeout_s})
@@ -41,7 +59,11 @@ def main() -> int:
         if time.time() - started_run > args.timeout_s:
             raise TimeoutError(f"batch {batch_id} did not finish in {args.timeout_s}s")
     run_s = time.time() - started_run
+    if out_dir is not None:
+        _write_json(out_dir / "status.json", status)
     collected = _get(args.base_url, "/ds4/queue/collect", {"batch_id": batch_id})
+    if out_dir is not None:
+        _write_json(out_dir / "collect.json", collected)
     results = collected.get("results", [])
     completed = [row for row in results if isinstance(row, dict) and (row.get("result") or {}).get("status") == "completed"]
     failed = len(results) - len(completed)
@@ -54,18 +76,20 @@ def main() -> int:
         equivalent_sparks=args.equivalent_sparks,
         reference_tok_s=args.reference_tok_s,
     )
-    target_tokens = args.batch_size * args.output_tokens
+    target_tokens = _target_completion_tokens(requests_payload)
     summary = {
         "format": "ds4-api-queue-benchmark-v1",
         "base_url": args.base_url,
         "batch_id": batch_id,
         "model": args.model,
-        "batch_size": args.batch_size,
+        "batch_size": len(requests_payload),
         "concurrency": args.concurrency,
         "limit": args.limit,
         "input_tokens_target": args.input_tokens,
         "output_tokens_target": args.output_tokens,
         "worker_mode": "api_sync_work" if args.drive_worker else "external_worker",
+        "request_source": str(args.requests_jsonl) if args.requests_jsonl else "generated",
+        "out_dir": str(out_dir) if out_dir else None,
         "ignore_eos": bool(args.ignore_eos),
         "min_tokens": args.output_tokens if args.ignore_eos else 0,
         "submit_s": round(submit_s, 6),
@@ -78,6 +102,8 @@ def main() -> int:
         "aggregate_completion_tok_s": round(aggregate_tok_s, 6),
         "performance_target": perf,
     }
+    if out_dir is not None:
+        _write_json(out_dir / "summary.json", summary)
     print(json.dumps(summary, sort_keys=True))
     return 0 if failed == 0 else 2
 
@@ -87,6 +113,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--base-url", default="http://10.20.0.10:8700")
     parser.add_argument("--model", default="dsv4")
     parser.add_argument("--batch-id")
+    parser.add_argument("--out-dir", help="Write the file-driven request set, submit response, collect output, and summary under this directory.")
+    parser.add_argument("--requests-jsonl", help="Read request envelopes from this JSONL file instead of generating them in memory.")
+    parser.add_argument("--write-only", action="store_true", help="Write requests.jsonl and manifest.json, then exit without submitting.")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--concurrency", type=int, default=32)
     parser.add_argument("--limit", type=int, default=32)
@@ -104,6 +133,49 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--job-class", default="analysis")
     parser.add_argument("--priority", type=int, default=None)
     return parser.parse_args()
+
+
+def _load_requests_jsonl(path: Path) -> list[dict[str, Any]]:
+    requests_payload: list[dict[str, Any]] = []
+    for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        raw = line.strip()
+        if not raw:
+            continue
+        item = json.loads(raw)
+        if not isinstance(item, dict):
+            raise ValueError(f"{path}:{line_no}: request must be a JSON object")
+        requests_payload.append(item)
+    if not requests_payload:
+        raise ValueError(f"{path}: no requests found")
+    return requests_payload
+
+
+def _write_requests_jsonl(path: Path, requests_payload: list[dict[str, Any]]) -> None:
+    with path.open("w", encoding="utf-8") as handle:
+        for item in requests_payload:
+            handle.write(json.dumps(item, sort_keys=True) + "\n")
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _manifest_json(args: argparse.Namespace, batch_id: str, requests_payload: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "format": "ds4-api-file-driven-benchmark-manifest-v1",
+        "base_url": args.base_url,
+        "batch_id": batch_id,
+        "model": args.model,
+        "request_count": len(requests_payload),
+        "input_tokens_target": args.input_tokens,
+        "output_tokens_target": args.output_tokens,
+        "concurrency": args.concurrency,
+        "limit": args.limit,
+        "worker_mode": "api_sync_work" if args.drive_worker else "external_worker",
+        "requests_jsonl": "requests.jsonl",
+        "ignore_eos": bool(args.ignore_eos),
+        "min_tokens": args.output_tokens if args.ignore_eos else 0,
+    }
 
 
 def _request_json(args: argparse.Namespace, batch_id: str, profile_id: str, idx: int) -> dict[str, Any]:
@@ -204,6 +276,16 @@ def _completion_tokens(result: dict[str, Any]) -> int:
             return max(0, int(value))
     text = json.dumps(result.get("output", {}), sort_keys=True)
     return max(0, len(text.encode("utf-8")) // 4)
+
+
+def _target_completion_tokens(requests_payload: list[dict[str, Any]]) -> int:
+    total = 0
+    for item in requests_payload:
+        try:
+            total += max(0, int(item.get("max_output_tokens", 0)))
+        except (TypeError, ValueError):
+            continue
+    return total
 
 
 if __name__ == "__main__":
