@@ -74,12 +74,23 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         self.assertEqual([item["request_id"] for item in loaded], ["batch-file-000000", "batch-file-000001", "batch-file-000002"])
         self.assertEqual(bench._target_completion_tokens(loaded), 384)
 
+    def test_file_driven_replay_remaps_request_ids(self) -> None:
+        loaded = [
+            {"request_id": "old-batch-000000", "max_output_tokens": 128, "input": {"prompt": "a"}},
+            {"request_id": "old-batch-000001", "max_output_tokens": 128, "input": {"prompt": "b"}},
+        ]
+        remapped = bench._remap_request_ids(loaded, "new-batch")
+        self.assertEqual([item["request_id"] for item in remapped], ["new-batch-000000", "new-batch-000001"])
+        self.assertEqual([item["request_id"] for item in loaded], ["old-batch-000000", "old-batch-000001"])
+        self.assertEqual(remapped[1]["input"]["prompt"], "b")
+
     def test_file_driven_manifest_marks_external_worker(self) -> None:
-        args = argparse.Namespace(base_url="http://127.0.0.1:8700", model="dsv4", input_tokens=128, output_tokens=256, concurrency=256, limit=256, drive_worker=False, ignore_eos=True)
+        args = argparse.Namespace(base_url="http://127.0.0.1:8700", model="dsv4", input_tokens=128, output_tokens=256, concurrency=256, limit=256, drive_worker=False, ignore_eos=True, preserve_request_ids=False)
         manifest = bench._manifest_json(args, "batch-file", [{"request_id": "a"}])
         self.assertEqual(manifest["format"], "ds4-api-file-driven-benchmark-manifest-v1")
         self.assertEqual(manifest["worker_mode"], "external_worker")
         self.assertEqual(manifest["requests_jsonl"], "requests.jsonl")
+        self.assertEqual(manifest["preserved_request_ids"], False)
 
 
 if __name__ == "__main__":

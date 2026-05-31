@@ -21,6 +21,8 @@ def main() -> int:
         out_dir.mkdir(parents=True, exist_ok=True)
     if args.requests_jsonl:
         requests_payload = _load_requests_jsonl(Path(args.requests_jsonl))
+        if not args.preserve_request_ids:
+            requests_payload = _remap_request_ids(requests_payload, batch_id)
     else:
         profile_id = _profile_id_for_model(args.base_url, args.model)
         requests_payload = [_request_json(args, batch_id, profile_id, idx) for idx in range(args.batch_size)]
@@ -89,6 +91,7 @@ def main() -> int:
         "output_tokens_target": args.output_tokens,
         "worker_mode": "api_sync_work" if args.drive_worker else "external_worker",
         "request_source": str(args.requests_jsonl) if args.requests_jsonl else "generated",
+        "preserved_request_ids": bool(args.preserve_request_ids),
         "out_dir": str(out_dir) if out_dir else None,
         "ignore_eos": bool(args.ignore_eos),
         "min_tokens": args.output_tokens if args.ignore_eos else 0,
@@ -115,6 +118,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-id")
     parser.add_argument("--out-dir", help="Write the file-driven request set, submit response, collect output, and summary under this directory.")
     parser.add_argument("--requests-jsonl", help="Read request envelopes from this JSONL file instead of generating them in memory.")
+    parser.add_argument("--preserve-request-ids", action="store_true", help="Replay request ids exactly as written in --requests-jsonl. By default, JSONL replay remaps request ids to the current batch id so cohorts can be rerun without SQLite request_id collisions.")
     parser.add_argument("--write-only", action="store_true", help="Write requests.jsonl and manifest.json, then exit without submitting.")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--concurrency", type=int, default=32)
@@ -150,6 +154,15 @@ def _load_requests_jsonl(path: Path) -> list[dict[str, Any]]:
     return requests_payload
 
 
+def _remap_request_ids(requests_payload: list[dict[str, Any]], batch_id: str) -> list[dict[str, Any]]:
+    remapped: list[dict[str, Any]] = []
+    for idx, item in enumerate(requests_payload):
+        cloned = dict(item)
+        cloned["request_id"] = f"{batch_id}-{idx:06d}"
+        remapped.append(cloned)
+    return remapped
+
+
 def _write_requests_jsonl(path: Path, requests_payload: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for item in requests_payload:
@@ -173,6 +186,7 @@ def _manifest_json(args: argparse.Namespace, batch_id: str, requests_payload: li
         "limit": args.limit,
         "worker_mode": "api_sync_work" if args.drive_worker else "external_worker",
         "requests_jsonl": "requests.jsonl",
+        "preserved_request_ids": bool(args.preserve_request_ids),
         "ignore_eos": bool(args.ignore_eos),
         "min_tokens": args.output_tokens if args.ignore_eos else 0,
     }
