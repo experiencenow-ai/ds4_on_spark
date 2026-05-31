@@ -53,6 +53,19 @@ class CapturingRunner(OpenAICompatibleRunner):
         return {"choices": [{"text": "completion ok"}], "usage": {"total_tokens": 2}}
 
 
+class CapturingCoalescedRunner(OpenAICompatibleRunner):
+    def __init__(self) -> None:
+        super().__init__(base_url="http://unused")
+        self.calls: list[tuple[str, dict]] = []
+
+    def _post_json(self, endpoint: str, payload: dict) -> dict:
+        self.calls.append((endpoint, payload))
+        return {
+            "choices": [{"index": 0, "text": "one"}, {"index": 1, "text": "two"}],
+            "usage": {"prompt_tokens": 20, "completion_tokens": 128, "total_tokens": 148},
+        }
+
+
 class CapturingAntirezRunner(AntirezRunner):
     def __init__(self) -> None:
         super().__init__(base_url="http://unused")
@@ -106,6 +119,35 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(completion_result["output"]["text"], "completion ok")
         self.assertEqual(runner.calls[0][0], "/v1/chat/completions")
         self.assertEqual(runner.calls[1][0], "/v1/completions")
+
+    def test_openai_runner_coalesces_compatible_completion_batch(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.resolve(capability="smart", chat=False, job_class="atom_edit")
+        first = make_request(chat=False)
+        first.raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": 64}
+        first = InferenceRequest.from_json(first.raw)
+        raw = make_request(chat=False).raw
+        raw["request_id"] = "r2"
+        raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": 64}
+        runner = CapturingCoalescedRunner()
+        result = runner.run_many_completion([first, InferenceRequest.from_json(raw)], profile)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(len(runner.calls), 1)
+        self.assertEqual(runner.calls[0][0], "/v1/completions")
+        self.assertIsInstance(runner.calls[0][1]["prompt"], list)
+        self.assertEqual(len(runner.calls[0][1]["prompt"]), 2)
+        self.assertEqual(result["r"]["output"]["text"], "one")
+        self.assertEqual(result["r2"]["output"]["text"], "two")
+        self.assertEqual(result["r"]["usage"]["completion_tokens"], 64)
+        self.assertEqual(result["r2"]["transport"]["coalesced_batch_size"], 2)
+
+    def test_openai_runner_does_not_coalesce_chat_batch(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
+        runner = CapturingCoalescedRunner()
+        self.assertIsNone(runner.run_many_completion([make_request(chat=True), make_request(chat=True)], profile))
+        self.assertEqual(runner.calls, [])
 
     def test_antirez_runner_falls_back_to_openai_completion_endpoint(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
