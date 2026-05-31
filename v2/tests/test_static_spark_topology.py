@@ -45,7 +45,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         topology = SparkTopology.load(TOPOLOGY)
         capacity = topology.estimate_capacity_by_profile()
         self.assertEqual(capacity[QWEN_PP], 12)
-        self.assertEqual(capacity[DSV4_PP], 8)
+        self.assertEqual(capacity[DSV4_PP], 512)
         self.assertNotIn("qwen3_6_27b_fp8_efficient_v1", capacity)
         self.assertNotIn("dsv4_vllm_mtp_smartest_v1", capacity)
 
