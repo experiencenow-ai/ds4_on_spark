@@ -43,7 +43,8 @@ class CoordinatorApi:
         self.dispatcher_batch_linger_s = max(0.0, _env_float("DS4_API_DISPATCH_BATCH_LINGER_S", 0.01))
         self.dispatcher_lease_ttl_s = max(1, _env_int("DS4_API_DISPATCH_LEASE_TTL_S", 900))
         self.dispatcher_heartbeat_s = max(0.25, _env_float("DS4_API_DISPATCH_HEARTBEAT_S", 2.0))
-        self.dispatcher_transport_max_attempts = max(1, _env_int("DS4_API_TRANSPORT_MAX_ATTEMPTS", 3))
+        self.dispatcher_transport_timeout_s = max(1, _env_int("DS4_API_TRANSPORT_TIMEOUT_S", 3600))
+        self.dispatcher_transport_max_attempts = max(1, _env_int("DS4_API_TRANSPORT_MAX_ATTEMPTS", 1))
         self.dispatcher_stop = threading.Event()
         self.dispatcher_thread: threading.Thread | None = None
         self.dispatcher_lock = threading.Lock()
@@ -60,6 +61,8 @@ class CoordinatorApi:
             "failed_count": 0,
             "retried_count": 0,
             "idle_count": 0,
+            "transport_timeout_s": self.dispatcher_transport_timeout_s,
+            "transport_max_attempts": self.dispatcher_transport_max_attempts,
             "last_summary": None,
         }
 
@@ -323,7 +326,7 @@ class CoordinatorApi:
             max_node_depth=int(body.get("max_node_depth") or 0),
             batch_linger_s=_body_float(body, "batch_linger_s", 0.05),
             kv_capacity_bytes=int(body.get("kv_capacity_bytes") or 0),
-            transport_max_attempts=int(body.get("transport_max_attempts") or 3),
+            transport_max_attempts=int(body.get("transport_max_attempts") or self.dispatcher_transport_max_attempts),
             kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
             batch_limits_by_service=_batch_limits_by_service(topology),
             refill_low_watermarks_by_service=_refill_low_watermarks_by_service(topology),
@@ -387,6 +390,7 @@ class CoordinatorApi:
                         "lease_ttl_s": self.dispatcher_lease_ttl_s,
                         "heartbeat_interval_s": self.dispatcher_heartbeat_s,
                         "batch_linger_s": self.dispatcher_batch_linger_s,
+                        "timeout_s": self.dispatcher_transport_timeout_s,
                         "transport_max_attempts": self.dispatcher_transport_max_attempts,
                     }
                 )

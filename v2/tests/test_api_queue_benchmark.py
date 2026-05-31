@@ -92,6 +92,30 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         self.assertEqual(manifest["requests_jsonl"], "requests.jsonl")
         self.assertEqual(manifest["preserved_request_ids"], False)
 
+    def test_file_driven_manifest_uses_replayed_completion_target(self) -> None:
+        args = argparse.Namespace(base_url="http://127.0.0.1:8700", model="dsv4", input_tokens=128, output_tokens=256, concurrency=256, limit=256, drive_worker=False, ignore_eos=True, preserve_request_ids=False)
+        manifest = bench._manifest_json(args, "batch-file", [{"request_id": "a", "max_output_tokens": 128}, {"request_id": "b", "max_output_tokens": 128}])
+        self.assertEqual(manifest["output_tokens_target"], 128)
+        self.assertEqual(manifest["completion_tokens_target"], 256)
+        self.assertEqual(manifest["min_tokens"], 128)
+
+    def test_result_timings_expose_transport_retries(self) -> None:
+        results = [
+            {
+                "request": {"created_at": 10.0, "started_at": 20.0, "completed_at": 60.0, "attempt_count": 2},
+                "result": {"transport": {"duration_s": 40.0}},
+            },
+            {
+                "request": {"created_at": 10.0, "started_at": 20.0, "completed_at": 61.0, "attempt_count": 2},
+                "result": {"transport": {"duration_s": 41.0}},
+            },
+        ]
+        timings = bench._result_timings(results, run_s=100.0)
+        self.assertEqual(timings["attempt_count_max"], 2)
+        self.assertEqual(timings["queue_wait_s"], 10.0)
+        self.assertEqual(timings["request_window_s"], 41.0)
+        self.assertEqual(timings["transport_duration_s_max"], 41.0)
+
 
 if __name__ == "__main__":
     unittest.main()

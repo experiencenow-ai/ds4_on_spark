@@ -70,7 +70,9 @@ def main() -> int:
     completed = [row for row in results if isinstance(row, dict) and (row.get("result") or {}).get("status") == "completed"]
     failed = len(results) - len(completed)
     tokens = sum(_completion_tokens(row.get("result") or {}) for row in completed)
+    timings = _result_timings(results, run_s=run_s)
     aggregate_tok_s = tokens / run_s if run_s > 0 else 0.0
+    transport_aggregate_tok_s = tokens / timings["transport_duration_s_max"] if timings["transport_duration_s_max"] > 0 else 0.0
     perf = _performance_score(
         aggregate_tok_s=aggregate_tok_s,
         concurrency=args.concurrency,
@@ -78,7 +80,16 @@ def main() -> int:
         equivalent_sparks=args.equivalent_sparks,
         reference_tok_s=args.reference_tok_s,
     )
+    transport_perf = _performance_score(
+        aggregate_tok_s=transport_aggregate_tok_s,
+        concurrency=args.concurrency,
+        pipeline_stages=args.pipeline_stages,
+        equivalent_sparks=args.equivalent_sparks,
+        reference_tok_s=args.reference_tok_s,
+    )
     target_tokens = _target_completion_tokens(requests_payload)
+    output_tokens_target = _uniform_request_int(requests_payload, "max_output_tokens", args.output_tokens)
+    perf_valid = int(timings["attempt_count_max"]) <= 1
     summary = {
         "format": "ds4-api-queue-benchmark-v1",
         "base_url": args.base_url,
@@ -88,22 +99,27 @@ def main() -> int:
         "concurrency": args.concurrency,
         "limit": args.limit,
         "input_tokens_target": args.input_tokens,
-        "output_tokens_target": args.output_tokens,
+        "output_tokens_target": output_tokens_target,
         "worker_mode": "api_sync_work" if args.drive_worker else "external_worker",
         "request_source": str(args.requests_jsonl) if args.requests_jsonl else "generated",
         "preserved_request_ids": bool(args.preserve_request_ids),
         "out_dir": str(out_dir) if out_dir else None,
         "ignore_eos": bool(args.ignore_eos),
-        "min_tokens": args.output_tokens if args.ignore_eos else 0,
+        "min_tokens": output_tokens_target if args.ignore_eos else 0,
         "submit_s": round(submit_s, 6),
         "run_s": round(run_s, 6),
+        "timings": timings,
         "completed": len(completed),
         "failed": failed,
         "completion_tokens": tokens,
         "completion_tokens_target": target_tokens,
         "completion_tokens_target_ratio": round(tokens / target_tokens, 6) if target_tokens > 0 else 0.0,
         "aggregate_completion_tok_s": round(aggregate_tok_s, 6),
+        "transport_aggregate_completion_tok_s": round(transport_aggregate_tok_s, 6),
+        "perf_valid": perf_valid,
+        "perf_invalid_reason": None if perf_valid else "transport_retries_detected",
         "performance_target": perf,
+        "transport_performance_target": transport_perf,
     }
     if out_dir is not None:
         _write_json(out_dir / "summary.json", summary)
@@ -174,6 +190,7 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _manifest_json(args: argparse.Namespace, batch_id: str, requests_payload: list[dict[str, Any]]) -> dict[str, Any]:
+    output_tokens_target = _uniform_request_int(requests_payload, "max_output_tokens", args.output_tokens)
     return {
         "format": "ds4-api-file-driven-benchmark-manifest-v1",
         "base_url": args.base_url,
@@ -181,15 +198,26 @@ def _manifest_json(args: argparse.Namespace, batch_id: str, requests_payload: li
         "model": args.model,
         "request_count": len(requests_payload),
         "input_tokens_target": args.input_tokens,
-        "output_tokens_target": args.output_tokens,
+        "output_tokens_target": output_tokens_target,
+        "completion_tokens_target": _target_completion_tokens(requests_payload),
         "concurrency": args.concurrency,
         "limit": args.limit,
         "worker_mode": "api_sync_work" if args.drive_worker else "external_worker",
         "requests_jsonl": "requests.jsonl",
         "preserved_request_ids": bool(args.preserve_request_ids),
         "ignore_eos": bool(args.ignore_eos),
-        "min_tokens": args.output_tokens if args.ignore_eos else 0,
+        "min_tokens": output_tokens_target if args.ignore_eos else 0,
     }
+
+
+def _uniform_request_int(requests_payload: list[dict[str, Any]], key: str, fallback: int) -> int:
+    values: set[int] = set()
+    for item in requests_payload:
+        try:
+            values.add(int(item[key]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return next(iter(values)) if len(values) == 1 else int(fallback)
 
 
 def _request_json(args: argparse.Namespace, batch_id: str, profile_id: str, idx: int) -> dict[str, Any]:
@@ -290,6 +318,53 @@ def _completion_tokens(result: dict[str, Any]) -> int:
             return max(0, int(value))
     text = json.dumps(result.get("output", {}), sort_keys=True)
     return max(0, len(text.encode("utf-8")) // 4)
+
+
+def _result_timings(results: list[Any], *, run_s: float) -> dict[str, Any]:
+    created: list[float] = []
+    started: list[float] = []
+    completed: list[float] = []
+    transports: list[float] = []
+    attempts: list[int] = []
+    for row in results:
+        if not isinstance(row, dict):
+            continue
+        request_status = row.get("request")
+        result = row.get("result")
+        if isinstance(request_status, dict):
+            _append_float(created, request_status.get("created_at"))
+            _append_float(started, request_status.get("started_at"))
+            _append_float(completed, request_status.get("completed_at"))
+            try:
+                attempts.append(int(request_status.get("attempt_count") or 0))
+            except (TypeError, ValueError):
+                pass
+        if isinstance(result, dict):
+            transport = result.get("transport")
+            if isinstance(transport, dict):
+                _append_float(transports, transport.get("duration_s"))
+    request_window_s = (max(completed) - min(started)) if started and completed else 0.0
+    queue_wait_s = (min(started) - min(created)) if started and created else 0.0
+    queue_total_s = (max(completed) - min(created)) if completed and created else 0.0
+    transport_duration_s_max = max(transports) if transports else 0.0
+    return {
+        "attempt_count_max": max(attempts) if attempts else 0,
+        "attempt_count_min": min(attempts) if attempts else 0,
+        "queue_wait_s": round(max(0.0, queue_wait_s), 6),
+        "queue_total_s": round(max(0.0, queue_total_s), 6),
+        "request_window_s": round(max(0.0, request_window_s), 6),
+        "transport_duration_s_max": round(max(0.0, transport_duration_s_max), 6),
+        "transport_duration_s_min": round(min(transports), 6) if transports else 0.0,
+        "transport_duration_s_avg": round(sum(transports) / len(transports), 6) if transports else 0.0,
+        "end_to_end_run_s": round(max(0.0, run_s), 6),
+    }
+
+
+def _append_float(values: list[float], value: Any) -> None:
+    try:
+        values.append(float(value))
+    except (TypeError, ValueError):
+        return
 
 
 def _target_completion_tokens(requests_payload: list[dict[str, Any]]) -> int:
