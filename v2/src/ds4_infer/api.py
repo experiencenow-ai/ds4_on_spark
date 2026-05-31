@@ -4,7 +4,9 @@ import argparse
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
+import threading
 import time
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
@@ -35,12 +37,39 @@ class CoordinatorApi:
         self.runner_kind = runner_kind
         self.sync_timeout_s = float(sync_timeout_s)
         self.poll_interval_s = max(0.001, float(poll_interval_s))
+        self.dispatcher_enabled = _env_bool("DS4_API_BACKGROUND_DISPATCH", True)
+        self.dispatcher_window = max(1, _env_int("DS4_API_DISPATCH_WINDOW", 64))
+        self.dispatcher_idle_sleep_s = max(0.001, _env_float("DS4_API_DISPATCH_IDLE_SLEEP_S", 0.005))
+        self.dispatcher_batch_linger_s = max(0.0, _env_float("DS4_API_DISPATCH_BATCH_LINGER_S", 0.01))
+        self.dispatcher_lease_ttl_s = max(1, _env_int("DS4_API_DISPATCH_LEASE_TTL_S", 900))
+        self.dispatcher_heartbeat_s = max(0.25, _env_float("DS4_API_DISPATCH_HEARTBEAT_S", 2.0))
+        self.dispatcher_transport_max_attempts = max(1, _env_int("DS4_API_TRANSPORT_MAX_ATTEMPTS", 3))
+        self.dispatcher_stop = threading.Event()
+        self.dispatcher_thread: threading.Thread | None = None
+        self.dispatcher_lock = threading.Lock()
+        self.dispatcher_state: dict[str, Any] = {
+            "enabled": self.dispatcher_enabled,
+            "running": False,
+            "window": self.dispatcher_window,
+            "started_at": None,
+            "last_work_at": None,
+            "last_error": None,
+            "worked_count": 0,
+            "claimed_count": 0,
+            "completed_count": 0,
+            "failed_count": 0,
+            "retried_count": 0,
+            "idle_count": 0,
+            "last_summary": None,
+        }
 
     def handle_get(self, path: str, query: dict[str, list[str]]) -> tuple[int, dict[str, Any]]:
         if path in {"/health", "/ds4/health"}:
-            return 200, {"ok": True, "service": "ds4-coordinator-api", "entry_node_id": self._topology().routing_policy.get("queue_entry_node_id", "spark0")}
+            return 200, {"ok": True, "service": "ds4-coordinator-api", "entry_node_id": self._topology().routing_policy.get("queue_entry_node_id", "spark0"), "dispatcher": self.dispatcher_status()}
         if path == "/v1/models":
             return 200, _openai_models(self._registry(), self._topology())
+        if path == "/ds4/dispatcher/status":
+            return 200, self.dispatcher_status()
         if path == "/ds4/queue/status":
             return 200, self.queue.status(request_id=_one(query, "request_id"), batch_id=_one(query, "batch_id"), job_id=_one(query, "job_id"))
         if path == "/ds4/queue/poll":
@@ -121,6 +150,8 @@ class CoordinatorApi:
             return 202, manifest
         if path in {"/ds4/kvcache/commit", "/ds4/kv-cache/commit"}:
             return 200, self.queue.external_kv_commit_shards(namespace=str(body.get("namespace") or "default"), kv_key=str(body["kv_key"]), service_id=str(body["service_id"]), object_state=str(body.get("object_state") or "available"), shard_state=str(body.get("shard_state") or "ready_on_ssd"), shard_updates=body.get("shards") or body.get("shard_updates") or ())
+        if path in {"/ds4/kvcache/shard/commit", "/ds4/kv-cache/shard/commit", "/ds4/kvcache/shard/archive", "/ds4/kv-cache/shard/archive"}:
+            return 200, self._kv_shard_commit(body)
         if path in {"/ds4/kvcache/transition", "/ds4/kv-cache/transition"}:
             return 200, self.queue.external_kv_transition(namespace=str(body.get("namespace") or "default"), kv_key=str(body["kv_key"]), service_id=str(body["service_id"]), state=str(body["state"]), shard_state=_optional_str(body.get("shard_state")), metadata=dict(body.get("metadata") or {}))
         if path in {"/ds4/kvcache/pin", "/ds4/kv-cache/pin"}:
@@ -237,12 +268,47 @@ class CoordinatorApi:
             shards=shards,
         )
 
+    def _kv_shard_commit(self, body: dict[str, Any]) -> dict[str, Any]:
+        topology = self._topology()
+        registry = self._registry()
+        service = _resolve_pipeline_service(topology, registry, body)
+        node_id = str(body["node_id"])
+        stage_index = _optional_int(body.get("stage_index"))
+        if stage_index is None:
+            stage_index = service.stage_for_node(node_id).stage_index
+        metadata = dict(body.get("metadata") or {})
+        if body.get("content_hash") is not None:
+            metadata["content_hash"] = str(body["content_hash"])
+        if body.get("archive_uri") is not None:
+            metadata["archive_uri"] = str(body["archive_uri"])
+        metadata.setdefault("archive_owner_node_id", node_id)
+        metadata.setdefault("archive_mode", "node_local_shard")
+        update: dict[str, Any] = {
+            "node_id": node_id,
+            "stage_index": stage_index,
+            "state": str(body.get("state") or body.get("shard_state") or "ready_on_ssd"),
+            "metadata": metadata,
+        }
+        if body.get("bytes") is not None:
+            update["bytes"] = int(body["bytes"])
+        if body.get("storage_uri") is not None:
+            update["storage_uri"] = str(body["storage_uri"])
+        if body.get("gpu_resident") is not None:
+            update["gpu_resident"] = bool(body["gpu_resident"])
+        return self.queue.external_kv_commit_shards(
+            namespace=str(body.get("namespace") or "default"),
+            kv_key=str(body["kv_key"]),
+            service_id=service.service_id,
+            object_state="available",
+            shard_state=str(body.get("state") or body.get("shard_state") or "ready_on_ssd"),
+            shard_updates=[update],
+        )
+
     def _work_once(self, body: dict[str, Any]) -> dict[str, Any]:
         registry = self._registry()
         topology = self._topology()
         runner = self._runner(topology, timeout_s=int(body.get("timeout_s") or self.sync_timeout_s))
         entry_node_id = str(body.get("node_id") or topology.routing_policy.get("queue_entry_node_id") or "spark0")
-        batch_linger_s = 0.05 if body.get("batch_linger_s") is None else float(body.get("batch_linger_s"))
         return self.queue.work(
             registry=registry,
             runner=runner,
@@ -255,7 +321,7 @@ class CoordinatorApi:
             heartbeat_interval_s=float(body.get("heartbeat_interval_s") or 5.0),
             node_profile_ids=_node_profile_ids(topology, entry_node_id),
             max_node_depth=int(body.get("max_node_depth") or 0),
-            batch_linger_s=batch_linger_s,
+            batch_linger_s=_body_float(body, "batch_linger_s", 0.05),
             kv_capacity_bytes=int(body.get("kv_capacity_bytes") or 0),
             transport_max_attempts=int(body.get("transport_max_attempts") or 3),
             kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
@@ -271,9 +337,78 @@ class CoordinatorApi:
             state = str(status.get("state") or "")
             if state in {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled", "failed"}:
                 return self.queue.collect(request_id=request_id)
-            self._work_once({"batch_id": batch_id})
+            if not self.dispatcher_enabled or self.dispatcher_thread is None:
+                self._work_once({"batch_id": batch_id})
+            elif not self._dispatcher_is_active():
+                return {"request": {"request_id": request_id, "state": "failed"}, "result": {"status": "failed", "error": "coordinator dispatcher is not running"}}
             time.sleep(idle_sleep)
         return {"request": {"request_id": request_id, "state": "failed"}, "result": {"status": "failed", "error": "coordinator sync timeout"}}
+
+    def start_background_dispatcher(self) -> None:
+        if not self.dispatcher_enabled:
+            return
+        if self.dispatcher_thread is not None and self.dispatcher_thread.is_alive():
+            return
+        self.dispatcher_stop.clear()
+        self.dispatcher_thread = threading.Thread(target=self._dispatcher_loop, name="ds4-api-dispatcher", daemon=True)
+        self.dispatcher_thread.start()
+
+    def stop_background_dispatcher(self) -> None:
+        self.dispatcher_stop.set()
+        thread = self.dispatcher_thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=10.0)
+
+    def dispatcher_status(self) -> dict[str, Any]:
+        with self.dispatcher_lock:
+            return dict(self.dispatcher_state)
+
+    def _dispatcher_is_active(self) -> bool:
+        return bool(self.dispatcher_enabled and self.dispatcher_thread is not None and self.dispatcher_thread.is_alive())
+
+    def _dispatcher_note(self, **updates: Any) -> None:
+        with self.dispatcher_lock:
+            self.dispatcher_state.update(updates)
+
+    def _dispatcher_count(self, **increments: int) -> None:
+        with self.dispatcher_lock:
+            for key, delta in increments.items():
+                self.dispatcher_state[key] = int(self.dispatcher_state.get(key) or 0) + int(delta)
+
+    def _dispatcher_loop(self) -> None:
+        self._dispatcher_note(running=True, started_at=time.time(), last_error=None)
+        try:
+            while not self.dispatcher_stop.is_set():
+                worked = self._work_once(
+                    {
+                        "limit": self.dispatcher_window,
+                        "concurrency": self.dispatcher_window,
+                        "worker_id": "spark0-api-continuous-dispatcher",
+                        "lease_ttl_s": self.dispatcher_lease_ttl_s,
+                        "heartbeat_interval_s": self.dispatcher_heartbeat_s,
+                        "batch_linger_s": self.dispatcher_batch_linger_s,
+                        "transport_max_attempts": self.dispatcher_transport_max_attempts,
+                    }
+                )
+                claimed = int(worked.get("claimed_count") or 0)
+                self._dispatcher_note(last_summary=worked, last_error=None)
+                if claimed:
+                    self._dispatcher_note(last_work_at=time.time())
+                    self._dispatcher_count(
+                        worked_count=1,
+                        claimed_count=claimed,
+                        completed_count=int(worked.get("completed_count") or 0),
+                        failed_count=int(worked.get("failed_count") or 0),
+                        retried_count=int(worked.get("retried_count") or 0),
+                    )
+                else:
+                    self._dispatcher_count(idle_count=1)
+                    self.dispatcher_stop.wait(self.dispatcher_idle_sleep_s)
+        except Exception as exc:
+            self._dispatcher_note(last_error=str(exc))
+            raise
+        finally:
+            self._dispatcher_note(running=False)
 
     def _registry(self) -> ProfileRegistry:
         return ProfileRegistry.load(self.profiles_dir)
@@ -309,7 +444,12 @@ def serve(*, host: str, port: int, queue_dir: str | Path, profiles_dir: str | Pa
             return
 
     server = ThreadingHTTPServer((host, port), Handler)
-    server.serve_forever()
+    api.start_background_dispatcher()
+    try:
+        server.serve_forever()
+    finally:
+        api.stop_background_dispatcher()
+        server.server_close()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -699,6 +839,33 @@ def _optional_str(value: Any) -> str | None:
 
 def _optional_int(value: Any) -> int | None:
     return int(value) if value is not None else None
+
+
+def _body_float(body: dict[str, Any], key: str, default: float) -> float:
+    if key not in body or body.get(key) is None:
+        return float(default)
+    return float(body[key])
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return bool(default)
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return int(default)
+    return int(value)
+
+
+def _env_float(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return float(default)
+    return float(value)
 
 
 if __name__ == "__main__":
