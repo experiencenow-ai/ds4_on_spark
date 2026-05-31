@@ -102,6 +102,19 @@ class InferenceQueueTests(unittest.TestCase):
             self.assertEqual(runner.calls, [("spark0", [f"hwm-{idx:03d}" for idx in range(12)], 12)])
             self.assertEqual(queue.status()["state_counts"], {"completed": 12, "queued": 24})
 
+    def test_batch_capable_runner_is_not_split_by_refill_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            for idx in range(12):
+                queue.submit_requests(requests=[req(f"cohort-{idx:03d}", priority=1)], registry=registry, batch_id=f"job-{idx:03d}")
+            runner = BatchRunner()
+            worked = queue.work(registry=registry, runner=runner, node_id="spark0", node_profile_ids=(QWEN,), limit=12, concurrency=12, refill_low_watermarks_by_service={"*": 8})
+            self.assertEqual(worked["claimed_count"], 12)
+            self.assertEqual(worked["batch_dispatch_count"], 1)
+            self.assertEqual(worked["batch_dispatch_mode"], "batch")
+            self.assertEqual(runner.calls, [("spark0", [f"cohort-{idx:03d}" for idx in range(12)], 12)])
+
     def test_partial_batch_waits_for_linger_then_dispatches(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             queue = InferenceQueue(tmp)

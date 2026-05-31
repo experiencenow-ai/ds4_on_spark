@@ -68,6 +68,9 @@ class BatchWorker:
         if claims[0].request_kind == "cpu":
             pairs = self._run_cpu_claims(claims, concurrency)
             mode = "cpu_batch"
+        elif _can_batch_models(self.runner, claims):
+            pairs = self._run_model_batch(claims, concurrency)
+            mode = "batch"
         elif _service_refill_low_watermark(claims[0].selected_service_id, refill_low_watermarks_by_service or {}) > 0:
             completed, failed, retried, claimed, refill_prefilled = self._run_refill_stream(
                 claims,
@@ -83,9 +86,6 @@ class BatchWorker:
                 refill_low_watermark=_service_refill_low_watermark(claims[0].selected_service_id, refill_low_watermarks_by_service or {}),
             )
             return _summary(claimed, completed, failed, reap, prefilled_count=prefilled + refill_prefilled, retried_count=retried, batch_dispatch_count=claimed, batch_dispatch_mode="rolling_refill")
-        elif _can_batch_models(self.runner, claims):
-            pairs = self._run_model_batch(claims, concurrency)
-            mode = "batch"
         else:
             completed, failed, retried = self._run_stream(claims, concurrency, on_result)
             return _summary(len(claims), completed, failed, reap, prefilled_count=prefilled, retried_count=retried, batch_dispatch_count=len(claims), batch_dispatch_mode="per_request")
