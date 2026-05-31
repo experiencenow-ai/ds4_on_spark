@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+V2_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 DS4_NVME_ROOT="${DS4_NVME_ROOT:-$HOME/ds4_nvme}"
 QUEUE_DIR="${QUEUE_DIR:-$DS4_NVME_ROOT/ds4_queue}"
 PROFILES_DIR="${PROFILES_DIR:-profiles/models}"
@@ -13,6 +16,8 @@ BATCH_LINGER_S="${BATCH_LINGER_S:-0.05}"
 
 DEFAULT_PIPELINE_BASE_URLS_JSON='{"qwen27_bf16_pp8":"http://127.0.0.1:8101","qwen3_6_27b_bf16_pp8_efficient_v1":"http://127.0.0.1:8101","Qwen/Qwen3.6-27B":"http://127.0.0.1:8101","dsv4_flash_pp8":"http://127.0.0.1:8102","dsv4_vllm_mtp_pp8_smartest_v1":"http://127.0.0.1:8102","deepseek-ai/DeepSeek-V4-Flash":"http://127.0.0.1:8102"}'
 export DS4_PIPELINE_BASE_URLS_JSON="${DS4_PIPELINE_BASE_URLS_JSON:-${DEFAULT_PIPELINE_BASE_URLS_JSON}}"
+export PYTHONPATH="$V2_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+cd "$V2_ROOT"
 
 exec python3 -m ds4_infer.cli queue-worker \
     --queue-dir "${QUEUE_DIR}" \
