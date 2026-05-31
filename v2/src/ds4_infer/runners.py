@@ -547,6 +547,7 @@ def _openai_payload(request: InferenceRequest, profile: ModelProfile) -> dict[st
             "temperature": request.temperature,
             "max_tokens": request.max_output_tokens,
         }
+    _merge_openai_request_fields(payload, request)
     if request.thinking_budget_tokens > 0:
         payload["extra_body"] = {"thinking_budget_tokens": request.thinking_budget_tokens}
     extra_body = kv_cache_extra_body(request.input)
@@ -598,3 +599,27 @@ def _merge_extra_body(payload: dict[str, Any], extra_body: dict[str, Any]) -> No
     merged = dict(existing) if isinstance(existing, dict) else {}
     merged.update(extra_body)
     payload["extra_body"] = merged
+
+
+OPENAI_REQUEST_FIELDS = {
+    "ignore_eos",
+    "include_stop_str_in_output",
+    "min_tokens",
+    "repetition_penalty",
+    "seed",
+    "skip_special_tokens",
+    "stop",
+    "stop_token_ids",
+    "top_k",
+    "top_p",
+    "truncate_prompt_tokens",
+}
+
+
+def _merge_openai_request_fields(payload: dict[str, Any], request: InferenceRequest) -> None:
+    raw = request.input.get("openai")
+    if not isinstance(raw, dict):
+        return
+    for key in OPENAI_REQUEST_FIELDS:
+        if key in raw and raw[key] is not None:
+            payload[key] = raw[key]
