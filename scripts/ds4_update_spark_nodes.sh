@@ -13,9 +13,7 @@ service units.
 Important environment knobs:
   DS4_SELF_UPDATE=1               fetch and detach this local worktree first
   DS4_UPDATE_REF=origin/main        git ref to deploy on each Spark checkout
-  DS4_REMOTE_REPO=$HOME/ds4_on_spark remote repo path on each Spark
-  DS4_REMOTE_UPDATE_MODE=auto      auto, git, or sync-local
-  DS4_FORCE_RESET=0                set 1 to reset dirty remote checkouts
+  DS4_REMOTE_REPO=$HOME/src/ds4_on_spark remote repo path on each Spark
   DS4_INSTALL_RESCUE=0             set 1 to rerun scripts/ds4_deploy_rescue_agent.sh
   DS4_EXTEND_SWAP=0                install survival swap while deploying monitor
   DS4_CONFIGURE_QWEN_RUNTIME=1     point Qwen gateways at host-local vLLM
@@ -24,6 +22,10 @@ Important environment knobs:
   DS4_INSTALL_DSV4_LOCAL=1         install spark4/spark5 local vLLM units
   DS4_RESTART_DSV4=0               set 1 to restart spark5 worker then spark4 head
   DS4_DSV4_KV_OFFLOAD_SIZE=4       recovery-safe total GiB for spark4+spark5
+
+Zero-drift rule:
+  this script refuses local sync payloads and installs service units from the
+  pulled Spark checkout, not from the Mac working tree.
 EOF
 	exit 2
 }
@@ -38,12 +40,9 @@ update_remote="${DS4_UPDATE_REMOTE:-origin}"
 update_branch="${DS4_UPDATE_BRANCH:-main}"
 update_ref="${DS4_UPDATE_REF:-origin/main}"
 local_self_update="${DS4_SELF_UPDATE:-1}"
-remote_update_mode="${DS4_REMOTE_UPDATE_MODE:-auto}"
-force_reset="${DS4_FORCE_RESET:-0}"
 skip_unreachable="${DS4_SKIP_UNREACHABLE:-1}"
 connect_timeout="${DS4_CONNECT_TIMEOUT:-8}"
 ssh_opts="${DS4_SSH_OPTS:-}"
-scp_opts="${DS4_SCP_OPTS:-$ssh_opts}"
 install_rescue="${DS4_INSTALL_RESCUE:-0}"
 extend_swap="${DS4_EXTEND_SWAP:-0}"
 configure_qwen_runtime="${DS4_CONFIGURE_QWEN_RUNTIME:-1}"
@@ -55,7 +54,11 @@ dsv4_kv_offload_size="${DS4_DSV4_KV_OFFLOAD_SIZE:-4}"
 dsv4_persist_store="${DS4_DSV4_PERSIST_STORE:-/var/tmp/ds4_hma_store/dsv4/simple_cpu_offload}"
 dsv4_persist_strict="${DS4_DSV4_PERSIST_STRICT:-1}"
 dsv4_pythonhashseed="${DS4_DSV4_PYTHONHASHSEED:-0}"
-local_release_id="$(git -C "$repo_dir" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
+
+if [ "$update_remote" != "origin" ] || [ "$update_branch" != "main" ] || [ "$update_ref" != "origin/main" ]; then
+	echo "zero-drift deployment requires DS4_UPDATE_REMOTE=origin DS4_UPDATE_BRANCH=main DS4_UPDATE_REF=origin/main" >&2
+	exit 13
+fi
 
 self_update_local_checkout()
 {
@@ -98,28 +101,13 @@ ssh_cmd()
 	ssh $ssh_opts -o BatchMode=yes -o ConnectTimeout="$connect_timeout" "$host" "$@"
 }
 
-scp_cmd()
-{
-	scp $scp_opts "$@"
-}
-
 remote_repo_path()
 {
 	local host="$1"
 	ssh_cmd "$host" "DS4_REMOTE_REPO='$remote_repo' bash -s" <<'REMOTE'
 set -eu
-repo="${DS4_REMOTE_REPO:-$HOME/ds4_on_spark}"
+repo="${DS4_REMOTE_REPO:-$HOME/src/ds4_on_spark}"
 printf '%s\n' "$repo"
-REMOTE
-}
-
-remote_has_git_repo()
-{
-	local host="$1"
-	ssh_cmd "$host" "DS4_REMOTE_REPO='$remote_repo' bash -s" >/dev/null 2>&1 <<'REMOTE'
-set -eu
-repo="${DS4_REMOTE_REPO:-$HOME/ds4_on_spark}"
-[ -d "$repo/.git" ]
 REMOTE
 }
 
@@ -155,9 +143,9 @@ update_remote_repo()
 	repo_path="$(remote_repo_path "$host")"
 	echo "==> $host: git update $repo_path to $update_ref"
 	ssh_cmd "$host" \
-		"DS4_REMOTE_REPO='$remote_repo' DS4_UPDATE_REMOTE='$update_remote' DS4_UPDATE_BRANCH='$update_branch' DS4_UPDATE_REF='$update_ref' DS4_FORCE_RESET='$force_reset' bash -s" <<'REMOTE'
+		"DS4_REMOTE_REPO='$remote_repo' DS4_UPDATE_REMOTE='$update_remote' DS4_UPDATE_BRANCH='$update_branch' DS4_UPDATE_REF='$update_ref' bash -s" <<'REMOTE'
 set -euo pipefail
-repo="${DS4_REMOTE_REPO:-$HOME/ds4_on_spark}"
+repo="${DS4_REMOTE_REPO:-$HOME/src/ds4_on_spark}"
 remote="$DS4_UPDATE_REMOTE"
 branch="$DS4_UPDATE_BRANCH"
 ref="$DS4_UPDATE_REF"
@@ -167,65 +155,15 @@ if [ ! -d "$repo/.git" ]; then
 fi
 cd "$repo"
 git fetch --prune "$remote" "$branch"
-if [ "$DS4_FORCE_RESET" = "1" ]; then
-	git checkout "$branch" 2>/dev/null || git checkout -b "$branch" "$ref"
-	git reset --hard "$ref"
-else
-	if [ -n "$(git status --porcelain)" ]; then
-		echo "dirty remote checkout; set DS4_FORCE_RESET=1 to reset $repo" >&2
-		git status --short >&2
-		exit 21
-	fi
-	git checkout "$branch"
-	git merge --ff-only "$ref"
+if [ -n "$(git status --porcelain)" ]; then
+	echo "dirty remote checkout; refusing zero-drift deployment: $repo" >&2
+	git status --short >&2
+	exit 21
 fi
+git checkout "$branch"
+git merge --ff-only "$ref"
 git rev-parse --short HEAD
 REMOTE
-}
-
-sync_local_repo()
-{
-	local host="$1"
-	local repo_path
-	repo_path="$(remote_repo_path "$host")"
-	echo "==> $host: sync local release $local_release_id to $repo_path"
-	COPYFILE_DISABLE=1 LC_ALL=C tar --no-mac-metadata -C "$repo_dir" \
-		--exclude='./.git' \
-		--exclude='./.pytest_cache' \
-		--exclude='./.mypy_cache' \
-		--exclude='./__pycache__' \
-		--exclude='*/__pycache__' \
-		-cf - . | ssh_cmd "$host" "DS4_REMOTE_REPO='$remote_repo' DS4_RELEASE_ID='$local_release_id' bash -c '
-set -euo pipefail
-repo=\"\${DS4_REMOTE_REPO:-\$HOME/ds4_on_spark}\"
-release_id=\"\$DS4_RELEASE_ID\"
-parent=\"\$(dirname \"\$repo\")/ds4_on_spark_releases\"
-release=\"\$parent/\$release_id\"
-tmp=\"\$parent/.incoming-\$release_id-\$\$\"
-tar_log=\"\$tmp.tar.log\"
-mkdir -p \"\$parent\"
-rm -rf \"\$tmp\"
-rm -f \"\$tar_log\"
-mkdir -p \"\$tmp\"
-tar -C \"\$tmp\" -xf - 2>\"\$tar_log\"
-if [ -s \"\$tar_log\" ]; then
-	grep -v \"LIBARCHIVE.xattr.com.apple.provenance\" \"\$tar_log\" >&2 || true
-fi
-rm -f \"\$tar_log\"
-if [ -e \"\$release\" ] || [ -L \"\$release\" ]; then
-	rm -rf \"\$release\"
-fi
-mv \"\$tmp\" \"\$release\"
-if [ -e \"\$repo\" ] && [ ! -L \"\$repo\" ]; then
-	if [ -d \"\$repo/.git\" ]; then
-		mv \"\$repo\" \"\$repo.git-backup.\$(date +%Y%m%d%H%M%S)\"
-	else
-		mv \"\$repo\" \"\$repo.backup.\$(date +%Y%m%d%H%M%S)\"
-	fi
-fi
-ln -sfn \"\$release\" \"\$repo\"
-printf \"%s\\n\" \"\$release\"
-	'"
 }
 
 configure_qwen_node_runtime()
@@ -287,25 +225,7 @@ REMOTE
 update_node_code()
 {
 	local host="$1"
-	case "$remote_update_mode" in
-	git)
-		update_remote_repo "$host"
-		;;
-	sync-local)
-		sync_local_repo "$host"
-		;;
-	auto)
-		if remote_has_git_repo "$host"; then
-			update_remote_repo "$host"
-		else
-			sync_local_repo "$host"
-		fi
-		;;
-	*)
-		echo "invalid DS4_REMOTE_UPDATE_MODE=$remote_update_mode; use auto, git, or sync-local" >&2
-		exit 2
-		;;
-	esac
+	update_remote_repo "$host"
 }
 
 write_dsv4_env()
@@ -327,10 +247,23 @@ install_dsv4_unit()
 	local host="$1"
 	local unit="$2"
 	echo "==> $host: install $unit"
-	ssh_cmd "$host" 'mkdir -p "$HOME/.config/systemd/user"'
-	scp_cmd "$repo_dir/v2/deploy/systemd-user/$unit" "$host:.config/systemd/user/$unit"
 	write_dsv4_env "$host"
-	ssh_cmd "$host" "systemctl --user daemon-reload; systemctl --user enable '$unit'; systemctl --user --no-pager --plain status '$unit' | sed -n '1,8p' || true"
+	ssh_cmd "$host" "DS4_REMOTE_REPO='$remote_repo' bash -s '$unit'" <<'REMOTE'
+set -euo pipefail
+unit="$1"
+repo="${DS4_REMOTE_REPO:-$HOME/src/ds4_on_spark}"
+src="$repo/v2/deploy/systemd-user/$unit"
+dst="$HOME/.config/systemd/user/$unit"
+if [ ! -f "$src" ]; then
+	echo "missing pulled unit file: $src" >&2
+	exit 30
+fi
+mkdir -p "$HOME/.config/systemd/user"
+install -m 0644 "$src" "$dst"
+systemctl --user daemon-reload
+systemctl --user enable "$unit"
+systemctl --user --no-pager --plain status "$unit" | sed -n '1,8p' || true
+REMOTE
 }
 
 reachable=()
