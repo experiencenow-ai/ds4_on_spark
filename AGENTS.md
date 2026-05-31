@@ -24,6 +24,11 @@ This repository targets Tockchain/Valis-style C/CUDA firmware-quality work.
 - Commit generated probe outputs only after redacting secrets, usernames that
   should not be public, tokens, and private LAN details if needed.
 - Prefer narrow, measurable milestones over broad framework work.
+- Deployment and benchmark tests must be zero-drift: commit the fix, open a PR,
+  merge it to main, pull main on the target Spark checkouts, rebuild/install from
+  those pulled checkouts, restart services, and only then test. Do not validate
+  deployment behavior from local hotpatches, copied files, dirty trees, or
+  unmerged branches.
 
 ## Codex Autonomy and Permissions
 
