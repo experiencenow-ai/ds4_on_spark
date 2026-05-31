@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import time
 from typing import Any
@@ -16,12 +15,17 @@ TERMINAL = {"completed", "completed_with_failures", "completed_with_cancelled", 
 def main() -> int:
     args = _parse_args()
     batch_id = args.batch_id or f"bench-{uuid.uuid4().hex[:16]}"
-    prompts = [_prompt(args.input_tokens, idx) for idx in range(args.batch_size)]
+    profile_id = _profile_id_for_model(args.base_url, args.model)
     started_submit = time.time()
-    with ThreadPoolExecutor(max_workers=max(1, args.submit_concurrency)) as pool:
-        futures = [pool.submit(_submit_one, args, batch_id, idx, prompt) for idx, prompt in enumerate(prompts)]
-        for future in as_completed(futures):
-            future.result()
+    _post(
+        args.base_url,
+        "/ds4/queue/submit",
+        {
+            "batch_id": batch_id,
+            "priority": args.priority,
+            "requests": [_request_json(args, batch_id, profile_id, idx) for idx in range(args.batch_size)],
+        },
+    )
     submit_s = time.time() - started_submit
     started_run = time.time()
     newest_event_id = 0
@@ -70,28 +74,41 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--concurrency", type=int, default=32)
     parser.add_argument("--limit", type=int, default=32)
-    parser.add_argument("--submit-concurrency", type=int, default=32)
     parser.add_argument("--input-tokens", type=int, default=512)
     parser.add_argument("--output-tokens", type=int, default=256)
     parser.add_argument("--timeout-s", type=int, default=1800)
     parser.add_argument("--poll-s", type=float, default=0.02)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--job-class", default="analysis")
+    parser.add_argument("--priority", type=int, default=None)
     return parser.parse_args()
 
 
-def _submit_one(args: argparse.Namespace, batch_id: str, idx: int, prompt: str) -> dict[str, Any]:
-    body = {
-        "model": args.model,
-        "prompt": prompt,
-        "max_tokens": args.output_tokens,
-        "temperature": args.temperature,
-        "ds4_async": True,
-        "batch_id": batch_id,
+def _request_json(args: argparse.Namespace, batch_id: str, profile_id: str, idx: int) -> dict[str, Any]:
+    return {
+        "format": "ds4-inference-request-v1",
         "request_id": f"{batch_id}-{idx:06d}",
-        "ds4_job_class": args.job_class,
+        "capability": None,
+        "chat": False,
+        "immediate": False,
+        "job_class": args.job_class,
+        "max_output_tokens": args.output_tokens,
+        "thinking_budget_tokens": 0,
+        "temperature": args.temperature,
+        "input": {"prompt": _prompt(args.input_tokens, idx)},
+        "output_contract": {"format": "text"},
+        "model_pin": {"profile_id": profile_id},
     }
-    return _post(args.base_url, "/v1/completions", body)
+
+
+def _profile_id_for_model(base_url: str, model: str) -> str:
+    models = _get(base_url, "/v1/models", {})
+    for item in models.get("data", []):
+        if isinstance(item, dict) and item.get("id") == model:
+            profile_id = item.get("ds4_profile_id")
+            if isinstance(profile_id, str) and profile_id:
+                return profile_id
+    return model
 
 
 def _post(base_url: str, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
