@@ -30,7 +30,8 @@ def main() -> int:
     started_run = time.time()
     newest_event_id = 0
     while True:
-        _post(args.base_url, "/ds4/queue/work", {"batch_id": batch_id, "limit": args.limit, "concurrency": args.concurrency, "timeout_s": args.timeout_s})
+        if args.drive_worker:
+            _post(args.base_url, "/ds4/queue/work", {"batch_id": batch_id, "limit": args.limit, "concurrency": args.concurrency, "timeout_s": args.timeout_s})
         status = _get(args.base_url, "/ds4/queue/status", {"batch_id": batch_id})
         if str(status.get("state")) in TERMINAL:
             break
@@ -55,6 +56,7 @@ def main() -> int:
         "limit": args.limit,
         "input_tokens_target": args.input_tokens,
         "output_tokens_target": args.output_tokens,
+        "worker_mode": "api_sync_work" if args.drive_worker else "external_worker",
         "submit_s": round(submit_s, 6),
         "run_s": round(run_s, 6),
         "completed": len(completed),
@@ -78,6 +80,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--output-tokens", type=int, default=256)
     parser.add_argument("--timeout-s", type=int, default=1800)
     parser.add_argument("--poll-s", type=float, default=0.02)
+    parser.add_argument("--drive-worker", action="store_true", help="Also call the synchronous /ds4/queue/work endpoint. Production benchmarks should leave this off and run ds4_pipeline_queue_worker.sh separately.")
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--job-class", default="analysis")
     parser.add_argument("--priority", type=int, default=None)
