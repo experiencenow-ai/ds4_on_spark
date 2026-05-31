@@ -1,0 +1,112 @@
+{
+  "contract_id": "dsv4_flash_pp8_mtp_v1",
+  "description": "DeepSeek V4 Flash all-Spark vLLM layer-pipeline runtime. Existing mixed FP4/FP8 checkpoint and native SimpleCPUOffload/HMA path are preserved.",
+  "format": "ds4-runtime-contract-v1",
+  "kv_cache": {
+    "cache_root": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8",
+    "connector": "SimpleCPUOffloadConnector",
+    "deployment": "profiles/kv_cache/dsv4_flash_pp8_simple_offload.json",
+    "expected_node_fraction": "1/8",
+    "sharding": "pipeline_layers"
+  },
+  "launch": {
+    "api_base_url": "http://127.0.0.1:8102",
+    "args": [
+      "--pipeline-parallel-size",
+      "8",
+      "--tensor-parallel-size",
+      "1",
+      "--distributed-executor-backend",
+      "mp",
+      "--nnodes",
+      "8",
+      "--kv-cache-dtype",
+      "fp8",
+      "--block-size",
+      "256",
+      "--enable-prefix-caching",
+      "--max-model-len",
+      "262144",
+      "--max-num-seqs",
+      "8",
+      "--max-num-batched-tokens",
+      "8192",
+      "--gpu-memory-utilization",
+      "0.30",
+      "--no-disable-hybrid-kv-cache-manager",
+      "--kv-offloading-size",
+      "2",
+      "--kv-offloading-backend",
+      "native",
+      "--linear-backend",
+      "deep_gemm",
+      "--moe-backend",
+      "deep_gemm",
+      "--kv-cache-metrics",
+      "--enable-logging-iteration-details",
+      "--speculative-config",
+      "{\"method\":\"deepseek_mtp\",\"num_speculative_tokens\":2}",
+      "--compilation-config",
+      "{\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"custom_ops\":[\"all\"]}"
+    ],
+    "host": "0.0.0.0",
+    "master_addr": "spark0",
+    "master_port": 29544,
+    "port": 8102
+  },
+  "model": {
+    "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+    "served_model_name": "deepseek-v4-flash"
+  },
+  "pipeline": {
+    "dtype": "mixed-fp4-fp8",
+    "entry_base_url": "http://127.0.0.1:8102",
+    "head_node": "spark0",
+    "layer_partition": [
+      6,
+      6,
+      6,
+      5,
+      5,
+      5,
+      5,
+      5
+    ],
+    "pipeline_parallel_size": 8,
+    "tensor_parallel_size": 1,
+    "text_only": true,
+    "total_layers": 43,
+    "worker_nodes": [
+      "spark1",
+      "spark2",
+      "spark3",
+      "spark4",
+      "spark5",
+      "spark6",
+      "spark7"
+    ]
+  },
+  "profile_ids": [
+    "dsv4_vllm_mtp_pp8_smartest_v1"
+  ],
+  "required_nodes": [
+    "spark0",
+    "spark1",
+    "spark2",
+    "spark3",
+    "spark4",
+    "spark5",
+    "spark6",
+    "spark7"
+  ],
+  "trim_request": {
+    "method": "POST",
+    "path": "/v1/trim_memory",
+    "query": "mode=abort&reset_external=true&release_offload_memory=true&malloc_trim=true&resume=true"
+  },
+  "vllm": {
+    "required_source": "ds4 patched vLLM zip vllm-dual-8x-pipelines-qwen27-dsv4.zip",
+    "required_source_commit": "c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34",
+    "trim_endpoint": "/v1/trim_memory"
+  }
+}

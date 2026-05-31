@@ -10,12 +10,43 @@ from .topology import SparkTopology
 Poster = Callable[[str, dict[str, Any], int], dict[str, Any]]
 
 
+EXECUTABLE_STARTUP_ACTIONS = {"warm", "group_primary_warm", "pipeline_ingress_warm"}
+
+
 def startup_plan(*, topology: SparkTopology, registry: ProfileRegistry, node_id: str) -> dict[str, Any]:
     node = next((item for item in topology.nodes if item.node_id == node_id), None)
     if node is None:
         raise ValueError(f"unknown spark node: {node_id}")
     items: list[dict[str, Any]] = []
+    pipeline_profile_ids = {service.profile_id for service in topology.pipeline_services.values()}
+    for service in topology.pipeline_services.values():
+        if node_id not in service.node_ids:
+            continue
+        profile = registry.get(service.profile_id)
+        if bool(profile.routing.get("requires_profile_pin", False)) or not profile.production_eligible:
+            continue
+        stage = service.stage_for_node(node_id)
+        if node_id == service.entry_node_id:
+            item = _warm_item(profile, "pipeline_ingress_warm")
+        else:
+            item = {"profile_id": profile.profile_id, "model_id": profile.model_id, "backend": profile.backend, "action": "pipeline_stage"}
+        item.update(
+            {
+                "service_id": service.service_id,
+                "entry_node_id": service.entry_node_id,
+                "api_base_url": service.api_base_url,
+                "compute_domain": service.compute_domain,
+                "stage_index": stage.stage_index,
+                "stage_count": stage.stage_count,
+                "layer_start": stage.layer_start,
+                "layer_end": stage.layer_end,
+                "layer_count": stage.layer_count,
+            }
+        )
+        items.append(item)
     for profile_id in node.resident_profiles:
+        if profile_id in pipeline_profile_ids:
+            continue
         profile = registry.get(profile_id)
         if bool(profile.routing.get("requires_profile_pin", False)) or not profile.production_eligible:
             continue
@@ -36,8 +67,8 @@ def warm_startup_models(*, plan: dict[str, Any], base_url: str, timeout_s: int, 
     poster = poster or post_json
     results: list[dict[str, Any]] = []
     for item in plan.get("items", []):
-        if item.get("action") not in {"warm", "group_primary_warm"}:
-            results.append({"profile_id": item.get("profile_id"), "action": item.get("action"), "status": "skipped"})
+        if item.get("action") not in EXECUTABLE_STARTUP_ACTIONS:
+            results.append({"profile_id": item.get("profile_id"), "service_id": item.get("service_id"), "action": item.get("action"), "status": "skipped"})
             continue
         payload = dict(item["payload"])
         endpoints = [str(item["endpoint"])]
@@ -45,18 +76,19 @@ def warm_startup_models(*, plan: dict[str, Any], base_url: str, timeout_s: int, 
         try:
             response = None
             last_exc: Exception | None = None
+            item_base_url = str(item.get("api_base_url") or base_url).rstrip("/")
             for endpoint in endpoints:
                 try:
-                    response = poster(base_url.rstrip("/") + endpoint, payload, timeout_s)
+                    response = poster(item_base_url + endpoint, payload, timeout_s)
                     break
                 except Exception as exc:
                     last_exc = exc
             if response is None:
                 assert last_exc is not None
                 raise last_exc
-            results.append({"profile_id": item["profile_id"], "action": item["action"], "status": "completed", "response_keys": sorted(response)[:8]})
+            results.append({"profile_id": item["profile_id"], "service_id": item.get("service_id"), "action": item["action"], "status": "completed", "response_keys": sorted(response)[:8]})
         except Exception as exc:
-            results.append({"profile_id": item["profile_id"], "action": item["action"], "status": "failed", "error": str(exc)[-1000:]})
+            results.append({"profile_id": item["profile_id"], "service_id": item.get("service_id"), "action": item["action"], "status": "failed", "error": str(exc)[-1000:]})
     failed = sum(1 for item in results if item.get("status") == "failed")
     return {
         "format": "ds4-startup-model-warmup-v1",

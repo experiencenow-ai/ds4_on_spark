@@ -41,7 +41,7 @@
       "type": "nixl_store",
       "backend": "POSIX",
       "backend_params": {
-        "file_path": "/mnt/nvme/ds4_lmcache/qwen27/l2",
+        "file_path": "/home/spark7/ds4_nvme/ds4_lmcache/qwen27/l2",
         "use_direct_io": "false"
       },
       "pool_size": 64
@@ -55,7 +55,7 @@
     "TORCH_CUDA_ARCH_LIST": "12.1a"
   },
   "cache_directories": [
-    "/mnt/nvme/ds4_lmcache/qwen27/l2"
+    "/home/spark7/ds4_nvme/ds4_lmcache/qwen27/l2"
   ],
   "extra_args": [
     "--trust-remote-code",

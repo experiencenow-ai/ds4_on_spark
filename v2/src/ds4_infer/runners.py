@@ -6,10 +6,12 @@ from pathlib import Path
 import shlex
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Protocol
 from urllib import error, request as urlrequest
 
 from .builders import model_batch_payload, request_messages, request_prompt
+from .kv_cache import kv_cache_extra_body
 from .profiles import ModelProfile
 from .schemas import InferenceRequest, make_result
 
@@ -279,14 +281,7 @@ class OpenAICompatibleRunner:
                 data = self._post_json(self.chat_endpoint, payload)
                 text = extract_openai_chat_text(data)
             else:
-                payload: dict[str, Any] = {
-                    "model": profile.model_id,
-                    "prompt": request_prompt(request),
-                    "temperature": request.temperature,
-                    "max_tokens": request.max_output_tokens,
-                }
-                if request.thinking_budget_tokens > 0:
-                    payload["extra_body"] = {"thinking_budget_tokens": request.thinking_budget_tokens}
+                payload = _openai_payload(request, profile)
                 _merge_extra_body(payload, self.default_extra_body)
                 data = self._post_json(self.completion_endpoint, payload)
                 text = extract_openai_completion_text(data)
@@ -312,6 +307,74 @@ class OpenAICompatibleRunner:
             detail = exc.read().decode("utf-8", errors="replace")[-4000:]
             raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
         return json.loads(text)
+
+
+class PipelineOpenAIRunner:
+    def __init__(
+        self,
+        *,
+        base_urls: dict[str, str] | None = None,
+        api_key: str | None = None,
+        timeout_s: int = 300,
+        default_base_url: str | None = None,
+    ) -> None:
+        env_urls = _json_env("DS4_PIPELINE_BASE_URLS_JSON")
+        merged = {str(key): str(value).rstrip("/") for key, value in env_urls.items()}
+        for key, value in dict(base_urls or {}).items():
+            merged[str(key)] = str(value).rstrip("/")
+        self.base_urls = merged
+        self.default_base_url = (default_base_url or os.environ.get("DS4_PIPELINE_DEFAULT_BASE_URL") or "").rstrip("/")
+        self.api_key = api_key if api_key is not None else os.environ.get("DS4_PIPELINE_API_KEY", "")
+        self.timeout_s = timeout_s
+        self.default_extra_body = _json_env("DS4_PIPELINE_EXTRA_BODY_JSON")
+
+    def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
+        return self.run_one_on_node(request, profile, None)
+
+    def run_one_on_node(self, request: InferenceRequest, profile: ModelProfile, node_id: str | None) -> dict:
+        return self._runner_for(profile, node_id).run_one(request, profile)
+
+    def run_many_on_node(self, requests: list[InferenceRequest], profile: ModelProfile, node_id: str | None, *, concurrency: int = 1) -> dict[str, dict]:
+        request_list = list(requests)
+        if not request_list:
+            return {}
+        worker_count = max(1, min(int(concurrency), len(request_list)))
+        runner = self._runner_for(profile, node_id)
+        out: dict[str, dict] = {}
+        with ThreadPoolExecutor(max_workers=worker_count) as pool:
+            futures = {pool.submit(runner.run_one, item, profile): item for item in request_list}
+            for future in as_completed(futures):
+                item = futures[future]
+                try:
+                    out[item.request_id] = future.result()
+                except Exception as exc:
+                    result = make_result(request=item, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": str(exc)}, sort_keys=True), status="transport_failed")
+                    result["transport"] = {"node_id": node_id, "base_url": self._base_url(profile, node_id), "error": str(exc)}
+                    out[item.request_id] = result
+        return out
+
+    def _runner_for(self, profile: ModelProfile, node_id: str | None) -> OpenAICompatibleRunner:
+        return OpenAICompatibleRunner(
+            base_url=self._base_url(profile, node_id),
+            api_key=self.api_key,
+            timeout_s=self.timeout_s,
+            default_extra_body=self.default_extra_body,
+        )
+
+    def _base_url(self, profile: ModelProfile, node_id: str | None) -> str:
+        keys = [profile.profile_id, profile.model_id]
+        service_id = profile.routing.get("pipeline_service_id")
+        if service_id:
+            keys.insert(0, str(service_id))
+        if node_id:
+            keys.append(str(node_id))
+        for key in keys:
+            value = self.base_urls.get(key)
+            if value:
+                return value.rstrip("/")
+        if self.default_base_url:
+            return self.default_base_url
+        raise ValueError(f"no pipeline base URL configured for profile {profile.profile_id!r}")
 
 
 class VllmOpenAIRunner(OpenAICompatibleRunner):
@@ -450,13 +513,15 @@ def strip_visible_thinking(text: str) -> str:
     return text.split(marker, 1)[1].lstrip()
 
 
-def make_runner(kind: str, *, timeout_s: int) -> Any:
+def make_runner(kind: str, *, timeout_s: int, pipeline_base_urls: dict[str, str] | None = None) -> Any:
     if kind == "fake":
         return FakeRunner()
     if kind == "auto":
         return AutoRunner(timeout_s=timeout_s)
     if kind == "vllm":
         return VllmOpenAIRunner(timeout_s=timeout_s)
+    if kind == "pipeline":
+        return PipelineOpenAIRunner(timeout_s=timeout_s, base_urls=pipeline_base_urls)
     if kind == "hma":
         return HmaPersistentRunner(timeout_s=timeout_s)
     if kind == "antirez":
@@ -467,23 +532,40 @@ def make_runner(kind: str, *, timeout_s: int) -> Any:
 
 
 def _openai_payload(request: InferenceRequest, profile: ModelProfile) -> dict[str, Any]:
+    model = _served_model_id(profile)
     if request.chat:
         payload: dict[str, Any] = {
-            "model": profile.model_id,
+            "model": model,
             "messages": request_messages(request),
             "temperature": request.temperature,
             "max_tokens": request.max_output_tokens,
         }
     else:
         payload = {
-            "model": profile.model_id,
+            "model": model,
             "prompt": request_prompt(request),
             "temperature": request.temperature,
             "max_tokens": request.max_output_tokens,
         }
     if request.thinking_budget_tokens > 0:
         payload["extra_body"] = {"thinking_budget_tokens": request.thinking_budget_tokens}
+    extra_body = kv_cache_extra_body(request.input)
+    if extra_body:
+        payload["extra_body"] = {**dict(payload.get("extra_body") or {}), **extra_body}
     return payload
+
+
+def _served_model_id(profile: ModelProfile) -> str:
+    for value in (profile.routing.get("served_model_name"), profile.routing.get("runner_model_id")):
+        if isinstance(value, str) and value:
+            return value
+    pipeline = profile.routing.get("pipeline")
+    if isinstance(pipeline, dict):
+        for key in ("served_model_name", "runner_model_id"):
+            value = pipeline.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return profile.model_id
 
 
 def _usage_from_response(data: dict[str, Any]) -> dict[str, Any]:

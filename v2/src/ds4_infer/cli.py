@@ -8,11 +8,11 @@ import time
 from .profiles import ProfileRegistry
 from .control import trim_spark_memory
 from .queue import InferenceQueue
-from .runners import AntirezRunner, AutoRunner, CommandRunner, FakeRunner, HmaPersistentRunner, SparkHttpRunner, VllmOpenAIRunner
+from .runners import AntirezRunner, AutoRunner, CommandRunner, FakeRunner, HmaPersistentRunner, PipelineOpenAIRunner, SparkHttpRunner, VllmOpenAIRunner
 from .service import load_requests_jsonl
 from .topology import SparkTopology
 
-RUNNER_CHOICES = ("fake", "command", "vllm", "hma", "antirez", "auto", "spark")
+RUNNER_CHOICES = ("fake", "command", "vllm", "hma", "antirez", "auto", "spark", "pipeline")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -108,6 +108,28 @@ def _add_queue_status_args(sub: argparse._SubParsersAction) -> None:
     queue_collect.add_argument("--batch-id")
     queue_collect.add_argument("--job-id")
 
+    pipeline_status = sub.add_parser("pipeline-status")
+    pipeline_status.add_argument("--queue-dir", required=True)
+    pipeline_status.add_argument("--service-id")
+
+    telemetry = sub.add_parser("pipeline-telemetry-report")
+    telemetry.add_argument("--queue-dir", required=True)
+    telemetry.add_argument("--service-id", required=True)
+    telemetry.add_argument("--node-id", required=True)
+    telemetry.add_argument("--stage-index", type=int, required=True)
+    telemetry.add_argument("--stage-count", type=int, required=True)
+    telemetry.add_argument("--layer-start", type=int)
+    telemetry.add_argument("--layer-end", type=int)
+    telemetry.add_argument("--kv-shard-bytes", type=int, default=0)
+    telemetry.add_argument("--payload-json", default="{}")
+
+    queue_pipeline_status = sub.add_parser("queue-pipeline-status")
+    queue_pipeline_status.add_argument("--queue-dir", required=True)
+
+    queue_pipeline_telemetry = sub.add_parser("queue-pipeline-telemetry")
+    queue_pipeline_telemetry.add_argument("--queue-dir", required=True)
+    queue_pipeline_telemetry.add_argument("--report", required=True)
+
 
 def main(argv: list[str] | None = None) -> int:
     return _run(_build_parser().parse_args(argv))
@@ -129,6 +151,12 @@ def _run(args: argparse.Namespace) -> int:
         "queue-cancel": _cmd_queue_cancel,
         "queue-poll": _cmd_queue_poll,
         "queue-collect": _cmd_queue_collect,
+        "pipeline-status": _cmd_pipeline_status,
+        "pipeline-telemetry-report": _cmd_pipeline_telemetry_report,
+        "pipeline-status": _cmd_pipeline_status,
+        "pipeline-telemetry-report": _cmd_pipeline_telemetry_report,
+        "queue-pipeline-status": _cmd_queue_pipeline_status,
+        "queue-pipeline-telemetry": _cmd_queue_pipeline_telemetry,
     }
     try:
         return handlers[args.cmd](args)
@@ -221,7 +249,7 @@ def _cmd_queue_submit_cpu(args: argparse.Namespace) -> int:
 def _cmd_queue_work(args: argparse.Namespace) -> int:
     queue = InferenceQueue(args.queue_dir)
     registry = ProfileRegistry.load(args.profiles_dir)
-    runner = _make_runner(args.runner, args.command or [], args.runner_timeout_s)
+    runner = _make_runner(args.runner, args.command or [], args.runner_timeout_s, topology_path=args.topology)
     iterations = 0
     while True:
         result = _queue_work_once(queue, registry, runner, args)
@@ -250,6 +278,9 @@ def _queue_work_once(queue: InferenceQueue, registry: ProfileRegistry, runner: o
         batch_linger_s=args.batch_linger_s,
         kv_capacity_bytes=args.kv_capacity_bytes,
         transport_max_attempts=args.transport_max_attempts,
+        kv_shard_layouts_by_profile=_pipeline_layouts(args.topology),
+        batch_limits_by_service=_pipeline_batch_limits(args.topology),
+        refill_low_watermarks_by_service=_pipeline_refill_low_watermarks(args.topology),
     )
 
 
@@ -259,8 +290,47 @@ def _node_profile_ids(topology_path: str | None, node_id: str | None) -> tuple[s
     topology = SparkTopology.load(topology_path)
     for node in topology.nodes:
         if node.node_id == node_id:
-            return tuple(node.resident_profiles)
+            profile_ids = set(node.resident_profiles)
+            for pipeline in topology.pipeline_services.values():
+                if node_id in pipeline.node_ids:
+                    profile_ids.add(pipeline.profile_id)
+            return tuple(sorted(profile_ids))
     raise ValueError(f"node {node_id!r} not found in topology")
+
+
+def _pipeline_layouts(topology_path: str | None) -> dict:
+    if not topology_path:
+        return {}
+    topology = SparkTopology.load(topology_path)
+    return dict(topology.profile_pipeline_services)
+
+
+def _pipeline_batch_limits(topology_path: str | None) -> dict[str, int]:
+    if not topology_path:
+        return {}
+    topology = SparkTopology.load(topology_path)
+    return {service.service_id: int(service.scheduler.get("queue_limit") or service.max_batch_size) for service in topology.pipeline_services.values()}
+
+
+def _pipeline_refill_low_watermarks(topology_path: str | None) -> dict[str, int]:
+    if not topology_path:
+        return {}
+    topology = SparkTopology.load(topology_path)
+    return {service.service_id: int(service.scheduler.get("refill_low_watermark") or 0) for service in topology.pipeline_services.values()}
+
+
+def _pipeline_base_urls(topology_path: str | None) -> dict[str, str]:
+    if not topology_path:
+        return {}
+    topology = SparkTopology.load(topology_path)
+    urls: dict[str, str] = {}
+    for pipeline in topology.pipeline_services.values():
+        if not pipeline.api_base_url:
+            continue
+        urls[pipeline.profile_id] = pipeline.api_base_url
+        urls[pipeline.service_id] = pipeline.api_base_url
+        urls[pipeline.model_id] = pipeline.api_base_url
+    return urls
 
 
 def _cmd_queue_reap(args: argparse.Namespace) -> int:
@@ -285,6 +355,63 @@ def _cmd_queue_poll(args: argparse.Namespace) -> int:
 
 def _cmd_queue_collect(args: argparse.Namespace) -> int:
     _emit(InferenceQueue(args.queue_dir).collect(request_id=args.request_id, batch_id=args.batch_id, job_id=args.job_id))
+    return 0
+
+
+def _cmd_pipeline_status(args: argparse.Namespace) -> int:
+    _emit(InferenceQueue(args.queue_dir).pipeline_status(service_id=args.service_id))
+    return 0
+
+
+def _cmd_pipeline_telemetry_report(args: argparse.Namespace) -> int:
+    payload = json.loads(args.payload_json)
+    _emit(
+        InferenceQueue(args.queue_dir).report_pipeline_telemetry(
+            service_id=args.service_id,
+            node_id=args.node_id,
+            stage_index=args.stage_index,
+            stage_count=args.stage_count,
+            layer_start=args.layer_start,
+            layer_end=args.layer_end,
+            kv_shard_bytes=args.kv_shard_bytes,
+            payload=payload,
+        )
+    )
+    return 0
+
+
+def _cmd_pipeline_status(args: argparse.Namespace) -> int:
+    _emit(InferenceQueue(args.queue_dir).pipeline_status(service_id=getattr(args, "service_id", None)))
+    return 0
+
+
+def _cmd_pipeline_telemetry_report(args: argparse.Namespace) -> int:
+    payload = json.loads(args.payload_json)
+    if not isinstance(payload, dict):
+        raise ValueError("--payload-json must decode to a JSON object")
+    _emit(
+        InferenceQueue(args.queue_dir).report_pipeline_telemetry(
+            service_id=args.service_id,
+            node_id=args.node_id,
+            stage_index=args.stage_index,
+            stage_count=args.stage_count,
+            layer_start=args.layer_start,
+            layer_end=args.layer_end,
+            kv_shard_bytes=args.kv_shard_bytes,
+            payload=payload,
+        )
+    )
+    return 0
+
+
+def _cmd_queue_pipeline_status(args: argparse.Namespace) -> int:
+    _emit(InferenceQueue(args.queue_dir).pipeline_status())
+    return 0
+
+
+def _cmd_queue_pipeline_telemetry(args: argparse.Namespace) -> int:
+    report = json.loads(open(args.report, "r", encoding="utf-8").read())
+    _emit(InferenceQueue(args.queue_dir).record_pipeline_telemetry(report))
     return 0
 
 
@@ -324,7 +451,7 @@ def _load_jsonl(path: str) -> list[dict]:
     return rows
 
 
-def _make_runner(kind: str, command: list[str], timeout_s: int):
+def _make_runner(kind: str, command: list[str], timeout_s: int, *, topology_path: str | None = None):
     if kind == "fake":
         return FakeRunner()
     if kind == "command":
@@ -339,6 +466,8 @@ def _make_runner(kind: str, command: list[str], timeout_s: int):
         return AutoRunner(timeout_s=timeout_s)
     if kind == "spark":
         return SparkHttpRunner(timeout_s=timeout_s)
+    if kind == "pipeline":
+        return PipelineOpenAIRunner(timeout_s=timeout_s, base_urls=_pipeline_base_urls(topology_path))
     raise ValueError(f"unknown runner: {kind}")
 
 

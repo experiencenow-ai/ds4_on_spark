@@ -1,0 +1,52 @@
+{
+  "backend": "vllm_mtp_pipeline",
+  "capability_classes": [
+    "smart",
+    "smartest",
+    "world_model_deep"
+  ],
+  "format": "ds4-model-profile-v1",
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "performance": {
+    "latency_rank": 2.0,
+    "target": "8-stage layer pipeline; native Blackwell DeepGEMM/MXFP4 fast path; no Marlin/emulation fallback; MTP enabled",
+    "expected_validation": "Compare PP8 aggregate throughput with native TP2 baseline cautiously; PP8 and TP2 are different topologies."
+  },
+  "production_eligible": true,
+  "profile_id": "dsv4_vllm_mtp_pp8_smartest_v1",
+  "quality": {
+    "status": "DSV4 Flash all-Spark pipeline profile; inherits existing DSV4 Flash model quality but requires PP8 throughput validation"
+  },
+  "routing": {
+    "chat_template_thinking_key": "thinking",
+    "default_for": [
+      "smart",
+      "smartest"
+    ],
+    "optional_kv_cache_deployments": [
+      "profiles/kv_cache/dsv4_flash_pp8_simple_offload.json"
+    ],
+    "pipeline": {
+      "api_base_url": "http://127.0.0.1:8102",
+      "compute_domain": "spark-fleet-0",
+      "entry_node_id": "spark0",
+      "served_model_name": "deepseek-v4-flash-pp8",
+      "service_id": "dsv4_flash_pp8"
+    },
+    "rank": 20
+  },
+  "runtime_contract_id": "dsv4_flash_pp8_mtp_v1",
+  "supported_job_classes": [
+    "atom_edit",
+    "analysis",
+    "debug",
+    "cluster_synthesis",
+    "tool_chat",
+    "longmem",
+    "world_model_extract",
+    "event_extract"
+  ],
+  "supports_chat": true,
+  "supports_completion": true,
+  "supports_thinking": true
+}

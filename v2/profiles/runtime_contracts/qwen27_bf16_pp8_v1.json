@@ -1,0 +1,98 @@
+{
+  "contract_id": "qwen27_bf16_pp8_v1",
+  "description": "Qwen3.6-27B BF16 text-only 8-stage vLLM layer-pipeline runtime. spark0 is the API ingress; all Sparks own one layer shard and one KV shard.",
+  "format": "ds4-runtime-contract-v1",
+  "kv_cache": {
+    "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8",
+    "connector": "LMCacheConnectorV1",
+    "deployment": "profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json",
+    "expected_node_fraction": "1/8",
+    "sharding": "pipeline_layers"
+  },
+  "launch": {
+    "api_base_url": "http://127.0.0.1:8101",
+    "args": [
+      "--dtype",
+      "bfloat16",
+      "--pipeline-parallel-size",
+      "8",
+      "--tensor-parallel-size",
+      "1",
+      "--distributed-executor-backend",
+      "mp",
+      "--nnodes",
+      "8",
+      "--max-model-len",
+      "262144",
+      "--max-num-seqs",
+      "12",
+      "--max-num-batched-tokens",
+      "65536",
+      "--gpu-memory-utilization",
+      "0.35",
+      "--enable-prefix-caching",
+      "--enable-chunked-prefill",
+      "--no-disable-hybrid-kv-cache-manager",
+      "--language-model-only"
+    ],
+    "host": "0.0.0.0",
+    "master_addr": "spark0",
+    "master_port": 29527,
+    "port": 8101
+  },
+  "model": {
+    "model_id": "Qwen/Qwen3.6-27B",
+    "served_model_name": "Qwen/Qwen3.6-27B"
+  },
+  "pipeline": {
+    "dtype": "bfloat16",
+    "entry_base_url": "http://127.0.0.1:8101",
+    "head_node": "spark0",
+    "layer_partition": [
+      9,
+      9,
+      9,
+      8,
+      8,
+      8,
+      8,
+      5
+    ],
+    "pipeline_parallel_size": 8,
+    "tensor_parallel_size": 1,
+    "text_only": true,
+    "total_layers": 64,
+    "worker_nodes": [
+      "spark1",
+      "spark2",
+      "spark3",
+      "spark4",
+      "spark5",
+      "spark6",
+      "spark7"
+    ]
+  },
+  "profile_ids": [
+    "qwen3_6_27b_bf16_pp8_efficient_v1"
+  ],
+  "required_nodes": [
+    "spark0",
+    "spark1",
+    "spark2",
+    "spark3",
+    "spark4",
+    "spark5",
+    "spark6",
+    "spark7"
+  ],
+  "trim_request": {
+    "method": "POST",
+    "path": "/v1/trim_memory",
+    "query": "mode=abort&reset_external=true&release_offload_memory=true&malloc_trim=true&resume=true"
+  },
+  "vllm": {
+    "required_source": "ds4 patched vLLM zip vllm-dual-8x-pipelines-qwen27-dsv4.zip",
+    "required_source_commit": "c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34",
+    "trim_endpoint": "/v1/trim_memory"
+  }
+}
