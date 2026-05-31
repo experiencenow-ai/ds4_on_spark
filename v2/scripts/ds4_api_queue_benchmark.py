@@ -46,6 +46,15 @@ def main() -> int:
     completed = [row for row in results if isinstance(row, dict) and (row.get("result") or {}).get("status") == "completed"]
     failed = len(results) - len(completed)
     tokens = sum(_completion_tokens(row.get("result") or {}) for row in completed)
+    aggregate_tok_s = tokens / run_s if run_s > 0 else 0.0
+    perf = _performance_score(
+        aggregate_tok_s=aggregate_tok_s,
+        concurrency=args.concurrency,
+        pipeline_stages=args.pipeline_stages,
+        equivalent_sparks=args.equivalent_sparks,
+        reference_tok_s=args.reference_tok_s,
+    )
+    target_tokens = args.batch_size * args.output_tokens
     summary = {
         "format": "ds4-api-queue-benchmark-v1",
         "base_url": args.base_url,
@@ -57,12 +66,17 @@ def main() -> int:
         "input_tokens_target": args.input_tokens,
         "output_tokens_target": args.output_tokens,
         "worker_mode": "api_sync_work" if args.drive_worker else "external_worker",
+        "ignore_eos": bool(args.ignore_eos),
+        "min_tokens": args.output_tokens if args.ignore_eos else 0,
         "submit_s": round(submit_s, 6),
         "run_s": round(run_s, 6),
         "completed": len(completed),
         "failed": failed,
         "completion_tokens": tokens,
-        "aggregate_completion_tok_s": round(tokens / run_s, 6) if run_s > 0 else 0.0,
+        "completion_tokens_target": target_tokens,
+        "completion_tokens_target_ratio": round(tokens / target_tokens, 6) if target_tokens > 0 else 0.0,
+        "aggregate_completion_tok_s": round(aggregate_tok_s, 6),
+        "performance_target": perf,
     }
     print(json.dumps(summary, sort_keys=True))
     return 0 if failed == 0 else 2
@@ -81,6 +95,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-s", type=int, default=1800)
     parser.add_argument("--poll-s", type=float, default=0.02)
     parser.add_argument("--drive-worker", action="store_true", help="Also call the synchronous /ds4/queue/work endpoint. Production benchmarks should leave this off and run ds4_pipeline_queue_worker.sh separately.")
+    parser.add_argument("--ignore-eos", dest="ignore_eos", action="store_true", default=True, help="Force benchmark decode to the requested output token count by passing ignore_eos/min_tokens through to vLLM.")
+    parser.add_argument("--allow-eos", dest="ignore_eos", action="store_false", help="Let EOS stop generation early. This is useful for behavior tests, not throughput targets.")
+    parser.add_argument("--pipeline-stages", type=int, default=8)
+    parser.add_argument("--equivalent-sparks", type=int, default=2)
+    parser.add_argument("--reference-tok-s", type=float, default=144.6, help="Known-good two-Spark-equivalent DSV4 c16 aggregate target.")
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--job-class", default="analysis")
     parser.add_argument("--priority", type=int, default=None)
@@ -98,9 +117,50 @@ def _request_json(args: argparse.Namespace, batch_id: str, profile_id: str, idx:
         "max_output_tokens": args.output_tokens,
         "thinking_budget_tokens": 0,
         "temperature": args.temperature,
-        "input": {"prompt": _prompt(args.input_tokens, idx)},
+        "input": {
+            "prompt": _prompt(args.input_tokens, idx),
+            "openai": _openai_benchmark_fields(args),
+        },
         "output_contract": {"format": "text"},
         "model_pin": {"profile_id": profile_id},
+    }
+
+
+def _openai_benchmark_fields(args: argparse.Namespace) -> dict[str, Any]:
+    if not args.ignore_eos:
+        return {}
+    return {
+        "ignore_eos": True,
+        "min_tokens": args.output_tokens,
+    }
+
+
+def _performance_score(
+    *,
+    aggregate_tok_s: float,
+    concurrency: int,
+    pipeline_stages: int,
+    equivalent_sparks: int,
+    reference_tok_s: float,
+) -> dict[str, Any]:
+    concurrency = max(1, int(concurrency))
+    pipeline_stages = max(1, int(pipeline_stages))
+    equivalent_sparks = max(1, int(equivalent_sparks))
+    bubble_factor = (concurrency + pipeline_stages - 1) / concurrency
+    stage_groups = pipeline_stages / equivalent_sparks
+    corrected = aggregate_tok_s * bubble_factor
+    equivalent = corrected / stage_groups if stage_groups > 0 else 0.0
+    reference_needed = reference_tok_s * stage_groups / bubble_factor if bubble_factor > 0 else 0.0
+    return {
+        "pipeline_stages": pipeline_stages,
+        "equivalent_sparks": equivalent_sparks,
+        "reference_tok_s": round(reference_tok_s, 6),
+        "pp_bubble_efficiency": round(1 / bubble_factor, 6) if bubble_factor > 0 else 0.0,
+        "bubble_corrected_aggregate_tok_s": round(corrected, 6),
+        "two_spark_equivalent_tok_s": round(equivalent, 6),
+        "reference_ratio": round(equivalent / reference_tok_s, 6) if reference_tok_s > 0 else 0.0,
+        "aggregate_tok_s_needed_for_reference": round(reference_needed, 6),
+        "aggregate_tok_s_needed_for_80pct_reference": round(reference_needed * 0.8, 6),
     }
 
 

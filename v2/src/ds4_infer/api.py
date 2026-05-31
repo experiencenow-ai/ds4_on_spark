@@ -358,6 +358,9 @@ def _make_inference_request_json(
 
 def _input_with_api_kv(input_payload: dict[str, Any], body: dict[str, Any], profile: ModelProfile, topology: SparkTopology) -> dict[str, Any]:
     out = dict(input_payload)
+    openai = {key: body[key] for key in OPENAI_REQUEST_FIELDS if key in body and body[key] is not None}
+    if openai:
+        out["openai"] = {**dict(out.get("openai") or {}), **openai}
     has_kv_cache = body.get("kv_cache") is not None
     has_external_kv = body.get("external_kv") is not None
     if has_kv_cache and has_external_kv and body.get("kv_cache") != body.get("external_kv"):
@@ -489,6 +492,21 @@ def _resolve_pipeline_service(topology: SparkTopology, registry: ProfileRegistry
     if default_service is None:
         raise ValueError("no default pipeline service is configured")
     return default_service
+
+
+OPENAI_REQUEST_FIELDS = {
+    "ignore_eos",
+    "include_stop_str_in_output",
+    "min_tokens",
+    "repetition_penalty",
+    "seed",
+    "skip_special_tokens",
+    "stop",
+    "stop_token_ids",
+    "top_k",
+    "top_p",
+    "truncate_prompt_tokens",
+}
 
 
 def _openai_chat_response(*, request_id: str, model: str, result: dict[str, Any]) -> dict[str, Any]:
