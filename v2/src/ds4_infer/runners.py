@@ -294,6 +294,39 @@ class OpenAICompatibleRunner:
             result["transport"] = {"base_url": self.base_url, "duration_s": round(time.time() - started, 6), "error": str(exc)}
             return result
 
+    def run_many_completion(self, requests: list[InferenceRequest], profile: ModelProfile) -> dict[str, dict] | None:
+        request_list = list(requests)
+        if len(request_list) < 2:
+            return None
+        payload = _coalesced_completion_payload(request_list, profile, self.default_extra_body)
+        if payload is None:
+            return None
+        started = time.time()
+        try:
+            data = self._post_json(self.completion_endpoint, payload)
+            return _coalesced_completion_results(
+                request_list,
+                profile,
+                data,
+                base_url=self.base_url,
+                endpoint=self.completion_endpoint,
+                started=started,
+            )
+        except Exception as exc:
+            return {
+                item.request_id: self._transport_failure(item, profile, started, str(exc), endpoint=self.completion_endpoint, coalesced_batch_size=len(request_list))
+                for item in request_list
+            }
+
+    def _transport_failure(self, request: InferenceRequest, profile: ModelProfile, started: float, error: str, *, endpoint: str | None = None, coalesced_batch_size: int | None = None) -> dict:
+        result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": error}, sort_keys=True), status="transport_failed")
+        result["transport"] = {"base_url": self.base_url, "duration_s": round(time.time() - started, 6), "error": error}
+        if endpoint is not None:
+            result["transport"]["endpoint"] = endpoint
+        if coalesced_batch_size is not None:
+            result["transport"]["coalesced_batch_size"] = coalesced_batch_size
+        return result
+
     def _post_json(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
         body = json.dumps(payload).encode("utf-8")
         headers = {"content-type": "application/json"}
@@ -340,6 +373,10 @@ class PipelineOpenAIRunner:
             return {}
         worker_count = max(1, min(int(concurrency), len(request_list)))
         runner = self._runner_for(profile, node_id)
+        if _env_bool("DS4_PIPELINE_COHORT_COMPLETIONS", True):
+            coalesced = runner.run_many_completion(request_list, profile)
+            if coalesced is not None:
+                return coalesced
         out: dict[str, dict] = {}
         with ThreadPoolExecutor(max_workers=worker_count) as pool:
             futures = {pool.submit(runner.run_one, item, profile): item for item in request_list}
@@ -492,6 +529,103 @@ def extract_openai_completion_text(data: dict[str, Any]) -> str:
     return extract_completion_like_text(data)
 
 
+def _coalesced_completion_payload(requests: list[InferenceRequest], profile: ModelProfile, default_extra_body: dict[str, Any]) -> dict[str, Any] | None:
+    prompts: list[str] = []
+    shared: dict[str, Any] | None = None
+    for item in requests:
+        if item.chat:
+            return None
+        payload = _openai_payload(item, profile)
+        _merge_extra_body(payload, default_extra_body)
+        prompt = payload.get("prompt")
+        if not isinstance(prompt, str):
+            return None
+        comparable = dict(payload)
+        comparable.pop("prompt", None)
+        if shared is None:
+            shared = comparable
+        elif comparable != shared:
+            return None
+        prompts.append(prompt)
+    if shared is None:
+        return None
+    payload = dict(shared)
+    payload["prompt"] = prompts
+    return payload
+
+
+def _coalesced_completion_results(
+    requests: list[InferenceRequest],
+    profile: ModelProfile,
+    data: dict[str, Any],
+    *,
+    base_url: str,
+    endpoint: str,
+    started: float,
+) -> dict[str, dict]:
+    choices = data.get("choices")
+    if not isinstance(choices, list):
+        return {
+            item.request_id: _coalesced_failure(item, profile, base_url, endpoint, started, len(requests), "coalesced completion response missing choices")
+            for item in requests
+        }
+    by_index: dict[int, dict[str, Any]] = {}
+    for position, choice in enumerate(choices):
+        if not isinstance(choice, dict):
+            continue
+        raw_index = choice.get("index", position)
+        index = int(raw_index) if isinstance(raw_index, (int, float)) else position
+        if 0 <= index < len(requests):
+            by_index[index] = choice
+    out: dict[str, dict] = {}
+    for index, item in enumerate(requests):
+        choice = by_index.get(index)
+        if choice is None:
+            out[item.request_id] = _coalesced_failure(item, profile, base_url, endpoint, started, len(requests), f"coalesced completion response missing choice index {index}")
+            continue
+        result = make_result(request=item, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=extract_openai_completion_text({"choices": [choice]}))
+        result["usage"].update(_coalesced_usage(data, choice, item, len(requests)))
+        result["transport"] = {"base_url": base_url, "endpoint": endpoint, "duration_s": round(time.time() - started, 6), "coalesced_batch_size": len(requests)}
+        out[item.request_id] = result
+    return out
+
+
+def _coalesced_failure(request: InferenceRequest, profile: ModelProfile, base_url: str, endpoint: str, started: float, batch_size: int, error: str) -> dict:
+    result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": error}, sort_keys=True), status="transport_failed")
+    result["transport"] = {"base_url": base_url, "endpoint": endpoint, "duration_s": round(time.time() - started, 6), "coalesced_batch_size": batch_size, "error": error}
+    return result
+
+
+def _coalesced_usage(data: dict[str, Any], choice: dict[str, Any], request: InferenceRequest, batch_size: int) -> dict[str, Any]:
+    usage = choice.get("usage")
+    if isinstance(usage, dict):
+        return dict(usage)
+    out: dict[str, Any] = {}
+    batch_usage = data.get("usage")
+    if _forced_output_request(request):
+        out["completion_tokens"] = request.max_output_tokens
+    elif isinstance(batch_usage, dict) and isinstance(batch_usage.get("completion_tokens"), (int, float)) and batch_size > 0:
+        out["completion_tokens"] = max(0, int(batch_usage["completion_tokens"]) // batch_size)
+    if isinstance(batch_usage, dict) and isinstance(batch_usage.get("prompt_tokens"), (int, float)) and batch_size > 0:
+        out["prompt_tokens"] = max(0, int(batch_usage["prompt_tokens"]) // batch_size)
+    if "prompt_tokens" in out and "completion_tokens" in out:
+        out["total_tokens"] = int(out["prompt_tokens"]) + int(out["completion_tokens"])
+    return out
+
+
+def _forced_output_request(request: InferenceRequest) -> bool:
+    raw = request.input.get("openai")
+    if not isinstance(raw, dict):
+        return False
+    if not bool(raw.get("ignore_eos")):
+        return False
+    try:
+        min_tokens = int(raw.get("min_tokens") or 0)
+    except (TypeError, ValueError):
+        return False
+    return min_tokens >= int(request.max_output_tokens)
+
+
 def extract_completion_like_text(data: dict[str, Any]) -> str:
     for key in ("content", "response", "text", "completion", "generated_text"):
         value = data.get(key)
@@ -583,6 +717,13 @@ def _json_env(name: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _completed_error(completed: Any, host: str) -> str:
