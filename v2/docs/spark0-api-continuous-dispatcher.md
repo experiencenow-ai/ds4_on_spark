@@ -13,10 +13,17 @@ DS4_API_DISPATCH_BATCH_LINGER_S=0.01
 DS4_API_DISPATCH_IDLE_SLEEP_S=0.005
 DS4_API_DISPATCH_HEARTBEAT_S=2.0
 DS4_API_DISPATCH_LEASE_TTL_S=900
-DS4_API_TRANSPORT_MAX_ATTEMPTS=3
+DS4_API_TRANSPORT_TIMEOUT_S=3600
+DS4_API_TRANSPORT_MAX_ATTEMPTS=1
 ```
 
 `/ds4/dispatcher/status` reports whether the dispatcher is running and the last queue-work summary. For high-concurrency DSV4 throughput sweeps, set `DS4_API_DISPATCH_WINDOW` to the target in-flight request count.
+
+The dispatcher transport timeout must be long enough for the largest coalesced
+cohort. A timeout is not a harmless retry: the vLLM request may continue running
+after the HTTP client gives up, and retrying can duplicate an entire expensive
+cohort. Production dispatch therefore defaults to one attempt and fails closed
+instead of silently measuring duplicate work.
 
 The dispatcher claims globally across ready work. Compute-domain leases still prevent mixing all-Spark services; while a service owns `spark-fleet-0`, refill prefers that same service until its work drains.
 
@@ -57,6 +64,11 @@ status.json
 collect.json
 summary.json
 ```
+
+`summary.json` reports both end-to-end queue throughput and the underlying
+coalesced service transport throughput. If any request has `attempt_count > 1`,
+`perf_valid` is false because the run duplicated model work or hit a transport
+failure before completion.
 
 To replay the exact same cohort after a deployment change:
 
