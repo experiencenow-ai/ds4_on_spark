@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sqlite3
 import tempfile
+import time
 import unittest
 
 from ds4_infer.api import CoordinatorApi
@@ -91,6 +92,75 @@ class CoordinatorApiKvCacheTests(unittest.TestCase):
             self.assertEqual(committed["state"], "available")
             self.assertEqual({shard["state"] for shard in committed["shards"]}, {"ready_on_ssd"})
 
+    def test_external_kv_manifest_is_control_only_and_node_local(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            code, declared = api.handle_post(
+                "/ds4/kvcache/declare",
+                {
+                    "namespace": "centaur.longmem",
+                    "kv_key": "doc:node-local",
+                    "service_id": "qwen27_bf16_pp8",
+                    "total_bytes": 8192,
+                    "storage_root": "/home/spark/ds4_nvme/ds4_kv",
+                },
+            )
+            self.assertEqual(code, 200)
+            self.assertFalse(declared["routing"]["spark0_aggregates_shards"])
+            self.assertFalse(declared["routing"]["client_receives_shards"])
+            self.assertEqual(declared["routing"]["data_plane"], "node_local_shards")
+            self.assertEqual(declared["archive"]["mode"], "node_local_shards")
+            self.assertEqual(len(declared["shards"]), 8)
+            self.assertTrue(declared["shards"][5]["storage_uri"].startswith("node-local://spark5/"))
+            self.assertIn("/home/spark/ds4_nvme/ds4_kv/", declared["shards"][5]["storage_uri"])
+            self.assertEqual(declared["shards"][5]["metadata"]["archive_owner_node_id"], "spark5")
+
+    def test_external_kv_requires_explicit_shards_at_queue_layer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            with self.assertRaises(ValueError):
+                api.queue.upsert_external_kv_object(
+                    namespace="centaur.longmem",
+                    kv_key="bad-aggregate",
+                    service_id="qwen27_bf16_pp8",
+                    total_bytes=8192,
+                )
+
+    def test_external_kv_shard_commit_is_node_local_and_object_partial_until_all_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            api.handle_post(
+                "/ds4/kvcache/declare",
+                {
+                    "namespace": "centaur.longmem",
+                    "kv_key": "doc:shard-commit",
+                    "service_id": "qwen27_bf16_pp8",
+                    "total_bytes": 0,
+                    "state": "declared",
+                    "storage_root": "/home/spark/ds4_nvme/ds4_kv",
+                },
+            )
+            code, committed = api.handle_post(
+                "/ds4/kvcache/shard/commit",
+                {
+                    "namespace": "centaur.longmem",
+                    "kv_key": "doc:shard-commit",
+                    "service_id": "qwen27_bf16_pp8",
+                    "node_id": "spark5",
+                    "bytes": 1024,
+                    "storage_uri": "node-local://spark5/home/spark/ds4_nvme/ds4_kv/doc-shard-commit/stage-05",
+                    "content_hash": "sha256:spark5",
+                },
+            )
+            self.assertEqual(code, 200)
+            self.assertEqual(committed["state"], "partial")
+            spark5 = next(shard for shard in committed["shards"] if shard["node_id"] == "spark5")
+            spark0 = next(shard for shard in committed["shards"] if shard["node_id"] == "spark0")
+            self.assertEqual(spark5["bytes"], 1024)
+            self.assertEqual(spark5["metadata"]["content_hash"], "sha256:spark5")
+            self.assertEqual(spark0["bytes"], 0)
+            self.assertEqual(spark0["state"], "declared")
+
     def test_openai_external_kv_shorthand_reaches_queue_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
@@ -116,6 +186,41 @@ class CoordinatorApiKvCacheTests(unittest.TestCase):
             self.assertEqual(plan["load"]["transport"], "external_manifest")
             self.assertEqual(plan["load"]["namespace"], "centaur.longmem")
             self.assertEqual(plan["load"]["service_id"], "qwen27_bf16_pp8")
+
+    def test_background_dispatcher_processes_global_queue_work(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake", sync_timeout_s=3)
+            requests = [
+                {
+                    "format": "ds4-inference-request-v1",
+                    "request_id": f"dispatcher-{index}",
+                    "capability": "efficient",
+                    "chat": False,
+                    "immediate": False,
+                    "job_class": "world_model_extract",
+                    "max_output_tokens": 16,
+                    "thinking_budget_tokens": 0,
+                    "temperature": 0,
+                    "input": {"prompt": f"dispatcher test {index}"},
+                    "output_contract": {"format": "text"},
+                }
+                for index in range(4)
+            ]
+            code, payload = api.handle_post("/ds4/queue/submit", {"batch_id": "dispatcher-batch", "requests": requests})
+            self.assertEqual(code, 200)
+            self.assertEqual(payload["request_count"], 4)
+            api.start_background_dispatcher()
+            try:
+                deadline = time.time() + 3.0
+                status = api.queue.status(batch_id="dispatcher-batch")
+                while time.time() < deadline and status["state"] != "completed":
+                    time.sleep(0.01)
+                    status = api.queue.status(batch_id="dispatcher-batch")
+                self.assertEqual(status["state"], "completed")
+                dispatcher = api.dispatcher_status()
+                self.assertGreaterEqual(dispatcher["claimed_count"], 4)
+            finally:
+                api.stop_background_dispatcher()
 
     def test_external_kv_lease_pin_and_evict_rules(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

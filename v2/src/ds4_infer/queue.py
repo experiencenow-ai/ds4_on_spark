@@ -10,6 +10,7 @@ import time
 from typing import Any, Callable, Iterable, Mapping
 import uuid
 
+from .external_kv_shards import external_kv_object_state_from_shards, update_external_kv_shard, validate_external_kv_shards
 from .kv_cache import ensure_cache_refs_resolved, request_kv_cache_batch_key
 from .profiles import ProfileRegistry
 from .queue_policy import job_batch_id, request_priority, validated_priority
@@ -22,6 +23,8 @@ BATCH_STATUS_FORMAT = "ds4-inference-batch-status-v1"
 PIPELINE_STATUS_FORMAT = "ds4-pipeline-status-v1"
 CPU_QUEUE_TIMEOUT_KEY = "__ds4_queue_timeout_s"
 TERMINAL_STATES = {"completed", "failed", "cancelled"}
+NODE_LOCAL_EXTERNAL_KV_ROUTING = {"sharding": "pipeline_layers", "control_node_id": "spark0", "data_plane": "node_local_shards", "spark0_aggregates_shards": False, "client_receives_shards": False}
+NODE_LOCAL_EXTERNAL_KV_ARCHIVE = {"mode": "node_local_shards", "object_manifest_on_control_node_only": True, "shard_owner_is_node": True}
 
 
 @dataclass(frozen=True)
@@ -638,22 +641,7 @@ class InferenceQueue:
         now = time.time()
         ttl_expires_at = None if ttl_s is None else now + max(0.0, float(ttl_s))
         shard_list = [dict(shard) for shard in shards]
-        if not shard_list:
-            shard_list = [
-                {
-                    "namespace": namespace,
-                    "kv_key": kv_key,
-                    "service_id": service_id,
-                    "node_id": "spark0",
-                    "stage_index": 0,
-                    "stage_count": 1,
-                    "layer_start": None,
-                    "layer_end": None,
-                    "bytes": max(0, int(total_bytes)),
-                    "state": state,
-                    "storage_uri": None,
-                }
-            ]
+        validate_external_kv_shards(shard_list, total_bytes=total_bytes)
         with closing(self._connect()) as conn, conn:
             conn.execute(
                 """
@@ -897,33 +885,14 @@ class InferenceQueue:
             row = conn.execute("select * from kv_memory_objects where namespace=? and kv_key=? and service_id=?", (namespace, kv_key, service_id)).fetchone()
             if row is None:
                 raise ValueError("external KV object is missing")
-            conn.execute("update kv_memory_objects set state=?, updated_at=?, last_used_at=? where namespace=? and kv_key=? and service_id=?", (object_state, now, now, namespace, kv_key, service_id))
             if not updates:
                 conn.execute("update kv_memory_shards set state=?, updated_at=?, last_used_at=? where namespace=? and kv_key=? and service_id=?", (shard_state, now, now, namespace, kv_key, service_id))
             for update in updates:
-                clauses = ["state=?", "updated_at=?", "last_used_at=?"]
-                params: list[Any] = [str(update.get("state") or shard_state), now, now]
-                if "bytes" in update:
-                    clauses.append("bytes=?")
-                    params.append(max(0, int(update["bytes"] or 0)))
-                if "storage_uri" in update:
-                    clauses.append("storage_uri=?")
-                    params.append(str(update["storage_uri"]) if update.get("storage_uri") is not None else None)
-                if "gpu_resident" in update:
-                    clauses.append("gpu_resident=?")
-                    params.append(1 if bool(update.get("gpu_resident")) else 0)
-                if "metadata" in update:
-                    clauses.append("metadata_json=?")
-                    params.append(json.dumps(dict(update.get("metadata") or {}), sort_keys=True))
-                params.extend([namespace, kv_key, service_id])
-                where = "namespace=? and kv_key=? and service_id=?"
-                if update.get("node_id") is not None:
-                    where += " and node_id=?"
-                    params.append(str(update["node_id"]))
-                if update.get("stage_index") is not None:
-                    where += " and stage_index=?"
-                    params.append(int(update["stage_index"]))
-                conn.execute(f"update kv_memory_shards set {', '.join(clauses)} where {where}", tuple(params))
+                changed = update_external_kv_shard(conn, namespace=namespace, kv_key=kv_key, service_id=service_id, update=update, default_state=shard_state, now=now)
+                if changed != 1 and (update.get("node_id") is not None or update.get("stage_index") is not None):
+                    raise ValueError(f"expected exactly one external KV shard update, changed {changed}")
+            object_state = external_kv_object_state_from_shards(conn, namespace=namespace, kv_key=kv_key, service_id=service_id, requested_state=object_state)
+            conn.execute("update kv_memory_objects set state=?, total_bytes=(select coalesce(sum(bytes),0) from kv_memory_shards where namespace=? and kv_key=? and service_id=?), updated_at=?, last_used_at=? where namespace=? and kv_key=? and service_id=?", (object_state, namespace, kv_key, service_id, now, now, namespace, kv_key, service_id))
         return self.external_kv_lookup(namespace=namespace, kv_key=kv_key, service_id=service_id)
 
 
@@ -1030,10 +999,20 @@ class InferenceQueue:
         if not domain:
             return None
         conn.execute("delete from compute_leases where lease_expires_at <= ?", (now,))
+        service_id = str(rows[0]["selected_service_id"] or "") or None
         existing = conn.execute("select * from compute_leases where compute_domain=?", (domain,)).fetchone()
         if existing is not None:
+            existing_service_id = str(existing["service_id"] or "") or None
+            if existing_service_id == service_id and str(existing["leased_by"]) == leased_by:
+                conn.execute(
+                    """
+                    update compute_leases set lease_expires_at=?, heartbeat_at=?, request_count=request_count+?, updated_at=?
+                    where compute_domain=? and compute_lease_id=?
+                    """,
+                    (now + lease_ttl_s, now, len(rows), now, domain, existing["compute_lease_id"]),
+                )
+                return str(existing["compute_lease_id"])
             return False
-        service_id = str(rows[0]["selected_service_id"] or "") or None
         compute_lease_id = f"{leased_by}:compute:{uuid.uuid4().hex}"
         conn.execute(
             """
@@ -1135,6 +1114,15 @@ def _queued_rows(conn: sqlite3.Connection, *, node_id: str | None, eligible: tup
     if batch_id:
         clauses.append("batch_id=?")
         params.append(batch_id)
+    else:
+        existing_lease = conn.execute("select * from compute_leases where lease_expires_at > ? order by created_at limit 1", (time.time(),)).fetchone()
+        if existing_lease is not None:
+            if existing_lease["service_id"]:
+                clauses.append("selected_service_id=?")
+                params.append(existing_lease["service_id"])
+            if existing_lease["compute_domain"]:
+                clauses.append("selected_compute_domain=?")
+                params.append(existing_lease["compute_domain"])
     params.append(max(1, int(limit)))
     return conn.execute(f"select * from requests where {' and '.join(clauses)} order by priority, created_at, request_id limit ?", tuple(params)).fetchall()
 
@@ -1228,7 +1216,8 @@ def _external_kv_manifest(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[st
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "last_used_at": row["last_used_at"],
-        "routing": {"sharding": "pipeline_layers", "entry_node_id": "spark0"},
+        "routing": dict(NODE_LOCAL_EXTERNAL_KV_ROUTING),
+        "archive": dict(NODE_LOCAL_EXTERNAL_KV_ARCHIVE),
         "shards": [_external_kv_shard_status(shard) for shard in shards],
         "leases": [dict(lease) for lease in leases],
     }
@@ -1281,6 +1270,15 @@ def _ready_rows(conn: sqlite3.Connection, *, node_id: str | None, batch_id: str 
     if selected_service_id is not None:
         clauses.append("selected_service_id=?")
         params.append(selected_service_id)
+    elif not batch_id:
+        existing_lease = conn.execute("select * from compute_leases where lease_expires_at > ? order by created_at limit 1", (time.time(),)).fetchone()
+        if existing_lease is not None:
+            if existing_lease["service_id"]:
+                clauses.append("selected_service_id=?")
+                params.append(existing_lease["service_id"])
+            if existing_lease["compute_domain"]:
+                clauses.append("selected_compute_domain=?")
+                params.append(existing_lease["compute_domain"])
     first = conn.execute(f"select * from requests where {' and '.join(clauses)} order by priority, ready_at, created_at, request_id limit 1", tuple(params)).fetchone()
     if first is None:
         return []

@@ -184,7 +184,14 @@ class PipelineService:
         for stage in self.stages():
             storage_uri = None
             if storage_root:
-                storage_uri = f"{storage_root.rstrip('/')}/{safe_namespace}/{self.service_id}/{safe_key}/stage-{stage.stage_index:02d}"
+                storage_uri = _node_local_storage_uri(
+                    storage_root=storage_root,
+                    node_id=stage.node_id,
+                    namespace=safe_namespace,
+                    service_id=self.service_id,
+                    kv_key=safe_key,
+                    stage_index=stage.stage_index,
+                )
             shards.append(
                 {
                     "namespace": namespace or "default",
@@ -198,6 +205,10 @@ class PipelineService:
                     "layer_start": stage.layer_start,
                     "layer_end": stage.layer_end,
                     "storage_uri": storage_uri,
+                    "metadata": {
+                        "archive_owner_node_id": stage.node_id,
+                        "archive_mode": "node_local_shard",
+                    },
                 }
             )
         return shards
@@ -327,6 +338,26 @@ def _load_layer_partition(data: Mapping[str, Any], *, total_layers: int, stage_c
     nodes = tuple(str(item) for item in data.get("node_ids", [f"stage{index}" for index in range(stage_count)]))
     partition, _source = load_layer_partition_with_source(data, node_ids=nodes, total_layers=total_layers, stage_count=stage_count)
     return partition
+
+
+def _node_local_storage_uri(*, storage_root: str, node_id: str, namespace: str, service_id: str, kv_key: str, stage_index: int) -> str:
+    root = str(storage_root).rstrip("/")
+    replacements = {
+        "node_id": node_id,
+        "namespace": namespace,
+        "service_id": service_id,
+        "kv_key": kv_key,
+        "stage_index": f"{stage_index:02d}",
+    }
+    for key, value in replacements.items():
+        root = root.replace("{" + key + "}", value)
+    suffix = f"/{namespace}/{service_id}/{kv_key}/stage-{stage_index:02d}"
+    if root.startswith("node-local://"):
+        return root + suffix
+    if "://" in root:
+        return root + suffix
+    path = root if root.startswith("/") else "/" + root
+    return f"node-local://{node_id}{path}{suffix}"
 
 
 def _safe_storage_component(value: str) -> str:
