@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
+from dataclasses import dataclass
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -15,9 +17,22 @@ import uuid
 from .profiles import ModelProfile, ProfileRegistry
 from .kv_cache import KV_CACHE_DIRECTIVE_FORMAT, KV_CACHE_PLAN_FORMAT, normalize_kv_cache_directive
 from .runners import FakeRunner, PipelineOpenAIRunner, Runner
-from .queue import InferenceQueue
+from .queue import InferenceQueue, QueueClaim
 from .schemas import InferenceRequest, REQUEST_FORMAT
 from .topology import SparkTopology
+from .worker import BatchWorker
+
+
+@dataclass
+class DispatcherRuntime:
+    worker: BatchWorker
+    executor: ThreadPoolExecutor
+    pending: dict[Any, list[QueueClaim]]
+    entry_node_id: str
+    node_profile_ids: tuple[str, ...]
+    batch_limits_by_service: dict[str, int]
+    kv_shard_layouts_by_profile: dict[str, Any]
+    next_heartbeat_at: float
 
 
 class CoordinatorApi:
@@ -39,6 +54,7 @@ class CoordinatorApi:
         self.poll_interval_s = max(0.001, float(poll_interval_s))
         self.dispatcher_enabled = _env_bool("DS4_API_BACKGROUND_DISPATCH", True)
         self.dispatcher_window = max(1, _env_int("DS4_API_DISPATCH_WINDOW", 64))
+        self.dispatcher_refill_batch = max(1, _env_int("DS4_API_DISPATCH_REFILL_BATCH", min(16, self.dispatcher_window)))
         self.dispatcher_idle_sleep_s = max(0.001, _env_float("DS4_API_DISPATCH_IDLE_SLEEP_S", 0.005))
         self.dispatcher_batch_linger_s = max(0.0, _env_float("DS4_API_DISPATCH_BATCH_LINGER_S", 0.01))
         self.dispatcher_lease_ttl_s = max(1, _env_int("DS4_API_DISPATCH_LEASE_TTL_S", 900))
@@ -48,23 +64,7 @@ class CoordinatorApi:
         self.dispatcher_stop = threading.Event()
         self.dispatcher_thread: threading.Thread | None = None
         self.dispatcher_lock = threading.Lock()
-        self.dispatcher_state: dict[str, Any] = {
-            "enabled": self.dispatcher_enabled,
-            "running": False,
-            "window": self.dispatcher_window,
-            "started_at": None,
-            "last_work_at": None,
-            "last_error": None,
-            "worked_count": 0,
-            "claimed_count": 0,
-            "completed_count": 0,
-            "failed_count": 0,
-            "retried_count": 0,
-            "idle_count": 0,
-            "transport_timeout_s": self.dispatcher_transport_timeout_s,
-            "transport_max_attempts": self.dispatcher_transport_max_attempts,
-            "last_summary": None,
-        }
+        self.dispatcher_state: dict[str, Any] = self._initial_dispatcher_state()
 
     def handle_get(self, path: str, query: dict[str, list[str]]) -> tuple[int, dict[str, Any]]:
         if path in {"/health", "/ds4/health"}:
@@ -195,25 +195,37 @@ class CoordinatorApi:
         registry = self._registry()
         topology = self._topology()
         profile = _resolve_profile(registry, topology, _optional_str(body.get("model")))
-        request_id = str(body.get("request_id") or f"cmpl-{uuid.uuid4().hex}")
-        batch_id = str(body.get("batch_id") or request_id)
-        prompt = body.get("prompt")
-        raw_request = _make_inference_request_json(
-            request_id=request_id,
-            profile=profile,
-            chat=False,
-            input_payload=_input_with_api_kv({"prompt": prompt}, body, profile, topology),
-            output_contract={"format": "text"},
-            max_tokens=int(body.get("max_tokens") or 1024),
-            temperature=float(body.get("temperature") or 0.0),
-            job_class=str(body.get("ds4_job_class") or "analysis"),
-            capability=_optional_str(body.get("ds4_capability")),
-        )
-        submitted = self.queue.submit_requests(requests=[InferenceRequest.from_json(raw_request)], registry=registry, topology=topology, batch_id=batch_id, priority=_optional_int(body.get("priority")))
+        base_request_id = str(body.get("request_id") or f"cmpl-{uuid.uuid4().hex}")
+        batch_id = str(body.get("batch_id") or base_request_id)
+        prompts = _completion_prompt_items(body.get("prompt"))
+        raw_requests = []
+        for index, prompt in enumerate(prompts):
+            request_id = base_request_id if len(prompts) == 1 else f"{base_request_id}-{index:06d}"
+            raw_requests.append(
+                _make_inference_request_json(
+                    request_id=request_id,
+                    profile=profile,
+                    chat=False,
+                    input_payload=_input_with_api_kv({"prompt": prompt}, body, profile, topology),
+                    output_contract={"format": "text"},
+                    max_tokens=int(body.get("max_tokens") or 1024),
+                    temperature=float(body.get("temperature") or 0.0),
+                    job_class=str(body.get("ds4_job_class") or "analysis"),
+                    capability=_optional_str(body.get("ds4_capability")),
+                )
+            )
+        requests = [InferenceRequest.from_json(raw_request) for raw_request in raw_requests]
+        submitted = self.queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id=batch_id, priority=_optional_int(body.get("priority")))
         if _is_async_request(body):
-            return 202, _async_queue_response("openai_completion", request_id, batch_id, submitted)
-        result = self._run_until_collected(batch_id=batch_id, request_id=request_id, timeout_s=float(body.get("ds4_timeout_s") or self.sync_timeout_s))
-        return 200, _openai_completion_response(request_id=request_id, model=str(body.get("model") or profile.model_id), result=result)
+            response = _async_queue_response("openai_completion", base_request_id, batch_id, submitted)
+            response["request_ids"] = [request.request_id for request in requests]
+            return 202, response
+        timeout_s = float(body.get("ds4_timeout_s") or self.sync_timeout_s)
+        if len(requests) == 1:
+            result = self._run_until_collected(batch_id=batch_id, request_id=requests[0].request_id, timeout_s=timeout_s)
+            return 200, _openai_completion_response(request_id=requests[0].request_id, model=str(body.get("model") or profile.model_id), result=result)
+        result = self._run_batch_until_collected(batch_id=batch_id, timeout_s=timeout_s)
+        return 200, _openai_completion_batch_response(request_id=base_request_id, model=str(body.get("model") or profile.model_id), result=result)
 
     def _handle_anthropic_messages(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         if body.get("stream"):
@@ -347,6 +359,21 @@ class CoordinatorApi:
             time.sleep(idle_sleep)
         return {"request": {"request_id": request_id, "state": "failed"}, "result": {"status": "failed", "error": "coordinator sync timeout"}}
 
+    def _run_batch_until_collected(self, *, batch_id: str, timeout_s: float) -> dict[str, Any]:
+        deadline = time.time() + max(0.1, timeout_s)
+        idle_sleep = self.poll_interval_s
+        while time.time() < deadline:
+            status = self.queue.status(batch_id=batch_id)
+            state = str(status.get("state") or "")
+            if state in {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled", "failed"}:
+                return self.queue.collect(batch_id=batch_id)
+            if not self.dispatcher_enabled or self.dispatcher_thread is None:
+                self._work_once({"batch_id": batch_id})
+            elif not self._dispatcher_is_active():
+                return {"format": "ds4-inference-queue-v1", "batch_id": batch_id, "state": "failed", "results": [], "error": "coordinator dispatcher is not running"}
+            time.sleep(idle_sleep)
+        return {"format": "ds4-inference-queue-v1", "batch_id": batch_id, "state": "failed", "results": [], "error": "coordinator sync timeout"}
+
     def start_background_dispatcher(self) -> None:
         if not self.dispatcher_enabled:
             return
@@ -369,6 +396,32 @@ class CoordinatorApi:
     def _dispatcher_is_active(self) -> bool:
         return bool(self.dispatcher_enabled and self.dispatcher_thread is not None and self.dispatcher_thread.is_alive())
 
+    def _initial_dispatcher_state(self) -> dict[str, Any]:
+        return {
+            "enabled": self.dispatcher_enabled,
+            "running": False,
+            "window": self.dispatcher_window,
+            "refill_batch": self.dispatcher_refill_batch,
+            "pending": 0,
+            "pending_cohorts": 0,
+            "started_at": None,
+            "last_work_at": None,
+            "last_error": None,
+            "worked_count": 0,
+            "claimed_count": 0,
+            "submitted_count": 0,
+            "completed_count": 0,
+            "failed_count": 0,
+            "retried_count": 0,
+            "requeued_count": 0,
+            "idle_count": 0,
+            "transport_timeout_s": self.dispatcher_transport_timeout_s,
+            "transport_max_attempts": self.dispatcher_transport_max_attempts,
+            "last_summary": None,
+            "last_claimed_cohort_size": 0,
+            "largest_claimed_cohort_size": 0,
+        }
+
     def _dispatcher_note(self, **updates: Any) -> None:
         with self.dispatcher_lock:
             self.dispatcher_state.update(updates)
@@ -380,31 +433,16 @@ class CoordinatorApi:
 
     def _dispatcher_loop(self) -> None:
         self._dispatcher_note(running=True, started_at=time.time(), last_error=None)
+        runtime = self._dispatcher_runtime()
         try:
             while not self.dispatcher_stop.is_set():
-                worked = self._work_once(
-                    {
-                        "limit": self.dispatcher_window,
-                        "concurrency": self.dispatcher_window,
-                        "worker_id": "spark0-api-continuous-dispatcher",
-                        "lease_ttl_s": self.dispatcher_lease_ttl_s,
-                        "heartbeat_interval_s": self.dispatcher_heartbeat_s,
-                        "batch_linger_s": self.dispatcher_batch_linger_s,
-                        "timeout_s": self.dispatcher_transport_timeout_s,
-                        "transport_max_attempts": self.dispatcher_transport_max_attempts,
-                    }
-                )
-                claimed = int(worked.get("claimed_count") or 0)
-                self._dispatcher_note(last_summary=worked, last_error=None)
-                if claimed:
-                    self._dispatcher_note(last_work_at=time.time())
-                    self._dispatcher_count(
-                        worked_count=1,
-                        claimed_count=claimed,
-                        completed_count=int(worked.get("completed_count") or 0),
-                        failed_count=int(worked.get("failed_count") or 0),
-                        retried_count=int(worked.get("retried_count") or 0),
-                    )
+                progressed = self._dispatcher_tick(runtime)
+                if progressed:
+                    continue
+                if runtime.pending:
+                    done, _ = wait(list(runtime.pending.keys()), timeout=self.dispatcher_idle_sleep_s, return_when=FIRST_COMPLETED)
+                    if done:
+                        continue
                 else:
                     self._dispatcher_count(idle_count=1)
                     self.dispatcher_stop.wait(self.dispatcher_idle_sleep_s)
@@ -412,7 +450,130 @@ class CoordinatorApi:
             self._dispatcher_note(last_error=str(exc))
             raise
         finally:
-            self._dispatcher_note(running=False)
+            self._dispatcher_shutdown(runtime)
+
+    def _dispatcher_runtime(self) -> DispatcherRuntime:
+        topology = self._topology()
+        registry = self._registry()
+        runner = self._runner(topology, timeout_s=self.dispatcher_transport_timeout_s)
+        worker = BatchWorker(
+            queue=self.queue,
+            registry=registry,
+            runner=runner,
+            worker_id="spark0-api-continuous-dispatcher",
+            lease_ttl_s=self.dispatcher_lease_ttl_s,
+            heartbeat_interval_s=self.dispatcher_heartbeat_s,
+            transport_max_attempts=self.dispatcher_transport_max_attempts,
+        )
+        entry_node_id = str(topology.routing_policy.get("queue_entry_node_id") or "spark0")
+        return DispatcherRuntime(
+            worker=worker,
+            executor=ThreadPoolExecutor(max_workers=self.dispatcher_window, thread_name_prefix="ds4-vllm-cohort"),
+            pending={},
+            entry_node_id=entry_node_id,
+            node_profile_ids=_node_profile_ids(topology, entry_node_id),
+            batch_limits_by_service=_batch_limits_by_service(topology),
+            kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+            next_heartbeat_at=time.time() + self.dispatcher_heartbeat_s,
+        )
+
+    def _dispatcher_tick(self, runtime: DispatcherRuntime) -> bool:
+        completed, failed, retried = self._dispatcher_finish_done(runtime.worker, runtime.pending, block=False)
+        if completed or failed or retried:
+            self._dispatcher_count(completed_count=completed, failed_count=failed, retried_count=retried, requeued_count=retried)
+        now = time.time()
+        if runtime.pending and now >= runtime.next_heartbeat_at:
+            runtime.worker._heartbeat(_pending_claims(runtime.pending))
+            runtime.next_heartbeat_at = now + self.dispatcher_heartbeat_s
+        submitted = self._dispatcher_refill(
+            worker=runtime.worker,
+            executor=runtime.executor,
+            pending=runtime.pending,
+            entry_node_id=runtime.entry_node_id,
+            node_profile_ids=runtime.node_profile_ids,
+            batch_limits_by_service=runtime.batch_limits_by_service,
+            kv_shard_layouts_by_profile=runtime.kv_shard_layouts_by_profile,
+        )
+        if submitted:
+            self._dispatcher_count(worked_count=1, claimed_count=submitted, submitted_count=submitted)
+            self._dispatcher_note(last_work_at=time.time(), pending=_pending_claim_count(runtime.pending), pending_cohorts=len(runtime.pending), last_error=None)
+            return True
+        self._dispatcher_note(pending=_pending_claim_count(runtime.pending), pending_cohorts=len(runtime.pending), last_error=None)
+        return bool(completed or failed or retried)
+
+    def _dispatcher_shutdown(self, runtime: DispatcherRuntime) -> None:
+        self.dispatcher_stop.set()
+        while runtime.pending:
+            completed, failed, retried = self._dispatcher_finish_done(runtime.worker, runtime.pending, block=True)
+            self._dispatcher_count(completed_count=completed, failed_count=failed, retried_count=retried, requeued_count=retried)
+        runtime.executor.shutdown(wait=True, cancel_futures=False)
+        self._dispatcher_note(running=False, pending=0, pending_cohorts=0)
+
+    def _dispatcher_refill(
+        self,
+        *,
+        worker: BatchWorker,
+        executor: ThreadPoolExecutor,
+        pending: dict[Any, list[QueueClaim]],
+        entry_node_id: str,
+        node_profile_ids: tuple[str, ...],
+        batch_limits_by_service: dict[str, int],
+        kv_shard_layouts_by_profile: dict[str, Any],
+    ) -> int:
+        available = self.dispatcher_window - _pending_claim_count(pending)
+        if available <= 0:
+            return 0
+        limit = min(available, self.dispatcher_refill_batch)
+        self.queue.requeue_expired_leases()
+        self.queue.prepare_ready(
+            node_id=entry_node_id,
+            eligible_profile_ids=node_profile_ids,
+            batch_id=None,
+            limit=limit,
+            leased_by=worker.worker_id,
+            lease_ttl_s=worker.lease_ttl_s,
+            max_node_depth=0,
+            kv_capacity_bytes=0,
+            kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
+        )
+        claims = self.queue.claim_ready_batch(
+            node_id=entry_node_id,
+            batch_id=None,
+            limit=limit,
+            leased_by=worker.worker_id,
+            lease_ttl_s=worker.lease_ttl_s,
+            batch_linger_s=self.dispatcher_batch_linger_s,
+            kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
+            batch_limits_by_service=batch_limits_by_service,
+        )
+        if not claims:
+            return 0
+        future = executor.submit(_dispatcher_run_claims, worker, claims, len(claims))
+        pending[future] = list(claims)
+        largest = max(int(self.dispatcher_state.get("largest_claimed_cohort_size") or 0), len(claims))
+        self._dispatcher_note(last_claimed_cohort_size=len(claims), largest_claimed_cohort_size=largest)
+        return len(claims)
+
+    def _dispatcher_finish_done(self, worker: BatchWorker, pending: dict[Any, list[QueueClaim]], *, block: bool) -> tuple[int, int, int]:
+        if not pending:
+            return (0, 0, 0)
+        if block:
+            done, _ = wait(list(pending.keys()), timeout=None, return_when=FIRST_COMPLETED)
+        else:
+            done = {future for future in pending if future.done()}
+        completed = failed = retried = 0
+        for future in list(done):
+            claims = pending.pop(future)
+            try:
+                pairs = future.result()
+            except Exception as exc:
+                pairs = [(claim, _dispatcher_transport_failure(claim, str(exc))) for claim in claims]
+            for claim, result in pairs:
+                item_completed, item_failed, item_retried = worker._finish_pair(claim, result, None)
+                completed += item_completed
+                failed += item_failed
+                retried += item_retried
+        return completed, failed, retried
 
     def _registry(self) -> ProfileRegistry:
         return ProfileRegistry.load(self.profiles_dir)
@@ -503,6 +664,8 @@ def _make_inference_request_json(
 def _input_with_api_kv(input_payload: dict[str, Any], body: dict[str, Any], profile: ModelProfile, topology: SparkTopology) -> dict[str, Any]:
     out = dict(input_payload)
     openai = {key: body[key] for key in OPENAI_REQUEST_FIELDS if key in body and body[key] is not None}
+    extra_body = body.get("extra_body") if isinstance(body.get("extra_body"), dict) else {}
+    openai.update({key: extra_body[key] for key in OPENAI_REQUEST_FIELDS if key in extra_body and extra_body[key] is not None})
     if openai:
         out["openai"] = {**dict(out.get("openai") or {}), **openai}
     has_kv_cache = body.get("kv_cache") is not None
@@ -679,6 +842,29 @@ def _openai_completion_response(*, request_id: str, model: str, result: dict[str
     }
 
 
+def _openai_completion_batch_response(*, request_id: str, model: str, result: dict[str, Any]) -> dict[str, Any]:
+    rows = result.get("results") if isinstance(result.get("results"), list) else []
+    choices = []
+    usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    for index, row in enumerate(rows):
+        item = row if isinstance(row, dict) else {}
+        text, status = _result_text_and_status(item)
+        item_usage = _result_usage(item)
+        usage["prompt_tokens"] += int(item_usage.get("prompt_tokens", 0) or 0)
+        usage["completion_tokens"] += int(item_usage.get("completion_tokens", 0) or 0)
+        usage["total_tokens"] += int(item_usage.get("total_tokens", 0) or 0)
+        choices.append({"index": index, "text": text, "finish_reason": "stop" if status == "completed" else "error"})
+    return {
+        "id": request_id,
+        "object": "text_completion",
+        "created": int(time.time()),
+        "model": model,
+        "choices": choices,
+        "usage": usage,
+        "ds4": {"batch_id": result.get("batch_id"), "state": result.get("state"), "result_count": len(rows)},
+    }
+
+
 def _anthropic_message_response(*, request_id: str, model: str, result: dict[str, Any]) -> dict[str, Any]:
     text, status = _result_text_and_status(result)
     return {
@@ -705,7 +891,12 @@ def _result_text_and_status(result: dict[str, Any]) -> tuple[str, str]:
 def _result_usage(result: dict[str, Any]) -> dict[str, int]:
     body = result.get("result") if isinstance(result.get("result"), dict) else {}
     usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
-    return {"prompt_tokens": int(usage.get("input_tokens", 0) or 0), "completion_tokens": int(usage.get("output_tokens", 0) or 0), "total_tokens": int(usage.get("total_tokens", 0) or 0)}
+    prompt_tokens = int(usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0)
+    completion_tokens = int(usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0)
+    total_tokens = int(usage.get("total_tokens", 0) or 0)
+    if total_tokens == 0 and (prompt_tokens or completion_tokens):
+        total_tokens = prompt_tokens + completion_tokens
+    return {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens, "total_tokens": total_tokens}
 
 
 def _anthropic_usage(result: dict[str, Any]) -> dict[str, int]:
@@ -715,6 +906,14 @@ def _anthropic_usage(result: dict[str, Any]) -> dict[str, int]:
 
 def _async_queue_response(kind: str, request_id: str, batch_id: str, submitted: dict[str, Any]) -> dict[str, Any]:
     return {"format": "ds4-async-api-response-v1", "api": kind, "request_id": request_id, "batch_id": batch_id, "job_id": batch_id, "queue": submitted}
+
+
+def _completion_prompt_items(prompt: Any) -> list[str]:
+    if isinstance(prompt, list) and all(isinstance(item, str) for item in prompt):
+        return [str(item) for item in prompt]
+    if isinstance(prompt, str):
+        return [prompt]
+    return [json.dumps(prompt, sort_keys=True)]
 
 
 def _is_async_request(body: dict[str, Any]) -> bool:
@@ -785,7 +984,23 @@ def _pipeline_base_urls(topology: SparkTopology) -> dict[str, str]:
 
 
 def _batch_limits_by_service(topology: SparkTopology) -> dict[str, int]:
-    return {service.service_id: int(service.scheduler.get("queue_limit") or service.max_batch_size) for service in topology.pipeline_services.values()}
+    limits = {service.service_id: int(service.scheduler.get("queue_limit") or service.max_batch_size) for service in topology.pipeline_services.values()}
+    overrides = {}
+    raw_overrides = os.environ.get("DS4_API_BATCH_LIMITS_JSON")
+    if raw_overrides:
+        try:
+            parsed = json.loads(raw_overrides)
+        except json.JSONDecodeError:
+            parsed = {}
+        overrides = parsed if isinstance(parsed, dict) else {}
+    if not overrides:
+        return limits
+    for service in topology.pipeline_services.values():
+        for key in (service.service_id, service.profile_id, service.model_id):
+            if key in overrides:
+                limits[service.service_id] = max(1, int(overrides[key]))
+                break
+    return limits
 
 
 def _refill_low_watermarks_by_service(topology: SparkTopology) -> dict[str, int]:
@@ -849,6 +1064,59 @@ def _body_float(body: dict[str, Any], key: str, default: float) -> float:
     if key not in body or body.get(key) is None:
         return float(default)
     return float(body[key])
+
+
+def _pending_claims(pending: dict[Any, list[QueueClaim]]) -> list[QueueClaim]:
+    claims: list[QueueClaim] = []
+    for cohort in pending.values():
+        claims.extend(cohort)
+    return claims
+
+
+def _pending_claim_count(pending: dict[Any, list[QueueClaim]]) -> int:
+    return sum(len(cohort) for cohort in pending.values())
+
+
+def _dispatcher_run_claims(worker: BatchWorker, claims: list[QueueClaim], concurrency: int) -> list[tuple[QueueClaim, dict[str, Any]]]:
+    if not claims:
+        return []
+    if claims[0].request_kind == "cpu":
+        return worker._run_cpu_claims(claims, max(1, concurrency))
+    if _dispatcher_can_batch_models(worker, claims):
+        return worker._run_model_batch(claims, max(1, concurrency))
+    out: list[tuple[QueueClaim, dict[str, Any]]] = []
+    max_workers = max(1, min(max(1, concurrency), len(claims)))
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {pool.submit(worker._run_one, claim): claim for claim in claims}
+        for future in as_completed(futures):
+            claim = futures[future]
+            try:
+                out.append((claim, future.result()))
+            except Exception as exc:
+                out.append((claim, _dispatcher_transport_failure(claim, str(exc))))
+    return out
+
+
+def _dispatcher_can_batch_models(worker: BatchWorker, claims: list[QueueClaim]) -> bool:
+    if not claims or claims[0].request_kind != "model" or not hasattr(worker.runner, "run_many_on_node"):
+        return False
+    first = claims[0]
+    return all(
+        claim.request_kind == "model"
+        and claim.selected_profile_id == first.selected_profile_id
+        and claim.selected_node_id == first.selected_node_id
+        and claim.selected_service_id == first.selected_service_id
+        for claim in claims
+    )
+
+
+def _dispatcher_transport_failure(claim: QueueClaim, error: str) -> dict[str, Any]:
+    return {
+        "format": "ds4-inference-failure-v1",
+        "request_id": claim.request_id,
+        "status": "transport_failed",
+        "error": error,
+    }
 
 
 def _env_bool(name: str, default: bool) -> bool:
