@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -34,6 +35,44 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         args = argparse.Namespace(input_tokens=8, output_tokens=256, temperature=0.0, job_class="analysis", ignore_eos=True)
         request = bench._request_json(args, "batch-a", "profile-a", 3)
         self.assertEqual(request["input"]["openai"], {"ignore_eos": True, "min_tokens": 256})
+
+    def test_benchmark_requests_attach_external_kv_plan(self) -> None:
+        args = argparse.Namespace(
+            input_tokens=8,
+            output_tokens=256,
+            temperature=0.0,
+            job_class="analysis",
+            ignore_eos=True,
+            external_kv_key="prefix-a",
+            external_kv_namespace="bench",
+            external_kv_service_id="dsv4_flash_pp8",
+            external_kv_backend="lmcache",
+            external_kv_mode="require",
+            external_kv_miss_policy="fail",
+            external_kv_route_affinity="required",
+            external_kv_prefix_hash="sha256:abc",
+            external_kv_total_bytes=4096,
+        )
+        request = bench._request_json(args, "batch-a", "profile-a", 0)
+        plan = request["input"]["kv_cache_plan"]
+        self.assertEqual(plan["format"], "ds4-kv-cache-plan-v1")
+        self.assertEqual(plan["load"]["transport"], "external_manifest")
+        self.assertEqual(plan["load"]["service_id"], "dsv4_flash_pp8")
+        self.assertEqual(plan["miss_policy"], "fail")
+        self.assertEqual(request["input"]["kv_cache_key"], "prefix-a")
+        self.assertEqual(request["input"]["kv_bytes_estimate"], 4096)
+
+    def test_benchmark_requests_attach_exact_kv_cache_directive(self) -> None:
+        directive = {"format": "ds4-kv-cache-directive-v1", "cache_id": "cache-a", "load": {"mode": "prefer", "transport": "local_store", "path": "node-local://spark0/cache-a"}}
+        args = argparse.Namespace(input_tokens=8, output_tokens=256, temperature=0.0, job_class="analysis", ignore_eos=True, kv_cache_directive_json=json.dumps(directive, sort_keys=True))
+        request = bench._request_json(args, "batch-a", "profile-a", 0)
+        self.assertEqual(request["input"]["kv_cache"], directive)
+
+    def test_benchmark_shared_prefix_splits_suffix(self) -> None:
+        args = argparse.Namespace(input_tokens=10, shared_prefix_tokens=6, suffix_tokens=None)
+        prompt = bench._prompt(args, 2)
+        self.assertEqual(prompt.count("shared-prefix-benchmark"), 6)
+        self.assertEqual(prompt.count("request-specific-detail"), 4)
 
     def test_bubble_corrected_two_spark_equivalent_score(self) -> None:
         score = bench._performance_score(aggregate_tok_s=420.0, concurrency=64, pipeline_stages=8, equivalent_sparks=2, reference_tok_s=144.6)
@@ -91,6 +130,7 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         self.assertEqual(manifest["worker_mode"], "external_worker")
         self.assertEqual(manifest["requests_jsonl"], "requests.jsonl")
         self.assertEqual(manifest["preserved_request_ids"], False)
+        self.assertEqual(manifest["cache_mode"], "cold_unique_prefix")
 
     def test_file_driven_manifest_uses_replayed_completion_target(self) -> None:
         args = argparse.Namespace(base_url="http://127.0.0.1:8700", model="dsv4", input_tokens=128, output_tokens=256, concurrency=256, limit=256, drive_worker=False, ignore_eos=True, preserve_request_ids=False)
