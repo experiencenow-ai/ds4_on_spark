@@ -29,6 +29,7 @@ export DS4_API_DISPATCH_BATCH_LINGER_S=0.25
 export DS4_API_BATCH_LIMITS_JSON='{"qwen27_bf16_pp8":256,"dsv4_flash_pp8":256}'
 export DS4_PIPELINE_COHORT_COMPLETIONS=1
 export DS4_PIPELINE_COMPLETION_COHORT_MAX=512
+export DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET=131072
 ```
 
 `DS4_API_DISPATCH_BATCH_LINGER_S` is deliberately larger for benchmarks than for
@@ -53,7 +54,10 @@ with an array of prompts:
 The coordinator expands this into one DS4 batch and returns an OpenAI-style
 response with one `choices[]` entry per prompt. Internally, the dispatcher
 should claim the whole batch as one compatible cohort and the runner should send
-one vLLM `/v1/completions` request with `prompt: [...]`.
+bounded vLLM `/v1/completions` requests with `prompt: [...]`. The API-level
+batch can be larger than a single vLLM prompt-array post: the runner splits it
+by `DS4_PIPELINE_COMPLETION_COHORT_MAX` and
+`DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET`.
 
 ## What to verify in logs
 
@@ -67,7 +71,10 @@ vLLM prefill does not show 1 + 20 + 123 + 112 style fragmentation for one c256 c
 ```
 
 If vLLM still sees split prefill groups, increase linger slightly or use
-prompt-array submission instead of many independent HTTP requests.
+prompt-array submission instead of many independent HTTP requests. If vLLM
+admits hundreds of requests and stops making progress, lower
+`DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET`; the large API batch should stay
+queued on spark0 rather than entering vLLM as one oversized prompt-array post.
 
 ## Production defaults
 
