@@ -296,27 +296,37 @@ class OpenAICompatibleRunner:
 
     def run_many_completion(self, requests: list[InferenceRequest], profile: ModelProfile) -> dict[str, dict] | None:
         request_list = list(requests)
-        if len(request_list) < 2:
+        minimum = max(2, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MIN", "2") or "2"))
+        if len(request_list) < minimum:
             return None
-        payload = _coalesced_completion_payload(request_list, profile, self.default_extra_body)
-        if payload is None:
-            return None
-        started = time.time()
-        try:
-            data = self._post_json(self.completion_endpoint, payload)
-            return _coalesced_completion_results(
-                request_list,
-                profile,
-                data,
-                base_url=self.base_url,
-                endpoint=self.completion_endpoint,
-                started=started,
-            )
-        except Exception as exc:
-            return {
-                item.request_id: self._transport_failure(item, profile, started, str(exc), endpoint=self.completion_endpoint, coalesced_batch_size=len(request_list))
-                for item in request_list
-            }
+        max_cohort = max(1, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MAX", "512") or "512"))
+        out: dict[str, dict] = {}
+        for offset in range(0, len(request_list), max_cohort):
+            chunk = request_list[offset : offset + max_cohort]
+            payload = _coalesced_completion_payload(chunk, profile, self.default_extra_body)
+            if payload is None:
+                return None
+            started = time.time()
+            try:
+                data = self._post_json(self.completion_endpoint, payload)
+                out.update(
+                    _coalesced_completion_results(
+                        chunk,
+                        profile,
+                        data,
+                        base_url=self.base_url,
+                        endpoint=self.completion_endpoint,
+                        started=started,
+                    )
+                )
+            except Exception as exc:
+                out.update(
+                    {
+                        item.request_id: self._transport_failure(item, profile, started, str(exc), endpoint=self.completion_endpoint, coalesced_batch_size=len(chunk))
+                        for item in chunk
+                    }
+                )
+        return out
 
     def _transport_failure(self, request: InferenceRequest, profile: ModelProfile, started: float, error: str, *, endpoint: str | None = None, coalesced_batch_size: int | None = None) -> dict:
         result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": error}, sort_keys=True), status="transport_failed")
@@ -585,7 +595,7 @@ def _coalesced_completion_results(
             continue
         result = make_result(request=item, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=extract_openai_completion_text({"choices": [choice]}))
         result["usage"].update(_coalesced_usage(data, choice, item, len(requests)))
-        result["transport"] = {"base_url": base_url, "endpoint": endpoint, "duration_s": round(time.time() - started, 6), "coalesced_batch_size": len(requests)}
+        result["transport"] = {"base_url": base_url, "endpoint": endpoint, "duration_s": round(time.time() - started, 6), "coalesced_completion_batch": True, "coalesced_batch_size": len(requests), "batch_size": len(requests)}
         out[item.request_id] = result
     return out
 
