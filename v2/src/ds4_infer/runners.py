@@ -308,6 +308,7 @@ class OpenAICompatibleRunner:
                 return None
             started = time.time()
             try:
+                prefetch_info = _maybe_prestage_common_kv_prefix(self, payload, chunk)
                 data = self._post_json(self.completion_endpoint, payload)
                 out.update(
                     _coalesced_completion_results(
@@ -317,6 +318,7 @@ class OpenAICompatibleRunner:
                         base_url=self.base_url,
                         endpoint=self.completion_endpoint,
                         started=started,
+                        prefetch_info=prefetch_info,
                     )
                 )
             except Exception as exc:
@@ -564,6 +566,76 @@ def _coalesced_completion_payload(requests: list[InferenceRequest], profile: Mod
     return payload
 
 
+def _maybe_prestage_common_kv_prefix(runner: OpenAICompatibleRunner, payload: dict[str, Any], requests: list[InferenceRequest]) -> dict[str, Any] | None:
+    if not _env_bool("DS4_PIPELINE_PRESTAGE_COMMON_KV_PREFIX", True):
+        return None
+    if not _payload_has_strict_kv_load(payload):
+        return None
+    prefix = _common_prompt_prefix(requests)
+    min_chars = _env_int("DS4_PIPELINE_PRESTAGE_COMMON_PREFIX_MIN_CHARS", 1024)
+    if prefix is None or len(prefix) < max(1, min_chars):
+        return None
+    max_tokens = max(1, _env_int("DS4_PIPELINE_PRESTAGE_MAX_TOKENS", 1))
+    prefetch_payload: dict[str, Any] = {
+        "model": payload["model"],
+        "prompt": prefix,
+        "max_tokens": max_tokens,
+        "temperature": payload.get("temperature", 0),
+        "stream": False,
+    }
+    extra_body = payload.get("extra_body")
+    if isinstance(extra_body, dict):
+        prefetch_payload["extra_body"] = dict(extra_body)
+    started = time.time()
+    runner._post_json(runner.completion_endpoint, prefetch_payload)
+    return {
+        "common_prefix_chars": len(prefix),
+        "duration_s": round(time.time() - started, 6),
+        "max_tokens": max_tokens,
+        "strategy": "single-prefix-load-before-cohort",
+    }
+
+
+def _payload_has_strict_kv_load(payload: dict[str, Any]) -> bool:
+    extra = payload.get("extra_body")
+    if not isinstance(extra, dict):
+        return False
+    plan = extra.get("ds4_kv_cache")
+    if not isinstance(plan, dict):
+        return False
+    load = plan.get("load")
+    if not isinstance(load, dict):
+        return False
+    if str(load.get("mode") or "skip") not in {"prefer", "require"}:
+        return False
+    miss_policy = str(plan.get("miss_policy") or "")
+    return str(load.get("mode") or "") == "require" or miss_policy == "fail"
+
+
+def _common_prompt_prefix(requests: list[InferenceRequest]) -> str | None:
+    shared_values = [
+        item.input.get("shared_prefix")
+        for item in requests
+        if isinstance(item.input.get("shared_prefix"), str)
+    ]
+    if len(shared_values) == len(requests) and shared_values:
+        first = str(shared_values[0])
+        if first and all(str(value) == first for value in shared_values):
+            return first
+    prompts = [request_prompt(item) for item in requests]
+    if not prompts:
+        return None
+    prefix = os.path.commonprefix(prompts)
+    if not prefix:
+        return None
+    if prefix[-1].isspace():
+        return prefix
+    cut = max(prefix.rfind(ch) for ch in (" ", "\n", "\t"))
+    if cut <= 0:
+        return None
+    return prefix[: cut + 1]
+
+
 def _completion_cohort_chunks(requests: list[InferenceRequest], *, max_cohort: int, token_budget: int) -> list[list[InferenceRequest]]:
     chunks: list[list[InferenceRequest]] = []
     current: list[InferenceRequest] = []
@@ -604,6 +676,7 @@ def _coalesced_completion_results(
     base_url: str,
     endpoint: str,
     started: float,
+    prefetch_info: dict[str, Any] | None = None,
 ) -> dict[str, dict]:
     choices = data.get("choices")
     if not isinstance(choices, list):
@@ -628,6 +701,8 @@ def _coalesced_completion_results(
         result = make_result(request=item, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=extract_openai_completion_text({"choices": [choice]}))
         result["usage"].update(_coalesced_usage(data, choice, item, len(requests)))
         result["transport"] = {"base_url": base_url, "endpoint": endpoint, "duration_s": round(time.time() - started, 6), "coalesced_completion_batch": True, "coalesced_batch_size": len(requests), "batch_size": len(requests)}
+        if prefetch_info is not None:
+            result["transport"]["kv_prestage"] = dict(prefetch_info)
         out[item.request_id] = result
     return out
 
@@ -767,6 +842,16 @@ def _env_bool(name: str, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
 
 
 def _completed_error(completed: Any, host: str) -> str:
