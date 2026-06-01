@@ -300,9 +300,9 @@ class OpenAICompatibleRunner:
         if len(request_list) < minimum:
             return None
         max_cohort = max(1, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MAX", "512") or "512"))
+        token_budget = max(0, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET", "131072") or "131072"))
         out: dict[str, dict] = {}
-        for offset in range(0, len(request_list), max_cohort):
-            chunk = request_list[offset : offset + max_cohort]
+        for chunk in _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget):
             payload = _coalesced_completion_payload(chunk, profile, self.default_extra_body)
             if payload is None:
                 return None
@@ -562,6 +562,38 @@ def _coalesced_completion_payload(requests: list[InferenceRequest], profile: Mod
     payload = dict(shared)
     payload["prompt"] = prompts
     return payload
+
+
+def _completion_cohort_chunks(requests: list[InferenceRequest], *, max_cohort: int, token_budget: int) -> list[list[InferenceRequest]]:
+    chunks: list[list[InferenceRequest]] = []
+    current: list[InferenceRequest] = []
+    current_tokens = 0
+    max_cohort = max(1, int(max_cohort))
+    token_budget = max(0, int(token_budget))
+    for item in requests:
+        estimate = _completion_request_token_estimate(item)
+        would_exceed_size = len(current) >= max_cohort
+        would_exceed_tokens = token_budget > 0 and current and (current_tokens + estimate) > token_budget
+        if would_exceed_size or would_exceed_tokens:
+            chunks.append(current)
+            current = []
+            current_tokens = 0
+        current.append(item)
+        current_tokens += estimate
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _completion_request_token_estimate(request: InferenceRequest) -> int:
+    return max(1, _prompt_token_estimate(request_prompt(request)) + int(request.max_output_tokens))
+
+
+def _prompt_token_estimate(prompt: str) -> int:
+    words = len(str(prompt).split())
+    if words > 0:
+        return words
+    return max(1, len(str(prompt).encode("utf-8")) // 4)
 
 
 def _coalesced_completion_results(

@@ -93,6 +93,27 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
         self.assertEqual([results[f"r{index}"]["output"]["text"] for index in range(4)], ["out-0", "out-1", "out-2", "out-3"])
         self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_batch"] for index in range(4)))
 
+    def test_runner_splits_coalesced_completion_requests_by_token_budget(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
+        runner = RecordingOpenAIRunner()
+        requests = [completion_request(f"r{index}", f"prompt-{index}") for index in range(8)]
+        old = os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET")
+        os.environ["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"] = "100"
+        try:
+            results = runner.run_many_completion(requests, profile)
+        finally:
+            if old is None:
+                os.environ.pop("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET", None)
+            else:
+                os.environ["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"] = old
+
+        self.assertIsNotNone(results)
+        self.assertEqual([len(call[1]["prompt"]) for call in runner.calls], [3, 3, 2])
+        assert results is not None
+        self.assertEqual(len(results), 8)
+        self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_batch"] for index in range(8)))
+
     def test_background_dispatcher_claims_one_cohort_instead_of_one_future_per_request(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
