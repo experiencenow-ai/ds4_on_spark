@@ -370,13 +370,48 @@ class PipelineOpenAIRunner:
         payload = _openai_payload(requests[0], profile)
         payload["prompt"] = [request_prompt(item) for item in requests]
         _merge_extra_body(payload, self.default_extra_body)
+        prefetch_info: dict[str, Any] | None = None
         try:
+            prefetch_info = self._maybe_prestage_common_kv_prefix(
+                runner, payload, requests
+            )
             data = runner._post_json(runner.completion_endpoint, payload)
         except Exception as exc:
             return {item.request_id: self._transport_failure(item, profile, node_id, started, str(exc), coalesced=True) for item in requests}
-        return self._coalesced_completion_results(requests, profile, node_id, data, started)
+        return self._coalesced_completion_results(
+            requests, profile, node_id, data, started, prefetch_info=prefetch_info
+        )
 
-    def _coalesced_completion_results(self, requests: list[InferenceRequest], profile: ModelProfile, node_id: str | None, data: dict[str, Any], started: float) -> dict[str, dict]:
+    def _maybe_prestage_common_kv_prefix(self, runner: OpenAICompatibleRunner, payload: dict[str, Any], requests: list[InferenceRequest]) -> dict[str, Any] | None:
+        if not _env_bool("DS4_PIPELINE_PRESTAGE_COMMON_KV_PREFIX", True):
+            return None
+        if not _payload_has_strict_kv_load(payload):
+            return None
+        prefix = _common_prompt_prefix(requests)
+        min_chars = _env_int("DS4_PIPELINE_PRESTAGE_COMMON_PREFIX_MIN_CHARS", 1024)
+        if prefix is None or len(prefix) < max(1, min_chars):
+            return None
+        max_tokens = max(1, _env_int("DS4_PIPELINE_PRESTAGE_MAX_TOKENS", 1))
+        prefetch_payload: dict[str, Any] = {
+            "model": payload["model"],
+            "prompt": prefix,
+            "max_tokens": max_tokens,
+            "temperature": payload.get("temperature", 0),
+            "stream": False,
+        }
+        extra_body = payload.get("extra_body")
+        if isinstance(extra_body, dict):
+            prefetch_payload["extra_body"] = dict(extra_body)
+        started = time.time()
+        runner._post_json(runner.completion_endpoint, prefetch_payload)
+        return {
+            "common_prefix_chars": len(prefix),
+            "duration_s": round(time.time() - started, 6),
+            "max_tokens": max_tokens,
+            "strategy": "single-prefix-load-before-cohort",
+        }
+
+    def _coalesced_completion_results(self, requests: list[InferenceRequest], profile: ModelProfile, node_id: str | None, data: dict[str, Any], started: float, *, prefetch_info: dict[str, Any] | None = None) -> dict[str, dict]:
         choices = data.get("choices")
         if not isinstance(choices, list):
             return {item.request_id: self._transport_failure(item, profile, node_id, started, f"coalesced /v1/completions response omitted choices: {json.dumps(data, sort_keys=True)[-4000:]}", coalesced=True) for item in requests}
@@ -406,6 +441,8 @@ class PipelineOpenAIRunner:
                 "batch_size": len(requests),
                 "duration_s": round(time.time() - started, 6),
             }
+            if prefetch_info is not None:
+                result["transport"]["kv_prestage"] = dict(prefetch_info)
             out[item.request_id] = result
         return out
 
@@ -696,6 +733,47 @@ def _compatible_completion_cohort(requests: list[InferenceRequest]) -> bool:
         if kv_cache_extra_body(item.input) != first_extra:
             return False
     return True
+
+
+def _payload_has_strict_kv_load(payload: dict[str, Any]) -> bool:
+    extra = payload.get("extra_body")
+    if not isinstance(extra, dict):
+        return False
+    plan = extra.get("ds4_kv_cache")
+    if not isinstance(plan, dict):
+        return False
+    load = plan.get("load")
+    if not isinstance(load, dict):
+        return False
+    if str(load.get("mode") or "skip") not in {"prefer", "require"}:
+        return False
+    miss_policy = str(plan.get("miss_policy") or "")
+    return str(load.get("mode") or "") == "require" or miss_policy == "fail"
+
+
+def _common_prompt_prefix(requests: list[InferenceRequest]) -> str | None:
+    shared_values = [
+        item.input.get("shared_prefix")
+        for item in requests
+        if isinstance(item.input.get("shared_prefix"), str)
+    ]
+    if len(shared_values) == len(requests) and shared_values:
+        first = str(shared_values[0])
+        if first and all(str(value) == first for value in shared_values):
+            return first
+    prompts = [request_prompt(item) for item in requests]
+    if not prompts:
+        return None
+    prefix = os.path.commonprefix(prompts)
+    if not prefix:
+        return None
+    if prefix[-1].isspace():
+        return prefix
+    cuts = [prefix.rfind(ch) for ch in (" ", "\n", "\t")]
+    cut = max(cuts)
+    if cut <= 0:
+        return None
+    return prefix[: cut + 1]
 
 
 def _usage_for_coalesced_choice(data: dict[str, Any], choice: dict[str, Any], index: int, count: int) -> dict[str, Any]:

@@ -245,6 +245,65 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual([results[f"prompt-{idx}"]["output"]["text"] for idx in range(3)], ["answer 0", "answer 1", "answer 2"])
         self.assertTrue(results["prompt-0"]["transport"]["coalesced_completion_batch"])
 
+    def test_pipeline_runner_prestages_common_strict_kv_prefix(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
+        prefix = "stable shared prefix " * 80
+        plan = {
+            "format": "ds4-kv-cache-plan-v1",
+            "backend": "simple_cpu_offload",
+            "cache_id": "bench-prefix",
+            "prefix_hash": "sha256:prefix",
+            "load": {"mode": "require", "transport": "local_store"},
+            "store": {"mode": "skip", "transport": "none"},
+            "miss_policy": "fail",
+            "route_affinity": "required",
+            "model_fingerprint": {},
+            "operation": "load",
+            "batch_key_hash": "sha256:batch",
+        }
+        requests = [
+            InferenceRequest.from_json(
+                {
+                    "format": "ds4-inference-request-v1",
+                    "request_id": f"kv-{idx}",
+                    "capability": "efficient",
+                    "chat": False,
+                    "immediate": False,
+                    "job_class": "analysis",
+                    "max_output_tokens": 8,
+                    "thinking_budget_tokens": 0,
+                    "temperature": 0,
+                    "input": {"prompt": f"{prefix}request {idx}", "kv_cache_plan": plan},
+                    "output_contract": {"format": "text"},
+                }
+            )
+            for idx in range(3)
+        ]
+        calls: list[dict] = []
+        original = OpenAICompatibleRunner._post_json
+
+        def fake_post(self, endpoint, payload):
+            calls.append({"endpoint": endpoint, "payload": payload})
+            if isinstance(payload.get("prompt"), list):
+                return {
+                    "choices": [{"index": idx, "text": f"answer {idx}"} for idx in range(3)],
+                    "usage": {"prompt_tokens": 30, "completion_tokens": 24, "total_tokens": 54},
+                }
+            return {"choices": [{"index": 0, "text": "warm"}], "usage": {"completion_tokens": 1}}
+
+        try:
+            OpenAICompatibleRunner._post_json = fake_post
+            runner = PipelineOpenAIRunner(base_urls={"qwen3_6_27b_bf16_pp8_efficient_v1": "http://127.0.0.1:9"})
+            results = runner.run_many_on_node(requests, profile, "spark0", concurrency=3)
+        finally:
+            OpenAICompatibleRunner._post_json = original
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0]["payload"]["prompt"], prefix + "request ")
+        self.assertEqual(calls[0]["payload"]["extra_body"]["ds4_kv_cache"], plan)
+        self.assertEqual(calls[1]["payload"]["prompt"], [f"{prefix}request {idx}" for idx in range(3)])
+        self.assertEqual(results["kv-0"]["transport"]["kv_prestage"]["strategy"], "single-prefix-load-before-cohort")
+
 
 if __name__ == "__main__":
     unittest.main()
