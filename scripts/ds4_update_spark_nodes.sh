@@ -7,15 +7,12 @@ usage()
 usage: scripts/ds4_update_spark_nodes.sh [spark0 spark1 ...]
 
 Updates reachable Spark nodes to the current merged DS4 repo ref, then
-optionally installs the quorum trim monitor and the spark4/spark5 local DSV4
-service units.
+optionally installs the spark4/spark5 local DSV4 service units.
 
 Important environment knobs:
   DS4_SELF_UPDATE=1               fetch and detach this local worktree first
   DS4_UPDATE_REF=origin/main        git ref to deploy on each Spark checkout
   DS4_REMOTE_REPO=$HOME/src/ds4_on_spark remote repo path on each Spark
-  DS4_INSTALL_RESCUE=0             set 1 to rerun scripts/ds4_deploy_rescue_agent.sh
-  DS4_EXTEND_SWAP=0                install survival swap while deploying monitor
   DS4_CONFIGURE_QWEN_RUNTIME=1     point Qwen gateways at host-local vLLM
   DS4_RESTART_QWEN=0               restart Qwen model gateways after env update
   DS4_QWEN_RUNTIME_TARGET=...      trim-capable target for ~/ds4-vllm-local
@@ -43,8 +40,6 @@ local_self_update="${DS4_SELF_UPDATE:-1}"
 skip_unreachable="${DS4_SKIP_UNREACHABLE:-1}"
 connect_timeout="${DS4_CONNECT_TIMEOUT:-8}"
 ssh_opts="${DS4_SSH_OPTS:-}"
-install_rescue="${DS4_INSTALL_RESCUE:-0}"
-extend_swap="${DS4_EXTEND_SWAP:-0}"
 configure_qwen_runtime="${DS4_CONFIGURE_QWEN_RUNTIME:-1}"
 restart_qwen="${DS4_RESTART_QWEN:-0}"
 qwen_runtime_target="${DS4_QWEN_RUNTIME_TARGET:-~/standard-runtimes/vllm-main-gdn-nixl/venv}"
@@ -297,11 +292,6 @@ if [ "$configure_qwen_runtime" = "1" ]; then
 			configure_qwen_node_runtime "$node"
 		fi
 	done
-fi
-
-if [ "$install_rescue" = "1" ]; then
-	echo "==> reinstall quorum trim monitor on reachable nodes"
-	DS4_EXTEND_SWAP="$extend_swap" "$repo_dir/scripts/ds4_deploy_rescue_agent.sh" "${reachable[@]}"
 fi
 
 if [ "$install_dsv4_local" = "1" ]; then
