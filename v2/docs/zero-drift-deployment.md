@@ -37,3 +37,28 @@ scripts/ds4_update_spark_nodes.sh
 
 Those scripts require the remote repos to be on `main` and clean. They should
 fail rather than hide drift.
+
+## Spark0 coordinator relaunch
+
+On spark0, use the repo-owned relaunch script instead of ad-hoc `pkill -f`
+commands:
+
+```bash
+cd ~/src/ds4_on_spark/v2
+python3 scripts/ds4_relaunch_coordinator_api.py --profile throughput
+```
+
+The relaunch script:
+
+```text
+git pull --ff-only origin main
+make if a Makefile exists, otherwise compile and run focused coordinator tests
+stop the old coordinator with exact PID discovery
+start the coordinator with the current dispatcher/cohort defaults
+verify /ds4/dispatcher/status
+```
+
+The stop script never kills by matching a shell command string. It scans `ps`,
+selects only the actual coordinator command (`python -m ds4_infer.api` or the
+repo launcher), adds descendants, sends SIGTERM, and force-kills only the
+surviving exact PIDs.
