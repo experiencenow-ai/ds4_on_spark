@@ -108,7 +108,7 @@ class CoordinatorApi:
             raw_requests = body.get("requests")
             if not isinstance(raw_requests, list):
                 return 400, {"error": "requests must be a list"}
-            requests = [InferenceRequest.from_json(dict(item)) for item in raw_requests]
+            requests = [InferenceRequest.from_json(_prepare_queue_request_json(item)) for item in raw_requests]
             return 200, self.queue.submit_requests(requests=requests, registry=self._registry(), topology=self._topology(), batch_id=_optional_str(body.get("batch_id")), priority=_optional_int(body.get("priority")))
         if path == "/ds4/queue/work":
             return 200, self._work_once(body)
@@ -692,6 +692,33 @@ def _input_with_api_kv(input_payload: dict[str, Any], body: dict[str, Any], prof
     if raw.get("total_bytes") is not None or raw.get("bytes") is not None:
         out["kv_bytes_estimate"] = int(raw.get("total_bytes") or raw.get("bytes") or 0)
     return out
+
+
+def _prepare_queue_request_json(item: Any) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        raise ValueError("queue request must be an object")
+    raw = dict(item)
+    input_payload = raw.get("input")
+    if not isinstance(input_payload, dict):
+        return raw
+    out = dict(input_payload)
+    directive = out.get("kv_cache")
+    if isinstance(directive, dict):
+        plan = normalize_kv_cache_directive(directive)
+        existing = out.get("kv_cache_plan")
+        if existing is not None and existing != plan:
+            raise ValueError("input.kv_cache_plan conflicts with input.kv_cache")
+        out["kv_cache_plan"] = plan
+        cache_key = plan.get("cache_id") or plan.get("prefix_hash")
+        if cache_key and out.get("kv_cache_key") is None:
+            out["kv_cache_key"] = str(cache_key)
+        for endpoint_name in ("load", "store"):
+            endpoint = plan.get(endpoint_name)
+            if isinstance(endpoint, dict) and endpoint.get("bytes") is not None and out.get("kv_bytes_estimate") is None:
+                out["kv_bytes_estimate"] = int(endpoint.get("bytes") or 0)
+                break
+    raw["input"] = out
+    return raw
 
 
 def _external_kv_plan(raw: dict[str, Any], *, profile: ModelProfile, topology: SparkTopology) -> dict[str, Any]:

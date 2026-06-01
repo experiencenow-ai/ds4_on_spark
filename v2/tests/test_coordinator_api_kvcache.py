@@ -187,6 +187,60 @@ class CoordinatorApiKvCacheTests(unittest.TestCase):
             self.assertEqual(plan["load"]["namespace"], "centaur.longmem")
             self.assertEqual(plan["load"]["service_id"], "qwen27_bf16_pp8")
 
+    def test_queue_submit_normalizes_kv_cache_directive(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            directive = {
+                "format": "ds4-kv-cache-directive-v1",
+                "cache_id": "node-local-cache-a",
+                "backend": "simple_cpu_offload",
+                "load": {
+                    "mode": "require",
+                    "transport": "local_store",
+                    "cache_key": "node-local-cache-a",
+                    "sha256": "sha256:" + ("a" * 64),
+                    "bytes": 4096,
+                },
+                "store": {"mode": "skip", "transport": "none"},
+                "miss_policy": "fail",
+                "route_affinity": "required",
+            }
+            code, payload = api.handle_post(
+                "/ds4/queue/submit",
+                {
+                    "batch_id": "kv-directive-submit",
+                    "requests": [
+                        {
+                            "format": "ds4-inference-request-v1",
+                            "request_id": "kv-directive-submit-000000",
+                            "capability": None,
+                            "chat": False,
+                            "immediate": False,
+                            "job_class": "analysis",
+                            "max_output_tokens": 16,
+                            "thinking_budget_tokens": 0,
+                            "temperature": 0.0,
+                            "input": {"prompt": "reuse cache", "kv_cache": directive},
+                            "output_contract": {"format": "text"},
+                            "model_pin": {"profile_id": "qwen3_6_27b_bf16_pp8_efficient_v1"},
+                        }
+                    ],
+                },
+            )
+            self.assertEqual(code, 200)
+            self.assertEqual(payload["request_count"], 1)
+            con = sqlite3.connect(Path(tmp) / "queue.sqlite3")
+            row = con.execute("select request_json,kv_key,kv_bytes from requests where request_id=?", ("kv-directive-submit-000000",)).fetchone()
+            con.close()
+            self.assertIsNotNone(row)
+            request = json.loads(row[0])
+            plan = request["input"]["kv_cache_plan"]
+            self.assertEqual(plan["format"], "ds4-kv-cache-plan-v1")
+            self.assertEqual(plan["load"]["transport"], "local_store")
+            self.assertEqual(plan["load"]["mode"], "require")
+            self.assertEqual(row[1], "node-local-cache-a")
+            self.assertEqual(row[2], 4096)
+
     def test_background_dispatcher_processes_global_queue_work(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake", sync_timeout_s=3)
