@@ -587,8 +587,10 @@ class CoordinatorApi:
         return PipelineOpenAIRunner(timeout_s=int(timeout_s), base_urls=_pipeline_base_urls(topology))
 
 
-def serve(*, host: str, port: int, queue_dir: str | Path, profiles_dir: str | Path, topology_path: str | Path, runner_kind: str = "pipeline") -> None:
-    api = CoordinatorApi(queue_dir=queue_dir, profiles_dir=profiles_dir, topology_path=topology_path, runner_kind=runner_kind)
+def serve(*, host: str, port: int, queue_dir: str | Path, profiles_dir: str | Path, topology_path: str | Path, runner_kind: str = "pipeline", sync_timeout_s: float | None = None) -> None:
+    if sync_timeout_s is None:
+        sync_timeout_s = _default_sync_timeout_s()
+    api = CoordinatorApi(queue_dir=queue_dir, profiles_dir=profiles_dir, topology_path=topology_path, runner_kind=runner_kind, sync_timeout_s=sync_timeout_s)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
@@ -625,9 +627,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--profiles-dir", default="profiles/models")
     parser.add_argument("--topology", default="profiles/topology/static_sparks.json")
     parser.add_argument("--runner-kind", choices=("pipeline", "fake"), default="pipeline")
+    parser.add_argument("--sync-timeout-s", type=float, default=None)
     args = parser.parse_args(argv)
-    serve(host=args.host, port=args.port, queue_dir=args.queue_dir, profiles_dir=args.profiles_dir, topology_path=args.topology, runner_kind=args.runner_kind)
+    serve(host=args.host, port=args.port, queue_dir=args.queue_dir, profiles_dir=args.profiles_dir, topology_path=args.topology, runner_kind=args.runner_kind, sync_timeout_s=args.sync_timeout_s)
     return 0
+
+
+def _default_sync_timeout_s() -> float:
+    return _env_float("DS4_API_SYNC_TIMEOUT_S", 3600.0)
 
 
 def _make_inference_request_json(
