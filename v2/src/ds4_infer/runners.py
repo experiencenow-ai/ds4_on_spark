@@ -300,7 +300,7 @@ class OpenAICompatibleRunner:
         if len(request_list) < minimum:
             return None
         max_cohort = max(1, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MAX", "512") or "512"))
-        token_budget = max(0, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET", "131072") or "131072"))
+        token_budget = max(0, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET", "0") or "0"))
         out: dict[str, dict] = {}
         for chunk in _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget):
             payload = _coalesced_completion_payload(chunk, profile, self.default_extra_body)
