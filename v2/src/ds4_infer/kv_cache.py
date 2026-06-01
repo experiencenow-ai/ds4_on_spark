@@ -97,6 +97,13 @@ def kv_cache_extra_body(input_data: dict[str, Any]) -> dict[str, Any]:
     return {"ds4_kv_cache": plan}
 
 
+def kv_cache_vllm_request_fields(input_data: dict[str, Any]) -> dict[str, Any]:
+    plan = input_data.get("kv_cache_plan")
+    if not isinstance(plan, dict):
+        return {}
+    return {"kv_transfer_params": _kv_transfer_params(plan)}
+
+
 def _resolve_prefix_cache_ref(input_data: dict[str, Any], *, base_dir: Path) -> None:
     ref = input_data.get("kv_cache_ref")
     if ref is None:
@@ -144,6 +151,33 @@ def _resolve_kv_cache_directive(input_data: dict[str, Any]) -> None:
     if existing is not None and existing != plan:
         raise ValueError("input.kv_cache_plan conflicts with input.kv_cache")
     input_data["kv_cache_plan"] = plan
+
+
+def _kv_transfer_params(plan: dict[str, Any]) -> dict[str, Any]:
+    params: dict[str, Any] = {
+        "ds4_kv_cache": dict(plan),
+        "ds4_require_kv_transfer": True,
+    }
+    cache_ref = _kv_cache_ref(plan)
+    if cache_ref is not None:
+        params["cache_ref"] = cache_ref
+        params["ds4_cache_ref"] = cache_ref
+        params["simple_kv_cache_ref"] = cache_ref
+    return params
+
+
+def _kv_cache_ref(plan: dict[str, Any]) -> str | None:
+    for key in ("cache_id", "prefix_hash"):
+        value = plan.get(key)
+        if isinstance(value, str) and value:
+            return value
+    load = plan.get("load")
+    if isinstance(load, dict):
+        for key in ("cache_key", "kv_key"):
+            value = load.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return None
 
 
 def ensure_cache_refs_resolved(input_data: dict[str, Any]) -> None:

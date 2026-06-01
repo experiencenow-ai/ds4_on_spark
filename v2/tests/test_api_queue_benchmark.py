@@ -68,6 +68,40 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         request = bench._request_json(args, "batch-a", "profile-a", 0)
         self.assertEqual(request["input"]["kv_cache"], directive)
 
+    def test_benchmark_requests_generate_warm_load_kv_cache_directive(self) -> None:
+        args = argparse.Namespace(
+            input_tokens=8,
+            output_tokens=256,
+            temperature=0.0,
+            job_class="analysis",
+            ignore_eos=True,
+            kv_cache_directive_json=None,
+            kv_cache_directive_file=None,
+            kv_cache_id="cache-a",
+            kv_cache_phase="warm-load",
+            kv_cache_backend="simple_cpu_offload",
+            kv_cache_prefix_hash="sha256:prefix",
+            kv_cache_sha256="sha256:" + ("a" * 64),
+            kv_cache_bytes=4096,
+            kv_cache_load_mode=None,
+            kv_cache_store_mode=None,
+            kv_cache_miss_policy=None,
+            kv_cache_route_affinity="required",
+        )
+        request = bench._request_json(args, "batch-a", "profile-a", 0)
+        directive = request["input"]["kv_cache"]
+        self.assertEqual(directive["cache_id"], "cache-a")
+        self.assertEqual(directive["backend"], "simple_cpu_offload")
+        self.assertEqual(directive["load"]["mode"], "require")
+        self.assertEqual(directive["load"]["cache_key"], "cache-a")
+        self.assertEqual(directive["store"]["mode"], "skip")
+        self.assertEqual(directive["miss_policy"], "fail")
+
+    def test_benchmark_generated_kv_load_requires_sha256(self) -> None:
+        args = argparse.Namespace(kv_cache_id="cache-a", kv_cache_phase="warm-load", kv_cache_sha256=None, kv_cache_load_mode=None, kv_cache_store_mode=None)
+        with self.assertRaisesRegex(ValueError, "kv-cache-sha256"):
+            bench._kv_cache_directive(args)
+
     def test_benchmark_shared_prefix_splits_suffix(self) -> None:
         args = argparse.Namespace(input_tokens=10, shared_prefix_tokens=6, suffix_tokens=None)
         prompt = bench._prompt(args, 2)
@@ -102,6 +136,43 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         payload = _openai_payload(request, profile)
         self.assertEqual(payload["ignore_eos"], True)
         self.assertEqual(payload["min_tokens"], 256)
+
+    def test_openai_runner_forwards_kv_plan_as_transfer_params(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
+        plan = {
+            "format": "ds4-kv-cache-plan-v1",
+            "backend": "simple_cpu_offload",
+            "cache_id": "prefix-a",
+            "load": {"mode": "require", "transport": "local_store", "cache_key": "prefix-a", "sha256": "sha256:" + ("a" * 64)},
+            "store": {"mode": "skip", "transport": "none"},
+            "miss_policy": "fail",
+            "route_affinity": "required",
+            "model_fingerprint": {},
+            "operation": "load",
+            "batch_key_hash": "sha256:" + ("b" * 64),
+        }
+        request = InferenceRequest.from_json(
+            {
+                "format": "ds4-inference-request-v1",
+                "request_id": "req-a",
+                "capability": None,
+                "chat": False,
+                "immediate": False,
+                "job_class": "analysis",
+                "max_output_tokens": 256,
+                "thinking_budget_tokens": 0,
+                "temperature": 0.0,
+                "input": {"prompt": "hello", "kv_cache_plan": plan},
+                "output_contract": {"format": "text"},
+                "model_pin": {"profile_id": profile.profile_id},
+            }
+        )
+        payload = _openai_payload(request, profile)
+        self.assertEqual(payload["extra_body"]["ds4_kv_cache"], plan)
+        self.assertEqual(payload["kv_transfer_params"]["ds4_kv_cache"], plan)
+        self.assertEqual(payload["kv_transfer_params"]["cache_ref"], "prefix-a")
+        self.assertTrue(payload["kv_transfer_params"]["ds4_require_kv_transfer"])
 
     def test_file_driven_request_jsonl_round_trip(self) -> None:
         args = argparse.Namespace(input_tokens=8, output_tokens=128, temperature=0.0, job_class="analysis", ignore_eos=True)

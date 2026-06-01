@@ -11,7 +11,7 @@ from typing import Any, Protocol
 from urllib import error, request as urlrequest
 
 from .builders import model_batch_payload, request_messages, request_prompt
-from .kv_cache import kv_cache_extra_body
+from .kv_cache import kv_cache_extra_body, kv_cache_vllm_request_fields
 from .profiles import ModelProfile
 from .schemas import InferenceRequest, make_result
 
@@ -728,6 +728,7 @@ def _openai_payload(request: InferenceRequest, profile: ModelProfile) -> dict[st
         payload["extra_body"] = {"thinking_budget_tokens": request.thinking_budget_tokens}
     extra_body = kv_cache_extra_body(request.input)
     if extra_body:
+        payload.update(kv_cache_vllm_request_fields(request.input))
         payload["extra_body"] = {**dict(payload.get("extra_body") or {}), **extra_body}
     return payload
 
