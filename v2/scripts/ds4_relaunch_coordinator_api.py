@@ -99,7 +99,7 @@ def _profile_defaults(profile: str) -> dict[str, str]:
     common = {
         "DS4_API_BACKGROUND_DISPATCH": "1",
         "DS4_PIPELINE_COHORT_COMPLETIONS": "1",
-        "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "131072",
+        "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "0",
         "DS4_API_TRANSPORT_TIMEOUT_S": "3600",
         "DS4_API_TRANSPORT_MAX_ATTEMPTS": "1",
     }
