@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import tempfile
 import unittest
 
+from ds4_infer import api as api_module
 from ds4_infer.api import CoordinatorApi
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.runners import _openai_payload
@@ -16,6 +18,14 @@ TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 
 
 class PipelineApiTests(unittest.TestCase):
+    def test_default_sync_timeout_is_benchmark_safe(self) -> None:
+        original = os.environ.pop("DS4_API_SYNC_TIMEOUT_S", None)
+        try:
+            self.assertGreaterEqual(api_module._default_sync_timeout_s(), 3600.0)
+        finally:
+            if original is not None:
+                os.environ["DS4_API_SYNC_TIMEOUT_S"] = original
+
     def test_pipeline_openai_payload_uses_served_model_name(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
