@@ -166,6 +166,16 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--external-kv-total-bytes", type=int, default=0)
     parser.add_argument("--kv-cache-directive-json", help="Attach an exact input.kv_cache directive JSON object to every generated request.")
     parser.add_argument("--kv-cache-directive-file", help="Read an exact input.kv_cache directive JSON object from this file.")
+    parser.add_argument("--kv-cache-id", help="Build and attach an input.kv_cache directive for a node-local cache object.")
+    parser.add_argument("--kv-cache-phase", default="warm-load", choices=("cold-store", "warm-load", "refresh-load-store"), help="Generated --kv-cache-id directive phase.")
+    parser.add_argument("--kv-cache-backend", default="auto")
+    parser.add_argument("--kv-cache-prefix-hash")
+    parser.add_argument("--kv-cache-sha256", help="Required by local_store warm-load directives.")
+    parser.add_argument("--kv-cache-bytes", type=int, default=0)
+    parser.add_argument("--kv-cache-load-mode", choices=("prefer", "require", "skip"))
+    parser.add_argument("--kv-cache-store-mode", choices=("write_through", "write_back", "skip"))
+    parser.add_argument("--kv-cache-miss-policy", choices=("compute", "fail", "compute_and_store"))
+    parser.add_argument("--kv-cache-route-affinity", default="required", choices=("none", "preferred", "required"))
     return parser.parse_args()
 
 
@@ -365,17 +375,70 @@ def _attach_cache_fields(input_payload: dict[str, Any], args: argparse.Namespace
 def _kv_cache_directive(args: argparse.Namespace) -> dict[str, Any] | None:
     raw_json = getattr(args, "kv_cache_directive_json", None)
     raw_file = getattr(args, "kv_cache_directive_file", None)
-    if raw_json and raw_file:
-        raise ValueError("provide only one of --kv-cache-directive-json or --kv-cache-directive-file")
+    generated = _generated_kv_cache_directive(args)
+    if sum(1 for value in (raw_json, raw_file, generated) if value) > 1:
+        raise ValueError("provide only one of --kv-cache-directive-json, --kv-cache-directive-file, or --kv-cache-id")
     if raw_json:
         data = json.loads(str(raw_json))
     elif raw_file:
         data = json.loads(Path(str(raw_file)).read_text(encoding="utf-8"))
+    elif generated:
+        data = generated
     else:
         return None
     if not isinstance(data, dict):
         raise ValueError("KV cache directive must be a JSON object")
     return data
+
+
+def _generated_kv_cache_directive(args: argparse.Namespace) -> dict[str, Any] | None:
+    cache_id = getattr(args, "kv_cache_id", None)
+    if not cache_id:
+        return None
+    phase = str(getattr(args, "kv_cache_phase", "warm-load") or "warm-load")
+    load_enabled = phase in {"warm-load", "refresh-load-store"}
+    store_enabled = phase in {"cold-store", "refresh-load-store"}
+    load_mode = getattr(args, "kv_cache_load_mode", None) or ("require" if load_enabled else "skip")
+    store_mode = getattr(args, "kv_cache_store_mode", None) or ("write_back" if store_enabled else "skip")
+    if load_mode != "skip" and not getattr(args, "kv_cache_sha256", None):
+        raise ValueError("--kv-cache-sha256 is required when generated local_store KV cache loading is enabled")
+    directive: dict[str, Any] = {
+        "format": "ds4-kv-cache-directive-v1",
+        "cache_id": str(cache_id),
+        "backend": str(getattr(args, "kv_cache_backend", "auto") or "auto"),
+        "load": _local_store_endpoint(mode=load_mode, cache_id=str(cache_id), args=args, load=True),
+        "store": _local_store_endpoint(mode=store_mode, cache_id=str(cache_id), args=args, load=False),
+        "miss_policy": getattr(args, "kv_cache_miss_policy", None) or _generated_miss_policy(load_mode, store_mode),
+        "route_affinity": str(getattr(args, "kv_cache_route_affinity", "required") or "required"),
+        "model_fingerprint": {},
+    }
+    prefix_hash = getattr(args, "kv_cache_prefix_hash", None)
+    if prefix_hash:
+        directive["prefix_hash"] = str(prefix_hash)
+    return directive
+
+
+def _local_store_endpoint(*, mode: str, cache_id: str, args: argparse.Namespace, load: bool) -> dict[str, Any]:
+    if mode == "skip":
+        return {"mode": "skip", "transport": "none"}
+    endpoint: dict[str, Any] = {"mode": mode, "transport": "local_store", "cache_key": cache_id}
+    sha256 = getattr(args, "kv_cache_sha256", None)
+    if sha256:
+        endpoint["sha256"] = str(sha256)
+    byte_count = int(getattr(args, "kv_cache_bytes", 0) or 0)
+    if byte_count > 0:
+        endpoint["bytes"] = byte_count
+    if not load:
+        endpoint["on_error"] = "fail"
+    return endpoint
+
+
+def _generated_miss_policy(load_mode: str, store_mode: str) -> str:
+    if load_mode == "require":
+        return "fail"
+    if load_mode != "skip":
+        return "compute_and_store" if store_mode != "skip" else "compute"
+    return "compute_and_store" if store_mode != "skip" else "compute"
 
 
 def _external_kv_plan(args: argparse.Namespace) -> dict[str, Any] | None:
