@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -140,6 +141,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--concurrency", type=int, default=32)
     parser.add_argument("--limit", type=int, default=32)
     parser.add_argument("--input-tokens", type=int, default=512)
+    parser.add_argument("--shared-prefix-tokens", type=int, default=0, help="Approximate token count for a token-identical prefix placed before each unique suffix.")
+    parser.add_argument("--suffix-tokens", type=int, help="Approximate token count for the per-request suffix when --shared-prefix-tokens is used. Defaults to input_tokens - shared_prefix_tokens.")
     parser.add_argument("--output-tokens", type=int, default=256)
     parser.add_argument("--timeout-s", type=int, default=1800)
     parser.add_argument("--poll-s", type=float, default=0.02)
@@ -152,6 +155,17 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--job-class", default="analysis")
     parser.add_argument("--priority", type=int, default=None)
+    parser.add_argument("--external-kv-key", help="Attach a DS4 external KV manifest load plan to every generated request.")
+    parser.add_argument("--external-kv-namespace", default="bench")
+    parser.add_argument("--external-kv-service-id")
+    parser.add_argument("--external-kv-backend", default="auto")
+    parser.add_argument("--external-kv-mode", default="prefer", choices=("prefer", "require", "skip"))
+    parser.add_argument("--external-kv-miss-policy", default="compute", choices=("compute", "fail", "compute_and_store"))
+    parser.add_argument("--external-kv-route-affinity", default="required", choices=("none", "preferred", "required"))
+    parser.add_argument("--external-kv-prefix-hash")
+    parser.add_argument("--external-kv-total-bytes", type=int, default=0)
+    parser.add_argument("--kv-cache-directive-json", help="Attach an exact input.kv_cache directive JSON object to every generated request.")
+    parser.add_argument("--kv-cache-directive-file", help="Read an exact input.kv_cache directive JSON object from this file.")
     return parser.parse_args()
 
 
@@ -198,6 +212,8 @@ def _manifest_json(args: argparse.Namespace, batch_id: str, requests_payload: li
         "model": args.model,
         "request_count": len(requests_payload),
         "input_tokens_target": args.input_tokens,
+        "shared_prefix_tokens_target": int(getattr(args, "shared_prefix_tokens", 0) or 0),
+        "suffix_tokens_target": _suffix_tokens(args),
         "output_tokens_target": output_tokens_target,
         "completion_tokens_target": _target_completion_tokens(requests_payload),
         "concurrency": args.concurrency,
@@ -207,6 +223,9 @@ def _manifest_json(args: argparse.Namespace, batch_id: str, requests_payload: li
         "preserved_request_ids": bool(args.preserve_request_ids),
         "ignore_eos": bool(args.ignore_eos),
         "min_tokens": output_tokens_target if args.ignore_eos else 0,
+        "cache_mode": _cache_mode(args),
+        "external_kv": _external_kv_manifest_summary(args),
+        "kv_cache_directive": _kv_cache_directive_summary(args),
     }
 
 
@@ -221,6 +240,11 @@ def _uniform_request_int(requests_payload: list[dict[str, Any]], key: str, fallb
 
 
 def _request_json(args: argparse.Namespace, batch_id: str, profile_id: str, idx: int) -> dict[str, Any]:
+    input_payload = {
+        "prompt": _prompt(args, idx),
+        "openai": _openai_benchmark_fields(args),
+    }
+    _attach_cache_fields(input_payload, args)
     return {
         "format": "ds4-inference-request-v1",
         "request_id": f"{batch_id}-{idx:06d}",
@@ -231,10 +255,7 @@ def _request_json(args: argparse.Namespace, batch_id: str, profile_id: str, idx:
         "max_output_tokens": args.output_tokens,
         "thinking_budget_tokens": 0,
         "temperature": args.temperature,
-        "input": {
-            "prompt": _prompt(args.input_tokens, idx),
-            "openai": _openai_benchmark_fields(args),
-        },
+        "input": input_payload,
         "output_contract": {"format": "text"},
         "model_pin": {"profile_id": profile_id},
     }
@@ -305,9 +326,127 @@ def _get(base_url: str, endpoint: str, params: dict[str, Any]) -> dict[str, Any]
         return json.loads(response.read().decode("utf-8"))
 
 
-def _prompt(tokens: int, idx: int) -> str:
-    filler = " ".join("benchmark" for _ in range(max(1, tokens)))
+def _prompt(args: argparse.Namespace, idx: int) -> str:
+    shared_tokens = int(getattr(args, "shared_prefix_tokens", 0) or 0)
+    if shared_tokens > 0:
+        shared = " ".join("shared-prefix-benchmark" for _ in range(shared_tokens))
+        suffix = " ".join("request-specific-detail" for _ in range(_suffix_tokens(args)))
+        return f"{shared}\n\nRequest {idx}. Continue with useful, non-repetitive details until the token budget is used. {suffix}"
+    filler = " ".join("benchmark" for _ in range(max(1, int(args.input_tokens))))
     return f"Request {idx}. Continue with useful, non-repetitive details until the token budget is used. {filler}"
+
+
+def _suffix_tokens(args: argparse.Namespace) -> int:
+    shared_tokens = int(getattr(args, "shared_prefix_tokens", 0) or 0)
+    if shared_tokens <= 0:
+        return max(1, int(args.input_tokens))
+    suffix = getattr(args, "suffix_tokens", None)
+    if suffix is not None:
+        return max(1, int(suffix))
+    return max(1, int(args.input_tokens) - shared_tokens)
+
+
+def _attach_cache_fields(input_payload: dict[str, Any], args: argparse.Namespace) -> None:
+    directive = _kv_cache_directive(args)
+    external_plan = _external_kv_plan(args)
+    if directive is not None and external_plan is not None:
+        raise ValueError("provide only one of --kv-cache-directive-* or --external-kv-key")
+    if directive is not None:
+        input_payload["kv_cache"] = directive
+        return
+    if external_plan is not None:
+        input_payload["kv_cache_plan"] = external_plan
+        input_payload["kv_cache_key"] = external_plan["cache_id"]
+        total_bytes = int(getattr(args, "external_kv_total_bytes", 0) or 0)
+        if total_bytes > 0:
+            input_payload["kv_bytes_estimate"] = total_bytes
+
+
+def _kv_cache_directive(args: argparse.Namespace) -> dict[str, Any] | None:
+    raw_json = getattr(args, "kv_cache_directive_json", None)
+    raw_file = getattr(args, "kv_cache_directive_file", None)
+    if raw_json and raw_file:
+        raise ValueError("provide only one of --kv-cache-directive-json or --kv-cache-directive-file")
+    if raw_json:
+        data = json.loads(str(raw_json))
+    elif raw_file:
+        data = json.loads(Path(str(raw_file)).read_text(encoding="utf-8"))
+    else:
+        return None
+    if not isinstance(data, dict):
+        raise ValueError("KV cache directive must be a JSON object")
+    return data
+
+
+def _external_kv_plan(args: argparse.Namespace) -> dict[str, Any] | None:
+    kv_key = getattr(args, "external_kv_key", None)
+    if not kv_key:
+        return None
+    namespace = str(getattr(args, "external_kv_namespace", "bench") or "bench")
+    service_id = getattr(args, "external_kv_service_id", None)
+    load: dict[str, Any] = {
+        "mode": str(getattr(args, "external_kv_mode", "prefer") or "prefer"),
+        "transport": "external_manifest",
+        "namespace": namespace,
+        "kv_key": str(kv_key),
+    }
+    if service_id:
+        load["service_id"] = str(service_id)
+    plan: dict[str, Any] = {
+        "format": "ds4-kv-cache-plan-v1",
+        "backend": str(getattr(args, "external_kv_backend", "auto") or "auto"),
+        "cache_id": str(kv_key),
+        "prefix_hash": _optional_str(getattr(args, "external_kv_prefix_hash", None)),
+        "load": load,
+        "store": {"mode": "skip", "transport": "none"},
+        "miss_policy": str(getattr(args, "external_kv_miss_policy", "compute") or "compute"),
+        "route_affinity": str(getattr(args, "external_kv_route_affinity", "required") or "required"),
+        "model_fingerprint": {},
+        "operation": "load",
+    }
+    plan["batch_key_hash"] = "sha256:" + hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return plan
+
+
+def _cache_mode(args: argparse.Namespace) -> str:
+    if _kv_cache_directive(args) is not None:
+        return "kv_cache_directive"
+    if _external_kv_plan(args) is not None:
+        return "external_kv"
+    if int(getattr(args, "shared_prefix_tokens", 0) or 0) > 0:
+        return "vllm_prefix_cache_candidate"
+    return "cold_unique_prefix"
+
+
+def _external_kv_manifest_summary(args: argparse.Namespace) -> dict[str, Any] | None:
+    if not getattr(args, "external_kv_key", None):
+        return None
+    return {
+        "namespace": str(getattr(args, "external_kv_namespace", "bench") or "bench"),
+        "kv_key": str(getattr(args, "external_kv_key")),
+        "service_id": _optional_str(getattr(args, "external_kv_service_id", None)),
+        "mode": str(getattr(args, "external_kv_mode", "prefer") or "prefer"),
+        "miss_policy": str(getattr(args, "external_kv_miss_policy", "compute") or "compute"),
+        "route_affinity": str(getattr(args, "external_kv_route_affinity", "required") or "required"),
+    }
+
+
+def _kv_cache_directive_summary(args: argparse.Namespace) -> dict[str, Any] | None:
+    directive = _kv_cache_directive(args)
+    if directive is None:
+        return None
+    return {
+        "format": directive.get("format"),
+        "cache_id": directive.get("cache_id"),
+        "prefix_hash": directive.get("prefix_hash"),
+        "backend": directive.get("backend"),
+        "load": directive.get("load"),
+        "store": directive.get("store"),
+    }
+
+
+def _optional_str(value: Any) -> str | None:
+    return str(value) if value is not None else None
 
 
 def _completion_tokens(result: dict[str, Any]) -> int:
