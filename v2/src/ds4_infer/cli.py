@@ -8,11 +8,11 @@ import time
 from .profiles import ProfileRegistry
 from .control import trim_spark_memory
 from .queue import InferenceQueue
-from .runners import AntirezRunner, AutoRunner, CommandRunner, FakeRunner, HmaPersistentRunner, SparkHttpRunner, VllmOpenAIRunner
+from .runners import AntirezRunner, AutoRunner, CommandRunner, FakeRunner, HmaPersistentRunner, PipelineOpenAIRunner, SparkHttpRunner, VllmOpenAIRunner
 from .service import load_requests_jsonl
 from .topology import SparkTopology
 
-RUNNER_CHOICES = ("fake", "command", "vllm", "hma", "antirez", "auto", "spark")
+RUNNER_CHOICES = ("fake", "command", "vllm", "hma", "antirez", "auto", "spark", "pipeline")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -45,6 +45,9 @@ def _add_basic_args(sub: argparse._SubParsersAction) -> None:
     trim.add_argument("--malloc-trim", action=argparse.BooleanOptionalAction, default=True)
     trim.add_argument("--resume", action=argparse.BooleanOptionalAction, default=True)
     trim.add_argument("--execute", action="store_true")
+    preconnect = sub.add_parser("spark-ssh-preconnect")
+    preconnect.add_argument("--nodes", default="spark0,spark1,spark2,spark3,spark4,spark5,spark6,spark7")
+    preconnect.add_argument("--runner-timeout-s", type=int, default=300)
 
 
 def _add_submit_args(sub: argparse._SubParsersAction) -> None:
@@ -78,44 +81,20 @@ def _add_queue_work_args(sub: argparse._SubParsersAction) -> None:
     queue_reap = sub.add_parser("queue-reap-leases")
     queue_reap.add_argument("--queue-dir", required=True)
     queue_reap.add_argument("--max-attempts", type=int, default=3)
-    queue_warm = sub.add_parser("queue-warm-prefixes")
-    queue_warm.add_argument("--queue-dir", required=True)
-    queue_warm.add_argument("--profiles-dir", required=True)
-    queue_warm.add_argument("--runner", choices=RUNNER_CHOICES, default="fake")
-    queue_warm.add_argument("--runner-timeout-s", type=int, default=300)
-    queue_warm.add_argument("--command", nargs="*")
-    queue_warm.add_argument("--node-id")
-    queue_warm.add_argument("--batch-id")
-    queue_warm.add_argument("--batch-key")
-    queue_warm.add_argument("--min-group-size", type=int, default=2)
-    queue_warm.add_argument("--max-output-tokens", type=int, default=1)
-    queue_warm.add_argument("--concurrency", type=int, default=1)
-    queue_warm.add_argument("--max-groups", type=int)
-    queue_warm.add_argument("--max-groups-per-node", type=int)
-    queue_warm.add_argument("--force", action="store_true")
-    queue_warm.add_argument("--topology")
-    queue_warm.add_argument("--all-resident-nodes", action="store_true")
-    queue_warm.add_argument("--loop", action="store_true")
-    queue_warm.add_argument("--sleep-s", type=float, default=1.0)
-    queue_warm.add_argument("--max-iterations", type=int, default=0)
 
 
 def _add_queue_status_args(sub: argparse._SubParsersAction) -> None:
-    queue_prefix_status = sub.add_parser("queue-prefix-status")
-    queue_prefix_status.add_argument("--queue-dir", required=True)
-    queue_prefix_status.add_argument("--skeleton-hash")
-    queue_prefix_status.add_argument("--node-id")
-    queue_prefix_status.add_argument("--profile-id")
-
     queue_status = sub.add_parser("queue-status")
     queue_status.add_argument("--queue-dir", required=True)
     queue_status.add_argument("--request-id")
     queue_status.add_argument("--batch-id")
+    queue_status.add_argument("--job-id")
 
     queue_cancel = sub.add_parser("queue-cancel")
     queue_cancel.add_argument("--queue-dir", required=True)
     queue_cancel.add_argument("--request-id")
     queue_cancel.add_argument("--batch-id")
+    queue_cancel.add_argument("--job-id")
     queue_cancel.add_argument("--reason", default="cancelled by operator")
 
     queue_poll = sub.add_parser("queue-poll")
@@ -127,6 +106,29 @@ def _add_queue_status_args(sub: argparse._SubParsersAction) -> None:
     queue_collect.add_argument("--queue-dir", required=True)
     queue_collect.add_argument("--request-id")
     queue_collect.add_argument("--batch-id")
+    queue_collect.add_argument("--job-id")
+
+    pipeline_status = sub.add_parser("pipeline-status")
+    pipeline_status.add_argument("--queue-dir", required=True)
+    pipeline_status.add_argument("--service-id")
+
+    telemetry = sub.add_parser("pipeline-telemetry-report")
+    telemetry.add_argument("--queue-dir", required=True)
+    telemetry.add_argument("--service-id", required=True)
+    telemetry.add_argument("--node-id", required=True)
+    telemetry.add_argument("--stage-index", type=int, required=True)
+    telemetry.add_argument("--stage-count", type=int, required=True)
+    telemetry.add_argument("--layer-start", type=int)
+    telemetry.add_argument("--layer-end", type=int)
+    telemetry.add_argument("--kv-shard-bytes", type=int, default=0)
+    telemetry.add_argument("--payload-json", default="{}")
+
+    queue_pipeline_status = sub.add_parser("queue-pipeline-status")
+    queue_pipeline_status.add_argument("--queue-dir", required=True)
+
+    queue_pipeline_telemetry = sub.add_parser("queue-pipeline-telemetry")
+    queue_pipeline_telemetry.add_argument("--queue-dir", required=True)
+    queue_pipeline_telemetry.add_argument("--report", required=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -138,18 +140,23 @@ def _run(args: argparse.Namespace) -> int:
         "profiles": _cmd_profiles,
         "topology": _cmd_topology,
         "trim-spark-memory": _cmd_trim_spark_memory,
+        "spark-ssh-preconnect": _cmd_spark_ssh_preconnect,
         "submit": _cmd_submit,
         "queue-submit": _cmd_queue_submit,
         "queue-submit-cpu": _cmd_queue_submit_cpu,
         "queue-work": _cmd_queue_work,
         "queue-worker": _cmd_queue_work,
         "queue-reap-leases": _cmd_queue_reap,
-        "queue-warm-prefixes": _cmd_queue_warm_prefixes,
-        "queue-prefix-status": _cmd_queue_prefix_status,
         "queue-status": _cmd_queue_status,
         "queue-cancel": _cmd_queue_cancel,
         "queue-poll": _cmd_queue_poll,
         "queue-collect": _cmd_queue_collect,
+        "pipeline-status": _cmd_pipeline_status,
+        "pipeline-telemetry-report": _cmd_pipeline_telemetry_report,
+        "pipeline-status": _cmd_pipeline_status,
+        "pipeline-telemetry-report": _cmd_pipeline_telemetry_report,
+        "queue-pipeline-status": _cmd_queue_pipeline_status,
+        "queue-pipeline-telemetry": _cmd_queue_pipeline_telemetry,
     }
     try:
         return handlers[args.cmd](args)
@@ -191,6 +198,12 @@ def _cmd_trim_spark_memory(args: argparse.Namespace) -> int:
             resume=args.resume,
         )
     )
+    return 0
+
+
+def _cmd_spark_ssh_preconnect(args: argparse.Namespace) -> int:
+    nodes = [node.strip() for node in str(args.nodes).split(",") if node.strip()]
+    _emit(SparkHttpRunner(timeout_s=args.runner_timeout_s).preconnect(nodes))
     return 0
 
 
@@ -236,7 +249,7 @@ def _cmd_queue_submit_cpu(args: argparse.Namespace) -> int:
 def _cmd_queue_work(args: argparse.Namespace) -> int:
     queue = InferenceQueue(args.queue_dir)
     registry = ProfileRegistry.load(args.profiles_dir)
-    runner = _make_runner(args.runner, args.command or [], args.runner_timeout_s)
+    runner = _make_runner(args.runner, args.command or [], args.runner_timeout_s, topology_path=args.topology)
     iterations = 0
     while True:
         result = _queue_work_once(queue, registry, runner, args)
@@ -255,19 +268,19 @@ def _queue_work_once(queue: InferenceQueue, registry: ProfileRegistry, runner: o
         runner=runner,
         node_id=args.node_id,
         batch_id=args.batch_id,
-        batch_key=args.batch_key,
         limit=args.limit,
         concurrency=args.concurrency,
         worker_id=args.worker_id,
         lease_ttl_s=args.lease_ttl_s,
         heartbeat_interval_s=args.heartbeat_interval_s,
-        warm_prefixes=args.warm_prefixes,
-        warm_min_group_size=args.warm_min_group_size,
-        warm_max_output_tokens=args.warm_max_output_tokens,
-        warm_max_groups=args.warm_max_groups,
-        warm_max_groups_per_node=args.warm_max_groups_per_node,
         node_profile_ids=_node_profile_ids(args.topology, args.node_id),
         max_node_depth=args.max_node_depth,
+        batch_linger_s=args.batch_linger_s,
+        kv_capacity_bytes=args.kv_capacity_bytes,
+        transport_max_attempts=args.transport_max_attempts,
+        kv_shard_layouts_by_profile=_pipeline_layouts(args.topology),
+        batch_limits_by_service=_pipeline_batch_limits(args.topology),
+        refill_low_watermarks_by_service=_pipeline_refill_low_watermarks(args.topology),
     )
 
 
@@ -277,8 +290,47 @@ def _node_profile_ids(topology_path: str | None, node_id: str | None) -> tuple[s
     topology = SparkTopology.load(topology_path)
     for node in topology.nodes:
         if node.node_id == node_id:
-            return tuple(node.resident_profiles)
+            profile_ids = set(node.resident_profiles)
+            for pipeline in topology.pipeline_services.values():
+                if node_id in pipeline.node_ids:
+                    profile_ids.add(pipeline.profile_id)
+            return tuple(sorted(profile_ids))
     raise ValueError(f"node {node_id!r} not found in topology")
+
+
+def _pipeline_layouts(topology_path: str | None) -> dict:
+    if not topology_path:
+        return {}
+    topology = SparkTopology.load(topology_path)
+    return dict(topology.profile_pipeline_services)
+
+
+def _pipeline_batch_limits(topology_path: str | None) -> dict[str, int]:
+    if not topology_path:
+        return {}
+    topology = SparkTopology.load(topology_path)
+    return {service.service_id: int(service.scheduler.get("queue_limit") or service.max_batch_size) for service in topology.pipeline_services.values()}
+
+
+def _pipeline_refill_low_watermarks(topology_path: str | None) -> dict[str, int]:
+    if not topology_path:
+        return {}
+    topology = SparkTopology.load(topology_path)
+    return {service.service_id: int(service.scheduler.get("refill_low_watermark") or 0) for service in topology.pipeline_services.values()}
+
+
+def _pipeline_base_urls(topology_path: str | None) -> dict[str, str]:
+    if not topology_path:
+        return {}
+    topology = SparkTopology.load(topology_path)
+    urls: dict[str, str] = {}
+    for pipeline in topology.pipeline_services.values():
+        if not pipeline.api_base_url:
+            continue
+        urls[pipeline.profile_id] = pipeline.api_base_url
+        urls[pipeline.service_id] = pipeline.api_base_url
+        urls[pipeline.model_id] = pipeline.api_base_url
+    return urls
 
 
 def _cmd_queue_reap(args: argparse.Namespace) -> int:
@@ -286,50 +338,13 @@ def _cmd_queue_reap(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_queue_warm_prefixes(args: argparse.Namespace) -> int:
-    queue = InferenceQueue(args.queue_dir)
-    registry = ProfileRegistry.load(args.profiles_dir)
-    topology = SparkTopology.load(args.topology) if args.topology else None
-    if args.all_resident_nodes and topology is None:
-        raise ValueError("--all-resident-nodes requires --topology")
-    runner = _make_runner(args.runner, args.command or [], args.runner_timeout_s)
-    iterations = 0
-    while True:
-        result = queue.warm_prefixes(
-            registry=registry,
-            runner=runner,
-            topology=topology,
-            node_id=args.node_id,
-            batch_id=args.batch_id,
-            batch_key=args.batch_key,
-            min_group_size=args.min_group_size,
-            max_output_tokens=args.max_output_tokens,
-            concurrency=args.concurrency,
-            max_groups=args.max_groups,
-            max_groups_per_node=args.max_groups_per_node,
-            force=args.force,
-            all_resident_nodes=args.all_resident_nodes,
-        )
-        _emit(result, indent=None, flush=True)
-        iterations += 1
-        if not args.loop or (args.max_iterations > 0 and iterations >= args.max_iterations):
-            break
-        time.sleep(args.sleep_s)
-    return 0
-
-
-def _cmd_queue_prefix_status(args: argparse.Namespace) -> int:
-    _emit(InferenceQueue(args.queue_dir).prefix_warm_status(skeleton_hash=args.skeleton_hash, node_id=args.node_id, profile_id=args.profile_id))
-    return 0
-
-
 def _cmd_queue_status(args: argparse.Namespace) -> int:
-    _emit(InferenceQueue(args.queue_dir).status(request_id=args.request_id, batch_id=args.batch_id))
+    _emit(InferenceQueue(args.queue_dir).status(request_id=args.request_id, batch_id=args.batch_id, job_id=args.job_id))
     return 0
 
 
 def _cmd_queue_cancel(args: argparse.Namespace) -> int:
-    _emit(InferenceQueue(args.queue_dir).cancel(request_id=args.request_id, batch_id=args.batch_id, reason=args.reason))
+    _emit(InferenceQueue(args.queue_dir).cancel(request_id=args.request_id, batch_id=args.batch_id, job_id=args.job_id, reason=args.reason))
     return 0
 
 
@@ -339,7 +354,64 @@ def _cmd_queue_poll(args: argparse.Namespace) -> int:
 
 
 def _cmd_queue_collect(args: argparse.Namespace) -> int:
-    _emit(InferenceQueue(args.queue_dir).collect(request_id=args.request_id, batch_id=args.batch_id))
+    _emit(InferenceQueue(args.queue_dir).collect(request_id=args.request_id, batch_id=args.batch_id, job_id=args.job_id))
+    return 0
+
+
+def _cmd_pipeline_status(args: argparse.Namespace) -> int:
+    _emit(InferenceQueue(args.queue_dir).pipeline_status(service_id=args.service_id))
+    return 0
+
+
+def _cmd_pipeline_telemetry_report(args: argparse.Namespace) -> int:
+    payload = json.loads(args.payload_json)
+    _emit(
+        InferenceQueue(args.queue_dir).report_pipeline_telemetry(
+            service_id=args.service_id,
+            node_id=args.node_id,
+            stage_index=args.stage_index,
+            stage_count=args.stage_count,
+            layer_start=args.layer_start,
+            layer_end=args.layer_end,
+            kv_shard_bytes=args.kv_shard_bytes,
+            payload=payload,
+        )
+    )
+    return 0
+
+
+def _cmd_pipeline_status(args: argparse.Namespace) -> int:
+    _emit(InferenceQueue(args.queue_dir).pipeline_status(service_id=getattr(args, "service_id", None)))
+    return 0
+
+
+def _cmd_pipeline_telemetry_report(args: argparse.Namespace) -> int:
+    payload = json.loads(args.payload_json)
+    if not isinstance(payload, dict):
+        raise ValueError("--payload-json must decode to a JSON object")
+    _emit(
+        InferenceQueue(args.queue_dir).report_pipeline_telemetry(
+            service_id=args.service_id,
+            node_id=args.node_id,
+            stage_index=args.stage_index,
+            stage_count=args.stage_count,
+            layer_start=args.layer_start,
+            layer_end=args.layer_end,
+            kv_shard_bytes=args.kv_shard_bytes,
+            payload=payload,
+        )
+    )
+    return 0
+
+
+def _cmd_queue_pipeline_status(args: argparse.Namespace) -> int:
+    _emit(InferenceQueue(args.queue_dir).pipeline_status())
+    return 0
+
+
+def _cmd_queue_pipeline_telemetry(args: argparse.Namespace) -> int:
+    report = json.loads(open(args.report, "r", encoding="utf-8").read())
+    _emit(InferenceQueue(args.queue_dir).record_pipeline_telemetry(report))
     return 0
 
 
@@ -352,18 +424,15 @@ def _add_queue_worker_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--node-id")
     parser.add_argument("--topology")
     parser.add_argument("--batch-id")
-    parser.add_argument("--batch-key")
     parser.add_argument("--limit", type=int, default=1)
     parser.add_argument("--concurrency", type=int, default=1)
     parser.add_argument("--max-node-depth", type=int, default=0, help="For node workers, cap queued+running model claims on this node; 0 disables the cap.")
+    parser.add_argument("--batch-linger-s", type=float, default=0.0, help="Wait this long after the newest ready request before dispatching a partial batch.")
+    parser.add_argument("--kv-capacity-bytes", type=int, default=0, help="Node-local KV reservation cap; 0 disables the cap.")
+    parser.add_argument("--transport-max-attempts", type=int, default=3, help="Requeue transient transport failures until this attempt count, then fail.")
     parser.add_argument("--worker-id")
     parser.add_argument("--lease-ttl-s", type=int, default=900)
     parser.add_argument("--heartbeat-interval-s", type=float, default=5.0)
-    parser.add_argument("--warm-prefixes", action="store_true")
-    parser.add_argument("--warm-min-group-size", type=int, default=2)
-    parser.add_argument("--warm-max-output-tokens", type=int, default=1)
-    parser.add_argument("--warm-max-groups", type=int)
-    parser.add_argument("--warm-max-groups-per-node", type=int)
     parser.add_argument("--loop", action="store_true")
     parser.add_argument("--sleep-s", type=float, default=1.0)
     parser.add_argument("--max-iterations", type=int, default=0)
@@ -382,7 +451,7 @@ def _load_jsonl(path: str) -> list[dict]:
     return rows
 
 
-def _make_runner(kind: str, command: list[str], timeout_s: int):
+def _make_runner(kind: str, command: list[str], timeout_s: int, *, topology_path: str | None = None):
     if kind == "fake":
         return FakeRunner()
     if kind == "command":
@@ -397,6 +466,8 @@ def _make_runner(kind: str, command: list[str], timeout_s: int):
         return AutoRunner(timeout_s=timeout_s)
     if kind == "spark":
         return SparkHttpRunner(timeout_s=timeout_s)
+    if kind == "pipeline":
+        return PipelineOpenAIRunner(timeout_s=timeout_s, base_urls=_pipeline_base_urls(topology_path))
     raise ValueError(f"unknown runner: {kind}")
 
 

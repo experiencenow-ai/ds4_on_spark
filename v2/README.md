@@ -8,7 +8,7 @@ The live substrate has five contracts:
 2. **ds4-tools** exposes stable lattice-addressed tools such as `tool:ds4.json.validate` and `tool:repo.tests.echo_contract`. A tool ID is a task location; the registry resolves it to the latest approved implementation.
 3. **ds4-agent** runs a bounded model + tool loop. Models may request tools, but only the tool service executes approved implementations.
 4. **ds4-calibrate** produces profile calibration plans so runtime batch sizes, output budgets, and chat/completion choices are measured inside the service layer instead of leaking into Centaur.
-5. **ds4-transfer** plans and runs direct Spark-to-Spark file transfers over the 200Gbps fabric without hairpinning payloads through the controller.
+5. **ds4-transfer** plans and runs parallel Spark-to-Spark bulk transfers over the 200Gbps fabric without hairpinning payloads through the controller.
 
 The main repository's Git history is the archive. Obsolete scripts are purged from live main instead of carried forward behind compatibility shims.
 
@@ -64,22 +64,12 @@ command warms only the resident profiles assigned to that Spark by topology;
 spark7 stays on demand.
 
 KV cache is launch plumbing, not a separate production model variant. The
-normal DSV4 service is the host-local vLLM runtime installed from
-`experiencenow-ai/vllm@d240cdbcf3de175be57c108fd9cbfce04009ec29`, based on the
-known-working Docker commit `jasl/vllm@dda4668b59567416f86956cfe7bbc1eab371a61e`.
-Launch it with `scripts/ds4_dsv4_spark45_local_vllm.sh`; the Docker recipe is a
-fallback/repro build path for the same source lineage. The live target is
-`max_model_len=262144` with HMA, MTP, metrics, persistent KV hooks, and
-`/v1/trim_memory` enabled. Treat startup logs as insufficient: the external-KV
-acceptance gate is a cold/warm/restart/replay benchmark with external-hit
-evidence and a TTFT/prefill delta. See `docs/kv-cache.md` and
-`docs/kv-cache-live-validation.md`.
-
-Decoded external KV uses the unified `input.kv_cache` request API documented in
-`docs/kv-cache-api.md`. It can push an inline or side-band request blob, tell
-the serving Spark to pull a verified network object, or store cache data after
-compute. The same high-level field is forwarded through Spark batch items and
-OpenAI-compatible `extra_body.ds4_kv_cache`.
+normal DSV4 service is the source-built local vLLM runtime from
+`experiencenow-ai/vllm@d523ead071132cd291e66e3dfd68f55446c27357`, launched by
+`scripts/ds4_dsv4_spark45_local_vllm.sh` with native SimpleCPUOffload. The live
+spark4+spark5 shape reports `max_model_len=1048576`, a 2,088,846-token GPU KV
+pool, and roughly two 1M-token full-context request slots. See
+`docs/kv-cache.md`.
 
 ## Inference queue
 
@@ -106,10 +96,14 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-poll \
   --after-event-id 0
 ```
 
-The queue internally groups requests by model/profile, Spark node, chat mode, job class, input/output/thinking buckets, and shared prefix hash. Workers claim compatible model work for one profile/node window, commit leases immediately, and dispatch each claim independently so fast completions are written without waiting for a slow tail. The Spark runner still uses `/ds4/batches` for execution, but queue completion is per request. Centaur does not need to know batch-size folklore.
+The queue resolves the model profile at submit time, but Spark node binding is
+late. A node worker prepares the highest-priority queued work for its own lane,
+claims one profile/node window, and sends it through `/ds4/batches`. Partial
+batches dispatch after `--batch-linger-s`, so a few requests do not wait
+forever for a full batch.
 
-For Centaur lattice and LongMem batches, workers can prewarm vLLM Automatic
-Prefix Caching for repeated skeletons:
+For Centaur lattice and LongMem batches, put cache identity on the request and
+let the worker readiness stage manage node-local KV reservation:
 
 ```bash
 PYTHONPATH=src python3 -m ds4_infer.cli queue-work \
@@ -117,14 +111,23 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-work \
   --profiles-dir profiles/models \
   --runner spark \
   --node-id spark0 \
-  --warm-prefixes \
-  --limit 128
+  --limit 12 \
+  --concurrency 12 \
+  --max-node-depth 14 \
+  --kv-capacity-bytes 120000000000
 ```
 
-This is best-effort cache warming. On normal vLLM lanes it warms automatic
-prefix cache; when the same profile was launched with an external KV connector,
-it also seeds that connector so later requests with byte-identical
-`shared_prefix` text can skip the long prefill.
+Completed KV entries stay resident as idle cache. The queue only deletes
+least-recently-used idle KV when a new readiness reservation would exceed the
+node cap.
+
+Qwen27 now has a concrete experimental LMCache MP deployment at
+`profiles/kv_cache/qwen27_lmcache_mp_spark7.json`. DSV4 remains on the
+custom/native HMA offload path; the common DS4 API is the stable
+`shared_prefix` / `kv_cache_ref` request contract above both implementations.
+Both paths require the source-built `experiencenow-ai/vllm` fork pinned in the
+runtime contracts; the current unified fork commit is
+`d523ead071132cd291e66e3dfd68f55446c27357`.
 
 `--runner spark` executes the model request on the selected Spark over SSH,
 using that Spark's local `http://127.0.0.1:8000` DS4 API. Spark inference uses
@@ -179,7 +182,7 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-submit-cpu \
 
 ## Spark transfer
 
-Plan a direct Spark-to-Spark transfer:
+Plan a direct Spark-to-Spark 200G transfer:
 
 ```bash
 PYTHONPATH=src python3 -m ds4_transfer.cli plan \
@@ -187,7 +190,9 @@ PYTHONPATH=src python3 -m ds4_transfer.cli plan \
   --request-json '{"format":"ds4-transfer-request-v1","source_node":"spark0","source_path":"/mnt/data/batch/","destination_node":"spark4","destination_path":"/mnt/data/batch/"}'
 ```
 
-The generated command SSHes into the source Spark and runs rsync from source to destination, so data flows over the Spark fabric rather than through the controller.
+The generated command uses the `parallel_nc_fanout_200g_v1` copier. Plain
+`sparkN` hostnames are control-plane only; bulk bytes target `sparkN-200g` /
+`10.10.100.N` and flow Spark-to-Spark.
 
 ## No local forge layer
 

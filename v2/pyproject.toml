@@ -22,6 +22,7 @@ ds4-spark-chat = "ds4_chat.cli:main"
 ds4-sparkrunner-queue = "ds4_infer.sparkrunner_adapter:main"
 ds4-kvcache = "ds4_kvcache.cli:main"
 ds4-hma = "ds4_hma.cli:main"
+ds4-archive = "ds4_archive.cli:main"
 
 [project.optional-dependencies]
 web = ["playwright>=1.40"]

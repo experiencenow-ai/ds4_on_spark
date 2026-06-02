@@ -31,31 +31,23 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-submit \
   --priority 10
 ```
 
-Priority is an explicit queueing field. Lower numbers run first. Use the
-default normal priority `10` for background regression queues and `1` for
-interactive/experiment batches that should be claimed as soon as an existing
-lease finishes. Immediate requests still default to priority `0` unless the
-submitter explicitly passes another value. The chosen priority is visible in
+Priority is an explicit queueing field. Lower numbers run first. Use normal
+priority `10` for background regression queues and priority `1` for experiment
+batches that should be claimed as soon as an existing lease window finishes.
+Immediate requests still default to priority `0` unless the submitter
+explicitly passes another value. The chosen priority is visible in
 `queue-submit`, request status, and submitted events.
 
-Each request is resolved to a model profile and `batch_key` at submission time.
-Normal queued model requests are late-bound to a Spark node when a node worker
-has an open slot. Immediate requests may still bind to a node at submission
-time. The `batch_key` includes:
+Each request is resolved to a model profile at submission time. Normal queued
+model requests are late-bound to a Spark node when that node worker has room.
+The worker prepares requests for its node, then claims the highest-priority
+ready requests for one profile/node window. Lower priority numbers run first;
+creation time is the tie breaker.
 
-```text
-node
-profile
-chat/completion mode
-job class
-input size bucket
-output size bucket
-thinking budget bucket
-shared prefix hash
-immediate/queued class
-```
-
-This lets workers process shape-compatible groups without making Centaur know optimal batch sizes.
+Partial batches use a simple linger timer. If the ready set is smaller than
+`--limit`, `queue-worker` waits until no newer ready request has arrived for
+`--batch-linger-s`, then dispatches the partial batch instead of waiting
+forever.
 
 ## Request Identity and Routing
 
@@ -84,7 +76,7 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-worker \
   --loop
 ```
 
-`queue-worker` claims compatible model work for one profile/node window and commits the leases immediately. Batch-capable model runners dispatch each claim independently, so a fast request can finish, emit an event, and write its notice without waiting for the slowest request in the window. CPU service jobs still use their service batch call.
+`queue-worker` claims compatible model work for one profile/node window and commits the leases immediately. Batch-capable model runners send one `/ds4/batches` call and persist each returned row separately. Non-batch model runners still finish requests as each future completes, so a fast request can emit its event without waiting for a slow sibling. CPU service jobs use their service batch call.
 
 CPU services use the same durable queue:
 
@@ -151,19 +143,18 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-cancel \
   --reason 'superseded by a newer run'
 ```
 
-To cancel the remaining queued work in a batch:
+To cancel the remaining queued work in a batch/job:
 
 ```bash
 PYTHONPATH=src python3 -m ds4_infer.cli queue-cancel \
   --queue-dir /tmp/ds4_queue \
-  --batch-id centaur-run-001
+  --job-id centaur-run-001
 ```
 
-Cancellation is deliberately conservative. It only marks requests still in
-`queued` state as `cancelled`, writes a completion notice, and records a
-`cancelled` event. Requests already `running`, `completed`, `failed`, or
-`cancelled` are reported in `skipped_state_counts`; the queue does not pretend
-to abort an in-flight model call.
+Cancellation is deliberately conservative. It marks `queued` and `ready`
+requests as `cancelled`, writes completion notices, and records `cancelled`
+events. Running requests are marked `cancel_requested`; their late model result
+is ignored when it returns and the request becomes `cancelled`.
 
 Every completed, failed, or cancelled request also writes:
 
@@ -173,12 +164,19 @@ Every completed, failed, or cancelled request also writes:
 
 Centaur can either poll events or watch completion notices.
 
-## Prefix cache warming
+## KV Readiness
 
-For lattice or LongMem batches, put the stable text first:
+The old prefix-warm sidecar is gone. KV work is part of the queue pipeline:
+submission records the cache key and estimated bytes, a node worker binds the
+request to its node before readiness, and ready work is claimed only after the
+node-local KV reservation succeeds.
 
 ```json
 {
+  "metadata": {
+    "kv_cache_key": "sha256:...",
+    "kv_bytes_estimate": 123456
+  },
   "input": {
     "skeleton_hash": "sha256:...",
     "shared_prefix": "repo skeleton\nrules\noutput contract\n",
@@ -187,54 +185,11 @@ For lattice or LongMem batches, put the stable text first:
 }
 ```
 
-Then warm groups before normal work:
-
-```bash
-PYTHONPATH=src python3 -m ds4_infer.cli queue-warm-prefixes \
-  --queue-dir /tmp/ds4_queue \
-  --profiles-dir profiles/models \
-  --topology profiles/topology/static_sparks.json \
-  --runner spark \
-  --node-id spark0 \
-  --min-group-size 2 \
-  --max-output-tokens 1
-```
-
-For repeated regression/evolution runs where a request may land on any resident
-node for the same profile, warm every resident node for the active work window
-explicitly:
-
-```bash
-PYTHONPATH=src python3 -m ds4_infer.cli queue-warm-prefixes \
-  --queue-dir /tmp/ds4_queue \
-  --profiles-dir profiles/models \
-  --topology profiles/topology/static_sparks.json \
-  --runner spark \
-  --all-resident-nodes \
-  --min-group-size 1 \
-  --concurrency 16 \
-  --max-output-tokens 1
-```
-
-After the first active window is resident, keep warming just ahead of workers
-instead of replaying the whole window. Caps are applied after already-warm
-prefixes are skipped, so repeated calls advance to the next cold prefix groups:
-
-```bash
-PYTHONPATH=src python3 -m ds4_infer.cli queue-warm-prefixes \
-  --queue-dir /tmp/ds4_queue \
-  --profiles-dir profiles/models \
-  --runner spark \
-  --node-id spark0 \
-  --min-group-size 1 \
-  --max-groups 2 \
-  --concurrency 2 \
-  --max-output-tokens 1 \
-  --loop \
-  --sleep-s 0.25
-```
-
-Workers can also warm just before claiming requests:
+The queue retains completed KV entries as `idle` instead of ejecting them on
+completion. If `--kv-capacity-bytes` is set and a new readiness reservation
+would exceed the node's cap, the queue deletes least-recently-used idle entries
+until the reservation fits. Running or ready KV is never purged to make room;
+the worker simply leaves the request queued until capacity opens.
 
 ```bash
 PYTHONPATH=src python3 -m ds4_infer.cli queue-work \
@@ -242,31 +197,9 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-work \
   --profiles-dir profiles/models \
   --runner spark \
   --node-id spark0 \
-  --warm-prefixes \
-  --warm-max-groups 2 \
-  --limit 128
-```
-
-This sends one tiny synthetic request per `(node, profile, chat mode,
-skeleton_hash, shared_prefix)` group. The shared prefix is byte-identical to the
-real request prefix, so vLLM Automatic Prefix Caching can reuse prefill work.
-The queue records best-effort status in `prefix_warms`; it cannot prove vLLM has
-not evicted the blocks later.
-
-Disk `kv_cache_ref` prefix blobs are durable prefix text, not proof that decoded
-KV blocks are resident. Use them to rebuild and warm the active window; do not
-assume the whole benchmark is resident in unified memory unless the serving
-backend exposes a fail-closed disk-KV load contract.
-
-For decoded external KV, use `input.kv_cache` from `docs/kv-cache-api.md`.
-`queue-submit` validates it into `input.kv_cache_plan`, and the queue includes
-the plan hash in the batch key so different cache sources cannot be grouped as
-if they were the same resident prefix.
-
-Status:
-
-```bash
-PYTHONPATH=src python3 -m ds4_infer.cli queue-prefix-status \
-  --queue-dir /tmp/ds4_queue \
-  --skeleton-hash sha256:...
+  --limit 12 \
+  --concurrency 12 \
+  --max-node-depth 14 \
+  --batch-linger-s 0.25 \
+  --kv-capacity-bytes 120000000000
 ```

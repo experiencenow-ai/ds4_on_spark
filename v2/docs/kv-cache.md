@@ -18,9 +18,10 @@ The DSV4 lane may use tensor parallel workers across spark4+spark5. That is
 still one model-serving service, not two model instances and not a
 prefiller/decoder split.
 
-Centaur still sends normal DS4 inference requests. The queue groups lattice
-requests by `shared_prefix_hash`, and `queue-warm-prefixes` can seed a skeleton
-prefix before the real atom suffixes arrive.
+Centaur still sends normal DS4 inference requests. The queue records cache
+identity and byte estimates on each request, binds the request to a node during
+readiness, and only claims inference work after that node-local KV reservation
+fits.
 
 ## What Is Proven
 
@@ -64,24 +65,108 @@ vllm:prompt_tokens_by_source_total{source="local_cache_hit"}
 vllm:prompt_tokens_by_source_total{source="external_kv_transfer"}
 ```
 
-## DSV4 vLLM cache launch
+## Qwen27 LMCache path
 
-Use the Docker-lineage vLLM service:
+Qwen uses ordinary vLLM KV tensors, so it can use LMCache directly. Keep this
+separate from DSV4: DSV4 needs its custom/native HMA path, but Qwen27 should
+prove external KV through LMCache MP first.
 
-```bash
-ssh spark4 systemctl --user start ds4-dsv4-docker-legacy.service
-```
+The shape follows LMCache MP's documented pattern: run `lmcache server`, then
+launch vLLM with `LMCacheMPConnector` and `kv_connector_extra_config` pointing
+at that server. See the LMCache MP quickstart and configuration reference:
+<https://docs.lmcache.ai/mp/quickstart.html> and
+<https://docs.lmcache.ai/mp/configuration.html>.
 
-The filename still contains `legacy` for compatibility with deployed unit
-names, but this is the production DSV4 lane.
-
-The production launch body is
-`scripts/ds4_dsv4_recipe_spark45.sh`, built from:
+The required vLLM fork revision for both DSV4 and Qwen27 is:
 
 ```text
 https://github.com/experiencenow-ai/vllm
-d240cdbcf3de175be57c108fd9cbfce04009ec29
-base: jasl/vllm@dda4668b59567416f86956cfe7bbc1eab371a61e
+c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34
+```
+
+The experimental launch profile is:
+
+```text
+profiles/kv_cache/qwen27_lmcache_mp_spark7.json
+```
+
+It starts one LMCache MP server on the same Spark as the Qwen vLLM service and
+connects vLLM through `LMCacheMPConnector`:
+
+```text
+Qwen27 vLLM:       http://127.0.0.1:18110
+vLLM runtime:      /home/spark7/ds4-vllm-local from experiencenow-ai/vllm@c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34
+LMCache data port: 127.0.0.1:5555
+LMCache HTTP port: 127.0.0.1:18080
+L1 CPU cache:      16 GiB, lazy init, LRU
+L2 store:          /mnt/nvme/ds4_lmcache/qwen27/l2 via POSIX NIXL store
+```
+
+On spark7 the LMCache package currently has to build from source. The generated
+install script builds a pinned `lmcache==0.4.5` wheel with
+`--no-build-isolation --no-deps`, then installs that wheel with `--no-deps` so a
+running vLLM environment does not unexpectedly churn shared dependencies.
+
+Plan it through the same DS4 KV tool used for DSV4:
+
+```bash
+PYTHONPATH=src python3 -m ds4_tools.cli invoke \
+  --registry tools/registry.jsonl \
+  --tool-id tool:ds4.kvcache.plan \
+  --arguments '{"deployment":"profiles/kv_cache/qwen27_lmcache_mp_spark7.json"}'
+```
+
+Write launch scripts:
+
+```bash
+PYTHONPATH=src python3 -m ds4_kvcache.cli write-scripts \
+  --deployment profiles/kv_cache/qwen27_lmcache_mp_spark7.json \
+  --output-dir /tmp/ds4_qwen27_lmcache_mp
+```
+
+Start order:
+
+```bash
+/tmp/ds4_qwen27_lmcache_mp/00_install_kv_cache_deps.sh
+/tmp/ds4_qwen27_lmcache_mp/start_lmcache_server.sh
+/tmp/ds4_qwen27_lmcache_mp/start_vllm_cache.sh
+```
+
+The Qwen acceptance gate is:
+
+```text
+1. launch LMCache MP server and Qwen27 vLLM with LMCacheMPConnector
+2. confirm /v1/models returns Qwen/Qwen3.6-27B-FP8
+3. send one long shared_prefix warm request
+4. send same-prefix suffix requests routed to that Spark
+5. verify external_kv_transfer or LMCache hit counters/logs
+6. restart vLLM while keeping LMCache/L2 intact
+7. repeat the same-prefix request and verify lower TTFT/prefill without full recompute
+```
+
+Use the same high-level request shape for both Qwen and DSV4: clients provide
+stable prefix text or a `kv_cache_ref` to stable prefix text, and DS4 routes the
+request to a compatible backend. The backend owns raw KV bytes. Qwen backs that
+contract with LMCache; DSV4 backs it with the custom/native HMA offload path.
+
+## DSV4 vLLM cache launch
+
+Use the source-built local vLLM services:
+
+```bash
+ssh spark5 systemctl --user start ds4-dsv4-local-worker.service
+ssh spark4 systemctl --user start ds4-dsv4-local-head.service
+```
+
+The compatibility `ds4-dsv4-vllm.service` on spark4 launches the same local
+head script. `ds4-dsv4-docker-legacy.service` is rollback-only.
+
+The production launch body is
+`scripts/ds4_dsv4_spark45_local_vllm.sh`, built from:
+
+```text
+https://github.com/experiencenow-ai/vllm
+c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34
 ```
 
 It uses:
@@ -90,7 +175,7 @@ It uses:
 --max-model-len ${DS4_DSV4_MAX_MODEL_LEN:-262144}
 --enable-prefix-caching
 --no-disable-hybrid-kv-cache-manager
---kv-offloading-size 8
+--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-2}
 --kv-offloading-backend native
 --kv-cache-metrics
 --enable-logging-iteration-details
@@ -109,13 +194,12 @@ GPU KV cache size:  2,088,846 tokens
 1M concurrency:     1.99x
 ```
 
-The production stabilization target keeps the Docker offload pool at 8 GiB
-total while lowering context to 256k. The failed source-built mainline path is
-not evidence that the Docker lineage cannot run this shape; it pulled in a
-large DeepSeek/MoE/MTP rewrite and failed before API readiness. Larger pools
-must be requalified live. NVMe swap can help the OS survive pressure long enough
-to kill vLLM, but swap is not KV capacity and should not be used for normal
-inference.
+`DS4_DSV4_KV_OFFLOAD_SIZE=16` was the first verified value for the 1M Docker
+proof. The current source-built 256k target defaults to `2` total because the
+1M host-local profile exhausted host/NVIDIA driver memory during
+requalification. Larger pools must be requalified live. NVMe swap can help the
+OS survive pressure long enough to kill vLLM, but swap is not KV capacity and
+should not be used for normal inference.
 
 This is external CPU KV offload. It preserves the full-quality HF/vLLM DSV4 path
 and avoids the bad full-KV fallback. Durable restart persistence is handled by
@@ -213,7 +297,7 @@ The operational rule is therefore:
 
 ```text
 small/normal requests: keep them short and highly batched
-shared long prefixes: group by shared_prefix_hash and warm once per lane
+shared long prefixes: queue cache keys with byte estimates and let readiness prepare one node window ahead
 rare 1M DSV4 contexts: schedule deliberately; do not mix casually with bulk queue traffic
 external CPU KV offload: use it to preserve high-value prefixes beyond normal GPU residency
 ```
@@ -250,8 +334,8 @@ Persistent external KV cache gate:
 1. choose or build a vLLM connector whose class implements SupportsHMA
 2. start DSV4 with --no-disable-hybrid-kv-cache-manager and that connector
 3. verify startup reports HMA enabled and max_model_len=1048576
-4. send one long shared_prefix warm request
-5. send 16-128 suffix requests with the same shared_prefix
+4. queue one node-bound ready window with the shared prefix cache key
+5. queue 16-128 suffix requests with the same shared_prefix
 6. observe external-cache reads and lower TTFT/prefill time on cached requests
 7. verify outputs are unchanged against the same HF/vLLM DSV4 profile
 ```

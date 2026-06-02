@@ -281,6 +281,10 @@ def _ingress_node_id(topology: SparkTopology, contract: dict[str, Any], profile_
     head_node = contract.get("launch",{}).get("head_node")
     if head_node:
         return str(head_node)
+    if profile_id is not None:
+        service = topology.pipeline_service_for_profile(profile_id)
+        if service is not None:
+            return service.entry_node_id
     if profile_id is not None and profile_id in topology.profile_node_groups:
         return topology.profile_group_ingress.get(profile_id,topology.profile_node_groups[profile_id][0])
     return node_id

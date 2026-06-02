@@ -24,11 +24,11 @@
     "--block-size",
     "256",
     "--max-num-seqs",
-    "1",
+    "2",
     "--max-num-batched-tokens",
-    "2048",
+    "8192",
     "--gpu-memory-utilization",
-    "0.72"
+    "0.8"
   ],
   "format": "ds4-dsv4-hma-persistent-deployment-v1",
   "hma_layout": "dsv4_hma_mla_sliding_indexer_compressor_v1",

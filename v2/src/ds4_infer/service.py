@@ -33,6 +33,7 @@ def run_requests(*, requests: Iterable[InferenceRequest], registry: ProfileRegis
     request_count = completed_count = failed_count = 0
     selected_profiles: dict[str, int] = {}
     selected_nodes: dict[str, int] = {}
+    selected_services: dict[str, int] = {}
     node_load: dict[str, int] = {}
     with responses_path.open("w", encoding="utf-8") as responses, failures_path.open("w", encoding="utf-8") as failures:
         for request in requests:
@@ -44,6 +45,8 @@ def run_requests(*, requests: Iterable[InferenceRequest], registry: ProfileRegis
                     assignment = topology.assign_profile(profile, immediate=request.immediate, current_load=node_load)
                     node_load[assignment.node_id] = node_load.get(assignment.node_id, 0) + 1
                     selected_nodes[assignment.node_id] = selected_nodes.get(assignment.node_id, 0) + 1
+                    if getattr(assignment, "service_id", None):
+                        selected_services[assignment.service_id] = selected_services.get(assignment.service_id, 0) + 1
                 else:
                     assignment = None
                 if assignment is not None:
@@ -63,6 +66,6 @@ def run_requests(*, requests: Iterable[InferenceRequest], registry: ProfileRegis
             except Exception as exc:
                 failed_count += 1
                 failures.write(json.dumps({"format": "ds4-inference-failure-v1", "request_id": request.request_id, "status": "failed_before_runner", "error": str(exc)}, sort_keys=True) + "\n")
-    manifest = {"format": BATCH_MANIFEST_FORMAT, "state": "completed" if failed_count == 0 else "completed_with_failures", "request_count": request_count, "completed_count": completed_count, "failed_count": failed_count, "selected_profiles": selected_profiles, "selected_nodes": selected_nodes, "topology_id": topology.topology_id if topology is not None else None, "responses_path": str(responses_path), "failures_path": str(failures_path)}
+    manifest = {"format": BATCH_MANIFEST_FORMAT, "state": "completed" if failed_count == 0 else "completed_with_failures", "request_count": request_count, "completed_count": completed_count, "failed_count": failed_count, "selected_profiles": selected_profiles, "selected_nodes": selected_nodes, "selected_services": selected_services, "topology_id": topology.topology_id if topology is not None else None, "responses_path": str(responses_path), "failures_path": str(failures_path)}
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return manifest

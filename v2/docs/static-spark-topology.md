@@ -6,24 +6,26 @@ The production Spark pool is intentionally static. Centaur and DS4 services shou
 
 | Spark | Role | Resident profiles |
 |---|---|---|
-| spark0 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1`, `qwen3_6_35b_a3b_fp8_fastest_v1` |
-| spark1 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1`, `qwen3_6_35b_a3b_fp8_fastest_v1` |
-| spark2 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1`, `qwen3_6_35b_a3b_fp8_fastest_v1` |
-| spark3 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1`, `qwen3_6_35b_a3b_fp8_fastest_v1` |
+| spark0 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1` |
+| spark1 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1` |
+| spark2 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1` |
+| spark3 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1` |
 | spark4 | DSV4 vLLM grouped lane half | `dsv4_vllm_mtp_smartest_v1` |
 | spark5 | DSV4 vLLM grouped lane half | `dsv4_vllm_mtp_smartest_v1` |
-| spark6 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1`, `qwen3_6_35b_a3b_fp8_fastest_v1` |
+| spark6 | Qwen production lane | `qwen3_6_27b_fp8_efficient_v1` |
 | spark7 | Experimental on-demand lane | none |
 
 This gives the service a normal production view of:
 
-- 5 Qwen lanes for `efficient` / `fastest` work;
+- 5 Qwen27 lanes for `efficient` work;
 - 1 DSV4 vLLM grouped lane for `smartest` chat/tool/reasoning work, consuming both spark4 and spark5;
 - 1 experimental on-demand lane on spark7.
 
 No model is dynamically ejected from production Sparks. Spark6 is now a normal
 Qwen resident lane. Spark7 is intentionally experimental and may lazy-load
 models for probes without becoming a production resident lane.
+The Qwen35/fastest profile remains in the profile registry for later use, but
+it is parked and is not a documented production resident model for now.
 
 KV-cache experiments should use `ds4_kvcache` deployment files. They do not add
 resident profiles to the topology.
@@ -44,46 +46,46 @@ caller asks to relieve spark5.
 
 ## DSV4 Launch Rule
 
-The spark4+spark5 DSV4 lane must use a host-local vLLM runtime built from the
-known-working Docker vLLM lineage with vLLM's hybrid KV cache manager enabled.
-This is not an interchangeable implementation detail. Each Spark has one GPU,
-and the working DSV4 result uses explicit multi-node ranks, not Ray placement
-groups.
+The spark4+spark5 DSV4 lane must use the source-built, host-local vLLM runtime
+with vLLM's hybrid KV cache manager enabled. This is not an interchangeable
+implementation detail. Each Spark has one GPU, and the working DSV4 result uses
+explicit multi-node ranks, not Ray placement groups.
 
 Canonical launch path:
 
 ```text
+spark5: deploy/systemd-user/ds4-dsv4-local-worker.service
+  -> scripts/ds4_dsv4_spark45_local_vllm.sh worker
+
 spark4: deploy/systemd-user/ds4-dsv4-local-head.service
   -> scripts/ds4_dsv4_spark45_local_vllm.sh head
-worker: deploy/systemd-user/ds4-dsv4-local-worker.service
-  -> scripts/ds4_dsv4_spark45_local_vllm.sh worker
 ```
 
-The Docker recipe remains as a fallback/repro build path for the same source
-lineage. Do not make Docker the production requirement when the host-local
-source runtime can be installed directly.
+The compatibility unit `ds4-dsv4-vllm.service` also launches the same
+source-built spark4 head script. The old Docker service has been moved to
+`ds4-dsv4-docker-legacy.service` and is rollback-only.
 
-Start the worker first, then the head:
+Start worker first, then head:
 
 ```bash
 ssh spark5 systemctl --user start ds4-dsv4-local-worker.service
 ssh spark4 systemctl --user start ds4-dsv4-local-head.service
 ```
 
-The runtime must come from the DS4 vLLM fork PR based on the original Docker
-proof commit:
+The runtime must come from the local vLLM fork:
 
 ```text
-vLLM fork:       https://github.com/experiencenow-ai/vllm
-base commit:     dda4668b59567416f86956cfe7bbc1eab371a61e
-feature commit:  d240cdbcf3de175be57c108fd9cbfce04009ec29
-feature PR:      https://github.com/experiencenow-ai/vllm/pull/6
+vLLM fork:   https://github.com/experiencenow-ai/vllm
+vLLM commit: c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34
+runtime:     ~/ds4-vllm-local-c6e55a8
+symlink:     ~/ds4-vllm-local
 ```
 
-That feature commit preserves the Docker DSV4 loader/MTP behavior and adds only
-the narrow SimpleCPUOffload persistence/cache-ref API plus `/v1/trim_memory`.
-Do not replace it with the newer source-built mainline branch; that branch
-contains a large DeepSeek/MoE/MTP rewrite and failed startup on spark4+5.
+That source commit includes the DSV4 loader, upstream DSV4 native KV offload,
+the DS4 persistent SimpleCPUOffload/cache-ref API, the trim endpoint, and the
+Qwen27 LMCache MP runtime docs/tooling. Do not recreate the service by copying
+Python files out of the old
+`vllm-node-dsv4-lmcache-rankfix` image.
 
 The required serving command shape is:
 
@@ -91,13 +93,13 @@ The required serving command shape is:
 TP=2, PP=1, EP enabled
 MTP speculative decoding enabled: deepseek_mtp, 2 speculative tokens
 max_model_len=262144
-max_num_seqs=2
-max_num_batched_tokens=8192
-gpu_memory_utilization=0.8
+max_num_seqs=1
+max_num_batched_tokens=2048
+gpu_memory_utilization=0.68
 block_size=256
 fp8 KV cache
 hybrid KV cache manager enabled
-SimpleCPUOffloadConnector via --kv-offloading-size 8 --kv-offloading-backend native
+SimpleCPUOffloadConnector via --kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-2} --kv-offloading-backend native
 KV cache metrics and iteration details enabled
 VLLM_USE_SIMPLE_KV_OFFLOAD=1
 NCCL_IB_DISABLE=1, NCCL/Gloo/TP sockets pinned to enP7s7
@@ -118,7 +120,7 @@ The live verified launch on 2026-05-26 exposed:
 API endpoint:       http://10.20.0.14:8000/v1
 served model name:  deepseek-v4-flash
 max_model_len:      1048576
-runtime target:     jasl/vllm@dda4668b59567416f86956cfe7bbc1eab371a61e
+runtime target:     experiencenow-ai/vllm@c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34
 HMA:                enabled (disable_hybrid_kv_cache_manager=False)
 KV connector:       SimpleCPUOffloadConnector
 CPU KV offload:     8 GiB total default, 4 GiB per TP rank
@@ -138,13 +140,13 @@ max_model_len:      45,056
 ```
 
 Do not replace this with a Ray vLLM service unless a new benchmark proves the
-Ray path reaches API readiness and matches the Docker-lineage lane.
+Ray path reaches API readiness and matches the source-built local lane.
 
-The May 27 2026 requalification showed the newer host-local mainline runtime
-exhausting NVIDIA driver/system memory during startup even with a 256k cap. The
-production lane is therefore the Docker lineage capped at 256k while MTP,
-prefix caching, native SimpleCPUOffload, persistent KV hooks, metrics, and
-`/v1/trim_memory` are qualified together.
+The May 27 2026 requalification showed the 1M-context host-local runtime
+exhausting NVIDIA driver/system memory during a cold request. The production
+lane is therefore capped at 256k while MTP, prefix caching, native
+SimpleCPUOffload, persistent KV hooks, metrics, and `/v1/trim_memory` are
+qualified together.
 
 Antirez's DS4 engine proves that durable, disk-backed DSV4 KV persistence is
 possible when the runtime owns the DS4-specific compressed session payload.
@@ -155,7 +157,7 @@ that already sees the compressed/sliding groups. The current reversible path is
 `SimpleCPUOffloadConnector` CPU block pool instead of flattening DSV4 through
 LMCache.
 
-The Docker-lineage artifacts are the production DSV4 lane:
+The legacy Docker artifacts remain only for rollback and historical comparison:
 
 ```text
 deploy/systemd-user/ds4-dsv4-docker-legacy.service
@@ -163,8 +165,7 @@ scripts/ds4_dsv4_recipe_spark45.sh
 recipes/deepseek-v4-flash-spark45.yaml
 ```
 
-Do not use the newer source-built mainline artifacts to recreate the DSV4 lane
-until they pass the same MTP, KV, trim, and speedup acceptance tests.
+Do not use those artifacts to recreate the current source-built DSV4 lane.
 
 Latest recovery status after the bad Ray launch attempt:
 
@@ -215,8 +216,8 @@ PYTHONPATH=src python3 -m ds4_infer.cli startup-models \
 ```
 
 The command reads this topology and warms only that node's resident profiles.
-Spark0-3 and spark6 warm both Qwen profiles, spark4 warms the deployed grouped
-DSV4 vLLM lane, spark5 records itself as the secondary half of that group, and
+Spark0-3 and spark6 warm Qwen27 only, spark4 warms the deployed grouped DSV4
+vLLM lane, spark5 records itself as the secondary half of that group, and
 spark7 is a clean no-op because it is on demand. Production lanes use the
 default `127.0.0.1:8000` gateway.
 

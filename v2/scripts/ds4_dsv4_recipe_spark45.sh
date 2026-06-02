@@ -9,7 +9,6 @@ recipe_runner_ref="${DS4_DSV4_RECIPE_RUNNER_REF:-refs/remotes/origin/pr/219}"
 head_ip="${DS4_DSV4_HEAD_IP:-10.20.0.14}"
 worker_ip="${DS4_DSV4_WORKER_IP:-10.20.0.15}"
 worker_user="${DS4_DSV4_WORKER_USER:-spark5}"
-worker_identity_file="${DS4_DSV4_WORKER_IDENTITY_FILE:-~/.ssh/ds4_spark_launch_ed25519}"
 eth_if="${DS4_DSV4_ETH_IF:-enP7s7}"
 ib_if="${DS4_DSV4_IB_IF:-__disabled__}"
 container_name="${DS4_DSV4_CONTAINER_NAME:-vllm_deepseek_v4_flash}"
@@ -19,9 +18,8 @@ persistent_mod_name="ds4-dsv4-persistent-simple-offload"
 persistent_mod_source="${DS4_DSV4_PERSIST_MOD_SOURCE:-$HOME/ds4_on_spark/v2/runtime_mods/dsv4_persistent_simple_offload}"
 persistent_strict="${DS4_DSV4_PERSIST_STRICT:-1}"
 python_hash_seed="${DS4_DSV4_PYTHONHASHSEED:-0}"
-force_build="${DS4_DSV4_FORCE_BUILD:-0}"
 
-echo "[ds4-dsv4] Docker-lineage DSV4 recipe path" >&2
+echo "[ds4-dsv4] legacy Docker recipe path; current source-built launch is scripts/ds4_dsv4_spark45_local_vllm.sh" >&2
 
 ensure_runner()
 {
@@ -43,7 +41,7 @@ ensure_worker_ssh()
 			echo ""
 			echo "Host $worker_ip"
 			echo "    User $worker_user"
-			echo "    IdentityFile $worker_identity_file"
+			echo "    IdentityFile ~/.ssh/ds4_spark_launch_ed25519"
 			echo "    StrictHostKeyChecking no"
 			echo "    UserKnownHostsFile ~/.ssh/known_hosts"
 		} >> "$HOME/.ssh/config"
@@ -76,7 +74,7 @@ EOF
 	fi
 }
 
-persistent_store_enabled()
+persistent_enabled()
 {
 	if [ "${DS4_DSV4_ENABLE_PERSISTENT_OFFLOAD:-0}" = "1" ]; then
 		return 0
@@ -87,18 +85,10 @@ persistent_store_enabled()
 	return 1
 }
 
-persistent_runtime_mod_enabled()
-{
-	if [ "${DS4_DSV4_ENABLE_PERSISTENT_RUNTIME_MOD:-0}" = "1" ]; then
-		return 0
-	fi
-	return 1
-}
-
 install_recipe()
 {
 	install -m 0644 "$recipe_source" "$recipe_repo/recipes/deepseek-v4-flash-spark45.yaml"
-	if persistent_runtime_mod_enabled; then
+	if persistent_enabled; then
 		if [ ! -f "$persistent_mod_source/run.sh" ]; then
 			echo "missing persistent offload runtime mod: $persistent_mod_source" >&2
 			exit 3
@@ -116,7 +106,7 @@ EOF
 
 prepare_persistent_store()
 {
-	if ! persistent_store_enabled; then
+	if [ -z "$persistent_store" ]; then
 		return
 	fi
 	if [[ ! "$persistent_store" =~ ^/[A-Za-z0-9._/-]+$ ]]; then
@@ -145,11 +135,7 @@ case "$mode" in
 		write_env
 		prepare_persistent_store
 		cd "$recipe_repo"
-		start_args=()
-		if [ "$force_build" = "1" ]; then
-			start_args+=(--force-build)
-		fi
-		exec ./run-recipe.sh recipes/deepseek-v4-flash-spark45.yaml -t "$container_image" "${start_args[@]}" --no-ray --no-cache-dirs -d
+		exec ./run-recipe.sh recipes/deepseek-v4-flash-spark45.yaml -t "$container_image" --no-ray --no-cache-dirs -d
 		;;
 	stop)
 		if [ -x "$recipe_repo/launch-cluster.sh" ]; then

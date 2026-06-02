@@ -76,8 +76,30 @@ class CpuBatchService:
         self.active = 0
         self.completed = 0
         self.failed = 0
-        self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=self.workers, thread_name_prefix="ds4-cpu")
+        self.pool: concurrent.futures.ThreadPoolExecutor | None = None
         self.services = {name: getattr(self, f"service_{name}") for name in CPU_SERVICE_NAMES}
+
+    def _pool(self) -> concurrent.futures.ThreadPoolExecutor:
+        if self.pool is None:
+            self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=self.workers, thread_name_prefix="ds4-cpu")
+        return self.pool
+
+    def close(self) -> None:
+        if self.pool is not None:
+            self.pool.shutdown(wait=False, cancel_futures=True)
+            self.pool = None
+
+    def __enter__(self) -> "CpuBatchService":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            return
 
     def status(self) -> dict[str, Any]:
         with self.lock:
@@ -121,7 +143,7 @@ class CpuBatchService:
         sem = threading.Semaphore(concurrency)
         with self.lock:
             self.pending += len(items)
-        futures = [self.pool.submit(self._run_one, service, i, item, sem) for i, item in enumerate(items)]
+        futures = [self._pool().submit(self._run_one, service, i, item, sem) for i, item in enumerate(items)]
         results: list[dict[str, Any] | None] = [None] * len(items)
         try:
             for future in concurrent.futures.as_completed(futures, timeout=timeout_s):

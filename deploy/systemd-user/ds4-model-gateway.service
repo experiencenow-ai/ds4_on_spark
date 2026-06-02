@@ -12,7 +12,7 @@ Environment=FRONT_PORT=8000
 Environment=BACKEND_HOST=127.0.0.1
 Environment=BACKEND_PORT=18000
 Environment=DS4_RESIDENT_BACKEND_BASE_PORT=18100
-Environment=DS4_RESIDENT_START=1
+Environment=DS4_RESIDENT_START=0
 EnvironmentFile=-%h/.config/ds4/model-gateway.env
 ExecStart=/usr/bin/env python3 %h/bin/ds4_vllm_lazy_proxy.py
 Restart=on-failure

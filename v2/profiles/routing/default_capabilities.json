@@ -1,1 +1,10 @@
-{"format":"ds4-capability-routing-v1","capabilities":{"smartest":"highest measured correctness profile","smart":"performant DSV4 profile","efficient":"Qwen 27B FP8 for mechanical atom edits","fastest":"fast Qwen profile for triage and summaries"}}
+{
+  "capabilities": {
+    "efficient": "Qwen3.6-27B BF16 all-Spark pipeline",
+    "fastest": "fast Qwen MoE fallback profile for triage only",
+    "smart": "DSV4 Flash all-Spark pipeline",
+    "smartest": "DSV4 Flash all-Spark pipeline",
+    "world_model": "Qwen3.6-27B BF16 for event extraction and structured WM updates"
+  },
+  "format": "ds4-capability-routing-v1"
+}

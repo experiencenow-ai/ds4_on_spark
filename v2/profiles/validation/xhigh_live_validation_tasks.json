@@ -1,71 +1,71 @@
 {
   "format": "ds4-xhigh-live-validation-tasks-v1",
-  "validation_id": "ds4_v2_live_validation_2026_05_25",
+  "validation_id": "ds4_dual_pp_live_validation_2026_05_29",
   "topology_ref": "profiles/topology/static_sparks.json",
-  "description": "First live checks required after the ds4_on_spark v2 substrate lands.",
+  "description": "Live checks for the dual all-Spark Qwen27 BF16 and DSV4 Flash layer-pipeline topology.",
   "tasks": [
     {
-      "task_id": "xhv-001-qwen-vllm-resident-lanes",
-      "runner": "vllm",
-      "target_nodes": ["spark0", "spark1", "spark2", "spark3", "spark6"],
-      "profiles": ["qwen3_6_27b_fp8_efficient_v1", "qwen3_6_35b_a3b_fp8_fastest_v1"],
-      "purpose": "Prove --runner vllm works against each resident Qwen lane with both static Qwen profiles loaded.",
-      "command_template": "ssh {node} 'cd {repo}/v2 && DS4_VLLM_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests {requests_jsonl} --out {out_dir}/{node}-qwen-vllm --runner vllm --runner-timeout-s 600 --run'",
-      "acceptance": ["all target nodes return completed_count=2", "each result status is completed", "selected profiles include both Qwen profile ids", "capture /v1/models and runner output", "spark6 is included as the fifth Qwen production lane"]
+      "task_id": "xhv-001-qwen27-bf16-pp8-service",
+      "runner": "vllm-pipeline",
+      "target_nodes": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7"],
+      "profiles": ["qwen3_6_27b_bf16_pp8_efficient_v1"],
+      "purpose": "Launch one Qwen27 BF16 pipeline rank per Spark and prove spark0 exposes the OpenAI API.",
+      "command_template": "cd {repo}/v2 && for rank in 0 1 2 3 4 5 6 7; do ssh spark${rank} 'cd {repo}/v2 && NODE_RANK=${rank} HEAD_ADDR=spark0 NNODES=8 ./scripts/ds4_launch_qwen27_bf16_pp.sh' ; done && curl -fsS http://spark0:8101/v1/models",
+      "acceptance": ["all eight ranks stay running", "rank0 serves /v1/models on spark0:8101", "startup logs show dtype bfloat16", "startup logs show language-model-only", "VLLM_PP_LAYER_PARTITION is 9,9,9,8,8,8,8,5", "LMCacheConnectorV1 is used with lmcache_kv_cache_group_id=auto"]
     },
     {
-      "task_id": "xhv-002-dsv4-vllm-mtp-spark45",
-      "runner": "vllm",
-      "target_nodes": ["spark4", "spark5"],
-      "profiles": ["dsv4_vllm_mtp_smartest_v1"],
-      "purpose": "Prove --runner vllm works against the grouped spark4+spark5 DSV4 vLLM/MTP lane.",
-      "command_template": "cd {repo}/v2 && DS4_VLLM_MTP_BASE_URL=http://spark4:8000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --topology profiles/topology/static_sparks.json --requests {requests_jsonl} --out {out_dir}/spark45-dsv4-vllm-mtp --runner vllm --runner-timeout-s 1200 --run",
-      "acceptance": ["request using capability=smartest and chat=true completes", "selected node is spark4+spark5", "transport base_url is the MTP endpoint", "record prompt/completion token usage when endpoint returns it"]
+      "task_id": "xhv-002-dsv4-flash-pp8-service",
+      "runner": "vllm-pipeline",
+      "target_nodes": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7"],
+      "profiles": ["dsv4_vllm_mtp_pp8_smartest_v1"],
+      "purpose": "Launch one DSV4 Flash pipeline rank per Spark while keeping the existing mixed FP4/FP8 + SimpleCPUOffload runtime path.",
+      "command_template": "cd {repo}/v2 && for rank in 0 1 2 3 4 5 6 7; do ssh spark${rank} 'cd {repo}/v2 && NODE_RANK=${rank} HEAD_ADDR=spark0 NNODES=8 ./scripts/ds4_launch_dsv4_flash_pp.sh' ; done && curl -fsS http://spark0:8102/v1/models",
+      "acceptance": ["all eight ranks stay running", "rank0 serves /v1/models on spark0:8102", "startup logs show SimpleCPUOffloadConnector/native KV offload", "startup logs show DeepSeek MTP speculative config", "VLLM_PP_LAYER_PARTITION is 6,6,6,5,5,5,5,5", "DSV4 precision and KV cache dtype remain mixed checkpoint/fp8 cache"]
     },
     {
-      "task_id": "xhv-003-spark6-qwen-vllm",
-      "runner": "vllm",
-      "target_nodes": ["spark6"],
-      "profiles": ["qwen3_6_27b_fp8_efficient_v1", "qwen3_6_35b_a3b_fp8_fastest_v1"],
-      "purpose": "Prove --runner vllm works against spark6 after converting it from antirez/support into the fifth resident Qwen lane.",
-      "command_template": "ssh spark6 'cd {repo}/v2 && DS4_VLLM_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src python3 -m ds4_infer.cli submit --profiles-dir profiles/models --requests {requests_jsonl} --out {out_dir}/spark6-qwen-vllm --runner vllm --runner-timeout-s 600 --run'",
-      "acceptance": ["completed_count=2", "selected profiles include both Qwen profile ids", "response records are non-empty", "capture /v1/models and runner output"]
+      "task_id": "xhv-003-single-ingress-queue-submit",
+      "runner": "ds4-infer-queue",
+      "target_nodes": ["spark0"],
+      "profiles": ["qwen3_6_27b_bf16_pp8_efficient_v1", "dsv4_vllm_mtp_pp8_smartest_v1"],
+      "purpose": "Prove all model requests enter through spark0 and bind to a pipeline service instead of a specific single-Spark worker lane.",
+      "command_template": "cd {repo}/v2 && PYTHONPATH=src python3 -m ds4_infer.cli queue-submit --queue-dir /mnt/nvme/ds4_queue --profiles-dir profiles/models --topology profiles/topology/static_sparks.json --requests {requests_jsonl}",
+      "acceptance": ["submit response selected_nodes is spark0 only", "selected_services includes qwen27_bf16_pp8 and/or dsv4_flash_pp8", "each request status includes selected_node_ids spark0 through spark7", "metadata.bound_count equals request_count"]
     },
     {
-      "task_id": "xhv-004-mac-studio-ds4-spark-chat",
-      "runner": "ds4-spark-chat",
-      "target_nodes": ["mac-studio", "spark4", "spark5"],
-      "profiles": ["dsv4_vllm_mtp_smartest_v1"],
-      "purpose": "Prove ds4-spark-chat works from Mac Studio against the resident DSV4 vLLM/MTP lane.",
-      "command_template": "cd {repo}/v2 && DS4_VLLM_MTP_BASE_URL=http://spark4:8000 PYTHONPATH=src python3 -m ds4_chat.cli --registry tools/registry.jsonl --history {out_dir}/mac-studio-chat-history.json --timeout-s 1200 --max-tokens 512 --ask 'Answer with one sentence: what are the three static DS4 v2 inference lanes?'",
-      "acceptance": ["command exits 0", "assistant response is non-empty", "history file is written", "no tool action is claimed without a tool result"]
+      "task_id": "xhv-004-shared-compute-domain-scheduler",
+      "runner": "ds4-infer-queue-worker",
+      "target_nodes": ["spark0"],
+      "profiles": ["qwen3_6_27b_bf16_pp8_efficient_v1", "dsv4_vllm_mtp_pp8_smartest_v1"],
+      "purpose": "Prove the DS4 API layer, not the two vLLM instances, arbitrates the shared Spark compute domain.",
+      "command_template": "cd {repo}/v2 && QUEUE_DIR=/mnt/nvme/ds4_queue LIMIT=12 CONCURRENCY=12 ./scripts/ds4_pipeline_queue_worker.sh",
+      "acceptance": ["only one active compute lease exists for compute_domain spark-fleet-0 during a dispatch window", "Qwen and DSV4 batches do not overlap compute leases", "completed results retain service_id and compute_domain in selected_node metadata", "requeue after transport failure preserves the pipeline binding"]
     },
     {
-      "task_id": "xhv-005-web-tool-playwright-host",
-      "runner": "web-tool",
-      "target_nodes": ["web-tool-host"],
-      "profiles": [],
-      "purpose": "Install Playwright only if rendered web access is required, then prove tool:web.fetch rendered mode works.",
-      "command_template": "cd {repo}/v2 && python3 -m pip install '.[web]' && python3 -m playwright install chromium && PYTHONPATH=src python3 -m ds4_tools.cli invoke --registry tools/registry.jsonl --tool-id tool:web.fetch --arguments '{\"url\":\"https://example.com\",\"mode\":\"rendered\",\"max_text_chars\":1000}'",
-      "acceptance": ["install succeeds when rendered access is needed", "tool:web.fetch returns ok=true", "mode is rendered", "fallback text mode remains available without Playwright"]
+      "task_id": "xhv-005-pipeline-kv-shards",
+      "runner": "ds4-infer-queue",
+      "target_nodes": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7"],
+      "profiles": ["qwen3_6_27b_bf16_pp8_efficient_v1"],
+      "purpose": "Prove logical KV entries are represented as one shard per pipeline stage instead of full replication to every possible worker.",
+      "command_template": "cd {repo}/v2 && PYTHONPATH=src python3 -m ds4_infer.cli queue-status --queue-dir /mnt/nvme/ds4_queue && PYTHONPATH=src python3 -m ds4_infer.cli pipeline-status --queue-dir /mnt/nvme/ds4_queue --service-id qwen27_bf16_pp8",
+      "acceptance": ["kv_shard_entries has one row per stage/node for a shared kv_cache_key", "kv_shard_bytes is ceil(kv_bytes_estimate/8) for PP8", "pipeline-status reports bytes grouped per node", "legacy kv_entries is not populated for pipeline services"]
     },
     {
-      "task_id": "xhv-006-dsv4-vllm-hma-kvoffload-spark45",
-      "runner": "vllm",
-      "target_nodes": ["spark4", "spark5"],
-      "profiles": ["dsv4_vllm_mtp_smartest_v1"],
-      "purpose": "Prove the normal DSV4 vLLM profile can be launched with HMA enabled and external CPU KV offload without adding a second DSV4 instance.",
-      "command_template": "ssh spark4 'cd {repo}/v2 && systemctl --user restart ds4-dsv4-docker-legacy.service && curl -fsS http://127.0.0.1:8000/v1/models'",
-      "acceptance": ["vLLM starts from experiencenow-ai/vllm@d240cdbcf3de175be57c108fd9cbfce04009ec29", "vLLM source history is based on jasl/vllm@dda4668b59567416f86956cfe7bbc1eab371a61e", "startup logs say SimpleCPUOffloadConnector", "startup logs do not say hybrid KV cache manager is disabled", "model metadata reports max_model_len=262144", "startup logs show speculative_config method deepseek_mtp", "Prometheus metrics expose KV cache/offload counters", "POST /v1/trim_memory is present", "one DSV4 vLLM server owns both KV load and save", "queue-warm-prefixes records a completed warm for a long shared_prefix", "second same-prefix request has materially lower TTFT/prefill time than cold", "no prefiller/decoder/proxy split is started"]
+      "task_id": "xhv-006-stage-telemetry",
+      "runner": "ds4-infer-telemetry",
+      "target_nodes": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7"],
+      "profiles": ["qwen3_6_27b_bf16_pp8_efficient_v1", "dsv4_vllm_mtp_pp8_smartest_v1"],
+      "purpose": "Prove every rank reports only its local stage/layer subset and local KV shard usage.",
+      "command_template": "cd {repo}/v2 && PYTHONPATH=src python3 -m ds4_infer.cli pipeline-status --queue-dir /mnt/nvme/ds4_queue",
+      "acceptance": ["Qwen telemetry has 8 stages and layer ranges ending at 64", "DSV4 telemetry has 8 stages and layer ranges ending at 43", "each stage payload contains state=prod", "reported kv_shard_bytes is node-local, not full logical KV size"]
     },
     {
-      "task_id": "xhv-007-dsv4-hma-persistent-kv-restart-reload",
-      "runner": "vllm_hma",
-      "target_nodes": ["spark4", "spark5"],
-      "profiles": ["dsv4_vllm_hma_persistent_experimental_v1"],
-      "purpose": "Wire and prove the pinned-only DSV4/HMA persistent KV connector across process restart without falling back to generic LMCache.",
-      "command_template": "cd {repo}/v2 && PYTHONPATH=src python3 -m ds4_hma.cli write-scripts --deployment profiles/hma/dsv4_hma_persistent.json --output-dir /tmp/ds4_hma_dsv4 && echo 'install ds4_hma into the source-built vLLM runtime, launch /tmp/ds4_hma_dsv4/start_dsv4_hma_persistent.sh under the Spark supervisor, then run warm/restart/reload acceptance'",
-      "acceptance": ["vLLM imports ds4_hma.vllm_connector and recognizes SupportsHMA", "startup logs do not say hybrid KV cache manager is disabled", "warm request writes a ds4-dsv4-hma-state-package-v1 manifest", "restart vLLM and rerun the same prefix", "reload comes from disk without hidden recompute", "output matches the non-cache baseline", "TTFT or prefill time is materially lower than cold", "corrupting one package part fails visibly with kv_load_failure_policy=fail"]
+      "task_id": "xhv-007-non8-pipeline-config",
+      "runner": "ds4-kvcache-plan",
+      "target_nodes": ["spark0"],
+      "profiles": ["qwen3_6_27b_bf16_pp8_efficient_v1"],
+      "purpose": "Prove the planning layer is not hardcoded to 8 stages; non-8 deployments must supply matching nodes and layer_partition.",
+      "command_template": "cd {repo}/v2 && PYTHONPATH=src python3 -m ds4_kvcache.cli plan --deployment profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json",
+      "acceptance": ["plan reports pipeline_parallel_size from the deployment file", "vllm_nodes length equals pipeline_parallel_size", "each vllm node command carries the same VLLM_PP_LAYER_PARTITION", "operator can create a non-8 copy by changing worker_nodes, pipeline_parallel_size, and layer_partition together"]
     }
   ]
 }

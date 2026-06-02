@@ -1,6 +1,9 @@
 {
   "format": "ds4-vllm-kv-cache-deployment-v1",
   "deployment_id": "dsv4_spark45_hma_cpu_offload_v1",
+  "runtime_contract_id": "dsv4_spark45_vllm_mtp_v1",
+  "vllm_fork": "https://github.com/experiencenow-ai/vllm",
+  "vllm_source_commit": "c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34",
   "profile_id": "dsv4_vllm_mtp_smartest_v1",
   "spark_node": "spark4",
   "worker_nodes": ["spark4", "spark5"],
@@ -11,8 +14,8 @@
   "tensor_parallel_size": 2,
   "vllm_bin": "vllm",
   "python_bin": "python3",
-  "working_directory": "/home/spark4/ds4_on_spark/v2",
-  "pythonpath": "/home/spark4/ds4_on_spark/v2/src",
+  "working_directory": "/home/spark4/src/ds4_on_spark/v2",
+  "pythonpath": "/home/spark4/src/ds4_on_spark/v2/src",
   "connector": {
     "connector_id": "simple_cpu_offload",
     "kv_role": "kv_both",

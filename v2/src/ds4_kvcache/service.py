@@ -18,6 +18,8 @@ class KvCacheConnector:
     kv_connector_module_path: str | None
     kv_connector_extra_config: dict[str, Any]
     install_packages: tuple[str, ...]
+    install_args: tuple[str, ...]
+    wheel_dir: str | None
 
     @staticmethod
     def from_json(data: dict[str, Any]) -> "KvCacheConnector":
@@ -34,12 +36,58 @@ class KvCacheConnector:
             kv_connector_module_path=str(module_path) if module_path else None,
             kv_connector_extra_config=dict(data.get("kv_connector_extra_config", {})),
             install_packages=tuple(str(item) for item in data.get("install_packages", _default_packages(connector_id))),
+            install_args=tuple(str(item) for item in data.get("install_args", [])),
+            wheel_dir=str(data["wheel_dir"]) if data.get("wheel_dir") else None,
         )
+
+
+@dataclass(frozen=True)
+class LmcacheServer:
+    server_id: str
+    bin: str
+    host: str
+    port: int
+    http_port: int
+    l1_size_gb: int
+    eviction_policy: str
+    chunk_size: int
+    l1_use_lazy: bool
+    l1_init_size_gb: int | None
+    max_workers: int | None
+    hash_algorithm: str | None
+    l2_adapter: dict[str, Any] | None
+    extra_args: tuple[str, ...]
+
+    @staticmethod
+    def from_json(data: dict[str, Any]) -> "LmcacheServer":
+        if data.get("kind", "lmcache_mp") != "lmcache_mp":
+            raise ValueError(f"unsupported cache_server kind: {data.get('kind')!r}")
+        server = LmcacheServer(
+            server_id=str(data.get("server_id", "lmcache_mp")),
+            bin=str(data.get("bin", "lmcache")),
+            host=str(data.get("host", "127.0.0.1")),
+            port=int(data.get("port", 5555)),
+            http_port=int(data.get("http_port", 8080)),
+            l1_size_gb=int(data["l1_size_gb"]),
+            eviction_policy=str(data.get("eviction_policy", "LRU")),
+            chunk_size=int(data.get("chunk_size", 256)),
+            l1_use_lazy=bool(data.get("l1_use_lazy", True)),
+            l1_init_size_gb=int(data["l1_init_size_gb"]) if data.get("l1_init_size_gb") is not None else None,
+            max_workers=int(data["max_workers"]) if data.get("max_workers") is not None else None,
+            hash_algorithm=str(data["hash_algorithm"]) if data.get("hash_algorithm") else None,
+            l2_adapter=dict(data["l2_adapter"]) if data.get("l2_adapter") else None,
+            extra_args=tuple(str(item) for item in data.get("extra_args", [])),
+        )
+        _validate_lmcache_server(server)
+        return server
 
 
 @dataclass(frozen=True)
 class KvCacheDeployment:
     deployment_id: str
+    runtime_contract_id: str | None
+    vllm_fork: str | None
+    vllm_source_commit: str | None
     profile_id: str
     spark_node: str
     worker_nodes: tuple[str, ...]
@@ -48,6 +96,12 @@ class KvCacheDeployment:
     host: str
     http_port: int
     tensor_parallel_size: int
+    pipeline_parallel_size: int
+    master_addr: str | None
+    master_port: int | None
+    layer_partition: tuple[int, ...]
+    total_layers: int | None
+    node_rank: int | None
     vllm_bin: str
     python_bin: str
     working_directory: str | None
@@ -55,7 +109,10 @@ class KvCacheDeployment:
     extra_env: dict[str, str]
     cache_directories: tuple[str, ...]
     connector: KvCacheConnector
+    cache_server: LmcacheServer | None
     extra_args: tuple[str, ...]
+    cache_sharding: str
+    text_only: bool
 
     @staticmethod
     def from_json(data: dict[str, Any]) -> "KvCacheDeployment":
@@ -67,18 +124,31 @@ class KvCacheDeployment:
             raise ValueError(f"KV cache deployment missing fields: {missing}")
         http_port = int(data.get("http_port", 8000))
         tensor_parallel_size = int(data.get("tensor_parallel_size", 1))
-        if http_port <= 0 or tensor_parallel_size <= 0:
-            raise ValueError("http_port and tensor_parallel_size must be positive")
+        pipeline_parallel_size = int(data.get("pipeline_parallel_size", 1))
+        worker_nodes = tuple(str(item) for item in data.get("pipeline_nodes", data.get("worker_nodes", [data["spark_node"]])))
+        total_layers = int(data["total_layers"]) if data.get("total_layers") is not None else None
+        layer_partition = _deployment_layer_partition(data, worker_nodes=worker_nodes, stage_count=pipeline_parallel_size, total_layers=total_layers)
+        if http_port <= 0 or tensor_parallel_size <= 0 or pipeline_parallel_size <= 0:
+            raise ValueError("http_port, tensor_parallel_size, and pipeline_parallel_size must be positive")
         deployment = KvCacheDeployment(
             deployment_id=str(data["deployment_id"]),
+            runtime_contract_id=str(data["runtime_contract_id"]) if data.get("runtime_contract_id") else None,
+            vllm_fork=str(data["vllm_fork"]) if data.get("vllm_fork") else None,
+            vllm_source_commit=str(data["vllm_source_commit"]) if data.get("vllm_source_commit") else None,
             profile_id=str(data["profile_id"]),
             spark_node=str(data["spark_node"]),
-            worker_nodes=tuple(str(item) for item in data.get("worker_nodes", [data["spark_node"]])),
+            worker_nodes=worker_nodes,
             model_id=str(data["model_id"]),
             served_model_name=str(data["served_model_name"]) if data.get("served_model_name") else None,
             host=str(data.get("host", "0.0.0.0")),
             http_port=http_port,
             tensor_parallel_size=tensor_parallel_size,
+            pipeline_parallel_size=pipeline_parallel_size,
+            master_addr=str(data["master_addr"]) if data.get("master_addr") else str(data["spark_node"]),
+            master_port=int(data["master_port"]) if data.get("master_port") is not None else None,
+            layer_partition=layer_partition,
+            total_layers=total_layers,
+            node_rank=int(data["node_rank"]) if data.get("node_rank") is not None else None,
             vllm_bin=str(data.get("vllm_bin", "vllm")),
             python_bin=str(data.get("python_bin", _default_python_bin(str(data.get("vllm_bin", "vllm"))))),
             working_directory=str(data["working_directory"]) if data.get("working_directory") else None,
@@ -86,7 +156,10 @@ class KvCacheDeployment:
             extra_env={str(key): str(value) for key, value in dict(data.get("extra_env", {})).items()},
             cache_directories=tuple(str(item) for item in data.get("cache_directories", [])),
             connector=KvCacheConnector.from_json(dict(data["connector"])),
+            cache_server=LmcacheServer.from_json(dict(data["cache_server"])) if data.get("cache_server") else None,
             extra_args=tuple(str(item) for item in data.get("extra_args", [])),
+            cache_sharding=str(data.get("cache_sharding", data.get("kv_cache_sharding", "replicated"))),
+            text_only=bool(data.get("text_only", False)),
         )
         _validate_deployment(deployment)
         return deployment
@@ -95,6 +168,10 @@ class KvCacheDeployment:
     def load(path: str | Path) -> "KvCacheDeployment":
         with Path(path).open("r", encoding="utf-8") as handle:
             return KvCacheDeployment.from_json(json.load(handle))
+
+    @property
+    def is_pipeline(self) -> bool:
+        return self.pipeline_parallel_size > 1
 
 
 def kv_transfer_config(connector: KvCacheConnector) -> dict[str, Any]:
@@ -109,7 +186,268 @@ def kv_transfer_config(connector: KvCacheConnector) -> dict[str, Any]:
     return config
 
 
+def plan_deployment(deployment: KvCacheDeployment) -> dict[str, Any]:
+    env = _deployment_env(deployment)
+    connector = _connector_with_server(deployment.connector, deployment.cache_server)
+    client_host = deployment.spark_node if deployment.host in {"0.0.0.0", "::"} else deployment.host
+    rank = deployment.node_rank if deployment.node_rank is not None else 0
+    vllm_plan = _vllm_node_plan(deployment, connector, node_rank=rank, env=env)
+    return_plan: dict[str, Any] = {
+        "format": KV_CACHE_PLAN_FORMAT,
+        "deployment_id": deployment.deployment_id,
+        "profile_id": deployment.profile_id,
+        "state": "planned",
+        "spark_node": deployment.spark_node,
+        "entry_node": deployment.spark_node,
+        "worker_nodes": list(deployment.worker_nodes),
+        "logical_service_count": 1,
+        "model_instance_count": 1,
+        "listen_base_url": f"http://{deployment.host}:{deployment.http_port}",
+        "openai_base_url": f"http://{client_host}:{deployment.http_port}",
+        "tensor_parallel_size": deployment.tensor_parallel_size,
+        "pipeline_parallel_size": deployment.pipeline_parallel_size,
+        "layer_partition": list(deployment.layer_partition),
+        "total_layers": deployment.total_layers,
+        "cache_sharding": deployment.cache_sharding,
+        "connector": {
+            "connector_id": connector.connector_id,
+            "install_packages": list(connector.install_packages),
+            "install_args": list(connector.install_args),
+            "wheel_dir": connector.wheel_dir,
+            "kv_transfer_config": kv_transfer_config(connector),
+        },
+        "runtime": _runtime_plan(deployment),
+        "notes": _plan_notes(deployment),
+        "vllm": vllm_plan,
+    }
+    if deployment.is_pipeline:
+        return_plan["vllm_nodes"] = [_vllm_node_plan(deployment, connector, node_rank=index, env=env) for index in range(deployment.pipeline_parallel_size)]
+    if deployment.cache_server is not None:
+        return_plan["cache_server"] = _lmcache_server_plan(deployment.cache_server, deployment)
+    return return_plan
+
+
+def write_launch_scripts(deployment: KvCacheDeployment, output_dir: str | Path) -> dict[str, Any]:
+    root = Path(output_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    plan = plan_deployment(deployment)
+    scripts: dict[str, Path | dict[str, str]] = {
+        "install": root / "00_install_kv_cache_deps.sh",
+        "start_vllm": root / "start_vllm_cache.sh",
+    }
+    if deployment.cache_server is not None:
+        scripts["start_cache_server"] = root / "start_lmcache_server.sh"
+    scripts["install"].write_text(_install_script(deployment), encoding="utf-8")  # type: ignore[union-attr]
+    if deployment.is_pipeline:
+        node_scripts: dict[str, str] = {}
+        for node_plan in plan["vllm_nodes"]:
+            node_id = str(node_plan["spark_node"])
+            rank = int(node_plan["node_rank"])
+            path = root / f"start_vllm_rank{rank}_{node_id}.sh"
+            path.write_text(_start_script(node_plan, deployment), encoding="utf-8")
+            path.chmod(0o755)
+            node_scripts[node_id] = str(path)
+            if rank == 0:
+                scripts["start_vllm"] = path
+        scripts["start_vllm_nodes"] = node_scripts
+    else:
+        scripts["start_vllm"].write_text(_start_script(plan["vllm"], deployment), encoding="utf-8")  # type: ignore[union-attr]
+    if deployment.cache_server is not None:
+        scripts["start_cache_server"].write_text(_start_script(plan["cache_server"], deployment), encoding="utf-8")  # type: ignore[union-attr]
+    for value in scripts.values():
+        if isinstance(value, Path):
+            value.chmod(0o755)
+    manifest = {
+        "format": "ds4-vllm-kv-cache-launch-scripts-v1",
+        "deployment_id": deployment.deployment_id,
+        "scripts": {key: str(value) if isinstance(value, Path) else value for key, value in scripts.items()},
+        "plan": plan,
+    }
+    (root / "kv_cache_launch_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return manifest
+
+
+def _deployment_env(deployment: KvCacheDeployment) -> dict[str, str]:
+    env = dict(deployment.extra_env)
+    if deployment.pythonpath:
+        env["PYTHONPATH"] = deployment.pythonpath
+    if deployment.is_pipeline and deployment.layer_partition:
+        env.setdefault("VLLM_PP_LAYER_PARTITION", ",".join(str(item) for item in deployment.layer_partition))
+    return env
+
+
+def _vllm_node_plan(deployment: KvCacheDeployment, connector: KvCacheConnector, *, node_rank: int, env: dict[str, str]) -> dict[str, Any]:
+    if node_rank < 0 or node_rank >= deployment.pipeline_parallel_size:
+        raise ValueError("node_rank is outside the pipeline stage range")
+    spark_node = deployment.worker_nodes[node_rank] if deployment.is_pipeline else deployment.spark_node
+    argv = _vllm_argv(deployment, connector, node_rank=node_rank)
+    command = _format_env_command(_env_for_rank(env, deployment, node_rank=node_rank, spark_node=spark_node), argv)
+    return dict(
+        _stage_plan(deployment, node_rank=node_rank, spark_node=spark_node),
+        working_directory=deployment.working_directory,
+        env=_env_for_rank(env, deployment, node_rank=node_rank, spark_node=spark_node),
+        argv=argv,
+        command=command,
+    )
+
+
+def _stage_plan(deployment: KvCacheDeployment, *, node_rank: int, spark_node: str) -> dict[str, Any]:
+    stage: dict[str, Any] = {"spark_node": spark_node, "node_rank": node_rank}
+    if deployment.layer_partition:
+        start = sum(deployment.layer_partition[:node_rank])
+        count = deployment.layer_partition[node_rank]
+        stage.update({"stage_index": node_rank, "stage_count": deployment.pipeline_parallel_size, "layer_start": start, "layer_end": start + count, "layer_count": count})
+    return stage
+
+
+def _env_for_rank(env: dict[str, str], deployment: KvCacheDeployment, *, node_rank: int, spark_node: str) -> dict[str, str]:
+    out = dict(env)
+    if deployment.is_pipeline:
+        out.setdefault("NODE_RANK", str(node_rank))
+        out.setdefault("DS4_NODE_ID", spark_node)
+        if deployment.connector.connector_id == "simple_cpu_offload":
+            out.setdefault("VLLM_SIMPLE_KV_OFFLOAD_PERSIST_RANK", f"{spark_node}-r{node_rank}")
+    return out
+
+
+def _vllm_argv(deployment: KvCacheDeployment, connector: KvCacheConnector, *, node_rank: int = 0) -> list[str]:
+    argv = [deployment.vllm_bin, "serve", deployment.model_id]
+    if not deployment.is_pipeline or node_rank == 0:
+        argv.extend(["--host", deployment.host, "--port", str(deployment.http_port)])
+    argv.extend([
+        "--tensor-parallel-size",
+        str(deployment.tensor_parallel_size),
+    ])
+    if deployment.is_pipeline:
+        argv.extend([
+            "--pipeline-parallel-size",
+            str(deployment.pipeline_parallel_size),
+            "--nnodes",
+            str(deployment.pipeline_parallel_size),
+            "--node-rank",
+            str(node_rank),
+            "--master-addr",
+            str(deployment.master_addr or deployment.spark_node),
+            "--master-port",
+            str(deployment.master_port or 29500),
+        ])
+    argv.extend(["--kv-transfer-config", json.dumps(kv_transfer_config(connector), sort_keys=True)])
+    if deployment.served_model_name:
+        argv.extend(["--served-model-name", deployment.served_model_name])
+    if deployment.text_only:
+        argv.append("--language-model-only")
+    argv.extend(_dedupe_args(deployment.extra_args, present=set(item for item in argv if item.startswith("--"))))
+    if deployment.is_pipeline and node_rank != 0 and "--headless" not in argv:
+        argv.append("--headless")
+    return argv
+
+
+def _connector_with_server(connector: KvCacheConnector, server: LmcacheServer | None) -> KvCacheConnector:
+    if server is None:
+        return connector
+    extra = dict(connector.kv_connector_extra_config)
+    extra["lmcache.mp.host"] = server.host
+    extra["lmcache.mp.port"] = server.port
+    return KvCacheConnector(
+        connector_id=connector.connector_id,
+        kv_connector=connector.kv_connector,
+        kv_role=connector.kv_role,
+        kv_connector_module_path=connector.kv_connector_module_path,
+        kv_connector_extra_config=extra,
+        install_packages=connector.install_packages,
+        install_args=connector.install_args,
+        wheel_dir=connector.wheel_dir,
+    )
+
+
+def _runtime_plan(deployment: KvCacheDeployment) -> dict[str, Any]:
+    return {
+        "runtime_contract_id": deployment.runtime_contract_id,
+        "vllm_fork": deployment.vllm_fork,
+        "vllm_source_commit": deployment.vllm_source_commit,
+    }
+
+
+def _plan_notes(deployment: KvCacheDeployment) -> list[str]:
+    if deployment.is_pipeline:
+        return [
+            "Layer-pipeline KV cache: each Spark owns and stores only its local stage cache/state shard.",
+            "spark0 is the OpenAI/API ingress; nonzero ranks are vLLM headless workers.",
+            "Use the DS4 queue compute-domain lease above vLLM when multiple resident pipelines share the same Sparks.",
+            "If total_layers is provided and no tuned partition is present, the planner uses a simple layers/N split; recipes may override with layer_partition or layer_partition_by_node.",
+        ]
+    return [
+        "Single-service KV cache: one vLLM serving lane owns model execution, batching, and external KV load/store.",
+        "Tensor parallel workers may span multiple Sparks, but this is not a prefiller/decoder split.",
+        "Use the queue readiness stage and external KV connector to prepare reusable prompt skeletons.",
+        "No second model-serving instance is required for this path.",
+    ]
+
+
+def _lmcache_server_plan(server: LmcacheServer, deployment: KvCacheDeployment) -> dict[str, Any]:
+    client_host = deployment.spark_node if server.host in {"0.0.0.0", "::"} else server.host
+    argv = _lmcache_argv(server)
+    return {
+        "kind": "lmcache_mp",
+        "server_id": server.server_id,
+        "spark_node": deployment.spark_node,
+        "listen_url": f"tcp://{server.host}:{server.port}",
+        "management_url": f"http://{client_host}:{server.http_port}",
+        "argv": argv,
+        "command": _format_env_command(deployment.extra_env, argv),
+    }
+
+
+def _lmcache_argv(server: LmcacheServer) -> list[str]:
+    argv = [
+        server.bin,
+        "server",
+        "--host",
+        server.host,
+        "--port",
+        str(server.port),
+        "--http-port",
+        str(server.http_port),
+        "--l1-size-gb",
+        str(server.l1_size_gb),
+        "--eviction-policy",
+        server.eviction_policy,
+        "--chunk-size",
+        str(server.chunk_size),
+    ]
+    if server.l1_use_lazy:
+        argv.append("--l1-use-lazy")
+    if server.l1_init_size_gb is not None:
+        argv.extend(["--l1-init-size-gb", str(server.l1_init_size_gb)])
+    if server.max_workers is not None:
+        argv.extend(["--max-workers", str(server.max_workers)])
+    if server.hash_algorithm is not None:
+        argv.extend(["--hash-algorithm", server.hash_algorithm])
+    if server.l2_adapter is not None:
+        argv.extend(["--l2-adapter", json.dumps(server.l2_adapter, sort_keys=True)])
+    argv.extend(server.extra_args)
+    return argv
+
+
+def _validate_lmcache_server(server: LmcacheServer) -> None:
+    if server.port <= 0 or server.http_port <= 0:
+        raise ValueError("LMCache server ports must be positive")
+    if server.l1_size_gb <= 0:
+        raise ValueError("LMCache l1_size_gb must be positive")
+    if server.chunk_size <= 0:
+        raise ValueError("LMCache chunk_size must be positive")
+
+
 def _validate_deployment(deployment: KvCacheDeployment) -> None:
+    if deployment.pipeline_parallel_size > 1:
+        if len(deployment.worker_nodes) != deployment.pipeline_parallel_size:
+            raise ValueError("pipeline_parallel_size must match worker_nodes length for pipeline deployments")
+        if deployment.layer_partition and len(deployment.layer_partition) != deployment.pipeline_parallel_size:
+            raise ValueError("layer_partition length must match pipeline_parallel_size")
+        if any(item <= 0 for item in deployment.layer_partition):
+            raise ValueError("layer_partition entries must be positive")
+        if deployment.total_layers is not None and deployment.layer_partition and sum(deployment.layer_partition) != deployment.total_layers:
+            raise ValueError("layer_partition must sum to total_layers")
     if deployment.model_id == "deepseek-ai/DeepSeek-V4-Flash" and deployment.connector.kv_connector.startswith("LMCache"):
         raise ValueError(
             "LMCache connectors are not a valid DSV4 long-context deployment "
@@ -122,95 +460,15 @@ def _validate_deployment(deployment: KvCacheDeployment) -> None:
             "plain OffloadingConnector does not prove the HMA-aware persistent "
             "SimpleCPUOffload path"
         )
-
-
-def plan_deployment(deployment: KvCacheDeployment) -> dict[str, Any]:
-    env = dict(deployment.extra_env)
-    if deployment.pythonpath:
-        env["PYTHONPATH"] = deployment.pythonpath
-    client_host = deployment.spark_node if deployment.host in {"0.0.0.0", "::"} else deployment.host
-    argv = _vllm_argv(deployment)
-    return_plan = {
-        "format": KV_CACHE_PLAN_FORMAT,
-        "deployment_id": deployment.deployment_id,
-        "profile_id": deployment.profile_id,
-        "state": "planned",
-        "spark_node": deployment.spark_node,
-        "worker_nodes": list(deployment.worker_nodes),
-        "logical_service_count": 1,
-        "model_instance_count": 1,
-        "listen_base_url": f"http://{deployment.host}:{deployment.http_port}",
-        "openai_base_url": f"http://{client_host}:{deployment.http_port}",
-        "connector": {
-            "connector_id": deployment.connector.connector_id,
-            "install_packages": list(deployment.connector.install_packages),
-            "kv_transfer_config": kv_transfer_config(deployment.connector),
-        },
-        "notes": _plan_notes(),
-        "vllm": {
-            "spark_node": deployment.spark_node,
-            "worker_nodes": list(deployment.worker_nodes),
-            "working_directory": deployment.working_directory,
-            "env": env,
-            "argv": argv,
-            "command": _format_env_command(env, argv),
-        },
-    }
-    return return_plan
-
-
-def _vllm_argv(deployment: KvCacheDeployment) -> list[str]:
-    argv = [
-        deployment.vllm_bin,
-        "serve",
-        deployment.model_id,
-        "--host",
-        deployment.host,
-        "--port",
-        str(deployment.http_port),
-        "--tensor-parallel-size",
-        str(deployment.tensor_parallel_size),
-        "--kv-transfer-config",
-        json.dumps(kv_transfer_config(deployment.connector), sort_keys=True),
-    ]
-    if deployment.served_model_name:
-        argv.extend(["--served-model-name", deployment.served_model_name])
-    argv.extend(_dedupe_args(deployment.extra_args, present=set(argv)))
-    return argv
-
-
-def _plan_notes() -> list[str]:
-    return [
-        "Single-service KV cache: one vLLM serving lane owns model execution, batching, and external KV load/store.",
-        "Tensor parallel workers may span multiple Sparks, but this is not a prefiller/decoder split.",
-        "Use queue-warm-prefixes or normal repeated shared_prefix requests to seed reusable prompt skeletons.",
-        "No second model-serving instance is required for this path.",
-    ]
-
-
-def write_launch_scripts(deployment: KvCacheDeployment, output_dir: str | Path) -> dict[str, Any]:
-    root = Path(output_dir)
-    root.mkdir(parents=True, exist_ok=True)
-    plan = plan_deployment(deployment)
-    scripts = {
-        "install": root / "00_install_kv_cache_deps.sh",
-        "start_vllm": root / "start_vllm_cache.sh",
-    }
-    scripts["install"].write_text(_install_script(deployment), encoding="utf-8")
-    scripts["start_vllm"].write_text(_start_script(plan["vllm"], deployment), encoding="utf-8")
-    for path in scripts.values():
-        path.chmod(0o755)
-    manifest = {
-        "format": "ds4-vllm-kv-cache-launch-scripts-v1",
-        "deployment_id": deployment.deployment_id,
-        "scripts": {key: str(path) for key, path in scripts.items()},
-        "plan": plan,
-    }
-    (root / "kv_cache_launch_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return manifest
+    if deployment.connector.connector_id == "lmcache_mp" and deployment.cache_server is None:
+        raise ValueError("LMCacheMPConnector deployments must define cache_server")
+    if deployment.cache_server is not None and deployment.connector.connector_id != "lmcache_mp":
+        raise ValueError("cache_server is only supported with connector_id=lmcache_mp")
 
 
 def _default_connector_name(connector_id: str) -> str:
+    if connector_id == "lmcache_mp":
+        return "LMCacheMPConnector"
     if connector_id == "lmcache_dynamic":
         return "LMCacheConnectorV1Dynamic"
     if connector_id == "lmcache":
@@ -230,7 +488,7 @@ def _default_connector_module(connector_id: str) -> str | None:
 
 def _default_packages(connector_id: str) -> list[str]:
     if connector_id.startswith("lmcache"):
-        return ["lmcache"]
+        return ["lmcache==0.4.5"]
     return []
 
 
@@ -261,13 +519,34 @@ def _install_script(deployment: KvCacheDeployment) -> str:
         "set -euo pipefail",
         "cd " + shlex.quote(deployment.working_directory or "."),
     ]
-    if packages:
-        lines.append(shlex.quote(deployment.python_bin) + " -m pip install --upgrade " + packages)
+    if deployment.connector.connector_id == "lmcache_mp" and packages:
+        wheel_dir = deployment.connector.wheel_dir or "/tmp/ds4_lmcache_wheels"
+        wheel_glob = _lmcache_wheel_glob(deployment.connector.install_packages)
+        wheel_argv = [deployment.python_bin, "-m", "pip", "wheel", "--no-build-isolation", "--no-deps", "--wheel-dir", wheel_dir]
+        wheel_argv.extend(deployment.connector.install_packages)
+        lines.append("mkdir -p " + shlex.quote(wheel_dir))
+        lines.append(_format_env_command(deployment.extra_env, wheel_argv))
+        lines.append("wheel=$(find " + shlex.quote(wheel_dir) + " -maxdepth 1 -name " + shlex.quote(wheel_glob) + " -print -quit)")
+        lines.append('if [ -z "${wheel}" ]; then echo "[ds4-kvcache] LMCache wheel not found" >&2; exit 2; fi')
+        install_argv = [deployment.python_bin, "-m", "pip", "install", "--no-deps"]
+        lines.append(_format_env_command(deployment.extra_env, install_argv) + ' "${wheel}"')
+    elif packages:
+        argv = [deployment.python_bin, "-m", "pip", "install", "--upgrade"]
+        argv.extend(deployment.connector.install_args)
+        argv.extend(deployment.connector.install_packages)
+        lines.append(_format_env_command(deployment.extra_env, argv))
     else:
         lines.append("echo '[ds4-kvcache] no connector packages requested'")
     for path in deployment.cache_directories:
         lines.append("mkdir -p " + shlex.quote(path))
     return "\n".join(lines) + "\n"
+
+
+def _lmcache_wheel_glob(packages: tuple[str, ...]) -> str:
+    for package in packages:
+        if package.startswith("lmcache=="):
+            return "lmcache-" + package.split("==", 1)[1] + "-*.whl"
+    return "lmcache-*.whl"
 
 
 def _default_python_bin(vllm_bin: str) -> str:
@@ -285,3 +564,40 @@ def _start_script(vllm_plan: dict[str, Any], deployment: KvCacheDeployment) -> s
         lines.append("cd " + shlex.quote(deployment.working_directory))
     lines.append("exec " + vllm_plan["command"])
     return "\n".join(lines) + "\n"
+
+
+def _deployment_layer_partition(data: dict[str, Any], *, worker_nodes: tuple[str, ...], stage_count: int, total_layers: int | None) -> tuple[int, ...]:
+    by_node = data.get("layer_partition_by_node")
+    if by_node is not None:
+        if not isinstance(by_node, dict):
+            raise ValueError("layer_partition_by_node must be an object")
+        missing = [node for node in worker_nodes if node not in by_node]
+        if missing:
+            raise ValueError(f"layer_partition_by_node missing nodes: {missing}")
+        extra = [node for node in by_node if node not in set(worker_nodes)]
+        if extra:
+            raise ValueError(f"layer_partition_by_node references nodes outside worker_nodes: {extra}")
+        return tuple(int(by_node[node]) for node in worker_nodes)
+    parsed = _parse_layer_partition(data.get("layer_partition", data.get("pipeline_layer_partition")))
+    if parsed:
+        return parsed
+    if total_layers is not None and stage_count > 1:
+        return _even_layer_partition(total_layers, stage_count)
+    return parsed
+
+
+def _even_layer_partition(total_layers: int, stage_count: int) -> tuple[int, ...]:
+    if total_layers < 1 or stage_count < 1 or stage_count > total_layers:
+        raise ValueError("invalid total_layers/stage_count for layer partition")
+    base, extra = divmod(total_layers, stage_count)
+    return tuple(base + (1 if index < extra else 0) for index in range(stage_count))
+
+
+def _parse_layer_partition(raw: Any) -> tuple[int, ...]:
+    if raw is None or raw == "":
+        return ()
+    if isinstance(raw, str):
+        return tuple(int(piece.strip()) for piece in raw.split(",") if piece.strip())
+    if isinstance(raw, list):
+        return tuple(int(item) for item in raw)
+    raise ValueError("layer_partition must be a comma string or list")

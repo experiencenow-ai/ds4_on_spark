@@ -1,0 +1,72 @@
+{
+  "format": "ds4-vllm-kv-cache-deployment-v1",
+  "deployment_id": "qwen27_lmcache_mp_spark7_v1",
+  "runtime_contract_id": "qwen27_vllm_trim_v1",
+  "vllm_fork": "https://github.com/experiencenow-ai/vllm",
+  "vllm_source_commit": "c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34",
+  "profile_id": "qwen3_6_27b_fp8_efficient_v1",
+  "spark_node": "spark7",
+  "worker_nodes": ["spark7"],
+  "host": "127.0.0.1",
+  "http_port": 18110,
+  "model_id": "/home/spark7/models/hf/Qwen/Qwen3.6-27B-FP8",
+  "served_model_name": "Qwen/Qwen3.6-27B-FP8",
+  "tensor_parallel_size": 1,
+  "vllm_bin": "/home/spark7/ds4-vllm-local/bin/vllm",
+  "python_bin": "/home/spark7/ds4-vllm-local/bin/python",
+  "working_directory": "/home/spark7/ds4_on_spark/v2",
+  "pythonpath": "/home/spark7/ds4_on_spark/v2/src",
+  "connector": {
+    "connector_id": "lmcache_mp",
+    "kv_role": "kv_both",
+    "install_packages": ["lmcache==0.4.5"],
+    "install_args": ["--no-build-isolation"],
+    "wheel_dir": "/tmp/ds4_lmcache_wheels"
+  },
+  "cache_server": {
+    "kind": "lmcache_mp",
+    "server_id": "qwen27_lmcache_mp_spark7",
+    "bin": "lmcache",
+    "host": "127.0.0.1",
+    "port": 5555,
+    "http_port": 18080,
+    "l1_size_gb": 16,
+    "l1_init_size_gb": 2,
+    "l1_use_lazy": true,
+    "eviction_policy": "LRU",
+    "chunk_size": 256,
+    "max_workers": 4,
+    "hash_algorithm": "blake3",
+    "l2_adapter": {
+      "type": "nixl_store",
+      "backend": "POSIX",
+      "backend_params": {
+        "file_path": "/mnt/nvme/ds4_lmcache/qwen27/l2",
+        "use_direct_io": "false"
+      },
+      "pool_size": 64
+    }
+  },
+  "extra_env": {
+    "CPATH": "/tmp/ds4_python312_dev/root/usr/include:/tmp/ds4_python312_dev/root/usr/include/python3.12:/tmp/ds4_python312_dev/root/usr/include/aarch64-linux-gnu/python3.12",
+    "CUDA_HOME": "/usr/local/cuda",
+    "LMCACHE_LOG_LEVEL": "INFO",
+    "PYTHONHASHSEED": "0",
+    "TORCH_CUDA_ARCH_LIST": "12.1a"
+  },
+  "cache_directories": [
+    "/mnt/nvme/ds4_lmcache/qwen27/l2"
+  ],
+  "extra_args": [
+    "--trust-remote-code",
+    "--max-model-len", "262144",
+    "--max-num-seqs", "12",
+    "--max-num-batched-tokens", "32768",
+    "--gpu-memory-utilization", "0.50",
+    "--enable-prefix-caching",
+    "--enable-chunked-prefill",
+    "--no-disable-hybrid-kv-cache-manager",
+    "--no-async-scheduling",
+    "--reasoning-parser", "qwen3"
+  ]
+}

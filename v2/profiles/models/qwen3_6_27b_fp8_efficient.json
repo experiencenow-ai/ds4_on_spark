@@ -1,29 +1,47 @@
 {
-  "format": "ds4-model-profile-v1",
-  "profile_id": "qwen3_6_27b_fp8_efficient_v1",
-  "model_id": "Qwen/Qwen3.6-27B-FP8",
   "backend": "vllm",
-  "runtime_contract_id": "qwen27_vllm_trim_v1",
-  "capability_classes": ["efficient"],
-  "supported_job_classes": ["atom_edit", "summary", "json_repair", "triage"],
-  "supports_chat": true,
-  "supports_completion": true,
-  "supports_thinking": true,
-  "production_eligible": true,
-  "quality": {"ds4_eval_correct": 76, "ds4_eval_total": 92, "ds4_eval_accuracy": 0.826},
+  "capability_classes": [
+    "efficient"
+  ],
+  "format": "ds4-model-profile-v1",
+  "model_id": "Qwen/Qwen3.6-27B-FP8",
   "performance": {
-    "prefill_prompt_tok_s": 7660.0,
-    "single_stream_decode_tok_s": 8.0,
     "aggregate_decode_tok_s_at_16": 98.7,
     "aggregate_decode_tok_s_at_32": 187.0,
-    "measured_output_tps": 98.7,
-    "long_single_request_latency_class": "slow",
     "latency_rank": 1.0,
-    "measurement_notes": "Qwen27 headline throughput is aggregate batched decode, not per-request decode. The production launch cap is max_num_seqs=12; do not revive the old 64-way gateway default."
+    "long_single_request_latency_class": "slow",
+    "measured_output_tps": 98.7,
+    "measurement_notes": "Qwen27 headline throughput is aggregate batched decode, not per-request decode. The production launch cap is max_num_seqs=12; do not revive the old 64-way gateway default.",
+    "prefill_prompt_tok_s": 7660.0,
+    "single_stream_decode_tok_s": 8.0
+  },
+  "production_eligible": true,
+  "profile_id": "qwen3_6_27b_fp8_efficient_v1",
+  "quality": {
+    "ds4_eval_accuracy": 0.826,
+    "ds4_eval_correct": 76,
+    "ds4_eval_total": 92,
+    "status": "legacy resident-lane profile retained for rollback; not selected by default in dual pipeline topology"
   },
   "routing": {
-    "default_for": ["efficient"],
-    "rank": 100,
-    "chat_template_thinking_key": "enable_thinking"
-  }
+    "chat_template_thinking_key": "enable_thinking",
+    "default_for": [
+      "efficient"
+    ],
+    "optional_kv_cache_deployments": [
+      "profiles/kv_cache/qwen27_lmcache_mp_spark7.json"
+    ],
+    "rank": 500,
+    "superseded_by": "qwen3_6_27b_bf16_pp8_efficient_v1"
+  },
+  "runtime_contract_id": "qwen27_vllm_trim_v1",
+  "supported_job_classes": [
+    "atom_edit",
+    "summary",
+    "json_repair",
+    "triage"
+  ],
+  "supports_chat": true,
+  "supports_completion": true,
+  "supports_thinking": true
 }

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.runners import FakeRunner
@@ -16,6 +17,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 VALIDATION_TASKS = ROOT / "profiles" / "validation" / "xhigh_live_validation_tasks.json"
+ALL_SPARKS = tuple(f"spark{index}" for index in range(8))
+QWEN_PP = "qwen3_6_27b_bf16_pp8_efficient_v1"
+DSV4_PP = "dsv4_vllm_mtp_pp8_smartest_v1"
 
 
 def make_request(request_id: str, *, capability: str, job_class: str, chat: bool = False, immediate: bool = False) -> InferenceRequest:
@@ -37,45 +41,68 @@ def make_request(request_id: str, *, capability: str, job_class: str, chat: bool
 
 
 class StaticSparkTopologyTests(unittest.TestCase):
-    def test_capacity_reflects_static_allocation(self) -> None:
+    def test_capacity_reflects_dual_pipeline_services(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
         capacity = topology.estimate_capacity_by_profile()
-        self.assertEqual(capacity["qwen3_6_27b_fp8_efficient_v1"], 5)
-        self.assertEqual(capacity["qwen3_6_35b_a3b_fp8_fastest_v1"], 5)
-        self.assertEqual(capacity["dsv4_vllm_mtp_smartest_v1"], 1)
-        self.assertNotIn("dsv4_antirez_smart_v1", capacity)
+        self.assertEqual(capacity[QWEN_PP], 12)
+        self.assertEqual(capacity[DSV4_PP], 8)
+        self.assertNotIn("qwen3_6_27b_fp8_efficient_v1", capacity)
+        self.assertNotIn("dsv4_vllm_mtp_smartest_v1", capacity)
 
-    def test_qwen_requests_spread_across_qwen_lanes_only(self) -> None:
-        registry = ProfileRegistry.load(PROFILES)
+    def test_pipeline_services_are_all_spark_and_spark0_ingress(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
-        profile = registry.resolve(capability="efficient", chat=False, job_class="atom_edit")
-        load: dict[str, int] = {}
-        nodes: list[str] = []
-        for _ in range(5):
-            assignment = topology.assign_profile(profile, immediate=False, current_load=load)
-            load[assignment.node_id] = load.get(assignment.node_id, 0) + 1
-            nodes.append(assignment.node_id)
-        self.assertEqual(sorted(nodes), ["spark0", "spark1", "spark2", "spark3", "spark6"])
+        qwen = topology.pipeline_service_by_id("qwen27_bf16_pp8")
+        dsv4 = topology.pipeline_service_by_id("dsv4_flash_pp8")
+        self.assertEqual(qwen.entry_node_id, "spark0")
+        self.assertEqual(dsv4.entry_node_id, "spark0")
+        self.assertEqual(qwen.node_ids, ALL_SPARKS)
+        self.assertEqual(dsv4.node_ids, ALL_SPARKS)
+        self.assertEqual(qwen.compute_domain, "spark-fleet-0")
+        self.assertEqual(dsv4.compute_domain, "spark-fleet-0")
+        self.assertEqual(qwen.layer_partition, (9, 9, 9, 8, 8, 8, 8, 5))
+        self.assertEqual(dsv4.layer_partition, (6, 6, 6, 5, 5, 5, 5, 5))
+        self.assertEqual(qwen.stages()[-1].layer_end, 64)
+        self.assertEqual(dsv4.stages()[-1].layer_end, 43)
 
-    def test_immediate_efficient_request_stays_on_qwen_lanes(self) -> None:
+    def test_pipeline_node_override_supports_six_sparks(self) -> None:
+        with patch.dict("os.environ", {"DS4_PIPELINE_NODES": "spark0,spark1,spark2,spark3,spark4,spark5"}):
+            topology = SparkTopology.load(TOPOLOGY)
+        qwen = topology.pipeline_service_by_id("qwen27_bf16_pp8")
+        dsv4 = topology.pipeline_service_by_id("dsv4_flash_pp8")
+        self.assertEqual(topology.topology_id, "static_sparks_2026_05_29_dual_pp_v1_n6")
+        self.assertEqual(qwen.node_ids, tuple(f"spark{index}" for index in range(6)))
+        self.assertEqual(dsv4.node_ids, tuple(f"spark{index}" for index in range(6)))
+        self.assertEqual(qwen.pipeline_parallel_size, 6)
+        self.assertEqual(dsv4.pipeline_parallel_size, 6)
+        self.assertEqual(qwen.layer_partition, (11, 11, 11, 11, 10, 10))
+        self.assertEqual(dsv4.layer_partition, (8, 7, 7, 7, 7, 7))
+        self.assertAlmostEqual(qwen.kv_cache["expected_entry_fraction_per_node"], 1.0 / 6)
+        self.assertEqual(dsv4.telemetry["expected_stage_count"], 6)
+
+    def test_efficient_request_binds_to_qwen_pipeline(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         topology = SparkTopology.load(TOPOLOGY)
         profile = registry.resolve(capability="efficient", chat=False, job_class="atom_edit")
         assignment = topology.assign_profile(profile, immediate=True, current_load={})
-        self.assertIn(assignment.node_id, {"spark0", "spark1", "spark2", "spark3", "spark6"})
-        self.assertEqual(assignment.reason, "resident_profile")
+        self.assertEqual(profile.profile_id, QWEN_PP)
+        self.assertEqual(assignment.node_id, "spark0")
+        self.assertEqual(assignment.node_ids, ALL_SPARKS)
+        self.assertEqual(assignment.service_id, "qwen27_bf16_pp8")
+        self.assertEqual(assignment.reason, "pipeline_service")
 
-    def test_vllm_chat_routes_to_dsv4_static_lanes(self) -> None:
+    def test_smart_chat_binds_to_dsv4_pipeline(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         topology = SparkTopology.load(TOPOLOGY)
         profile = registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
-        self.assertEqual(profile.model_id, "deepseek-ai/DeepSeek-V4-Flash")
         assignment = topology.assign_profile(profile, immediate=False, current_load={})
-        self.assertEqual(assignment.node_id, "spark5")
-        self.assertEqual(assignment.node_ids, ("spark4", "spark5"))
-        self.assertEqual(assignment.reason, "resident_profile_group")
+        self.assertEqual(profile.profile_id, DSV4_PP)
+        self.assertEqual(profile.model_id, "deepseek-ai/DeepSeek-V4-Flash")
+        self.assertEqual(assignment.node_id, "spark0")
+        self.assertEqual(assignment.node_ids, ALL_SPARKS)
+        self.assertEqual(assignment.service_id, "dsv4_flash_pp8")
+        self.assertEqual(assignment.compute_domain, "spark-fleet-0")
 
-    def test_run_manifest_records_topology_assignments(self) -> None:
+    def test_run_manifest_records_pipeline_assignments(self) -> None:
         requests = [
             make_request("r0", capability="efficient", job_class="atom_edit"),
             make_request("r1", capability="smartest", job_class="tool_chat", chat=True),
@@ -88,77 +115,56 @@ class StaticSparkTopologyTests(unittest.TestCase):
                 out_dir=tmp,
                 topology=SparkTopology.load(TOPOLOGY),
             )
-            self.assertEqual(manifest["topology_id"], "static_sparks_2026_05_26_v8")
-            self.assertEqual(manifest["selected_nodes"]["spark0"], 1)
-            self.assertEqual(manifest["selected_nodes"]["spark5"], 1)
+            self.assertEqual(manifest["topology_id"], "static_sparks_2026_05_29_dual_pp_v1")
+            self.assertEqual(manifest["selected_nodes"], {"spark0": 2})
+            self.assertEqual(manifest["selected_services"], {"dsv4_flash_pp8": 1, "qwen27_bf16_pp8": 1})
             responses = [json.loads(line) for line in (Path(tmp) / "responses.jsonl").read_text().splitlines()]
             self.assertEqual(responses[0]["selected_node"]["node_id"], "spark0")
-            self.assertEqual(responses[1]["selected_node"]["node_id"], "spark5")
-            self.assertEqual(responses[1]["selected_node"]["node_ids"], ["spark4", "spark5"])
+            self.assertEqual(responses[0]["selected_node"]["node_ids"], list(ALL_SPARKS))
+            self.assertEqual(responses[1]["selected_node"]["service_id"], "dsv4_flash_pp8")
 
-    def test_smart_completion_routes_to_dsv4_group_lane(self) -> None:
-        registry = ProfileRegistry.load(PROFILES)
+    def test_static_topology_has_no_dynamic_ejection_lane(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
-        profile = registry.resolve(capability="smart", chat=False, job_class="atom_edit")
-        assignment = topology.assign_profile(profile, immediate=True, current_load={})
-        self.assertEqual(profile.profile_id, "dsv4_vllm_mtp_smartest_v1")
-        self.assertEqual(assignment.node_id, "spark5")
-        self.assertEqual(assignment.node_ids, ("spark4", "spark5"))
-        self.assertEqual(assignment.reason, "resident_profile_group")
+        self.assertFalse(topology.routing_policy.get("allow_dynamic_load_for_unmatched_profiles"))
+        self.assertEqual(topology.routing_policy.get("queue_entry_node_id"), "spark0")
+        self.assertTrue(topology.routing_policy.get("bind_on_submit"))
+        self.assertTrue(all(not node.dynamic_load for node in topology.nodes))
+        self.assertTrue(all("pipeline_stage" in node.roles for node in topology.nodes))
 
-    def test_static_topology_has_no_production_ejection_lane(self) -> None:
-        topology = SparkTopology.load(TOPOLOGY)
-        self.assertTrue(topology.routing_policy.get("allow_dynamic_load_for_unmatched_profiles"))
-        self.assertEqual(topology.routing_policy.get("experimental_node_id"), "spark7")
-        production_nodes = [node for node in topology.nodes if "production" in node.roles]
-        self.assertTrue(all(not node.dynamic_load for node in production_nodes))
-        spark7 = [node for node in topology.nodes if node.node_id == "spark7"][0]
-        self.assertTrue(spark7.dynamic_load)
-        self.assertEqual(spark7.resident_profiles, ())
-
-    def test_xhigh_live_validation_manifest_lists_required_checks(self) -> None:
+    def test_xhigh_live_validation_manifest_lists_pipeline_checks(self) -> None:
         manifest = json.loads(VALIDATION_TASKS.read_text(encoding="utf-8"))
         self.assertEqual(manifest["format"], "ds4-xhigh-live-validation-tasks-v1")
         task_ids = [task["task_id"] for task in manifest["tasks"]]
         self.assertEqual(
             task_ids,
             [
-                "xhv-001-qwen-vllm-resident-lanes",
-                "xhv-002-dsv4-vllm-mtp-spark45",
-                "xhv-003-spark6-qwen-vllm",
-                "xhv-004-mac-studio-ds4-spark-chat",
-                "xhv-005-web-tool-playwright-host",
-                "xhv-006-dsv4-vllm-hma-kvoffload-spark45",
-                "xhv-007-dsv4-hma-persistent-kv-restart-reload",
+                "xhv-001-qwen27-bf16-pp8-service",
+                "xhv-002-dsv4-flash-pp8-service",
+                "xhv-003-single-ingress-queue-submit",
+                "xhv-004-shared-compute-domain-scheduler",
+                "xhv-005-pipeline-kv-shards",
+                "xhv-006-stage-telemetry",
+                "xhv-007-non8-pipeline-config",
             ],
         )
         qwen_task = manifest["tasks"][0]
-        self.assertEqual(qwen_task["runner"], "vllm")
-        self.assertEqual(qwen_task["target_nodes"], ["spark0", "spark1", "spark2", "spark3", "spark6"])
-        self.assertIn("qwen3_6_27b_fp8_efficient_v1", qwen_task["profiles"])
-        self.assertIn("qwen3_6_35b_a3b_fp8_fastest_v1", qwen_task["profiles"])
+        self.assertEqual(qwen_task["target_nodes"], list(ALL_SPARKS))
+        self.assertIn(QWEN_PP, qwen_task["profiles"])
 
-    def test_startup_plan_warms_resident_models_and_skips_spark7(self) -> None:
+    def test_startup_plan_marks_ingress_and_stage_items(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         topology = SparkTopology.load(TOPOLOGY)
         spark0 = startup_plan(topology=topology, registry=registry, node_id="spark0")
         spark4 = startup_plan(topology=topology, registry=registry, node_id="spark4")
-        spark5 = startup_plan(topology=topology, registry=registry, node_id="spark5")
-        spark6 = startup_plan(topology=topology, registry=registry, node_id="spark6")
         spark7 = startup_plan(topology=topology, registry=registry, node_id="spark7")
-        self.assertEqual([item["model_id"] for item in spark0["items"]], ["Qwen/Qwen3.6-27B-FP8", "Qwen/Qwen3.6-35B-A3B-FP8"])
-        self.assertEqual(spark4["items"][0]["action"], "group_primary_warm")
-        self.assertEqual(len(spark4["items"]), 1)
-        self.assertEqual(
-            spark5["items"],
-            [
-                {"profile_id": "dsv4_vllm_mtp_smartest_v1", "action": "group_secondary", "primary_node": "spark4"},
-            ],
-        )
-        self.assertEqual([item["model_id"] for item in spark6["items"]], ["Qwen/Qwen3.6-27B-FP8", "Qwen/Qwen3.6-35B-A3B-FP8"])
-        self.assertEqual(spark7["items"], [])
+        self.assertEqual([item["action"] for item in spark0["items"]], ["pipeline_ingress_warm", "pipeline_ingress_warm"])
+        self.assertEqual([item["service_id"] for item in spark0["items"]], ["dsv4_flash_pp8", "qwen27_bf16_pp8"])
+        self.assertEqual([item["action"] for item in spark4["items"]], ["pipeline_stage", "pipeline_stage"])
+        self.assertEqual(spark4["items"][0]["stage_index"], 4)
+        self.assertEqual(spark4["items"][1]["layer_start"], 35)
+        self.assertEqual([item["action"] for item in spark7["items"]], ["pipeline_stage", "pipeline_stage"])
 
-    def test_startup_warm_posts_only_executable_items(self) -> None:
+    def test_startup_warm_posts_only_ingress_items(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         topology = SparkTopology.load(TOPOLOGY)
         plan = startup_plan(topology=topology, registry=registry, node_id="spark0")
@@ -171,10 +177,15 @@ class StaticSparkTopologyTests(unittest.TestCase):
         result = warm_startup_models(plan=plan, base_url="http://spark.local:8000", timeout_s=3, poster=poster)
         self.assertEqual(result["status"], "completed")
         self.assertEqual(result["warm_count"], 2)
-        self.assertEqual(calls[0], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-27B-FP8"))
-        self.assertEqual(calls[1], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-35B-A3B-FP8"))
+        self.assertEqual(
+            calls,
+            [
+                ("http://127.0.0.1:8102/v1/chat/completions", "deepseek-ai/DeepSeek-V4-Flash"),
+                ("http://127.0.0.1:8101/v1/chat/completions", "Qwen/Qwen3.6-27B"),
+            ],
+        )
 
-    def test_startup_warm_posts_to_spark6_qwen_lane(self) -> None:
+    def test_startup_warm_skips_non_ingress_stage_items(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         topology = SparkTopology.load(TOPOLOGY)
         plan = startup_plan(topology=topology, registry=registry, node_id="spark6")
@@ -186,8 +197,9 @@ class StaticSparkTopologyTests(unittest.TestCase):
 
         result = warm_startup_models(plan=plan, base_url="http://spark.local:8000", timeout_s=3, poster=poster)
         self.assertEqual(result["status"], "completed")
-        self.assertEqual(calls[0], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-27B-FP8"))
-        self.assertEqual(calls[1], ("http://spark.local:8000/v1/chat/completions", "Qwen/Qwen3.6-35B-A3B-FP8"))
+        self.assertEqual(result["warm_count"], 0)
+        self.assertEqual(calls, [])
+        self.assertEqual({item["status"] for item in result["results"]}, {"skipped"})
 
 
 if __name__ == "__main__":

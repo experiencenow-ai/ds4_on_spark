@@ -70,6 +70,10 @@ the current Qwen27 launch contract:
 - `--enable-chunked-prefill`
 - `--enable-prefix-caching`
 - `--async-scheduling`
+- Optional external Qwen27 KV cache uses
+  `profiles/kv_cache/qwen27_lmcache_mp_spark7.json` with LMCache MP. That path
+  is Qwen-specific, requires `experiencenow-ai/vllm@c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34`,
+  and does not change the DSV4 rule below.
 
 The DeepSeek V4 Flash path also carried parser/backend details:
 
@@ -81,11 +85,10 @@ The DeepSeek V4 Flash path also carried parser/backend details:
   `--headless` for the worker rank. Keep that shape for the production DSV4
   lane. The current requalification target keeps vLLM's hybrid KV cache manager
   enabled, uses `max_model_len=262144`, and adds native CPU KV offload with
-  `--kv-offloading-size 8 --kv-offloading-backend native` and
-  `VLLM_USE_SIMPLE_KV_OFFLOAD=1`. The current runtime is the Docker-lineage
-  fork `experiencenow-ai/vllm@d240cdbcf3de175be57c108fd9cbfce04009ec29`, based
-  on known-working `jasl/vllm@dda4668b59567416f86956cfe7bbc1eab371a61e`, and
-  launched by `scripts/ds4_dsv4_recipe_spark45.sh`.
+  `--kv-offloading-size ${DS4_DSV4_KV_OFFLOAD_SIZE:-2} --kv-offloading-backend native`
+  and `VLLM_USE_SIMPLE_KV_OFFLOAD=1`. The current source-built runtime is
+  `experiencenow-ai/vllm@c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34` launched by
+  `scripts/ds4_dsv4_spark45_local_vllm.sh`, not the old Docker recipe.
   MTP speculative decoding, KV cache metrics, and iteration-detail logs are
   enabled for the 256k proof.
   Do not add

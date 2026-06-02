@@ -27,17 +27,16 @@ PYTHONPATH=src python3 -m ds4_infer.cli queue-worker \
   --loop
 ```
 
-`queue-worker` claims a compatible `batch_key`, commits the lease immediately,
-then runs a concurrency window of compatible model claims for the same
-profile/node. Each claimed model request is dispatched independently so queue
-events and notices land as each request finishes instead of waiting for the
-slowest request in the window. The Spark runner still uses `/ds4/batches` for
-execution.
+`queue-worker` prepares work for its node, claims the highest-priority ready
+requests for one profile/node window, commits the leases immediately, and sends
+that window through `/ds4/batches`. Results are still persisted per request, so
+Centaur can score and cancel by request or by job id.
 
 Queue priorities are numeric and lower values run first. Keep full500
-regression queues at normal priority `10`; submit experiment batches at
-priority `1` so they jump ahead of queued background work after the current
-lease window finishes.
+regression jobs at priority `10`; submit experiment groups at priority `1` so
+they jump ahead of queued background work after the current lease window
+finishes. Use `queue-cancel --job-id <batch_id>` to cancel remaining queued
+requests in a background regression job.
 
 ## Qwen Throughput Policy
 
@@ -57,8 +56,18 @@ live calibration updates the runtime contract. Comparing single-stream latency
 to aggregate batched throughput is invalid for capacity planning.
 
 `--runner spark` SSHes to the selected Spark and posts to that Spark's local
-`http://127.0.0.1:8000` DS4 endpoint. The Spark runner uses `/ds4/batches`;
-legacy `/v1/*` endpoints are not part of readiness or production routing.
+`http://127.0.0.1:8000` DS4 endpoint. The Spark runner uses persistent SSH
+control sockets by default; pre-open them before a long run so request
+submission does not depend on creating a fresh SSH connection while GPUs are
+busy:
+
+```bash
+PYTHONPATH=src python3 -m ds4_infer.cli spark-ssh-preconnect \
+  --nodes spark0,spark1,spark2,spark3,spark4,spark5,spark6,spark7
+```
+
+The request endpoint is `/ds4/batches`; legacy `/v1/*` endpoints are not part
+of readiness or production routing.
 
 Recommended first deployment:
 
@@ -100,15 +109,17 @@ The harness keeps the topology-derived mix queued for five minutes:
 
 ```text
 spark0-3: qwen3_6_27b_fp8_efficient_v1
-spark0-3: qwen3_6_35b_a3b_fp8_fastest_v1
 spark4+spark5: dsv4_vllm_mtp_smartest_v1, ingress spark5
-spark6: qwen3_6_27b_fp8_efficient_v1, qwen3_6_35b_a3b_fp8_fastest_v1
+spark6: qwen3_6_27b_fp8_efficient_v1
 ```
 
 It writes `plan.json`, `gpu_samples.jsonl`, `summary.json`, and the queue DB
 under `/tmp/ds4_queue_saturation_<run_id>/`. The run passes only if the queue
 drains, no request fails, and every production GPU records the required active
 seconds above the configured threshold.
+
+Qwen35/fastest remains a profile in the registry, but it is parked and should
+not be included in the production saturation mix until its service is restored.
 
 For throughput tuning, run a stress ladder:
 
@@ -130,14 +141,15 @@ Manual chat uses the same path:
 ```bash
 ds4-spark-chat -m ds4v
 ds4-spark-chat -m qwen
-ds4-spark-chat -m fast
 ```
 
 Aliases:
 
 - `ds4v`: DeepSeek V4 Flash vLLM/MTP lane on spark4+spark5.
 - `qwen`: Qwen efficient lane on spark0-3 and spark6.
-- `fast`: fastest Qwen lane on spark0-3 and spark6.
+
+The older `fast`/Qwen35 lane is parked for now and is not part of the
+production queue mix.
 
 The controller keeps the full chat history in the local history file, but each
 model request is executed on the Spark selected by the v2 topology.

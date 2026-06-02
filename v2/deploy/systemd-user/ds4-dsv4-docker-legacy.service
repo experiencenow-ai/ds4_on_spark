@@ -8,10 +8,10 @@ StartLimitBurst=2
 
 [Service]
 Type=oneshot
-WorkingDirectory=%h/ds4_on_spark/v2
-EnvironmentFile=-%h/.config/ds4/dsv4-spark45.env
-ExecStart=%h/ds4_on_spark/v2/scripts/ds4_dsv4_recipe_spark45.sh start
-ExecStop=%h/ds4_on_spark/v2/scripts/ds4_dsv4_recipe_spark45.sh stop
+WorkingDirectory=%h/src/ds4_on_spark/v2
+EnvironmentFile=%h/.config/ds4/dsv4-spark45.env
+ExecStart=%h/src/ds4_on_spark/v2/scripts/ds4_dsv4_recipe_spark45.sh start
+ExecStop=%h/src/ds4_on_spark/v2/scripts/ds4_dsv4_recipe_spark45.sh stop
 RemainAfterExit=true
 Restart=no
 TimeoutStartSec=1200

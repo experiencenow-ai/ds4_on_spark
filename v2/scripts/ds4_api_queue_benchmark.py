@@ -40,6 +40,7 @@ def main() -> int:
         newest_event_id = int(poll.get("newest_event_id") or newest_event_id)
         time.sleep(args.poll_s)
         if time.time() - started_run > args.timeout_s:
+            _cancel_on_timeout(args, batch_id)
             raise TimeoutError(f"batch {batch_id} did not finish in {args.timeout_s}s")
     run_s = time.time() - started_run
     collected = _get(args.base_url, "/ds4/queue/collect", {"batch_id": batch_id})
@@ -83,8 +84,13 @@ def _run_prompt_array_benchmark(args: argparse.Namespace, batch_id: str, prompts
         "request_id": batch_id,
         "ds4_job_class": args.job_class,
     }
+    _add_sampling_controls(body, args)
     body.update(cache_body)
     started = time.time()
+    if args.prompt_array_async:
+        body["ds4_async"] = True
+        response = _post(args.base_url, "/v1/completions", body, timeout_s=args.timeout_s)
+        return _run_submitted_batch_benchmark(args, batch_id, started, response, cache_body)
     response = _post(args.base_url, "/v1/completions", body, timeout_s=args.timeout_s)
     run_s = time.time() - started
     choices = response.get("choices") if isinstance(response, dict) else []
@@ -122,6 +128,52 @@ def _run_prompt_array_benchmark(args: argparse.Namespace, batch_id: str, prompts
     return 0 if failed == 0 else 2
 
 
+def _run_submitted_batch_benchmark(args: argparse.Namespace, batch_id: str, started: float, submit_response: dict[str, Any], cache_body: dict[str, Any]) -> int:
+    newest_event_id = 0
+    while True:
+        status = _get(args.base_url, "/ds4/queue/status", {"batch_id": batch_id, "refresh": 0})
+        if str(status.get("state")) in TERMINAL:
+            break
+        poll = _get(args.base_url, "/ds4/queue/poll", {"after_event_id": newest_event_id, "limit": 100})
+        newest_event_id = int(poll.get("newest_event_id") or newest_event_id)
+        time.sleep(args.poll_s)
+        if time.time() - started > args.timeout_s:
+            _cancel_on_timeout(args, batch_id)
+            raise TimeoutError(f"batch {batch_id} did not finish in {args.timeout_s}s")
+    run_s = time.time() - started
+    collected = _get(args.base_url, "/ds4/queue/collect", {"batch_id": batch_id})
+    results = collected.get("results", [])
+    completed = [row for row in results if isinstance(row, dict) and (row.get("result") or {}).get("status") == "completed"]
+    failed = len(results) - len(completed)
+    tokens = sum(_completion_tokens(row.get("result") or {}) for row in completed)
+    summary = {
+        "format": "ds4-api-queue-benchmark-v1",
+        "base_url": args.base_url,
+        "batch_id": batch_id,
+        "model": args.model,
+        "submission_mode": "prompt-array-async",
+        "batch_size": args.batch_size,
+        "concurrency": args.concurrency,
+        "limit": args.limit,
+        "input_tokens_target": args.input_tokens,
+        "shared_prefix_tokens_target": args.shared_prefix_tokens,
+        "suffix_tokens_target": _suffix_tokens(args),
+        "output_tokens_target": args.output_tokens,
+        "cache_mode": _cache_mode(args),
+        "external_kv": cache_body.get("external_kv"),
+        "kv_cache": cache_body.get("kv_cache"),
+        "submit_s": 0.0,
+        "run_s": round(run_s, 6),
+        "completed": len(completed),
+        "failed": failed,
+        "completion_tokens": tokens,
+        "aggregate_completion_tok_s": round(tokens / run_s, 6) if run_s > 0 else 0.0,
+        "api_response_id": submit_response.get("id") if isinstance(submit_response, dict) else None,
+    }
+    print(json.dumps(summary, sort_keys=True))
+    return 0 if failed == 0 else 2
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Benchmark the DS4 deployment path through the spark0 coordinator API.")
     parser.add_argument("--base-url", default="http://10.20.0.10:8700")
@@ -132,11 +184,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=32)
     parser.add_argument("--submit-concurrency", type=int, default=32)
     parser.add_argument("--submission-mode", choices=("prompt-array", "async-requests"), default="prompt-array")
+    parser.add_argument("--prompt-array-async", action="store_true", help="Submit one prompt-array cohort with ds4_async=true and poll/cancel by batch_id.")
+    parser.add_argument("--cancel-on-timeout", action="store_true", help="Force-cancel the benchmark batch if polling times out.")
     parser.add_argument("--drive-work", action="store_true", help="Legacy mode: call /ds4/queue/work while polling async requests. Production benchmarks should leave this off.")
     parser.add_argument("--input-tokens", type=int, default=512)
     parser.add_argument("--shared-prefix-tokens", type=int, default=0, help="Approximate token count for a token-identical prefix placed before each unique suffix.")
     parser.add_argument("--suffix-tokens", type=int, help="Approximate token count for the per-request suffix when --shared-prefix-tokens is used. Defaults to input_tokens - shared_prefix_tokens.")
     parser.add_argument("--output-tokens", type=int, default=256)
+    parser.add_argument("--min-tokens", type=int, help="Forward min_tokens to the OpenAI-compatible service.")
+    parser.add_argument("--ignore-eos", action="store_true", help="Forward ignore_eos=true so forced-output tests use the full token budget.")
     parser.add_argument("--timeout-s", type=int, default=1800)
     parser.add_argument("--poll-s", type=float, default=0.02)
     parser.add_argument("--temperature", type=float, default=0.0)
@@ -165,6 +221,7 @@ def _submit_one(args: argparse.Namespace, batch_id: str, idx: int, prompt: str, 
         "request_id": f"{batch_id}-{idx:06d}",
         "ds4_job_class": args.job_class,
     }
+    _add_sampling_controls(body, args)
     body.update(cache_body)
     return _post(args.base_url, "/v1/completions", body)
 
@@ -193,6 +250,13 @@ def _cache_body(args: argparse.Namespace) -> dict[str, Any]:
     return {"external_kv": external_kv}
 
 
+def _add_sampling_controls(body: dict[str, Any], args: argparse.Namespace) -> None:
+    if args.ignore_eos:
+        body["ignore_eos"] = True
+    if args.min_tokens is not None:
+        body["min_tokens"] = max(0, int(args.min_tokens))
+
+
 def _kv_cache_directive(args: argparse.Namespace) -> dict[str, Any] | None:
     if args.kv_cache_directive_json and args.kv_cache_directive_file:
         raise ValueError("provide only one of --kv-cache-directive-json or --kv-cache-directive-file")
@@ -216,6 +280,16 @@ def _post(base_url: str, endpoint: str, body: dict[str, Any], *, timeout_s: int 
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[-4000:]
         raise RuntimeError(f"POST {endpoint} HTTP {exc.code}: {detail}") from exc
+
+
+def _cancel_on_timeout(args: argparse.Namespace, batch_id: str) -> None:
+    if not args.cancel_on_timeout:
+        return
+    body = {"batch_id": batch_id, "reason": "benchmark timed out", "force_running": True}
+    try:
+        _post(args.base_url, "/ds4/queue/cancel", body, timeout_s=30)
+    except Exception:
+        return
 
 
 def _get(base_url: str, endpoint: str, params: dict[str, Any]) -> dict[str, Any]:

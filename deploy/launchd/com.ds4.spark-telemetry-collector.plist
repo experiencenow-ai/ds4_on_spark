@@ -10,20 +10,28 @@
     <string>/usr/bin/python3</string>
     <string>/Users/mac/.local/share/ds4_telemetry/spark_telemetry_collect.py</string>
     <string>--nodes</string>
-    <string>spark0,spark1,spark2,spark3,spark4=spark4-10g,spark5=spark5-10g,spark6,spark7</string>
+    <string>spark0=spark0-10g,spark1=spark1-10g,spark2=spark2-10g,spark3=spark3-10g,spark4=spark4-10g,spark5=spark5-10g,spark6=spark6-10g,spark7=spark7-10g</string>
     <string>--out-dir</string>
     <string>/tmp/ds4_telemetry/mac</string>
     <string>--tail-lines</string>
     <string>720</string>
     <string>--ssh-timeout</string>
     <string>8</string>
+    <string>--loop-interval</string>
+    <string>5</string>
+    <string>--ssh-control-dir</string>
+    <string>/tmp/ds4mux</string>
+    <string>--ssh-control-persist</string>
+    <string>600</string>
+    <string>--fetch-workers</string>
+    <string>8</string>
   </array>
   <key>WorkingDirectory</key>
   <string>/Users/mac/.local/share/ds4_telemetry</string>
   <key>RunAtLoad</key>
   <true/>
-  <key>StartInterval</key>
-  <integer>60</integer>
+  <key>KeepAlive</key>
+  <true/>
   <key>StandardOutPath</key>
   <string>/tmp/ds4_telemetry/mac/telemetry-collector.out.log</string>
   <key>StandardErrorPath</key>

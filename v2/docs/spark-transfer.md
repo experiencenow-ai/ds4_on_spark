@@ -1,62 +1,106 @@
-# Spark Transfer Service
+# Spark 200G Transfer
 
-The Spark fabric is a major resource. Transfers should not hairpin through the controller when two Sparks can move data directly over the 200Gbps fabric.
+Bulk model payloads must use the Spark fabric, not the office/control-plane
+network. Plain `sparkN` names are for control commands. Bulk data targets are
+`sparkN-200g`, which must resolve to `10.10.100.N`, or the explicit
+`10.10.100.N` address from `profiles/transfer/spark_200g.json`.
 
-The transfer service is a safe planner/executor for direct Spark-to-Spark file movement. It currently emits source-initiated rsync-over-SSH commands:
+The canonical copy method is `parallel_nc_fanout_200g_v1`:
 
-```text
-controller -> ssh source_spark -> rsync /source destination_spark:/destination
-```
+- The Mac Studio starts and monitors the job only.
+- File bytes flow directly from Spark to Spark over the 200G fabric.
+- Each adjacent ring hop discovers both next hops with `ip route show`.
+- Workers bind one unencrypted `nc` stream per rail and copy many files in
+  parallel.
+- Large cluster replication walks adjacent Spark hops instead of opening
+  non-adjacent streams across the ring.
 
-That keeps the payload path:
+## Proof Check
 
-```text
-source Spark -> destination Spark
-```
-
-not:
-
-```text
-source Spark -> controller -> destination Spark
-```
-
-## Plan a transfer
+Run this before a large model replication if the fabric was reconfigured:
 
 ```bash
-PYTHONPATH=src python3 -m ds4_transfer.cli plan \
-  --topology profiles/transfer/spark_200g.json \
-  --request-json '{
-    "format":"ds4-transfer-request-v1",
-    "request_id":"copy-batch-001",
-    "source_node":"spark0",
-    "source_path":"/mnt/data/batch/",
-    "destination_node":"spark4",
-    "destination_path":"/mnt/data/batch/"
-  }'
+ssh spark2 'iperf -s -p 49232 -f g'
+ssh spark3 'iperf -c 10.10.100.12 -p 49232 -P 32 -t 5 -f g'
 ```
 
-The plan includes both an argv list and a shell-rendered string for review.
-
-## Execute or dry-run
+Expected healthy single-destination aggregate is tens of Gbit/s or better. A
+live spark3-to-spark2 check on 2026-05-28 reached `79 Gbit/s` through the
+`10.10.100.12` fabric address. Binding both direct rails separately reached
+about `136 Gbit/s` aggregate:
 
 ```bash
-PYTHONPATH=src python3 -m ds4_transfer.cli run \
-  --topology profiles/transfer/spark_200g.json \
-  --dry-run \
-  --request-json '{...}'
+ssh spark2 'iperf -s -B 10.10.5.1 -p 49233 -f g'
+ssh spark2 'iperf -s -B 10.10.6.1 -p 49234 -f g'
+ssh spark3 'iperf -c 10.10.5.1 -B 10.10.5.2 -p 49233 -P 16 -t 5 -f g'
+ssh spark3 'iperf -c 10.10.6.1 -B 10.10.6.2 -p 49234 -P 16 -t 5 -f g'
 ```
 
-The topology allowlists root paths per Spark. Requests outside the allowlist are rejected before execution.
+## Single Edge
+
+```bash
+cd v2
+PYTHONPATH=src python3 -m ds4_transfer.fast_copy \
+  --topology profiles/transfer/spark_200g.json \
+  --source-node spark3 \
+  --source-path /home/spark3/models/hf/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
+  --destination-node spark2 \
+  --destination-path /home/spark2/models/hf/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
+  --jobs-per-edge 16
+```
+
+## Full Fan-Out
+
+Full fan-out is rooted at the declared seed node. For a spark3 seed over all
+eight Sparks, the adjacent-hop stages are:
+
+```text
+stage 1: spark3 -> spark4
+stage 2: spark4 -> spark5
+stage 3: spark5 -> spark6
+stage 4: spark6 -> spark7
+stage 5: spark7 -> spark0
+stage 6: spark0 -> spark1
+stage 7: spark1 -> spark2
+```
+
+Run:
+
+```bash
+cd v2
+PYTHONPATH=src python3 -m ds4_transfer.fast_copy \
+  --topology profiles/transfer/spark_200g.json \
+  --source-node spark3 \
+  --source-path /home/spark3/models/hf/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
+  --fanout-all \
+  --destination-path-template '/home/{node}/models/hf/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4' \
+  --jobs-per-edge 16
+```
+
+Use `--dry-run` first to print the stage plan without opening data streams.
+
+For an N-way pipeline with only a selected subset active, pass the destination
+set explicitly so the copier walks the selected adjacent ring instead of
+touching offline or unused nodes. A spark0 Qwen seed for the current six-node
+pipeline emits `spark0 -> spark1 -> spark2 -> spark3 -> spark4 -> spark5`:
+
+```bash
+cd v2
+PYTHONPATH=src python3 -m ds4_transfer.fast_copy \
+  --topology profiles/transfer/spark_200g.json \
+  --source-node spark0 \
+  --source-path /home/spark0/models/hf/Qwen/Qwen3.6-27B \
+  --fanout-all \
+  --fanout-nodes spark1,spark2,spark3,spark4,spark5 \
+  --destination-path-template '/home/{node}/models/hf/Qwen/Qwen3.6-27B' \
+  --jobs-per-edge 16
+```
 
 ## Policy
 
-- Compression is disabled by default.
-- The source Spark initiates transfer.
-- Paths must be absolute and allowlisted.
-- Controller never expands arbitrary shell.
-- The Mac Studio is control plane only. It should start the job and collect status, not carry model payload bytes.
-- For initial bulk payloads, avoid Mac-local `scp` or controller-local `rsync`. They hairpin through the controller and miss the Spark fabric.
-- Healthy Spark-to-Spark transfer plans should show the source Spark talking directly to the destination Spark host on the 200G fabric.
-- Use rsync for metadata-safe deltas, small updates, and final verification. For first-copy multi-hundred-GB payloads, prefer future chunked/native engines behind the same request schema.
-- If a rail fails, isolate the bad rail and fall back to the healthy rail or hop-by-hop adjacent links instead of routing through the controller.
-- The first method is rsync because it is already good for incremental artifacts. Future transfer methods can add tar-streaming, parallel file-list shards, or native chunk copy behind the same request schema.
+- Do not use the office/control-plane hostname for model payload bytes.
+- Do not copy from one seed directly to non-adjacent ring nodes.
+- Do not add compressed or encrypted payload paths to the 200G transfer docs.
+- Keep `sparkN-200g` resolver entries in sync with `10.10.100.N`.
+- For file trees produced by Hugging Face downloads, the copier excludes
+  `.cache/` and transfers only completed files.

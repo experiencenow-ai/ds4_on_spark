@@ -20,6 +20,7 @@ else
 fi
 
 runtime="${DS4_DSV4_LOCAL_RUNTIME:-$HOME/ds4-vllm-local}"
+vllm_source="${DS4_DSV4_VLLM_SOURCE:-$HOME/src/vllm-c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34}"
 model_path="${DS4_DSV4_MODEL_PATH:-$HOME/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-V4-Flash/snapshots/6976c7ff1b30a1b2cb7805021b8ba4684041f136}"
 port="${DS4_DSV4_PORT:-8000}"
 master_addr="${DS4_DSV4_MASTER_ADDR:-${DS4_DSV4_HEAD_IP:-10.20.0.14}}"
@@ -29,10 +30,10 @@ repo_root="${DS4_DSV4_REPO_ROOT:-$HOME/ds4_on_spark}"
 persistent_mod_source="${DS4_DSV4_PERSIST_MOD_SOURCE:-$repo_root/v2/runtime_mods/dsv4_persistent_simple_offload}"
 apply_runtime_mods="${DS4_DSV4_APPLY_RUNTIME_MODS:-0}"
 max_model_len="${DS4_DSV4_MAX_MODEL_LEN:-262144}"
-kv_offload_size="${DS4_DSV4_KV_OFFLOAD_SIZE:-8}"
-gpu_memory_utilization="${DS4_DSV4_GPU_MEMORY_UTILIZATION:-0.8}"
-max_num_batched_tokens="${DS4_DSV4_MAX_NUM_BATCHED_TOKENS:-8192}"
-max_num_seqs="${DS4_DSV4_MAX_NUM_SEQS:-2}"
+kv_offload_size="${DS4_DSV4_KV_OFFLOAD_SIZE:-2}"
+gpu_memory_utilization="${DS4_DSV4_GPU_MEMORY_UTILIZATION:-0.68}"
+max_num_batched_tokens="${DS4_DSV4_MAX_NUM_BATCHED_TOKENS:-2048}"
+max_num_seqs="${DS4_DSV4_MAX_NUM_SEQS:-1}"
 enable_mtp="${DS4_DSV4_ENABLE_MTP:-1}"
 mtp_tokens="${DS4_DSV4_MTP_TOKENS:-2}"
 python_dev_include="${DS4_DSV4_PYTHON_DEV_INCLUDE:-$HOME/standard-runtimes/python3.12-dev-extract/usr/include}"
@@ -42,6 +43,9 @@ if [ "$enable_mtp" = "1" ]; then
 fi
 
 export PATH="$runtime/bin:/usr/local/cuda/bin:$PATH"
+if [ -f "$vllm_source/vllm/__init__.py" ]; then
+	export PYTHONPATH="$vllm_source:${PYTHONPATH:-}"
+fi
 export CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
 export LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
 export CPATH="$python_dev_include:$python_dev_include/python3.12:${CPATH:-}"

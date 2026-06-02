@@ -20,6 +20,19 @@ from .schemas import InferenceRequest, REQUEST_FORMAT
 from .topology import SparkTopology
 
 
+OPENAI_SAMPLING_CONTROL_FIELDS = (
+    "ignore_eos",
+    "min_tokens",
+    "top_p",
+    "top_k",
+    "repetition_penalty",
+    "presence_penalty",
+    "frequency_penalty",
+    "stop",
+    "stop_token_ids",
+)
+
+
 class CoordinatorApi:
     def __init__(
         self,
@@ -60,7 +73,7 @@ class CoordinatorApi:
         if path == "/v1/models":
             return 200, _openai_models(self._registry(), self._topology())
         if path == "/ds4/queue/status":
-            return 200, self.queue.status(request_id=_one(query, "request_id"), batch_id=_one(query, "batch_id"), job_id=_one(query, "job_id"))
+            return 200, self.queue.status(request_id=_one(query, "request_id"), batch_id=_one(query, "batch_id"), job_id=_one(query, "job_id"), refresh=_query_bool(query, "refresh", False))
         if path == "/ds4/queue/poll":
             return 200, self.queue.poll(after_event_id=int(_one(query, "after_event_id") or 0), limit=int(_one(query, "limit") or 100))
         if path == "/ds4/queue/collect":
@@ -101,7 +114,7 @@ class CoordinatorApi:
         if path == "/ds4/queue/work":
             return 200, self._work_once(body)
         if path == "/ds4/queue/cancel":
-            return 200, self.queue.cancel(request_id=_optional_str(body.get("request_id")), batch_id=_optional_str(body.get("batch_id")), job_id=_optional_str(body.get("job_id")), reason=str(body.get("reason") or "cancelled by operator"))
+            return 200, self.queue.cancel(request_id=_optional_str(body.get("request_id")), batch_id=_optional_str(body.get("batch_id")), job_id=_optional_str(body.get("job_id")), reason=str(body.get("reason") or "cancelled by operator"), force_running=bool(body.get("force_running")))
         if path == "/ds4/pipeline/telemetry":
             topology = self._topology()
             return 200, self.queue.record_pipeline_telemetry(_pipeline_telemetry_with_topology(body, topology))
@@ -323,7 +336,7 @@ class CoordinatorApi:
         deadline = time.time() + max(0.1, timeout_s)
         idle_sleep = self.poll_interval_s
         while time.time() < deadline:
-            status = self.queue.status(batch_id=batch_id)
+            status = self.queue.status(batch_id=batch_id, refresh=False)
             state = str(status.get("state") or "")
             if state in {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled", "failed"}:
                 return self.queue.collect(request_id=request_id)
@@ -336,7 +349,7 @@ class CoordinatorApi:
         deadline = time.time() + max(0.1, timeout_s)
         idle_sleep = self.poll_interval_s
         while time.time() < deadline:
-            status = self.queue.status(batch_id=batch_id)
+            status = self.queue.status(batch_id=batch_id, refresh=False)
             state = str(status.get("state") or "")
             if state in {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled", "failed"}:
                 return self.queue.collect(batch_id=batch_id)
@@ -505,6 +518,9 @@ def _make_inference_request_json(
 
 def _input_with_api_kv(input_payload: dict[str, Any], body: dict[str, Any], profile: ModelProfile, topology: SparkTopology) -> dict[str, Any]:
     out = dict(input_payload)
+    sampling = _openai_sampling_controls(body)
+    if sampling:
+        out["openai_sampling"] = sampling
     has_kv_cache = body.get("kv_cache") is not None
     has_external_kv = body.get("external_kv") is not None
     if has_kv_cache and has_external_kv and body.get("kv_cache") != body.get("external_kv"):
@@ -531,6 +547,14 @@ def _input_with_api_kv(input_payload: dict[str, Any], body: dict[str, Any], prof
     return out
 
 
+def _openai_sampling_controls(body: dict[str, Any]) -> dict[str, Any]:
+    controls: dict[str, Any] = {}
+    for key in OPENAI_SAMPLING_CONTROL_FIELDS:
+        if key in body and body.get(key) is not None:
+            controls[key] = body[key]
+    return controls
+
+
 def _external_kv_plan(raw: dict[str, Any], *, profile: ModelProfile, topology: SparkTopology) -> dict[str, Any]:
     kv_key = str(raw.get("kv_key") or "")
     if not kv_key:
@@ -551,17 +575,32 @@ def _external_kv_plan(raw: dict[str, Any], *, profile: ModelProfile, topology: S
         load["lease_id"] = str(raw["lease_id"])
     if raw.get("content_hash") is not None:
         load["content_hash"] = str(raw["content_hash"])
+    miss_policy = str(raw.get("miss_policy") or "compute")
+    store_mode = str(raw.get("store_mode") or raw.get("store_policy") or "")
+    if not store_mode:
+        store_mode = "write_back" if miss_policy == "compute_and_store" else "skip"
+    if store_mode == "skip":
+        store = {"mode": "skip", "transport": "none"}
+    else:
+        store = {
+            "mode": store_mode,
+            "transport": "external_manifest",
+            "namespace": namespace,
+            "kv_key": kv_key,
+            "service_id": service_id,
+        }
+    operation = "load_store" if load["mode"] != "skip" and store["mode"] != "skip" else ("store" if store["mode"] != "skip" else "load")
     plan = {
         "format": KV_CACHE_PLAN_FORMAT,
         "backend": str(raw.get("backend") or "auto"),
         "cache_id": kv_key,
         "prefix_hash": _optional_str(raw.get("prefix_hash")),
         "load": load,
-        "store": {"mode": "skip", "transport": "none"},
-        "miss_policy": str(raw.get("miss_policy") or "compute"),
+        "store": store,
+        "miss_policy": miss_policy,
         "route_affinity": str(raw.get("route_affinity") or "required"),
         "model_fingerprint": dict(raw.get("model_fingerprint") or {}),
-        "operation": "load",
+        "operation": operation,
     }
     plan["batch_key_hash"] = "sha256:" + hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     return plan
@@ -859,6 +898,13 @@ def _required_query(query: dict[str, list[str]], key: str) -> str:
     if value is None:
         raise ValueError(f"query parameter {key!r} is required")
     return value
+
+
+def _query_bool(query: dict[str, list[str]], key: str, default: bool) -> bool:
+    value = _one(query, key)
+    if value is None or value == "":
+        return default
+    return value.strip().lower() not in {"0", "false", "no", "off"}
 
 
 def _optional_str(value: Any) -> str | None:

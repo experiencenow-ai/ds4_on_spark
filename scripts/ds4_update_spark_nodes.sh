@@ -6,22 +6,19 @@ usage()
 	cat >&2 <<'EOF'
 usage: scripts/ds4_update_spark_nodes.sh [spark0 spark1 ...]
 
-Updates reachable Spark nodes to the current merged DS4 repo ref, then installs
-the current rescue/watchdog payload and the spark4/spark5 local DSV4 service
-units.
+Updates DS4 on the selected Spark nodes from the canonical checkout:
+  $HOME/src/ds4_on_spark
 
-Important environment knobs:
-  DS4_SELF_UPDATE=1               fetch and detach this local worktree first
-  DS4_UPDATE_REF=origin/main        git ref to deploy on each Spark checkout
-  DS4_REMOTE_REPO=$HOME/ds4_on_spark remote repo path on each Spark
-  DS4_REMOTE_UPDATE_MODE=auto      auto, git, or sync-local
-  DS4_FORCE_RESET=0                set 1 to reset dirty remote checkouts
-  DS4_INSTALL_RESCUE=1             rerun scripts/ds4_deploy_rescue_agent.sh
-  DS4_RESCUE_ROOT=auto             install root watchdog when sudo works
-  DS4_EXTEND_SWAP=1                install survival swap while deploying rescue
-  DS4_INSTALL_DSV4_LOCAL=1         install spark4/spark5 local vLLM units
-  DS4_RESTART_DSV4=0               set 1 to restart spark5 worker then spark4 head
-  DS4_DSV4_KV_OFFLOAD_SIZE=4       recovery-safe total GiB for spark4+spark5
+The remote checkout must exist, be on main, and be clean. The update is:
+  git fetch --prune origin main
+  git pull --ff-only origin main
+
+This script is intentionally zero-drift. It installs deployment files from the
+remote Spark checkout after the pull, never from the Mac working tree.
+
+This script also disables model autoload services so experimental pipelines do
+not load models on reboot. Set DS4_INSTALL_EXPERIMENTAL_MODEL_UNITS=1 only
+when intentionally re-arming those units for a test.
 EOF
 	exit 2
 }
@@ -30,58 +27,7 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
 	usage
 fi
 
-repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-remote_repo="${DS4_REMOTE_REPO:-}"
-update_remote="${DS4_UPDATE_REMOTE:-origin}"
-update_branch="${DS4_UPDATE_BRANCH:-main}"
-update_ref="${DS4_UPDATE_REF:-origin/main}"
-local_self_update="${DS4_SELF_UPDATE:-1}"
-remote_update_mode="${DS4_REMOTE_UPDATE_MODE:-auto}"
-force_reset="${DS4_FORCE_RESET:-0}"
-skip_unreachable="${DS4_SKIP_UNREACHABLE:-1}"
-connect_timeout="${DS4_CONNECT_TIMEOUT:-8}"
-ssh_opts="${DS4_SSH_OPTS:-}"
-scp_opts="${DS4_SCP_OPTS:-$ssh_opts}"
-install_rescue="${DS4_INSTALL_RESCUE:-1}"
-rescue_root="${DS4_RESCUE_ROOT:-auto}"
-extend_swap="${DS4_EXTEND_SWAP:-1}"
-install_dsv4_local="${DS4_INSTALL_DSV4_LOCAL:-1}"
-restart_dsv4="${DS4_RESTART_DSV4:-0}"
-dsv4_kv_offload_size="${DS4_DSV4_KV_OFFLOAD_SIZE:-4}"
-dsv4_persist_store="${DS4_DSV4_PERSIST_STORE:-/var/tmp/ds4_hma_store/dsv4/simple_cpu_offload}"
-dsv4_persist_strict="${DS4_DSV4_PERSIST_STRICT:-1}"
-dsv4_pythonhashseed="${DS4_DSV4_PYTHONHASHSEED:-0}"
-local_release_id="$(git -C "$repo_dir" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
-
-self_update_local_checkout()
-{
-	if [ "$local_self_update" != "1" ] || [ "${DS4_SELF_UPDATE_DONE:-0}" = "1" ]; then
-		return 0
-	fi
-	if ! git -C "$repo_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-		return 0
-	fi
-	if [ -n "$(git -C "$repo_dir" status --porcelain)" ]; then
-		echo "local checkout is dirty; refusing to self-update" >&2
-		echo "set DS4_SELF_UPDATE=0 to run this exact checkout anyway" >&2
-		git -C "$repo_dir" status --short >&2
-		exit 12
-	fi
-	echo "==> local: fetch $update_remote $update_branch"
-	git -C "$repo_dir" fetch "$update_remote" "$update_branch"
-	target="$(git -C "$repo_dir" rev-parse --verify "$update_ref")"
-	current="$(git -C "$repo_dir" rev-parse --verify HEAD)"
-	if [ "$current" = "$target" ]; then
-		echo "==> local: already at $update_ref ($(git -C "$repo_dir" rev-parse --short HEAD))"
-		return 0
-	fi
-	echo "==> local: checkout --detach $update_ref"
-	git -C "$repo_dir" checkout --detach "$update_ref"
-	exec env DS4_SELF_UPDATE_DONE=1 "$0" "$@"
-}
-
-self_update_local_checkout "$@"
-
+install_experimental_model_units="${DS4_INSTALL_EXPERIMENTAL_MODEL_UNITS:-0}"
 nodes=("$@")
 if [ "${#nodes[@]}" -eq 0 ]; then
 	nodes=(spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7)
@@ -91,39 +37,14 @@ ssh_cmd()
 {
 	local host="$1"
 	shift
-	ssh $ssh_opts -o BatchMode=yes -o ConnectTimeout="$connect_timeout" "$host" "$@"
-}
-
-scp_cmd()
-{
-	scp $scp_opts "$@"
-}
-
-remote_repo_path()
-{
-	local host="$1"
-	ssh_cmd "$host" "DS4_REMOTE_REPO='$remote_repo' bash -s" <<'REMOTE'
-set -eu
-repo="${DS4_REMOTE_REPO:-$HOME/ds4_on_spark}"
-printf '%s\n' "$repo"
-REMOTE
-}
-
-remote_has_git_repo()
-{
-	local host="$1"
-	ssh_cmd "$host" "DS4_REMOTE_REPO='$remote_repo' bash -s" >/dev/null 2>&1 <<'REMOTE'
-set -eu
-repo="${DS4_REMOTE_REPO:-$HOME/ds4_on_spark}"
-[ -d "$repo/.git" ]
-REMOTE
+	ssh -o BatchMode=yes -o ConnectTimeout=8 "$host" "$@"
 }
 
 node_is_selected()
 {
 	local wanted="$1"
 	local node
-	for node in "${reachable[@]}"
+	for node in "${nodes[@]}"
 	do
 		if [ "$node" = "$wanted" ]; then
 			return 0
@@ -132,185 +53,136 @@ node_is_selected()
 	return 1
 }
 
-update_remote_repo()
+update_ds4_repo()
 {
 	local host="$1"
-	local repo_path
-	repo_path="$(remote_repo_path "$host")"
-	echo "==> $host: git update $repo_path to $update_ref"
-	ssh_cmd "$host" \
-		"DS4_REMOTE_REPO='$remote_repo' DS4_UPDATE_REMOTE='$update_remote' DS4_UPDATE_BRANCH='$update_branch' DS4_UPDATE_REF='$update_ref' DS4_FORCE_RESET='$force_reset' bash -s" <<'REMOTE'
+	echo "==> $host: update \$HOME/src/ds4_on_spark"
+	ssh_cmd "$host" 'bash -s' <<'REMOTE'
 set -euo pipefail
-repo="${DS4_REMOTE_REPO:-$HOME/ds4_on_spark}"
-remote="$DS4_UPDATE_REMOTE"
-branch="$DS4_UPDATE_BRANCH"
-ref="$DS4_UPDATE_REF"
+repo="$HOME/src/ds4_on_spark"
 if [ ! -d "$repo/.git" ]; then
-	echo "missing repo: $repo" >&2
+	echo "missing canonical repo: $repo" >&2
 	exit 20
 fi
 cd "$repo"
-git fetch --prune "$remote" "$branch"
-if [ "$DS4_FORCE_RESET" = "1" ]; then
-	git checkout "$branch" 2>/dev/null || git checkout -b "$branch" "$ref"
-	git reset --hard "$ref"
-else
-	if [ -n "$(git status --porcelain)" ]; then
-		echo "dirty remote checkout; set DS4_FORCE_RESET=1 to reset $repo" >&2
-		git status --short >&2
-		exit 21
-	fi
-	git checkout "$branch"
-	git merge --ff-only "$ref"
+branch="$(git symbolic-ref --short HEAD)"
+if [ "$branch" != "main" ]; then
+	echo "repo is not on main: $repo branch=$branch" >&2
+	exit 21
 fi
+if [ -n "$(git status --porcelain)" ]; then
+	echo "dirty canonical repo: $repo" >&2
+	git status --short >&2
+	exit 22
+fi
+git fetch --prune origin main
+git pull --ff-only origin main
 git rev-parse --short HEAD
 REMOTE
-}
-
-sync_local_repo()
-{
-	local host="$1"
-	local repo_path
-	repo_path="$(remote_repo_path "$host")"
-	echo "==> $host: sync local release $local_release_id to $repo_path"
-	COPYFILE_DISABLE=1 LC_ALL=C tar --no-mac-metadata -C "$repo_dir" \
-		--exclude='./.git' \
-		--exclude='./.pytest_cache' \
-		--exclude='./.mypy_cache' \
-		--exclude='./__pycache__' \
-		--exclude='*/__pycache__' \
-		-cf - . | ssh_cmd "$host" "DS4_REMOTE_REPO='$remote_repo' DS4_RELEASE_ID='$local_release_id' bash -c '
-set -euo pipefail
-repo=\"\${DS4_REMOTE_REPO:-\$HOME/ds4_on_spark}\"
-release_id=\"\$DS4_RELEASE_ID\"
-parent=\"\$(dirname \"\$repo\")/ds4_on_spark_releases\"
-release=\"\$parent/\$release_id\"
-tmp=\"\$parent/.incoming-\$release_id-\$\$\"
-tar_log=\"\$tmp.tar.log\"
-mkdir -p \"\$parent\"
-rm -rf \"\$tmp\"
-rm -f \"\$tar_log\"
-mkdir -p \"\$tmp\"
-tar -C \"\$tmp\" -xf - 2>\"\$tar_log\"
-if [ -s \"\$tar_log\" ]; then
-	grep -v \"LIBARCHIVE.xattr.com.apple.provenance\" \"\$tar_log\" >&2 || true
-fi
-rm -f \"\$tar_log\"
-if [ -e \"\$release\" ] || [ -L \"\$release\" ]; then
-	rm -rf \"\$release\"
-fi
-mv \"\$tmp\" \"\$release\"
-if [ -e \"\$repo\" ] && [ ! -L \"\$repo\" ]; then
-	if [ -d \"\$repo/.git\" ]; then
-		mv \"\$repo\" \"\$repo.git-backup.\$(date +%Y%m%d%H%M%S)\"
-	else
-		mv \"\$repo\" \"\$repo.backup.\$(date +%Y%m%d%H%M%S)\"
-	fi
-fi
-ln -sfn \"\$release\" \"\$repo\"
-printf \"%s\\n\" \"\$release\"
-'"
-}
-
-update_node_code()
-{
-	local host="$1"
-	case "$remote_update_mode" in
-	git)
-		update_remote_repo "$host"
-		;;
-	sync-local)
-		sync_local_repo "$host"
-		;;
-	auto)
-		if remote_has_git_repo "$host"; then
-			update_remote_repo "$host"
-		else
-			sync_local_repo "$host"
-		fi
-		;;
-	*)
-		echo "invalid DS4_REMOTE_UPDATE_MODE=$remote_update_mode; use auto, git, or sync-local" >&2
-		exit 2
-		;;
-	esac
 }
 
 write_dsv4_env()
 {
 	local host="$1"
-	ssh_cmd "$host" 'mkdir -p "$HOME/.config/ds4"; cat > "$HOME/.config/ds4/dsv4-spark45.env"' <<EOF
+	ssh_cmd "$host" 'mkdir -p "$HOME/.config/ds4"; cat > "$HOME/.config/ds4/dsv4-spark45.env"' <<'EOF'
 # Written by ds4_update_spark_nodes.sh.
-# Recovery default: keep the DSV4 CPU KV offload pool small enough that sshd
-# and systemd remain reachable. Raise this after a stable boot if needed.
-DS4_DSV4_KV_OFFLOAD_SIZE=$dsv4_kv_offload_size
-DS4_DSV4_PERSIST_STORE=$dsv4_persist_store
-DS4_DSV4_PERSIST_STRICT=$dsv4_persist_strict
-DS4_DSV4_PYTHONHASHSEED=$dsv4_pythonhashseed
+DS4_DSV4_KV_OFFLOAD_SIZE=4
+DS4_DSV4_PERSIST_STORE=/var/tmp/ds4_hma_store/dsv4/simple_cpu_offload
+DS4_DSV4_PERSIST_STRICT=1
+DS4_DSV4_PYTHONHASHSEED=0
 EOF
 }
 
-install_dsv4_unit()
+write_startup_models_env()
+{
+	local host="$1"
+	ssh_cmd "$host" 'mkdir -p "$HOME/.config/ds4"; cat > "$HOME/.config/ds4/startup-models.env"' <<'EOF'
+# Written by ds4_update_spark_nodes.sh.
+DS4_STARTUP_BASE_URL=http://127.0.0.1:8000
+EOF
+}
+
+disable_model_autoload()
+{
+	local host="$1"
+	echo "==> $host: disable model autoload"
+	ssh_cmd "$host" 'bash -s' <<'REMOTE'
+set -euo pipefail
+mkdir -p "$HOME/.config/ds4"
+tmp="$HOME/.config/ds4/model-gateway.env.tmp"
+if [ -f "$HOME/.config/ds4/model-gateway.env" ]; then
+	grep -v '^DS4_RESIDENT_START=' "$HOME/.config/ds4/model-gateway.env" > "$tmp" || true
+else
+	: > "$tmp"
+fi
+printf 'DS4_RESIDENT_START=0\n' >> "$tmp"
+mv "$tmp" "$HOME/.config/ds4/model-gateway.env"
+for unit in \
+	ds4-startup-models.service \
+	ds4-model-gateway.service \
+	ds4-qwen35b.service \
+	ds4-dsv4-local-head.service \
+	ds4-dsv4-local-worker.service \
+	ds4-dsv4-vllm.service \
+	ds4-dsv4-docker-legacy.service \
+	ds4-dsv4-gateway.service \
+	ds4-dsv4-ray-head.service \
+	ds4-dsv4-ray-worker.service
+do
+	systemctl --user stop "$unit" >/dev/null 2>&1 || true
+	systemctl --user disable "$unit" >/dev/null 2>&1 || true
+done
+systemctl --user reset-failed >/dev/null 2>&1 || true
+systemctl --user daemon-reload
+REMOTE
+}
+
+install_unit()
 {
 	local host="$1"
 	local unit="$2"
 	echo "==> $host: install $unit"
-	ssh_cmd "$host" 'mkdir -p "$HOME/.config/systemd/user"'
-	scp_cmd "$repo_dir/v2/deploy/systemd-user/$unit" "$host:.config/systemd/user/$unit"
-	write_dsv4_env "$host"
-	ssh_cmd "$host" "systemctl --user daemon-reload; systemctl --user enable '$unit'; systemctl --user --no-pager --plain status '$unit' | sed -n '1,8p' || true"
+	ssh_cmd "$host" "bash -s '$unit'" <<'REMOTE'
+set -euo pipefail
+unit="$1"
+repo="$HOME/src/ds4_on_spark"
+src="$repo/v2/deploy/systemd-user/$unit"
+dst="$HOME/.config/systemd/user/$unit"
+if [ ! -f "$src" ]; then
+	echo "missing pulled unit file: $src" >&2
+	exit 30
+fi
+mkdir -p "$HOME/.config/systemd/user"
+install -m 0644 "$src" "$dst"
+systemctl --user daemon-reload
+systemctl --user enable "$unit"
+systemctl --user --no-pager --plain status "$unit" | sed -n '1,8p' || true
+REMOTE
 }
 
-reachable=()
 for node in "${nodes[@]}"
 do
 	echo "==> $node: probe ssh"
-	if ssh_cmd "$node" 'printf ok' >/dev/null 2>&1; then
-		reachable+=("$node")
-	else
-		echo "WARN: $node is unreachable"
-		if [ "$skip_unreachable" != "1" ]; then
-			exit 10
-		fi
-	fi
+	ssh_cmd "$node" 'printf ok >/dev/null'
 done
 
-if [ "${#reachable[@]}" -eq 0 ]; then
-	echo "no reachable nodes" >&2
-	exit 11
-fi
-
-for node in "${reachable[@]}"
+for node in "${nodes[@]}"
 do
-	update_node_code "$node"
+	update_ds4_repo "$node"
+	write_startup_models_env "$node"
+	disable_model_autoload "$node"
+	if [ "$install_experimental_model_units" = "1" ]; then
+		install_unit "$node" ds4-startup-models.service
+	fi
 done
 
-if [ "$install_rescue" = "1" ]; then
-	echo "==> reinstall rescue/watchdog payload on reachable nodes"
-	DS4_RESCUE_ROOT="$rescue_root" DS4_EXTEND_SWAP="$extend_swap" \
-		"$repo_dir/scripts/ds4_deploy_rescue_agent.sh" "${reachable[@]}"
+if [ "$install_experimental_model_units" = "1" ] && node_is_selected spark4; then
+	write_dsv4_env spark4
+	install_unit spark4 ds4-dsv4-local-head.service
+fi
+if [ "$install_experimental_model_units" = "1" ] && node_is_selected spark5; then
+	write_dsv4_env spark5
+	install_unit spark5 ds4-dsv4-local-worker.service
 fi
 
-if [ "$install_dsv4_local" = "1" ]; then
-	if node_is_selected spark4; then
-		install_dsv4_unit spark4 ds4-dsv4-local-head.service
-	fi
-	if node_is_selected spark5; then
-		install_dsv4_unit spark5 ds4-dsv4-local-worker.service
-	fi
-fi
-
-if [ "$restart_dsv4" = "1" ]; then
-	if node_is_selected spark4 && node_is_selected spark5; then
-		echo "==> restart DSV4 local lane: spark5 worker, then spark4 head"
-		ssh_cmd spark4 'systemctl --user stop ds4-dsv4-local-head.service || true'
-		ssh_cmd spark5 'systemctl --user stop ds4-dsv4-local-worker.service || true'
-		ssh_cmd spark5 'systemctl --user restart ds4-dsv4-local-worker.service'
-		sleep 5
-		ssh_cmd spark4 'systemctl --user restart ds4-dsv4-local-head.service'
-	else
-		echo "WARN: DS4_RESTART_DSV4=1 requested, but spark4 and spark5 are not both reachable"
-	fi
-fi
-
-echo "==> updated nodes: ${reachable[*]}"
+echo "==> updated nodes: ${nodes[*]}"

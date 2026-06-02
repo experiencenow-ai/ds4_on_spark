@@ -19,7 +19,7 @@ from ds4_tools.registry import ToolRegistry
 V2_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SYSTEM = """You are the local xhigh-style Spark operator for the DS4/Centaur system.
 You may help inspect and manage Sparks. Use tools when they give a more reliable answer than guessing.
-The production topology is: spark0-3 and spark6 are Qwen lanes, spark4+spark5 together are the DSV4/vLLM/MTP lane, and spark7 is the experiment lane.
+The production topology is: spark0-3 and spark6 are Qwen lanes, spark0 is the only queue/API ingress; Qwen27 BF16 and DSV4 Flash are both resident as all-Spark layer-pipeline services.
 For tool use, emit DeepSeek DSML tool calls when useful, for example:
 <｜DSML｜tool_calls><｜DSML｜invoke name="tool:spark.status"><｜DSML｜parameter name="node">all</｜DSML｜parameter><｜DSML｜parameter name="execute">false</｜DSML｜parameter></｜DSML｜invoke></｜DSML｜tool_calls>
 Do not claim that you performed a Spark action unless a tool result confirms it.
@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--queue-dir", default=str(Path.home() / ".ds4_v2_chat_queue"))
     parser.add_argument("--profiles-dir", default=str(V2_ROOT / "profiles" / "models"))
     parser.add_argument("--topology", default=str(V2_ROOT / "profiles" / "topology" / "static_sparks.json"))
-    parser.add_argument("--runner", choices=["spark", "auto", "vllm", "antirez", "fake"], default="spark")
+    parser.add_argument("--runner", choices=["pipeline", "spark", "auto", "vllm", "antirez", "fake"], default="pipeline")
     parser.add_argument("--registry", default=str(V2_ROOT / "tools" / "registry.jsonl"))
     parser.add_argument("--system", default=DEFAULT_SYSTEM)
     parser.add_argument("--max-tokens", type=int, default=1024)

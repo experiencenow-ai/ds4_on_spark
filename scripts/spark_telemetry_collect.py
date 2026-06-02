@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import csv
 import datetime as dt
 import os
@@ -26,13 +27,41 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--tail-lines", type=int, default=17280)
     p.add_argument("--loop-interval", type=float, default=0.0)
     p.add_argument("--ssh-timeout", type=float, default=8.0)
+    p.add_argument("--ssh-control-dir", default=os.environ.get("DS4_TELEMETRY_SSH_CONTROL_DIR","/tmp/ds4mux"))
+    p.add_argument("--ssh-control-persist", type=int, default=int(os.environ.get("DS4_TELEMETRY_SSH_CONTROL_PERSIST","600")))
+    p.add_argument("--fetch-workers", type=int, default=8)
+    p.add_argument("--stale-warn-seconds", type=float, default=30.0)
     p.add_argument("--stale-ok-seconds", type=float, default=300.0)
     p.add_argument("--queue-db", default=os.environ.get("DS4_QUEUE_DB",""))
     p.add_argument("--queue-db-glob", default=telemetry.QUEUE_DB_GLOB)
     return(p.parse_args())
 
 
-def fetch_node(node: str, remote_dir: str, timeout: float, lines: int, target: str | None = None) -> Tuple[str,str,str]:
+def ssh_control_path(control_dir: str) -> Tuple[str,str]:
+    base = (control_dir or "/tmp/ds4mux").rstrip("/")
+    path = "%s/t-%%C" % base
+    if len(path.replace("%C","x" * 40)) > 80:
+        base = "/tmp/ds4mux"
+        path = "%s/t-%%C" % base
+    return(base,path)
+
+
+def ssh_control_options(control_dir: str, persist_seconds: int) -> List[str]:
+    if persist_seconds <= 0 or control_dir.strip() == "":
+        return([])
+    base,path = ssh_control_path(control_dir)
+    os.makedirs(base,exist_ok=True)
+    return([
+        "-o",
+        "ControlMaster=auto",
+        "-o",
+        "ControlPersist=%ds" % persist_seconds,
+        "-o",
+        "ControlPath=%s" % path,
+    ])
+
+
+def fetch_node(node: str, remote_dir: str, timeout: float, lines: int, target: str | None = None, control_dir: str = "", control_persist: int = 0) -> Tuple[str,str,str]:
     target = target or node
     remote_path = shlex.quote(telemetry.node_csv_path(remote_dir))
     cmd = [
@@ -41,6 +70,11 @@ def fetch_node(node: str, remote_dir: str, timeout: float, lines: int, target: s
         "BatchMode=yes",
         "-o",
         "ConnectTimeout=%d" % max(1,int(timeout)),
+        "-o",
+        "ServerAliveInterval=2",
+        "-o",
+        "ServerAliveCountMax=1",
+    ] + ssh_control_options(control_dir,control_persist) + [
         target,
         "if [ -r %s ]; then head -n 1 %s; tail -n %d %s; else exit 1; fi" % (remote_path,remote_path,lines,remote_path),
     ]
@@ -93,6 +127,12 @@ def read_cached_rows(path: str, max_age_s: float) -> List[Dict[str,str]]:
     return(rows if age_s <= max_age_s else [])
 
 
+def rows_age_s(rows: List[Dict[str,str]]) -> float:
+    if len(rows) == 0:
+        return(999999999.0)
+    return(max(0.0,time.time() - row_unix_ts(rows[-1])))
+
+
 def summarize_node(rows: List[Dict[str,str]], error: str, fetch_error: str = "", stale_data: bool = False) -> Dict[str,object]:
     if len(rows) == 0:
         return({"sample_count":0,"error":error})
@@ -134,6 +174,25 @@ def summarize_node(rows: List[Dict[str,str]], error: str, fetch_error: str = "",
         "last_vllm_kv_cache_pct": telemetry.fnum(latest,"vllm_kv_cache_pct"),
         "last_vllm_prompt_tokens_total": telemetry.fnum(latest,"vllm_prompt_tokens_total"),
         "last_vllm_generation_tokens_total": telemetry.fnum(latest,"vllm_generation_tokens_total"),
+        "last_vllm_prompt_tokens_local_compute_total": telemetry.fnum(latest,"vllm_prompt_tokens_local_compute_total"),
+        "last_vllm_prompt_tokens_local_cache_hit_total": telemetry.fnum(latest,"vllm_prompt_tokens_local_cache_hit_total"),
+        "last_vllm_prompt_tokens_external_kv_transfer_total": telemetry.fnum(latest,"vllm_prompt_tokens_external_kv_transfer_total"),
+        "last_vllm_prompt_tokens_cached_total": telemetry.fnum(latest,"vllm_prompt_tokens_cached_total"),
+        "last_vllm_prefix_cache_queries_total": telemetry.fnum(latest,"vllm_prefix_cache_queries_total"),
+        "last_vllm_prefix_cache_hits_total": telemetry.fnum(latest,"vllm_prefix_cache_hits_total"),
+        "last_vllm_external_prefix_cache_queries_total": telemetry.fnum(latest,"vllm_external_prefix_cache_queries_total"),
+        "last_vllm_external_prefix_cache_hits_total": telemetry.fnum(latest,"vllm_external_prefix_cache_hits_total"),
+        "last_vllm_tokens_total": telemetry.fnum(latest,"vllm_tokens_total"),
+        "last_vllm_tokens_per_s": telemetry.fnum(latest,"vllm_tokens_per_s"),
+        "last_vllm_prompt_tokens_per_s": telemetry.fnum(latest,"vllm_prompt_tokens_per_s"),
+        "last_vllm_generation_tokens_per_s": telemetry.fnum(latest,"vllm_generation_tokens_per_s"),
+        "last_vllm_prompt_tokens_cached_per_s": telemetry.fnum(latest,"vllm_prompt_tokens_cached_per_s"),
+        "last_vllm_prompt_tokens_local_compute_per_s": telemetry.fnum(latest,"vllm_prompt_tokens_local_compute_per_s"),
+        "last_vllm_prompt_tokens_local_cache_hit_per_s": telemetry.fnum(latest,"vllm_prompt_tokens_local_cache_hit_per_s"),
+        "last_vllm_prompt_tokens_external_kv_transfer_per_s": telemetry.fnum(latest,"vllm_prompt_tokens_external_kv_transfer_per_s"),
+        "last_vllm_prompt_cache_hit_pct": telemetry.fnum(latest,"vllm_prompt_cache_hit_pct"),
+        "last_vllm_prefix_cache_hit_pct": telemetry.fnum(latest,"vllm_prefix_cache_hit_pct"),
+        "last_vllm_external_prefix_cache_hit_pct": telemetry.fnum(latest,"vllm_external_prefix_cache_hit_pct"),
         "last_vllm_metrics_sources": latest.get("vllm_metrics_sources",""),
         "last_local_queue_db": latest.get("local_queue_db",""),
         "last_local_queue_total": telemetry.fnum(latest,"local_queue_total"),
@@ -145,6 +204,14 @@ def summarize_node(rows: List[Dict[str,str]], error: str, fetch_error: str = "",
         "last_local_queue_model_depth": telemetry.fnum(latest,"local_queue_model_depth"),
         "last_local_queue_cpu_depth": telemetry.fnum(latest,"local_queue_cpu_depth"),
         "last_local_queue_by_node": latest.get("local_queue_by_node",""),
+        "last_local_queue_queued_by_node": latest.get("local_queue_queued_by_node",""),
+        "last_local_queue_running_by_node": latest.get("local_queue_running_by_node",""),
+        "last_local_queue_prompt_tokens_recent": telemetry.fnum(latest,"local_queue_prompt_tokens_recent"),
+        "last_local_queue_prompt_tok_s": telemetry.fnum(latest,"local_queue_prompt_tok_s"),
+        "last_local_queue_prompt_tok_s_by_node": latest.get("local_queue_prompt_tok_s_by_node",""),
+        "last_local_queue_completion_tokens_recent": telemetry.fnum(latest,"local_queue_completion_tokens_recent"),
+        "last_local_queue_completion_tok_s": telemetry.fnum(latest,"local_queue_completion_tok_s"),
+        "last_local_queue_completion_tok_s_by_node": latest.get("local_queue_completion_tok_s_by_node",""),
         "last_gpu_util_pct": telemetry.fnum(latest,"gpu_util_pct"),
         "last_gpu_temp_c": telemetry.fnum(latest,"gpu_temp_c"),
         "last_gpu_fan_pct": telemetry.fnum(latest,"gpu_fan_pct"),
@@ -163,8 +230,17 @@ def summarize_node(rows: List[Dict[str,str]], error: str, fetch_error: str = "",
         "vllm_requests_running": telemetry.stats(telemetry.fnum(r,"vllm_requests_running") for r in rows),
         "vllm_requests_waiting": telemetry.stats(telemetry.fnum(r,"vllm_requests_waiting") for r in rows),
         "vllm_kv_cache_pct": telemetry.stats(telemetry.fnum(r,"vllm_kv_cache_pct") for r in rows),
+        "vllm_tokens_per_s": telemetry.stats(telemetry.fnum(r,"vllm_tokens_per_s") for r in rows),
+        "vllm_prompt_tokens_per_s": telemetry.stats(telemetry.fnum(r,"vllm_prompt_tokens_per_s") for r in rows),
+        "vllm_generation_tokens_per_s": telemetry.stats(telemetry.fnum(r,"vllm_generation_tokens_per_s") for r in rows),
+        "vllm_prompt_tokens_cached_per_s": telemetry.stats(telemetry.fnum(r,"vllm_prompt_tokens_cached_per_s") for r in rows),
+        "vllm_prompt_cache_hit_pct": telemetry.stats(telemetry.fnum(r,"vllm_prompt_cache_hit_pct") for r in rows),
+        "vllm_prefix_cache_hit_pct": telemetry.stats(telemetry.fnum(r,"vllm_prefix_cache_hit_pct") for r in rows),
+        "vllm_external_prefix_cache_hit_pct": telemetry.stats(telemetry.fnum(r,"vllm_external_prefix_cache_hit_pct") for r in rows),
         "local_queue_depth": telemetry.stats(telemetry.fnum(r,"local_queue_depth") for r in rows),
         "local_queue_running": telemetry.stats(telemetry.fnum(r,"local_queue_running") for r in rows),
+        "local_queue_prompt_tok_s": telemetry.stats(telemetry.fnum(r,"local_queue_prompt_tok_s") for r in rows),
+        "local_queue_completion_tok_s": telemetry.stats(telemetry.fnum(r,"local_queue_completion_tok_s") for r in rows),
         "gpu_util_pct": telemetry.stats(gpu_vals),
         "gpu_temp_c": telemetry.stats(gpu_temps),
         "gpu_samples_ge_90": len(hot),
@@ -190,14 +266,15 @@ def write_combined(out_dir: str, all_rows: Dict[str,List[Dict[str,str]]], errors
                 if key not in seen:
                     seen.add(key)
                     fieldnames.append(key)
-    with open(combined_path + ".tmp","w",encoding="utf-8",newline="") as f:
+    combined_tmp = "%s.%d.tmp" % (combined_path,os.getpid())
+    with open(combined_tmp,"w",encoding="utf-8",newline="") as f:
         if fieldnames:
             w = csv.DictWriter(f,fieldnames=fieldnames)
             w.writeheader()
             for node in sorted(all_rows):
                 for row in all_rows[node]:
                     w.writerow({key:row.get(key,"") for key in fieldnames})
-    os.replace(combined_path + ".tmp",combined_path)
+    os.replace(combined_tmp,combined_path)
     summary = telemetry.summary_base()
     summary.update({"combined_csv":combined_path,"queue":queue,"nodes":{}})
     for node in sorted(set(all_rows) | set(errors)):
@@ -205,30 +282,48 @@ def write_combined(out_dir: str, all_rows: Dict[str,List[Dict[str,str]]], errors
     telemetry.write_json_atomic(summary_path,summary)
     lines = ["# Spark telemetry summary",""]
     if str(queue.get("local_queue_db","")):
-        lines.append("Queue: depth=%s queued=%s running=%s model=%s cpu=%s db=%s" % (
+        lines.append("Queue: depth=%s queued=%s running=%s model=%s cpu=%s in tok/s=%s out tok/s=%s db=%s" % (
             queue.get("local_queue_depth",0),
             queue.get("local_queue_queued",0),
             queue.get("local_queue_running",0),
             queue.get("local_queue_model_depth",0),
             queue.get("local_queue_cpu_depth",0),
+            queue.get("local_queue_prompt_tok_s",0),
+            queue.get("local_queue_completion_tok_s",0),
             queue.get("local_queue_db",""),
         ))
         by_node = str(queue.get("local_queue_by_node",""))
         if by_node:
             lines.append("Queue by node: %s" % by_node)
         lines.append("")
-    lines.append("| node | samples | gpu % | gpu C | vLLM run/wait | KV % | local q | gateway cpu q | disk % | rx Mbps | tx Mbps | cpu % | mem % | model | error |")
-    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|")
+    queue_depth_by_node = telemetry.node_metric_map(queue.get("local_queue_by_node",""))
+    queue_queued_by_node = telemetry.node_metric_map(queue.get("local_queue_queued_by_node",""))
+    queue_running_by_node = telemetry.node_metric_map(queue.get("local_queue_running_by_node",""))
+    queue_prompt_tok_s_by_node = telemetry.node_metric_map(queue.get("local_queue_prompt_tok_s_by_node",""))
+    queue_tok_s_by_node = telemetry.node_metric_map(queue.get("local_queue_completion_tok_s_by_node",""))
+    lines.append("| node | samples | gpu % | gpu C | vLLM run/wait | KV % | local q | gateway cpu q | disk % | rx Mbps | tx Mbps | cpu % | mem % | model | error | in tok/s | out tok/s | cache hit % | ext hit % |")
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|")
     for node,row in summary["nodes"].items():
-        lines.append("| %s | %s | %.2f | %.2f | %.0f/%.0f | %.2f | %.0f | %.0f/%.0f | %.2f | %.4f | %.4f | %.2f | %.2f | %s | %s |" % (
+        vllm_running = float(row.get("last_vllm_requests_running",0.0))
+        vllm_waiting = float(row.get("last_vllm_requests_waiting",0.0))
+        local_q = max(float(row.get("last_local_queue_depth",0.0)),float(queue_depth_by_node.get(node,0.0)))
+        if float(row.get("last_vllm_metrics_up",0.0)) <= 0.0:
+            vllm_running = max(vllm_running,float(queue_running_by_node.get(node,0.0)))
+            vllm_waiting = max(vllm_waiting,float(queue_queued_by_node.get(node,0.0)))
+        kv_text = "%.2f" % float(row.get("last_vllm_kv_cache_pct",0.0)) if float(row.get("last_vllm_metrics_up",0.0)) > 0.0 else "n/a"
+        in_tok_s = max(float(row.get("last_vllm_prompt_tokens_per_s",0.0)),float(queue_prompt_tok_s_by_node.get(node,0.0)))
+        out_tok_s = max(float(row.get("last_vllm_generation_tokens_per_s",0.0)),float(queue_tok_s_by_node.get(node,0.0)))
+        cache_hit_pct = float(row.get("last_vllm_prompt_cache_hit_pct",0.0))
+        ext_hit_pct = float(row.get("last_vllm_external_prefix_cache_hit_pct",0.0))
+        lines.append("| %s | %s | %.2f | %.2f | %.0f/%.0f | %s | %.0f | %.0f/%.0f | %.2f | %.4f | %.4f | %.2f | %.2f | %s | %s | %.3f | %.3f | %.2f | %.2f |" % (
             node,
             row.get("sample_count",0),
             float(row.get("last_gpu_util_pct",0.0)),
             float(row.get("last_gpu_temp_c",0.0)),
-            float(row.get("last_vllm_requests_running",0.0)),
-            float(row.get("last_vllm_requests_waiting",0.0)),
-            float(row.get("last_vllm_kv_cache_pct",0.0)),
-            float(row.get("last_local_queue_depth",0.0)),
+            vllm_running,
+            vllm_waiting,
+            kv_text,
+            local_q,
             float(row.get("last_ds4_gateway_cpu_pending",0.0)),
             float(row.get("last_ds4_gateway_cpu_active",0.0)),
             float(row.get("last_root_disk_used_pct",0.0)),
@@ -238,6 +333,10 @@ def write_combined(out_dir: str, all_rows: Dict[str,List[Dict[str,str]]], errors
             float(row.get("last_mem_used_pct",0.0)),
             str(row.get("last_ds4_gateway_current_model","")).replace("|","/")[:40],
             str(row.get("error","")).replace("|","/"),
+            in_tok_s,
+            out_tok_s,
+            cache_hit_pct,
+            ext_hit_pct,
         ))
     telemetry.write_text_atomic(md_path,"\n".join(lines) + "\n")
     return(summary)
@@ -250,13 +349,21 @@ def collect_once(args: argparse.Namespace) -> Dict[str,object]:
     errors: Dict[str,str] = {}
     fetch_errors: Dict[str,str] = {}
     stale_nodes: set[str] = set()
-    for node,target in telemetry.parse_node_targets(args.nodes):
-        name,text,error = fetch_node(node,args.remote_dir,args.ssh_timeout,args.tail_lines,target)
+    node_targets = telemetry.parse_node_targets(args.nodes)
+    workers = max(1,min(max(1,args.fetch_workers),len(node_targets) or 1))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(fetch_node,node,args.remote_dir,args.ssh_timeout,args.tail_lines,target,args.ssh_control_dir,args.ssh_control_persist): node
+            for node,target in node_targets
+        }
+        results = [future.result() for future in concurrent.futures.as_completed(futures)]
+    for name,text,error in results:
         if error:
             cached = read_cached_rows(os.path.join(raw_dir,name + ".csv"),args.stale_ok_seconds)
             if cached:
                 fetch_errors[name] = error
-                stale_nodes.add(name)
+                if rows_age_s(cached) > args.stale_warn_seconds:
+                    stale_nodes.add(name)
                 all_rows[name] = cached
             else:
                 errors[name] = error

@@ -8,9 +8,9 @@ StartLimitBurst=2
 
 [Service]
 Type=simple
-WorkingDirectory=%h/ds4_on_spark/v2
-EnvironmentFile=-%h/.config/ds4/dsv4-spark45.env
-ExecStart=%h/ds4_on_spark/v2/scripts/ds4_dsv4_spark45_local_vllm.sh head
+WorkingDirectory=%h/src/ds4_on_spark/v2
+EnvironmentFile=%h/.config/ds4/dsv4-spark45.env
+ExecStart=%h/src/ds4_on_spark/v2/scripts/ds4_dsv4_spark45_local_vllm.sh head
 Restart=on-failure
 RestartSec=10
 TimeoutStartSec=1200

@@ -1,21 +1,40 @@
 {
-  "format": "ds4-model-profile-v1",
-  "profile_id": "dsv4_vllm_mtp_smartest_v1",
-  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
   "backend": "vllm_mtp",
+  "capability_classes": [
+    "smart",
+    "smartest"
+  ],
+  "format": "ds4-model-profile-v1",
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "performance": {
+    "latency_rank": 3.0,
+    "observed_chat_mtp_tps": 20.0
+  },
+  "production_eligible": true,
+  "profile_id": "dsv4_vllm_mtp_smartest_v1",
+  "quality": {
+    "status": "legacy resident-lane profile retained for rollback; not selected by default in dual pipeline topology"
+  },
+  "routing": {
+    "chat_template_thinking_key": "thinking",
+    "default_for": [
+      "smartest"
+    ],
+    "optional_kv_cache_deployments": [
+      "profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json"
+    ],
+    "rank": 500,
+    "superseded_by": "dsv4_vllm_mtp_pp8_smartest_v1"
+  },
   "runtime_contract_id": "dsv4_spark45_vllm_mtp_v1",
-  "capability_classes": ["smart", "smartest"],
-  "supported_job_classes": ["atom_edit", "analysis", "debug", "cluster_synthesis", "tool_chat"],
+  "supported_job_classes": [
+    "atom_edit",
+    "analysis",
+    "debug",
+    "cluster_synthesis",
+    "tool_chat"
+  ],
   "supports_chat": true,
   "supports_completion": true,
-  "supports_thinking": true,
-  "production_eligible": true,
-  "quality": {"status": "best quality candidate pending calibration"},
-  "performance": {"observed_chat_mtp_tps": 20.0, "latency_rank": 3.0},
-  "routing": {
-    "default_for": ["smartest"],
-    "rank": 50,
-    "chat_template_thinking_key": "thinking",
-    "optional_kv_cache_deployments": ["profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json"]
-  }
+  "supports_thinking": true
 }

@@ -15,12 +15,13 @@ PROFILES = ROOT / "profiles" / "models"
 
 
 class InferenceContractTests(unittest.TestCase):
-    def test_efficient_routes_to_qwen_27b(self) -> None:
+    def test_efficient_routes_to_qwen_27b_bf16_pipeline(self) -> None:
         profile = ProfileRegistry.load(PROFILES).resolve(capability="efficient", chat=False, job_class="atom_edit")
-        self.assertEqual(profile.profile_id, "qwen3_6_27b_fp8_efficient_v1")
-        self.assertEqual(profile.quality["ds4_eval_correct"], 76)
-        self.assertLess(profile.performance["single_stream_decode_tok_s"], profile.performance["aggregate_decode_tok_s_at_16"])
-        self.assertLess(profile.performance["aggregate_decode_tok_s_at_16"], profile.performance["aggregate_decode_tok_s_at_32"])
+        self.assertEqual(profile.profile_id, "qwen3_6_27b_bf16_pp8_efficient_v1")
+        self.assertEqual(profile.model_id, "Qwen/Qwen3.6-27B")
+        self.assertEqual(profile.backend, "vllm_pipeline")
+        self.assertIn("76/92 ds4_eval", profile.quality["baseline"])
+        self.assertIn("3-5B per-stage", profile.performance["target"])
 
     def test_fastest_routes_to_qwen_a3b_for_triage(self) -> None:
         profile = ProfileRegistry.load(PROFILES).resolve(capability="fastest", chat=False, job_class="triage")
@@ -28,20 +29,20 @@ class InferenceContractTests(unittest.TestCase):
 
     def test_smart_completion_routes_to_dsv4_vllm(self) -> None:
         profile = ProfileRegistry.load(PROFILES).resolve(capability="smart", chat=False, job_class="atom_edit")
-        self.assertEqual(profile.profile_id, "dsv4_vllm_mtp_smartest_v1")
+        self.assertEqual(profile.profile_id, "dsv4_vllm_mtp_pp8_smartest_v1")
 
     def test_smartest_chat_routes_to_vllm_mtp(self) -> None:
         profile = ProfileRegistry.load(PROFILES).resolve(capability="smartest", chat=True, job_class="tool_chat")
-        self.assertEqual(profile.profile_id, "dsv4_vllm_mtp_smartest_v1")
+        self.assertEqual(profile.profile_id, "dsv4_vllm_mtp_pp8_smartest_v1")
 
     def test_pin_overrides_capability(self) -> None:
         profile = ProfileRegistry.load(PROFILES).resolve(
             capability="efficient",
             chat=True,
             job_class="atom_edit",
-            model_pin={"profile_id": "dsv4_vllm_mtp_smartest_v1"},
+            model_pin={"profile_id": "dsv4_vllm_mtp_pp8_smartest_v1"},
         )
-        self.assertEqual(profile.profile_id, "dsv4_vllm_mtp_smartest_v1")
+        self.assertEqual(profile.profile_id, "dsv4_vllm_mtp_pp8_smartest_v1")
 
     def test_fake_runner_writes_durable_manifest(self) -> None:
         request = InferenceRequest.from_json(
@@ -69,7 +70,7 @@ class InferenceContractTests(unittest.TestCase):
             self.assertEqual(manifest["request_count"], 1)
             self.assertEqual(manifest["completed_count"], 1)
             response = json.loads((Path(tmp) / "responses.jsonl").read_text().strip())
-            self.assertEqual(response["selected_profile"]["profile_id"], "qwen3_6_27b_fp8_efficient_v1")
+            self.assertEqual(response["selected_profile"]["profile_id"], "qwen3_6_27b_bf16_pp8_efficient_v1")
             self.assertIn("centaur-atom-edit-v1", response["output"]["text"])
 
 

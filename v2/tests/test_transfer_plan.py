@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+from argparse import Namespace
 from pathlib import Path
 import unittest
 
+from ds4_transfer.fast_copy import _selected_stages
 from ds4_transfer.service import TransferRequest, TransferTopology, plan_transfer, run_transfer
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,7 +13,7 @@ TOPOLOGY = ROOT / "profiles" / "transfer" / "spark_200g.json"
 
 
 class TransferPlanTests(unittest.TestCase):
-    def test_transfer_plan_runs_rsync_on_source_node_for_direct_data_path(self) -> None:
+    def test_transfer_plan_uses_200g_bulk_copy(self) -> None:
         topology = TransferTopology.load(TOPOLOGY)
         request = TransferRequest.from_json(
             {
@@ -24,12 +26,11 @@ class TransferPlanTests(unittest.TestCase):
             }
         )
         plan = plan_transfer(topology, request)
-        self.assertEqual(plan["method"], "source_initiated_rsync_over_ssh_no_compress")
-        self.assertEqual(plan["direct_data_path"], "spark0 -> spark4")
-        self.assertEqual(plan["argv"][:4], ["ssh", "-T", "-o", "Compression=no"])
-        self.assertIn("spark0", plan["argv"])
-        self.assertIn("spark4:/mnt/data/batch/", plan["argv"])
-        self.assertIn("--no-compress", plan["argv"])
+        self.assertEqual(plan["method"], "parallel_nc_fanout_200g_v1")
+        self.assertEqual(plan["direct_data_path"], "spark0-200g -> spark4-200g")
+        self.assertIn("ds4_transfer.fast_copy", plan["argv"])
+        self.assertIn("--jobs-per-edge", plan["argv"])
+        self.assertEqual(plan["destination_fabric_ip"], "10.10.100.14")
 
     def test_transfer_rejects_disallowed_paths(self) -> None:
         topology = TransferTopology.load(TOPOLOGY)
@@ -60,6 +61,27 @@ class TransferPlanTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["status"], "planned")
         self.assertEqual(result["plan"]["source_node"], "spark2")
+
+    def test_source_rooted_n_way_fanout_uses_selected_ring(self) -> None:
+        topology = TransferTopology.load(TOPOLOGY)
+        stages = _selected_stages(
+            topology,
+            Namespace(
+                source_node="spark0",
+                destination_node=None,
+                fanout_nodes="spark1,spark2,spark3,spark4,spark5",
+            ),
+        )
+        self.assertEqual(
+            stages,
+            [
+                [("spark0", "spark1")],
+                [("spark1", "spark2")],
+                [("spark2", "spark3")],
+                [("spark3", "spark4")],
+                [("spark4", "spark5")],
+            ],
+        )
 
 
 if __name__ == "__main__":

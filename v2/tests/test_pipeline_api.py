@@ -30,11 +30,14 @@ class PipelineApiTests(unittest.TestCase):
                 "max_output_tokens": 8,
                 "thinking_budget_tokens": 0,
                 "temperature": 0,
-                "input": {"text": "ping"},
+                "input": {"text": "ping", "openai_sampling": {"ignore_eos": True, "min_tokens": 8}},
                 "output_contract": {"format": "text"},
             }
         )
-        self.assertEqual(_openai_payload(request, profile)["model"], "deepseek-v4-flash-pp8")
+        payload = _openai_payload(request, profile)
+        self.assertEqual(payload["model"], "deepseek-v4-flash-pp8")
+        self.assertTrue(payload["ignore_eos"])
+        self.assertEqual(payload["min_tokens"], 8)
 
     def test_submit_binds_to_spark0_pipeline_and_kv_shards_are_layer_local(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -217,7 +220,7 @@ class PipelineApiTests(unittest.TestCase):
                     "max_output_tokens": 8,
                     "thinking_budget_tokens": 0,
                     "temperature": 0,
-                    "input": {"prompt": f"prompt {idx}"},
+                    "input": {"prompt": f"prompt {idx}", "openai_sampling": {"ignore_eos": True, "min_tokens": 8}},
                     "output_contract": {"format": "text"},
                 }
             )
@@ -242,6 +245,8 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["endpoint"], "/v1/completions")
         self.assertEqual(calls[0]["payload"]["prompt"], ["prompt 0", "prompt 1", "prompt 2"])
+        self.assertTrue(calls[0]["payload"]["ignore_eos"])
+        self.assertEqual(calls[0]["payload"]["min_tokens"], 8)
         self.assertEqual([results[f"prompt-{idx}"]["output"]["text"] for idx in range(3)], ["answer 0", "answer 1", "answer 2"])
         self.assertTrue(results["prompt-0"]["transport"]["coalesced_completion_batch"])
 

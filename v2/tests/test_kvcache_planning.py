@@ -12,6 +12,10 @@ from ds4_tools.registry import ToolRegistry
 
 ROOT = Path(__file__).resolve().parents[1]
 DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "dsv4_spark45_hma_cpu_offload.json"
+QWEN_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_lmcache_mp_spark7.json"
+QWEN_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_lmcache_hma.json"
+DSV4_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "dsv4_flash_pp8_simple_offload.json"
+VLLM_COMMIT = "c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34"
 
 
 class KvCachePlanningTests(unittest.TestCase):
@@ -25,6 +29,8 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["worker_nodes"], ["spark4", "spark5"])
         self.assertEqual(plan["logical_service_count"], 1)
         self.assertEqual(plan["model_instance_count"], 1)
+        self.assertEqual(plan["runtime"]["runtime_contract_id"], "dsv4_spark45_vllm_mtp_v1")
+        self.assertEqual(plan["runtime"]["vllm_source_commit"], VLLM_COMMIT)
         self.assertEqual(plan["listen_base_url"], "http://0.0.0.0:8000")
         self.assertEqual(plan["openai_base_url"], "http://spark4:8000")
         self.assertIn("--kv-transfer-config", plan["vllm"]["argv"])
@@ -86,6 +92,96 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertNotIn("LMCacheConnectorV1Dynamic", start.read_text())
             self.assertTrue((Path(tmp) / "kv_cache_launch_manifest.json").exists())
 
+    def test_qwen_lmcache_mp_plan_uses_external_cache_server(self) -> None:
+        deployment = KvCacheDeployment.load(QWEN_DEPLOYMENT)
+        plan = plan_deployment(deployment)
+        config = plan["connector"]["kv_transfer_config"]
+
+        self.assertEqual(plan["profile_id"], "qwen3_6_27b_fp8_efficient_v1")
+        self.assertEqual(plan["spark_node"], "spark7")
+        self.assertEqual(plan["runtime"]["runtime_contract_id"], "qwen27_vllm_trim_v1")
+        self.assertEqual(plan["runtime"]["vllm_fork"], "https://github.com/experiencenow-ai/vllm")
+        self.assertEqual(plan["runtime"]["vllm_source_commit"], VLLM_COMMIT)
+        self.assertEqual(plan["openai_base_url"], "http://127.0.0.1:18110")
+        self.assertEqual(plan["connector"]["install_packages"], ["lmcache==0.4.5"])
+        self.assertEqual(plan["connector"]["install_args"], ["--no-build-isolation"])
+        self.assertEqual(plan["connector"]["wheel_dir"], "/tmp/ds4_lmcache_wheels")
+        self.assertEqual(config["kv_connector"], "LMCacheMPConnector")
+        self.assertNotIn("kv_connector_module_path", config)
+        self.assertEqual(config["kv_connector_extra_config"]["lmcache.mp.host"], "127.0.0.1")
+        self.assertEqual(config["kv_connector_extra_config"]["lmcache.mp.port"], 5555)
+        self.assertIn("LMCacheMPConnector", plan["vllm"]["command"])
+        self.assertIn("--max-model-len", plan["vllm"]["argv"])
+        self.assertIn("--no-disable-hybrid-kv-cache-manager", plan["vllm"]["argv"])
+        self.assertEqual(plan["cache_server"]["kind"], "lmcache_mp")
+        self.assertEqual(plan["cache_server"]["management_url"], "http://127.0.0.1:18080")
+        self.assertIn("--l2-adapter", plan["cache_server"]["argv"])
+        self.assertIn("/mnt/nvme/ds4_lmcache/qwen27/l2", plan["cache_server"]["command"])
+
+    def test_write_qwen_lmcache_launch_scripts(self) -> None:
+        deployment = KvCacheDeployment.load(QWEN_DEPLOYMENT)
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = write_launch_scripts(deployment, tmp)
+            install = Path(manifest["scripts"]["install"]).read_text()
+            cache_server = Path(manifest["scripts"]["start_cache_server"]).read_text()
+            vllm = Path(manifest["scripts"]["start_vllm"]).read_text()
+
+            self.assertIn("CUDA_HOME=/usr/local/cuda", install)
+            self.assertIn("pip wheel --no-build-isolation --no-deps", install)
+            self.assertIn("lmcache==0.4.5", install)
+            self.assertIn("pip install --no-deps", install)
+            self.assertIn('\"${wheel}\"', install)
+            self.assertIn("mkdir -p /mnt/nvme/ds4_lmcache/qwen27/l2", install)
+            self.assertIn("lmcache server", cache_server)
+            self.assertIn("LMCacheMPConnector", vllm)
+
+    def test_qwen_bf16_pp8_lmcache_hma_plan_is_pipeline_sharded(self) -> None:
+        deployment = KvCacheDeployment.load(QWEN_PP_DEPLOYMENT)
+        plan = plan_deployment(deployment)
+
+        self.assertEqual(plan["profile_id"], "qwen3_6_27b_bf16_pp8_efficient_v1")
+        self.assertEqual(plan["spark_node"], "spark0")
+        self.assertEqual(plan["pipeline_parallel_size"], 8)
+        self.assertEqual(plan["tensor_parallel_size"], 1)
+        self.assertEqual(plan["cache_sharding"], "pipeline_layers")
+        self.assertEqual(plan["layer_partition"], [9, 9, 9, 8, 8, 8, 8, 5])
+        self.assertEqual(len(plan["vllm_nodes"]), 8)
+        self.assertEqual(plan["vllm_nodes"][0]["layer_start"], 0)
+        self.assertEqual(plan["vllm_nodes"][-1]["layer_end"], 64)
+        self.assertIn("--language-model-only", plan["vllm_nodes"][0]["argv"])
+        self.assertIn("--dtype", plan["vllm_nodes"][0]["argv"])
+        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--dtype") + 1], "bfloat16")
+        self.assertIn("LMCacheConnectorV1", plan["vllm_nodes"][0]["command"])
+        self.assertIn("VLLM_PP_LAYER_PARTITION=9,9,9,8,8,8,8,5", plan["vllm_nodes"][0]["command"])
+        self.assertIn("--headless", plan["vllm_nodes"][-1]["argv"])
+
+    def test_dsv4_flash_pp8_simple_offload_plan_is_pipeline_sharded(self) -> None:
+        deployment = KvCacheDeployment.load(DSV4_PP_DEPLOYMENT)
+        plan = plan_deployment(deployment)
+
+        self.assertEqual(plan["profile_id"], "dsv4_vllm_mtp_pp8_smartest_v1")
+        self.assertEqual(plan["pipeline_parallel_size"], 8)
+        self.assertEqual(plan["cache_sharding"], "pipeline_layers")
+        self.assertEqual(plan["layer_partition"], [6, 6, 6, 5, 5, 5, 5, 5])
+        self.assertEqual(plan["vllm_nodes"][-1]["layer_end"], 43)
+        self.assertIn("SimpleCPUOffloadConnector", plan["vllm_nodes"][0]["command"])
+        self.assertIn("--kv-cache-dtype", plan["vllm_nodes"][0]["argv"])
+        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--kv-cache-dtype") + 1], "fp8")
+        self.assertIn("--headless", plan["vllm_nodes"][-1]["argv"])
+
+    def test_write_pipeline_launch_scripts(self) -> None:
+        deployment = KvCacheDeployment.load(QWEN_PP_DEPLOYMENT)
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = write_launch_scripts(deployment, tmp)
+            self.assertIn("start_vllm_nodes", manifest["scripts"])
+            self.assertEqual(len(manifest["scripts"]["start_vllm_nodes"]), 8)
+            rank0 = Path(manifest["scripts"]["start_vllm_nodes"]["spark0"]).read_text()
+            rank7 = Path(manifest["scripts"]["start_vllm_nodes"]["spark7"]).read_text()
+            self.assertIn("--pipeline-parallel-size 8", rank0)
+            self.assertIn("--node-rank 0", rank0)
+            self.assertIn("--node-rank 7", rank7)
+            self.assertIn("--headless", rank7)
+
     def test_kv_cache_is_optional_on_existing_profiles(self) -> None:
         registry = ProfileRegistry.load(ROOT / "profiles" / "models")
         dsv4 = registry.get("dsv4_vllm_mtp_smartest_v1")
@@ -94,8 +190,13 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(dsv4.backend, "vllm_mtp")
         self.assertEqual(qwen.backend, "vllm")
         self.assertEqual(dsv4.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json"])
-        self.assertNotIn("optional_kv_cache_deployments", qwen.routing)
-        self.assertEqual(registry.resolve(capability="smartest", chat=True, job_class="tool_chat").profile_id, dsv4.profile_id)
+        self.assertEqual(qwen.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/qwen27_lmcache_mp_spark7.json"])
+        pp_dsv4 = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
+        pp_qwen = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
+        self.assertEqual(pp_dsv4.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/dsv4_flash_pp8_simple_offload.json"])
+        self.assertEqual(pp_qwen.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json"])
+        self.assertEqual(registry.resolve(capability="smartest", chat=True, job_class="tool_chat").profile_id, pp_dsv4.profile_id)
+        self.assertEqual(registry.resolve(capability="efficient", chat=False, job_class="atom_edit").profile_id, pp_qwen.profile_id)
 
     def test_tool_registry_has_kvcache_plan_tool(self) -> None:
         registry = ToolRegistry.load(ROOT / "tools" / "registry.jsonl")

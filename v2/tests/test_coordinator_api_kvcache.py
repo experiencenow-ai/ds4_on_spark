@@ -117,6 +117,37 @@ class CoordinatorApiKvCacheTests(unittest.TestCase):
             self.assertEqual(plan["load"]["namespace"], "centaur.longmem")
             self.assertEqual(plan["load"]["service_id"], "qwen27_bf16_pp8")
 
+    def test_openai_external_kv_compute_and_store_requests_store(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            code, payload = api.handle_post(
+                "/v1/completions",
+                {
+                    "model": "qwen27_bf16_pp8",
+                    "prompt": "reuse the prefix",
+                    "max_tokens": 16,
+                    "ds4_async": True,
+                    "external_kv": {
+                        "namespace": "centaur.longmem",
+                        "kv_key": "wm:event-prefix:42",
+                        "miss_policy": "compute_and_store",
+                    },
+                },
+            )
+            self.assertEqual(code, 202)
+            con = sqlite3.connect(Path(tmp) / "queue.sqlite3")
+            row = con.execute("select request_json from requests where request_id=?", (payload["request_id"],)).fetchone()
+            con.close()
+            self.assertIsNotNone(row)
+            request = json.loads(row[0])
+            plan = request["input"]["kv_cache_plan"]
+            self.assertEqual(plan["miss_policy"], "compute_and_store")
+            self.assertEqual(plan["operation"], "load_store")
+            self.assertEqual(plan["store"]["mode"], "write_back")
+            self.assertEqual(plan["store"]["transport"], "external_manifest")
+            self.assertEqual(plan["store"]["namespace"], "centaur.longmem")
+            self.assertEqual(plan["store"]["service_id"], "qwen27_bf16_pp8")
+
     def test_openai_completion_prompt_array_expands_one_api_batch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake", sync_timeout_s=3)

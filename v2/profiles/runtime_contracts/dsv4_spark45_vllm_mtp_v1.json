@@ -1,7 +1,7 @@
 {
   "format": "ds4-runtime-contract-v1",
   "contract_id": "dsv4_spark45_vllm_mtp_v1",
-  "description": "Canonical Spark4/5 DeepSeek V4 Flash host-local vLLM runtime built from the Docker-lineage source with native DSV4 KV offload.",
+  "description": "Canonical Spark4/5 DeepSeek V4 Flash host-local vLLM runtime with native DSV4 KV offload.",
   "profile_ids": [
     "dsv4_vllm_mtp_smartest_v1"
   ],
@@ -10,12 +10,8 @@
     "spark5"
   ],
   "vllm": {
-    "runtime_root_template": "/home/{spark_user}/ds4-vllm-local editable install from /home/{spark_user}/src/vllm-b55c3b6-docker-lineage",
-    "required_source_base_commit": "dda4668b59567416f86956cfe7bbc1eab371a61e",
-    "required_source_commit": "d240cdbcf3de175be57c108fd9cbfce04009ec29",
-    "required_source_prs": [
-      "https://github.com/experiencenow-ai/vllm/pull/6"
-    ],
+    "runtime_root_template": "/home/{node_id}/ds4-vllm-local",
+    "required_source_commit": "c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34",
     "trim_endpoint": "/v1/trim_memory"
   },
   "model": {
@@ -40,14 +36,14 @@
       "--max-model-len",
       "262144",
       "--max-num-seqs",
-      "2",
+      "1",
       "--max-num-batched-tokens",
-      "8192",
+      "2048",
       "--gpu-memory-utilization",
-      "0.8",
+      "0.68",
       "--no-disable-hybrid-kv-cache-manager",
       "--kv-offloading-size",
-      "8",
+      "2",
       "--kv-offloading-backend",
       "native",
       "--kv-cache-metrics",

@@ -1,1372 +1,1428 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import as_completed
 from contextlib import closing
 from dataclasses import dataclass
-import hashlib
+from math import ceil
 import json
-import os
 from pathlib import Path
 import sqlite3
 import time
+from typing import Any, Callable, Iterable, Mapping
 import uuid
-from typing import Any, Callable, Iterable
 
-from .builders import new_id, safe_request_id
 from .kv_cache import ensure_cache_refs_resolved, request_kv_cache_batch_key
-from .profiles import ModelProfile, ProfileRegistry
+from .profiles import ProfileRegistry
+from .queue_policy import job_batch_id, request_priority, validated_priority
 from .runners import Runner
-from .schemas import InferenceRequest, make_result
-from .topology import SparkAssignment, SparkTopology
+from .schemas import InferenceRequest
 
 QUEUE_FORMAT = "ds4-inference-queue-v1"
 REQUEST_STATUS_FORMAT = "ds4-inference-request-status-v1"
-REQUEST_NOTICE_FORMAT = "ds4-inference-completion-notice-v1"
 BATCH_STATUS_FORMAT = "ds4-inference-batch-status-v1"
-PREFIX_GROUP_FORMAT = "ds4-prefix-group-v1"
-PREFIX_WARM_REPORT_FORMAT = "ds4-prefix-warm-report-v1"
-PREFIX_WARM_STATUS_FORMAT = "ds4-prefix-warm-status-v1"
-TERMINAL_STATES = {"completed", "failed", "cancelled"}
+PIPELINE_STATUS_FORMAT = "ds4-pipeline-status-v1"
 CPU_QUEUE_TIMEOUT_KEY = "__ds4_queue_timeout_s"
-DEFAULT_QUEUE_PRIORITY = 10
-IMMEDIATE_QUEUE_PRIORITY = 0
-REQUEST_COLUMNS_SQL = """
-create table if not exists requests(
-    request_id text primary key,
-    batch_id text not null,
-    request_kind text not null default 'model',
-    service_name text,
-    state text not null,
-    priority integer not null,
-    immediate integer not null,
-    batch_key text not null,
-    selected_profile_id text not null,
-    selected_node_id text,
-    request_json text not null,
-    result_json text,
-    error text,
-    created_at real not null,
-    updated_at real not null,
-    started_at real,
-    completed_at real,
-    lease_id text,
-    leased_by text,
-    lease_expires_at real,
-    heartbeat_at real,
-    attempt_count integer not null default 0
-)
-"""
-QUEUE_SCHEMA_SQL = (
-    """
-    create table if not exists batches(
-        batch_id text primary key,
-        state text not null default 'queued',
-        created_at real not null,
-        updated_at real not null,
-        request_count integer not null default 0,
-        queued_count integer not null default 0,
-        running_count integer not null default 0,
-        completed_count integer not null default 0,
-        failed_count integer not null default 0,
-        cancelled_count integer not null default 0
-    )
-    """,
-    REQUEST_COLUMNS_SQL,
-    "create index if not exists idx_requests_state_node_key "
-    "on requests(state, selected_node_id, batch_key, priority, created_at)",
-    "create index if not exists idx_requests_lease on requests(state, lease_expires_at, lease_id)",
-    "create index if not exists idx_requests_batch on requests(batch_id, state)",
-    """
-    create table if not exists events(
-        event_id integer primary key autoincrement,
-        created_at real not null,
-        request_id text not null,
-        event_type text not null,
-        state text not null,
-        payload_json text not null
-    )
-    """,
-    """
-    create table if not exists prefix_warms(
-        warm_key text primary key,
-        skeleton_hash text not null,
-        shared_prefix_hash text not null,
-        profile_id text not null,
-        node_id text,
-        chat integer not null,
-        shared_prefix_bytes integer not null,
-        request_count integer not null,
-        state text not null,
-        warmed_at real,
-        updated_at real not null,
-        result_json text,
-        error text
-    )
-    """,
-)
-
-
-@dataclass(frozen=True)
-class QueueSubmission:
-    batch_id: str
-    request_ids: tuple[str, ...]
-    selected_profiles: dict[str, int]
-    selected_nodes: dict[str, int]
-    priority_counts: dict[int, int] | None = None
-    selected_services: dict[str, int] | None = None
-    metadata: dict[str, Any] | None = None
-
-    def to_public_dict(self) -> dict[str, Any]:
-        payload = {
-            "format": QUEUE_FORMAT,
-            "batch_id": self.batch_id,
-            "state": "queued",
-            "request_count": len(self.request_ids),
-            "request_ids": list(self.request_ids),
-            "selected_profiles": self.selected_profiles,
-            "selected_nodes": self.selected_nodes,
-            "priority_counts": {str(priority): count for priority, count in sorted((self.priority_counts or {}).items())},
-            "selected_services": self.selected_services or {},
-        }
-        if self.metadata:
-            payload["metadata"] = self.metadata
-        return payload
+TERMINAL_STATES = {"completed", "failed", "cancelled"}
 
 
 @dataclass(frozen=True)
 class QueueClaim:
     request_id: str
     batch_id: str
-    batch_key: str
     request_kind: str
     selected_profile_id: str
     selected_node_id: str | None
     lease_id: str
+    attempt_count: int
     request: InferenceRequest | None
     service_name: str | None = None
     payload: dict[str, Any] | None = None
+    selected_service_id: str | None = None
+    selected_node_ids: tuple[str, ...] = ()
+    selected_compute_domain: str | None = None
+    compute_lease_id: str | None = None
 
 
 class InferenceQueue:
     def __init__(self, root: str | Path) -> None:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
+        (self.root / "notices").mkdir(exist_ok=True)
         self.db_path = self.root / "queue.sqlite3"
-        self.notices_dir = self.root / "notices"
-        self.notices_dir.mkdir(parents=True, exist_ok=True)
-        self._connect().close()
+        self._init_db()
 
-    def submit_requests(
-        self,
-        *,
-        requests: Iterable[InferenceRequest],
-        registry: ProfileRegistry,
-        topology: SparkTopology | None = None,
-        batch_id: str | None = None,
-        priority: int | None = None,
-    ) -> dict[str, Any]:
-        priority_override = _validated_priority(priority)
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path, timeout=30)
+        conn.row_factory = sqlite3.Row
+        conn.execute("pragma journal_mode = wal")
+        conn.execute("pragma synchronous = normal")
+        conn.execute("pragma temp_store = memory")
+        conn.execute("pragma mmap_size = 268435456")
+        conn.execute("pragma busy_timeout = 30000")
+        return conn
+
+    def _init_db(self) -> None:
+        with closing(self._connect()) as conn, conn:
+            conn.executescript(
+                """
+                create table if not exists batches(
+                    batch_id text primary key, state text not null default 'queued',
+                    request_count integer not null default 0, queued_count integer not null default 0,
+                    prefilling_count integer not null default 0, ready_count integer not null default 0,
+                    running_count integer not null default 0, completed_count integer not null default 0,
+                    failed_count integer not null default 0, cancelled_count integer not null default 0,
+                    created_at real not null, updated_at real not null
+                );
+                create table if not exists requests(
+                    request_id text primary key, batch_id text not null, request_kind text not null default 'model',
+                    service_name text, state text not null, priority integer not null, immediate integer not null default 0,
+                    selected_profile_id text not null, selected_node_id text, selected_service_id text,
+                    selected_node_ids_json text, selected_compute_domain text, compute_lease_id text,
+                    request_json text not null, result_json text, error text, cancel_requested integer not null default 0,
+                    kv_key text, kv_bytes integer not null default 0, kv_shard_count integer not null default 0,
+                    kv_shard_bytes integer not null default 0,
+                    created_at real not null, updated_at real not null, ready_at real,
+                    started_at real, completed_at real, lease_id text, leased_by text,
+                    lease_expires_at real, heartbeat_at real, attempt_count integer not null default 0
+                );
+                create table if not exists events(
+                    event_id integer primary key autoincrement, created_at real not null,
+                    request_id text not null, event_type text not null, state text not null, payload_json text not null
+                );
+                create table if not exists kv_entries(
+                    node_id text not null, kv_key text not null, request_id text not null,
+                    bytes integer not null, state text not null, last_used_at real not null,
+                    created_at real not null, updated_at real not null,
+                    primary key(node_id, kv_key)
+                );
+                create table if not exists kv_shard_entries(
+                    service_id text not null, node_id text not null, kv_key text not null, request_id text not null,
+                    stage_index integer not null, stage_count integer not null,
+                    layer_start integer, layer_end integer,
+                    bytes integer not null, state text not null, last_used_at real not null,
+                    created_at real not null, updated_at real not null,
+                    primary key(service_id, node_id, kv_key)
+                );
+                create table if not exists compute_leases(
+                    compute_domain text primary key, compute_lease_id text not null, service_id text,
+                    leased_by text not null, lease_expires_at real not null, heartbeat_at real not null,
+                    request_count integer not null, created_at real not null, updated_at real not null
+                );
+                create table if not exists pipeline_telemetry(
+                    service_id text not null, node_id text not null, stage_index integer not null,
+                    stage_count integer not null, layer_start integer, layer_end integer, layer_count integer,
+                    kv_shard_bytes integer not null default 0, payload_json text not null,
+                    reported_at real not null, primary key(service_id, node_id, stage_index)
+                );
+                create table if not exists kv_memory_objects(
+                    namespace text not null, kv_key text not null, service_id text not null,
+                    profile_id text, model_id text, owner text, content_hash text,
+                    total_bytes integer not null default 0, total_tokens integer not null default 0,
+                    state text not null, pin_count integer not null default 0, priority integer not null default 100,
+                    ttl_expires_at real, metadata_json text not null,
+                    created_at real not null, updated_at real not null, last_used_at real not null,
+                    primary key(namespace, kv_key, service_id)
+                );
+                create table if not exists kv_memory_shards(
+                    namespace text not null, kv_key text not null, service_id text not null,
+                    node_id text not null, stage_index integer not null, stage_count integer not null,
+                    layer_start integer, layer_end integer, bytes integer not null default 0,
+                    state text not null, storage_uri text, gpu_resident integer not null default 0,
+                    metadata_json text not null, created_at real not null, updated_at real not null, last_used_at real not null,
+                    primary key(namespace, kv_key, service_id, node_id, stage_index)
+                );
+                create table if not exists kv_memory_leases(
+                    lease_id text primary key, namespace text not null, kv_key text not null,
+                    service_id text not null, mode text not null, owner text,
+                    expires_at real not null, created_at real not null, updated_at real not null
+                );
+                create index if not exists requests_ready_idx on requests(state, selected_node_id, priority, ready_at, created_at);
+                create index if not exists requests_queued_idx on requests(state, priority, created_at, request_id);
+                create index if not exists requests_job_idx on requests(batch_id, state);
+                create index if not exists requests_service_idx on requests(selected_service_id, state, priority, ready_at);
+                create index if not exists kv_shards_node_idx on kv_shard_entries(service_id, node_id, state, last_used_at);
+                create index if not exists kv_memory_objects_state_idx on kv_memory_objects(service_id, state, priority, last_used_at);
+                create index if not exists kv_memory_shards_node_idx on kv_memory_shards(service_id, node_id, state, last_used_at);
+                create index if not exists kv_memory_leases_expiry_idx on kv_memory_leases(service_id, expires_at);
+                """
+            )
+            _ensure_request_columns(conn)
+            _ensure_kv_shard_columns(conn)
+
+    def submit_requests(self, *, requests: Iterable[InferenceRequest], registry: ProfileRegistry, topology: Any | None = None, batch_id: str | None = None, priority: int | None = None) -> dict[str, Any]:
         request_list = list(requests)
         if not request_list:
             raise ValueError("cannot submit an empty request set")
-        batch_id = batch_id or new_id("batch")
-        existing = self._existing_submission(batch_id, request_list, priority_override=priority_override)
+        batch_id = batch_id or "batch-" + uuid.uuid4().hex[:16]
+        existing = self._existing_submission(batch_id, request_list, priority)
         if existing is not None:
             return existing
-        request_ids: list[str] = []
-        selected_profiles: dict[str, int] = {}
-        selected_nodes: dict[str, int] = {}
-        priority_counts: dict[int, int] = {}
-        late_bound_count = 0
-        node_load = self._queued_and_running_node_load()
         now = time.time()
+        profiles: dict[str, int] = {}
+        priorities: dict[int, int] = {}
+        nodes: dict[str, int] = {}
+        services: dict[str, int] = {}
+        late_bound_count = 0
+        ids: list[str] = []
+        current_load: dict[str, int] = {}
+        bind_on_submit = bool(getattr(topology, "routing_policy", {}).get("bind_on_submit", False)) if topology is not None else False
         with closing(self._connect()) as conn, conn:
-            conn.execute(
-                "insert into batches(batch_id, created_at, updated_at) values (?, ?, ?)",
-                (batch_id, now, now),
-            )
-            for request in request_list:
-                ensure_cache_refs_resolved(request.input)
-                profile = registry.resolve(
-                    capability=request.capability,
-                    chat=request.chat,
-                    job_class=request.job_class,
-                    model_pin=request.model_pin,
-                )
-                assignment = None
-                if topology is not None and request.immediate:
-                    assignment = topology.assign_profile(profile, immediate=request.immediate, current_load=node_load)
-                    node_load[assignment.node_id] = node_load.get(assignment.node_id, 0) + 1
-                    selected_nodes[assignment.node_id] = selected_nodes.get(assignment.node_id, 0) + 1
-                elif topology is not None:
+            conn.execute("insert into batches(batch_id, created_at, updated_at) values (?, ?, ?)", (batch_id, now, now))
+            for req in request_list:
+                ensure_cache_refs_resolved(req.input)
+                profile = registry.resolve(capability=req.capability, chat=req.chat, job_class=req.job_class, model_pin=req.model_pin)
+                prio = request_priority(req, priority_override=priority)
+                kv_key, kv_bytes = _kv_need(req)
+                assignment = topology.assign_profile(profile, immediate=req.immediate, current_load=current_load) if topology is not None else None
+                selected_node_id = selected_service_id = selected_compute_domain = selected_node_ids_json = None
+                kv_shard_count = kv_shard_bytes = 0
+                if assignment is not None and (bind_on_submit or assignment.service_id is not None or assignment.reason == "resident_profile_group"):
+                    selected_node_id = assignment.node_id
+                    selected_service_id = assignment.service_id
+                    selected_compute_domain = assignment.compute_domain
+                    node_ids = tuple(assignment.node_ids or (assignment.node_id,))
+                    selected_node_ids_json = json.dumps(list(node_ids), sort_keys=True)
+                    if selected_node_id:
+                        nodes[selected_node_id] = nodes.get(selected_node_id, 0) + 1
+                        current_load[selected_node_id] = current_load.get(selected_node_id, 0) + 1
+                    if selected_service_id:
+                        services[selected_service_id] = services.get(selected_service_id, 0) + 1
+                        kv_shard_count = len(node_ids)
+                        kv_shard_bytes = int(ceil(kv_bytes / max(1, kv_shard_count))) if kv_bytes > 0 else 0
+                else:
                     late_bound_count += 1
-                selected_profiles[profile.profile_id] = selected_profiles.get(profile.profile_id, 0) + 1
-                batch_key = request_batch_key(request, profile, assignment)
-                request_priority = _request_priority(request, priority_override=priority_override)
-                priority_counts[request_priority] = priority_counts.get(request_priority, 0) + 1
                 conn.execute(
                     """
-                    insert into requests(
-                        request_id, batch_id, request_kind, service_name, state, priority, immediate, batch_key,
-                        selected_profile_id, selected_node_id, request_json,
-                        created_at, updated_at
-                    ) values (?, ?, 'model', null, 'queued', ?, ?, ?, ?, ?, ?, ?, ?)
+                    insert into requests(request_id,batch_id,request_kind,state,priority,immediate,selected_profile_id,
+                        selected_node_id,selected_service_id,selected_node_ids_json,selected_compute_domain,request_json,
+                        kv_key,kv_bytes,kv_shard_count,kv_shard_bytes,created_at,updated_at)
+                    values (?,?,'model','queued',?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
-                        request.request_id,
+                        req.request_id,
                         batch_id,
-                        request_priority,
-                        1 if request.immediate else 0,
-                        batch_key,
+                        prio,
+                        1 if req.immediate else 0,
                         profile.profile_id,
-                        assignment.node_id if assignment is not None else None,
-                        json.dumps(request.raw, sort_keys=True),
+                        selected_node_id,
+                        selected_service_id,
+                        selected_node_ids_json,
+                        selected_compute_domain,
+                        json.dumps(req.raw, sort_keys=True),
+                        kv_key,
+                        kv_bytes,
+                        kv_shard_count,
+                        kv_shard_bytes,
                         now,
                         now,
                     ),
                 )
-                self._insert_event(
+                self._event(
                     conn,
-                    request.request_id,
+                    req.request_id,
                     "submitted",
                     "queued",
                     {
                         "batch_id": batch_id,
-                        "batch_key": batch_key,
-                        "selected_profile_id": profile.profile_id,
-                        "selected_node_id": assignment.node_id if assignment is not None else None,
-                        "priority": request_priority,
-                        "node_binding": "submit" if assignment is not None else "lease",
+                        "priority": prio,
+                        "node_binding": "bound" if selected_node_id else "lease",
+                        "selected_node_id": selected_node_id,
+                        "selected_service_id": selected_service_id,
+                        "selected_compute_domain": selected_compute_domain,
                     },
                 )
-                request_ids.append(request.request_id)
-            self._refresh_batch_row(conn, batch_id)
-        return QueueSubmission(
-            batch_id=batch_id,
-            request_ids=tuple(request_ids),
-            selected_profiles=selected_profiles,
-            selected_nodes=selected_nodes,
-            priority_counts=priority_counts,
-            metadata={"late_bound_count": late_bound_count},
-        ).to_public_dict()
+                profiles[profile.profile_id] = profiles.get(profile.profile_id, 0) + 1
+                priorities[prio] = priorities.get(prio, 0) + 1
+                ids.append(req.request_id)
+            self._refresh_batch(conn, batch_id)
+        return {"format": QUEUE_FORMAT, "state": "queued", "batch_id": batch_id, "job_id": batch_id, "request_ids": ids, "request_count": len(ids), "selected_profiles": profiles, "selected_nodes": nodes, "selected_services": services, "priority_counts": {str(k): v for k, v in sorted(priorities.items())}, "metadata": {"late_bound_count": late_bound_count, "bound_count": len(ids) - late_bound_count}}
 
-    def _existing_submission(self, batch_id: str, requests: list[InferenceRequest], *, priority_override: int | None) -> dict[str, Any] | None:
-        with closing(self._connect()) as conn:
-            batch = conn.execute("select batch_id from batches where batch_id = ?", (batch_id,)).fetchone()
-            if batch is None:
-                return None
-            rows = conn.execute(
-                "select request_id, selected_profile_id, selected_node_id, priority from requests where batch_id = ? order by created_at, request_id",
-                (batch_id,),
-            ).fetchall()
-        existing_ids = [str(row["request_id"]) for row in rows]
-        requested_ids = [request.request_id for request in requests]
-        if set(existing_ids) != set(requested_ids):
-            raise ValueError(f"batch_id already exists with different requests: {batch_id}")
-        expected_priorities = {request.request_id: _request_priority(request, priority_override=priority_override) for request in requests if priority_override is not None or request.priority is not None}
-        if expected_priorities:
-            existing_priorities = {str(row["request_id"]): int(row["priority"]) for row in rows}
-            mismatches = sorted(request_id for request_id, expected in expected_priorities.items() if existing_priorities.get(request_id) != expected)
-            if mismatches:
-                raise ValueError(f"batch_id already exists with different priority for requests: {mismatches}")
-        selected_profiles: dict[str, int] = {}
-        selected_nodes: dict[str, int] = {}
-        priority_counts: dict[int, int] = {}
-        for row in rows:
-            profile_id = str(row["selected_profile_id"])
-            selected_profiles[profile_id] = selected_profiles.get(profile_id, 0) + 1
-            row_priority = int(row["priority"])
-            priority_counts[row_priority] = priority_counts.get(row_priority, 0) + 1
-            if row["selected_node_id"] is not None:
-                node_id = str(row["selected_node_id"])
-                selected_nodes[node_id] = selected_nodes.get(node_id, 0) + 1
-        return QueueSubmission(
-            batch_id=batch_id,
-            request_ids=tuple(existing_ids),
-            selected_profiles=selected_profiles,
-            selected_nodes=selected_nodes,
-            priority_counts=priority_counts,
-        ).to_public_dict()
-
-    def submit_cpu_requests(
-        self,
-        *,
-        service: str,
-        items: Iterable[dict[str, Any]],
-        batch_id: str | None = None,
-        immediate: bool = False,
-        node_id: str | None = None,
-        timeout_s: float | None = None,
-        priority: int | None = None,
-    ) -> dict[str, Any]:
-        request_priority = _validated_priority(priority, immediate=immediate)
-        batch_id = batch_id or new_id("cpu-batch")
-        service, item_list = _validated_cpu_items(service, items, timeout_s)
+    def submit_cpu_requests(self, *, service: str, items: Iterable[dict[str, Any]], batch_id: str | None = None, immediate: bool = False, node_id: str | None = None, timeout_s: float | None = None, priority: int | None = None) -> dict[str, Any]:
+        prio = validated_priority(priority, immediate=immediate)
+        item_list = list(items)
+        if not item_list:
+            raise ValueError("cannot submit an empty CPU request set")
+        batch_id = batch_id or "cpu-" + uuid.uuid4().hex[:16]
         now = time.time()
-        request_ids: list[str] = []
-        batch_key = cpu_batch_key(service=service, node_id=node_id, immediate=immediate, timeout_s=timeout_s)
+        ids: list[str] = []
         with closing(self._connect()) as conn, conn:
-            conn.execute(
-                "insert into batches(batch_id, created_at, updated_at) values (?, ?, ?)",
-                (batch_id, now, now),
-            )
-            for request_id, item in _cpu_request_rows(service, item_list, timeout_s):
-                self._insert_cpu_request(
-                    conn,
-                    request_id=request_id,
-                    batch_id=batch_id,
-                    service=service,
-                    item=item,
-                    immediate=immediate,
-                    priority=request_priority,
-                    batch_key=batch_key,
-                    node_id=node_id,
-                    now=now,
+            conn.execute("insert into batches(batch_id, created_at, updated_at) values (?, ?, ?)", (batch_id, now, now))
+            for item in item_list:
+                request_id = str(item.get("custom_id") or item.get("request_id") or f"{batch_id}-{len(ids):06d}")
+                payload = dict(item)
+                if timeout_s is not None:
+                    payload[CPU_QUEUE_TIMEOUT_KEY] = float(timeout_s)
+                conn.execute(
+                    """
+                    insert into requests(request_id,batch_id,request_kind,service_name,state,priority,immediate,
+                        selected_profile_id,selected_node_id,request_json,created_at,updated_at,ready_at)
+                    values (?,?, 'cpu', ?, 'ready', ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (request_id, batch_id, service, prio, 1 if immediate else 0, f"cpu:{service}", node_id, json.dumps(payload, sort_keys=True), now, now, now),
                 )
-                event = {"batch_id": batch_id, "batch_key": batch_key, "service": service, "selected_node_id": node_id, "priority": request_priority}
-                self._insert_event(conn, request_id, "submitted", "queued", event)
-                request_ids.append(request_id)
-            self._refresh_batch_row(conn, batch_id)
-        return QueueSubmission(
-            batch_id=batch_id,
-            request_ids=tuple(request_ids),
-            selected_profiles={},
-            selected_nodes={node_id: len(request_ids)} if node_id else {},
-            priority_counts={request_priority: len(request_ids)},
-            selected_services={service: len(request_ids)},
-        ).to_public_dict()
+                self._event(conn, request_id, "submitted", "ready", {"batch_id": batch_id, "priority": prio, "service": service})
+                ids.append(request_id)
+            self._refresh_batch(conn, batch_id)
+        return {"format": QUEUE_FORMAT, "state": "queued", "batch_id": batch_id, "job_id": batch_id, "request_ids": ids, "request_count": len(ids), "selected_profiles": {}, "selected_nodes": {node_id: len(ids)} if node_id else {}, "selected_services": {service: len(ids)}, "priority_counts": {str(prio): len(ids)}}
 
-    def _insert_cpu_request(
-        self,
-        conn: sqlite3.Connection,
-        *,
-        request_id: str,
-        batch_id: str,
-        service: str,
-        item: dict[str, Any],
-        immediate: bool,
-        priority: int,
-        batch_key: str,
-        node_id: str | None,
-        now: float,
-    ) -> None:
-        conn.execute(
-            """
-            insert into requests(
-                request_id, batch_id, request_kind, service_name, state, priority, immediate, batch_key,
-                selected_profile_id, selected_node_id, request_json, created_at, updated_at
-            ) values (?, ?, 'cpu', ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                request_id,
-                batch_id,
-                service,
-                priority,
-                1 if immediate else 0,
-                batch_key,
-                f"cpu:{service}",
-                node_id,
-                json.dumps(item, sort_keys=True),
-                now,
-                now,
-            ),
-        )
-
-    def work(
-        self,
-        *,
-        registry: ProfileRegistry,
-        runner: Runner,
-        node_id: str | None = None,
-        batch_id: str | None = None,
-        batch_key: str | None = None,
-        limit: int = 1,
-        concurrency: int = 1,
-        worker_id: str | None = None,
-        lease_ttl_s: int = 900,
-        heartbeat_interval_s: float = 5.0,
-        warm_prefixes: bool = False,
-        warm_min_group_size: int = 2,
-        warm_max_output_tokens: int = 1,
-        warm_max_groups: int | None = None,
-        warm_max_groups_per_node: int | None = None,
-        node_profile_ids: Iterable[str] | None = None,
-        max_node_depth: int = 0,
-        on_result: Callable[[QueueClaim, dict[str, Any]], None] | None = None,
-    ) -> dict[str, Any]:
+    def work(self, *, registry: ProfileRegistry, runner: Runner, node_id: str | None = None, batch_id: str | None = None, limit: int = 1, concurrency: int = 1, worker_id: str | None = None, lease_ttl_s: int = 900, heartbeat_interval_s: float = 5.0, node_profile_ids: Iterable[str] | None = None, max_node_depth: int = 0, batch_linger_s: float = 0.0, kv_capacity_bytes: int = 0, transport_max_attempts: int = 3, kv_shard_layouts_by_profile: Mapping[str, Any] | None = None, batch_limits_by_service: Mapping[str, int] | None = None, refill_low_watermarks_by_service: Mapping[str, int] | None = None, on_result: Callable[[QueueClaim, dict[str, Any]], None] | None = None) -> dict[str, Any]:
         from .worker import BatchWorker
+        return BatchWorker(queue=self, registry=registry, runner=runner, worker_id=worker_id, lease_ttl_s=lease_ttl_s, heartbeat_interval_s=heartbeat_interval_s, transport_max_attempts=transport_max_attempts).run_once(node_id=node_id, batch_id=batch_id, limit=limit, concurrency=concurrency, node_profile_ids=tuple(node_profile_ids or ()), max_node_depth=max_node_depth, batch_linger_s=batch_linger_s, kv_capacity_bytes=kv_capacity_bytes, kv_shard_layouts_by_profile=kv_shard_layouts_by_profile or {}, batch_limits_by_service=batch_limits_by_service or {}, refill_low_watermarks_by_service=refill_low_watermarks_by_service or {}, on_result=on_result)
 
-        warm_report = None
-        if warm_prefixes:
-            warm_report = self.warm_prefixes(
-                registry=registry,
-                runner=runner,
-                node_id=node_id,
-                batch_id=batch_id,
-                batch_key=batch_key,
-                min_group_size=warm_min_group_size,
-                max_output_tokens=warm_max_output_tokens,
-                max_groups=warm_max_groups,
-                max_groups_per_node=warm_max_groups_per_node,
-            )
-        worker = BatchWorker(
-            queue=self,
-            registry=registry,
-            runner=runner,
-            worker_id=worker_id,
-            lease_ttl_s=lease_ttl_s,
-            heartbeat_interval_s=heartbeat_interval_s,
-        )
-        result = worker.run_once(
-            node_id=node_id,
-            batch_id=batch_id,
-            batch_key=batch_key,
-            limit=limit,
-            concurrency=concurrency,
-            node_profile_ids=tuple(node_profile_ids) if node_profile_ids is not None else None,
-            max_node_depth=max_node_depth,
-            on_result=on_result,
-        )
-        if warm_report is not None:
-            result["prefix_warm"] = warm_report
-        return result
-
-    def claim_requests(
-        self,
-        *,
-        node_id: str | None = None,
-        batch_id: str | None = None,
-        batch_key: str | None = None,
-        request_kind: str | None = None,
-        profile_id: str | None = None,
-        service_name: str | None = None,
-        include_unassigned: bool = False,
-        eligible_profile_ids: Iterable[str] | None = None,
-        max_node_depth: int = 0,
-        limit: int = 1,
-        leased_by: str,
-        lease_ttl_s: int = 900,
-    ) -> list[QueueClaim]:
-        if limit < 1:
-            raise ValueError("limit must be positive")
-        if lease_ttl_s < 1:
-            raise ValueError("lease_ttl_s must be positive")
-        if max_node_depth < 0:
-            raise ValueError("max_node_depth must not be negative")
+    def prepare_ready(self, *, node_id: str | None, eligible_profile_ids: Iterable[str], batch_id: str | None, limit: int, leased_by: str, lease_ttl_s: int, max_node_depth: int = 0, kv_capacity_bytes: int = 0, kv_shard_layouts_by_profile: Mapping[str, Any] | None = None) -> int:
+        eligible = tuple(str(x) for x in eligible_profile_ids if str(x))
         now = time.time()
-        conn = self._connect()
-        claims: list[QueueClaim] = []
-        try:
-            conn.execute("begin immediate")
-            if node_id is not None and max_node_depth > 0 and request_kind in (None, "model"):
-                limit = min(limit, self._node_model_depth_allowance(conn, node_id=node_id, max_node_depth=max_node_depth))
-                if limit < 1:
-                    conn.commit()
-                    return []
-            selected_key = batch_key or self._select_next_batch_key(conn, node_id=node_id, batch_id=batch_id, request_kind=request_kind, profile_id=profile_id, service_name=service_name, include_unassigned=include_unassigned, eligible_profile_ids=eligible_profile_ids)
-            if selected_key is None:
-                conn.commit()
-                return []
-            rows = self._select_work_rows(conn, node_id=node_id, batch_id=batch_id, batch_key=selected_key, request_kind=request_kind, profile_id=profile_id, service_name=service_name, include_unassigned=include_unassigned, eligible_profile_ids=eligible_profile_ids, limit=limit)
-            batch_ids = set()
+        made_ready = 0
+        touched_batches: set[str] = set()
+        kv_shard_layouts_by_profile = kv_shard_layouts_by_profile or {}
+        with closing(self._connect()) as conn, conn:
+            remaining = int(limit)
+            if node_id is not None and max_node_depth > 0:
+                remaining = min(remaining, max(0, int(max_node_depth) - _node_depth(conn, node_id)))
+            if remaining <= 0:
+                return 0
+            rows = _queued_rows(conn, node_id=node_id, eligible=eligible, batch_id=batch_id, limit=remaining)
             for row in rows:
-                request_id = str(row["request_id"])
-                lease_id = f"{leased_by}:{uuid.uuid4().hex}"
-                assigned_node_id = node_id if node_id is not None and row["selected_node_id"] is None else None
-                updated = self._lease_row(
-                    conn,
-                    request_id=request_id,
-                    lease_id=lease_id,
-                    leased_by=leased_by,
-                    lease_ttl_s=lease_ttl_s,
-                    now=now,
-                    selected_node_id=assigned_node_id,
-                )
+                bind_node_id = str(row["selected_node_id"] or node_id) if (row["selected_node_id"] or node_id) else None
+                pipeline_layout = kv_shard_layouts_by_profile.get(str(row["selected_profile_id"]))
+                if not self._reserve_kv(conn, row, node_id=bind_node_id, capacity=kv_capacity_bytes, now=now, pipeline_layout=pipeline_layout):
+                    self._event(
+                        conn,
+                        str(row["request_id"]),
+                        "kv_capacity_wait",
+                        "queued",
+                        {
+                            "batch_id": row["batch_id"],
+                            "node_id": bind_node_id,
+                            "service_id": row["selected_service_id"],
+                            "kv_capacity_bytes": kv_capacity_bytes,
+                        },
+                    )
+                    continue
+                lease_id = f"{leased_by}:prefill:{uuid.uuid4().hex}"
+                node_ids_json = row["selected_node_ids_json"] or (json.dumps([bind_node_id]) if bind_node_id else None)
+                updated = conn.execute(
+                    """
+                    update requests set state='ready', selected_node_id=coalesce(selected_node_id, ?),
+                        selected_node_ids_json=coalesce(selected_node_ids_json, ?), ready_at=?, updated_at=?,
+                        lease_id=null, leased_by=null, lease_expires_at=null, heartbeat_at=null
+                    where request_id=? and state='queued'
+                    """,
+                    (bind_node_id, node_ids_json, now, now, row["request_id"]),
+                ).rowcount
                 if updated != 1:
                     continue
-                batch_ids.add(str(row["batch_id"]))
-                event = {"batch_id": row["batch_id"], "batch_key": row["batch_key"], "lease_id": lease_id, "leased_by": leased_by}
-                if assigned_node_id is not None:
-                    event["selected_node_id"] = assigned_node_id
-                self._insert_event(conn, request_id, "started", "running", event)
-                claims.append(_row_claim(row, request_id=request_id, lease_id=lease_id, selected_node_id=assigned_node_id))
-            for batch_id_value in batch_ids:
-                self._refresh_batch_row(conn, batch_id_value)
-            conn.commit()
+                self._event(conn, str(row["request_id"]), "prefilled", "ready", {"batch_id": row["batch_id"], "node_id": bind_node_id, "service_id": row["selected_service_id"], "lease_id": lease_id})
+                touched_batches.add(str(row["batch_id"]))
+                made_ready += 1
+            for touched_batch_id in touched_batches:
+                self._refresh_batch(conn, touched_batch_id)
+        return made_ready
+
+    def claim_ready_batch(self, *, node_id: str | None, batch_id: str | None, limit: int, leased_by: str, lease_ttl_s: int, batch_linger_s: float = 0.0, kv_shard_layouts_by_profile: Mapping[str, Any] | None = None, batch_limits_by_service: Mapping[str, int] | None = None, compute_lease_id: str | None = None, selected_service_id: str | None = None) -> list[QueueClaim]:
+        now = time.time()
+        with closing(self._connect()) as conn, conn:
+            rows = _ready_rows(conn, node_id=node_id, batch_id=batch_id, limit=limit, batch_limits_by_service=batch_limits_by_service or {}, selected_service_id=selected_service_id)
+            if not rows:
+                return []
+            linger_limit = _service_batch_limit(rows[0]["selected_service_id"], batch_limits_by_service or {}, limit)
+            if len(rows) < linger_limit and batch_linger_s > 0:
+                newest_ready = max(float(row["ready_at"] or row["updated_at"] or now) for row in rows)
+                if (now - newest_ready) < batch_linger_s:
+                    return []
+            acquired_compute_lease_id = self._extend_compute_lease(conn, rows=rows, compute_lease_id=compute_lease_id, leased_by=leased_by, lease_ttl_s=lease_ttl_s, now=now) if compute_lease_id else self._acquire_compute_lease(conn, rows=rows, leased_by=leased_by, lease_ttl_s=lease_ttl_s, now=now)
+            new_compute_lease = compute_lease_id is None and isinstance(acquired_compute_lease_id, str)
+            if acquired_compute_lease_id is False:
+                return []
+            claims: list[QueueClaim] = []
+            batch_ids: set[str] = set()
+            for row in rows:
+                lease_id = f"{leased_by}:run:{uuid.uuid4().hex}"
+                updated = conn.execute(
+                    """
+                    update requests set state='running', lease_id=?, compute_lease_id=?, leased_by=?, lease_expires_at=?,
+                        heartbeat_at=?, started_at=?, updated_at=?, attempt_count=attempt_count+1
+                    where request_id=? and state='ready'
+                    """,
+                    (lease_id, acquired_compute_lease_id if isinstance(acquired_compute_lease_id, str) else None, leased_by, now + lease_ttl_s, now, now, now, row["request_id"]),
+                ).rowcount
+                if updated == 1:
+                    batch_ids.add(str(row["batch_id"]))
+                    self._event(conn, str(row["request_id"]), "started", "running", {"batch_id": row["batch_id"], "lease_id": lease_id, "node_id": row["selected_node_id"], "service_id": row["selected_service_id"], "compute_domain": row["selected_compute_domain"], "compute_lease_id": acquired_compute_lease_id if isinstance(acquired_compute_lease_id, str) else None})
+                    claims.append(_claim(row, lease_id, acquired_compute_lease_id if isinstance(acquired_compute_lease_id, str) else None))
+            if not claims and new_compute_lease:
+                conn.execute("delete from compute_leases where compute_lease_id=?", (acquired_compute_lease_id,))
+            for bid in batch_ids:
+                self._refresh_batch(conn, bid)
             return claims
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
 
-    def _node_model_depth_allowance(self, conn: sqlite3.Connection, *, node_id: str, max_node_depth: int) -> int:
-        row = conn.execute(
-            """
-            select count(*) n
-            from requests
-            where state in ('queued','running') and selected_node_id = ? and request_kind = 'model'
-            """,
-            (node_id,),
-        ).fetchone()
-        return max(0, max_node_depth - int(row["n"] if row is not None else 0))
-
-    def _lease_row(
-        self,
-        conn: sqlite3.Connection,
-        *,
-        request_id: str,
-        lease_id: str,
-        leased_by: str,
-        lease_ttl_s: int,
-        now: float,
-        selected_node_id: str | None = None,
-    ) -> int:
-        return conn.execute(
-            """
-            update requests
-            set state = 'running', lease_id = ?, leased_by = ?, lease_expires_at = ?,
-                heartbeat_at = ?, attempt_count = attempt_count + 1,
-                started_at = ?, updated_at = ?, selected_node_id = coalesce(selected_node_id, ?)
-            where request_id = ? and state = 'queued'
-            """,
-            (lease_id, leased_by, now + lease_ttl_s, now, now, now, selected_node_id, request_id),
-        ).rowcount
-
-    def finish_request(
-        self,
-        *,
-        request_id: str,
-        lease_id: str,
-        state: str,
-        result: dict[str, Any],
-        error: str | None = None,
-    ) -> bool:
+    def finish_request(self, *, request_id: str, lease_id: str, state: str, result: dict[str, Any], error: str | None = None) -> bool:
         if state not in TERMINAL_STATES:
             raise ValueError(f"unsupported terminal state: {state}")
         now = time.time()
-        conn = self._connect()
-        try:
-            conn.execute("begin immediate")
-            updated = conn.execute(
-                """
-                update requests
-                set state = ?, result_json = ?, error = ?, completed_at = ?, updated_at = ?,
-                    lease_id = null, leased_by = null, lease_expires_at = null, heartbeat_at = null
-                where request_id = ? and lease_id = ? and state = 'running'
-                """,
-                (state, json.dumps(result, sort_keys=True), error, now, now, request_id, lease_id),
-            ).rowcount
-            if updated != 1:
-                conn.rollback()
+        with closing(self._connect()) as conn, conn:
+            row = conn.execute("select * from requests where request_id=? and lease_id=? and state='running'", (request_id, lease_id)).fetchone()
+            if row is None:
                 return False
-            row = conn.execute(
-                "select batch_id, batch_key from requests where request_id = ?",
-                (request_id,),
-            ).fetchone()
-            payload = {"batch_id": row["batch_id"], "batch_key": row["batch_key"]} if row is not None else {}
-            self._insert_event(conn, request_id, state, state, payload)
-            if row is not None:
-                self._refresh_batch_row(conn, str(row["batch_id"]))
-            conn.commit()
-            self._write_notice(request_id, state, result)
-            return True
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
-
-    def heartbeat(self, *, lease_ids: Iterable[str], lease_ttl_s: int = 900) -> int:
-        lease_list = [lease_id for lease_id in lease_ids if lease_id]
-        if not lease_list:
-            return 0
-        now = time.time()
-        with closing(self._connect()) as conn, conn:
-            updated = 0
-            for lease_id in lease_list:
-                updated += conn.execute(
-                    """
-                    update requests
-                    set heartbeat_at = ?, lease_expires_at = ?, updated_at = ?
-                    where lease_id = ? and state = 'running'
-                    """,
-                    (now, now + lease_ttl_s, now, lease_id),
-                ).rowcount
-            return updated
-
-    def requeue_expired_leases(self, *, max_attempts: int = 3, now: float | None = None) -> dict[str, Any]:
-        now = time.time() if now is None else now
-        conn = self._connect()
-        requeued = failed = 0
-        notices: list[tuple[str, dict[str, Any]]] = []
-        try:
-            conn.execute("begin immediate")
-            rows = conn.execute(
-                """
-                select * from requests
-                where state = 'running' and lease_expires_at is not null and lease_expires_at <= ?
-                order by lease_expires_at asc, request_id asc
-                """,
-                (now,),
-            ).fetchall()
-            batch_ids = set()
-            for row in rows:
-                batch_id_value, outcome = self._expire_running_row(
-                    conn,
-                    row=row,
-                    max_attempts=max_attempts,
-                    now=now,
-                    notices=notices,
-                )
-                batch_ids.add(batch_id_value)
-                requeued += 1 if outcome == "queued" else 0
-                failed += 1 if outcome == "failed" else 0
-            for batch_id_value in batch_ids:
-                self._refresh_batch_row(conn, batch_id_value)
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
-        for request_id, failure in notices:
-            self._write_notice(request_id, "failed", failure)
-        return {
-            "format": QUEUE_FORMAT,
-            "requeued_count": requeued,
-            "failed_count": failed,
-            "state": "reaped" if requeued or failed else "idle",
-        }
-
-    def warm_prefixes(
-        self,
-        *,
-        registry: ProfileRegistry,
-        runner: Runner,
-        topology: SparkTopology | None = None,
-        node_id: str | None = None,
-        batch_id: str | None = None,
-        batch_key: str | None = None,
-        min_group_size: int = 2,
-        max_output_tokens: int = 1,
-        concurrency: int = 1,
-        max_groups: int | None = None,
-        max_groups_per_node: int | None = None,
-        force: bool = False,
-        all_resident_nodes: bool = False,
-    ) -> dict[str, Any]:
-        if min_group_size < 1:
-            raise ValueError("min_group_size must be positive")
-        if max_output_tokens < 1:
-            raise ValueError("max_output_tokens must be positive")
-        if concurrency < 1:
-            raise ValueError("concurrency must be positive")
-        if max_groups is not None and max_groups < 1:
-            raise ValueError("max_groups must be positive")
-        if max_groups_per_node is not None and max_groups_per_node < 1:
-            raise ValueError("max_groups_per_node must be positive")
-        if all_resident_nodes and topology is None:
-            raise ValueError("all_resident_nodes requires topology")
-        warmed = failed = skipped = 0
-        public_groups: list[dict[str, Any]] = []
-        warm_candidates: list[dict[str, Any]] = []
-        with closing(self._connect()) as conn, conn:
-            groups = self._prefix_groups(conn, node_id=node_id, batch_id=batch_id, batch_key=batch_key, min_group_size=min_group_size)
-            if all_resident_nodes:
-                groups = _replicate_prefix_groups_to_resident_nodes(groups, registry=registry, topology=topology)
-            statuses = {group["warm_key"]: self._prefix_warm_status(conn, group["warm_key"]) for group in groups}
-        for group in groups:
-            status = statuses[group["warm_key"]]
-            if status is not None and status["state"] == "warm" and not force:
-                skipped += 1
-                public_groups.append(_public_prefix_group(group, state="warm", skipped=True, status=status))
-                continue
-            warm_candidates.append(group)
-        pending_groups = _limit_prefix_warm_groups(warm_candidates, max_groups=max_groups, max_groups_per_node=max_groups_per_node)
-        deferred_count = len(warm_candidates) - len(pending_groups)
-        for group in pending_groups:
-            with closing(self._connect()) as conn, conn:
-                self._record_prefix_warm(conn, group, state="warming", result=None, error=None)
-        for group, state, result in _run_warm_groups(registry=registry, runner=runner, groups=pending_groups, max_output_tokens=max_output_tokens, concurrency=concurrency):
-            with closing(self._connect()) as conn, conn:
-                self._record_prefix_warm(conn, group, state=state, result=result, error=None if state == "warm" else str(result.get("status", "failed")))
-            if state == "warm":
-                warmed += 1
-            else:
-                failed += 1
-            public_groups.append(_public_prefix_group(group, state=state, skipped=False, result=result))
-        return {
-            "format": PREFIX_WARM_REPORT_FORMAT,
-            "state": "completed" if failed == 0 else "completed_with_failures",
-            "group_count": len(public_groups),
-            "warmed_count": warmed,
-            "failed_count": failed,
-            "skipped_count": skipped,
-            "deferred_count": deferred_count,
-            "max_groups": max_groups,
-            "max_groups_per_node": max_groups_per_node,
-            "groups": public_groups,
-        }
-
-    def prefix_warm_status(self, *, skeleton_hash: str | None = None, node_id: str | None = None, profile_id: str | None = None) -> dict[str, Any]:
-        clauses: list[str] = []
-        params: list[Any] = []
-        if skeleton_hash is not None:
-            clauses.append("skeleton_hash = ?")
-            params.append(skeleton_hash)
-        if node_id is not None:
-            clauses.append("node_id = ?")
-            params.append(node_id)
-        if profile_id is not None:
-            clauses.append("profile_id = ?")
-            params.append(profile_id)
-        where = f"where {' and '.join(clauses)}" if clauses else ""
-        with closing(self._connect()) as conn:
-            rows = conn.execute(
-                f"""
-                select * from prefix_warms
-                {where}
-                order by updated_at desc, warm_key asc
-                """,
-                tuple(params),
-            ).fetchall()
-        return {
-            "format": PREFIX_WARM_STATUS_FORMAT,
-            "state": "known" if rows else "cold",
-            "statuses": [self._row_to_prefix_warm_status(row) for row in rows],
-        }
-
-    def _expire_running_row(
-        self,
-        conn: sqlite3.Connection,
-        *,
-        row: sqlite3.Row,
-        max_attempts: int,
-        now: float,
-        notices: list[tuple[str, dict[str, Any]]],
-    ) -> tuple[str, str]:
-        request_id = str(row["request_id"])
-        attempts = int(row["attempt_count"] or 0)
-        payload = _lease_payload(row, attempts)
-        if attempts >= max_attempts:
-            failure = _lease_failure(request_id, attempts)
+            final = "cancelled" if int(row["cancel_requested"] or 0) else state
+            final_result = result if final != "cancelled" else dict(result, status="cancelled", ignored_result=True)
             conn.execute(
                 """
-                update requests
-                set state = 'failed', result_json = ?, error = ?, completed_at = ?, updated_at = ?,
-                    lease_id = null, leased_by = null, lease_expires_at = null, heartbeat_at = null
-                where request_id = ? and state = 'running'
+                update requests set state=?, result_json=?, error=?, completed_at=?, updated_at=?,
+                    lease_id=null, leased_by=null, lease_expires_at=null, heartbeat_at=null
+                where request_id=? and lease_id=? and state='running'
                 """,
-                (json.dumps(failure, sort_keys=True), failure["error"], now, now, request_id),
+                (final, json.dumps(final_result, sort_keys=True), None if final == "completed" else (error or final), now, now, request_id, lease_id),
             )
-            self._insert_event(conn, request_id, "lease_expired", "failed", payload)
-            notices.append((request_id, failure))
-            return str(row["batch_id"]), "failed"
-        conn.execute(
-            """
-            update requests
-            set state = 'queued', updated_at = ?,
-                lease_id = null, leased_by = null, lease_expires_at = null, heartbeat_at = null
-            where request_id = ? and state = 'running'
-            """,
-            (now, request_id),
-        )
-        self._insert_event(conn, request_id, "lease_expired", "queued", payload)
-        return str(row["batch_id"]), "queued"
+            if row["kv_key"]:
+                conn.execute("update kv_entries set state='idle', last_used_at=?, updated_at=? where request_id=?", (now, now, request_id))
+                conn.execute("update kv_shard_entries set state='idle', last_used_at=?, updated_at=? where request_id=?", (now, now, request_id))
+            self._release_unused_compute_lease(conn, row["compute_lease_id"])
+            self._event(conn, request_id, final, final, {"batch_id": row["batch_id"], "service_id": row["selected_service_id"]})
+            self._refresh_batch(conn, str(row["batch_id"]))
+        self._write_notice(request_id, final, final_result)
+        return True
 
-    def status(self, *, request_id: str | None = None, batch_id: str | None = None) -> dict[str, Any]:
+    def retry_transport_failure(self, *, request_id: str, lease_id: str, result: dict[str, Any], max_attempts: int) -> str:
+        now = time.time()
         with closing(self._connect()) as conn, conn:
-            if request_id is not None:
-                row = conn.execute("select * from requests where request_id = ?", (request_id,)).fetchone()
-                if row is None:
-                    return {"format": REQUEST_STATUS_FORMAT, "request_id": request_id, "state": "unknown"}
-                return self._row_to_request_status(row)
-            if batch_id is not None:
-                self._refresh_batch_row(conn, batch_id)
-                row = conn.execute("select * from batches where batch_id = ?", (batch_id,)).fetchone()
-                if row is None:
-                    return {"format": BATCH_STATUS_FORMAT, "batch_id": batch_id, "state": "unknown"}
-                return self._row_to_batch_status(row)
-            rows = conn.execute(
-                "select state, count(*) as count from requests group by state order by state"
-            ).fetchall()
-            counts = {str(row["state"]): int(row["count"]) for row in rows}
-            event = conn.execute("select max(event_id) as newest_event_id from events").fetchone()
-            return {
-                "format": QUEUE_FORMAT,
-                "state_counts": counts,
-                "newest_event_id": int(event["newest_event_id"] or 0),
-            }
+            row = conn.execute("select * from requests where request_id=? and lease_id=? and state='running'", (request_id, lease_id)).fetchone()
+            if row is None:
+                return "lost"
+            attempts = int(row["attempt_count"] or 0)
+            error = _result_error(result) or "transport_failed"
+            if int(row["cancel_requested"] or 0):
+                final = dict(result, status="cancelled", ignored_result=True)
+                conn.execute("update requests set state='cancelled', result_json=?, error=?, completed_at=?, updated_at=?, lease_id=null, leased_by=null, lease_expires_at=null, heartbeat_at=null where request_id=? and lease_id=? and state='running'", (json.dumps(final, sort_keys=True), "cancelled", now, now, request_id, lease_id))
+                self._delete_request_kv(conn, request_id)
+                self._release_unused_compute_lease(conn, row["compute_lease_id"])
+                self._event(conn, request_id, "cancelled", "cancelled", {"batch_id": row["batch_id"], "after_transport_error": error})
+                self._refresh_batch(conn, str(row["batch_id"]))
+                self._write_notice(request_id, "cancelled", final)
+                return "cancelled"
+            if attempts < max_attempts:
+                self._delete_request_kv(conn, request_id)
+                conn.execute(
+                    """
+                    update requests set state='queued',
+                        selected_node_id=case when selected_service_id is null then null else selected_node_id end,
+                        selected_node_ids_json=case when selected_service_id is null then null else selected_node_ids_json end,
+                        selected_compute_domain=case when selected_service_id is null then null else selected_compute_domain end,
+                        ready_at=null, result_json=null, error=?, lease_id=null, compute_lease_id=null, leased_by=null,
+                        lease_expires_at=null, heartbeat_at=null, updated_at=?
+                    where request_id=? and lease_id=? and state='running'
+                    """,
+                    (error, now, request_id, lease_id),
+                )
+                self._release_unused_compute_lease(conn, row["compute_lease_id"])
+                self._event(conn, request_id, "transport_requeued", "queued", {"batch_id": row["batch_id"], "attempt_count": attempts, "max_attempts": max_attempts, "error": error})
+                self._refresh_batch(conn, str(row["batch_id"]))
+                return "requeued"
+            conn.execute("update requests set state='failed', result_json=?, error=?, completed_at=?, updated_at=?, lease_id=null, leased_by=null, lease_expires_at=null, heartbeat_at=null where request_id=? and lease_id=? and state='running'", (json.dumps(result, sort_keys=True), error, now, now, request_id, lease_id))
+            self._delete_request_kv(conn, request_id)
+            self._release_unused_compute_lease(conn, row["compute_lease_id"])
+            self._event(conn, request_id, "failed", "failed", {"batch_id": row["batch_id"], "attempt_count": attempts, "error": error})
+            self._refresh_batch(conn, str(row["batch_id"]))
+        self._write_notice(request_id, "failed", result)
+        return "failed"
 
-    def cancel(self, *, request_id: str | None = None, batch_id: str | None = None, reason: str = "cancelled by operator") -> dict[str, Any]:
-        if (request_id is None) == (batch_id is None):
-            raise ValueError("exactly one of request_id or batch_id is required")
+    def cancel(self, *, request_id: str | None = None, batch_id: str | None = None, job_id: str | None = None, reason: str = "cancelled by operator", force_running: bool = False) -> dict[str, Any]:
+        batch_id = job_batch_id(batch_id=batch_id, job_id=job_id)
+        if sum(x is not None for x in (request_id, batch_id)) != 1:
+            raise ValueError("exactly one of request_id, batch_id, or job_id is required")
         now = time.time()
         cancelled: list[str] = []
         skipped: dict[str, int] = {}
         with closing(self._connect()) as conn, conn:
-            if request_id is not None:
-                rows = conn.execute("select * from requests where request_id = ?", (request_id,)).fetchall()
-            else:
-                rows = conn.execute("select * from requests where batch_id = ? order by request_id", (batch_id,)).fetchall()
-            if not rows:
-                return {
-                    "format": QUEUE_FORMAT,
-                    "state": "unknown",
-                    "request_id": request_id,
-                    "batch_id": batch_id,
-                    "cancelled_count": 0,
-                    "cancelled_request_ids": [],
-                    "skipped_state_counts": {},
-                }
-            touched_batches = {str(row["batch_id"]) for row in rows}
-            notices: list[tuple[str, dict[str, Any]]] = []
+            rows = conn.execute("select * from requests where request_id=?" if request_id else "select * from requests where batch_id=? order by request_id", (request_id or batch_id,)).fetchall()
             for row in rows:
-                state = str(row["state"])
                 rid = str(row["request_id"])
-                if state != "queued":
+                state = str(row["state"])
+                if state in TERMINAL_STATES:
                     skipped[state] = skipped.get(state, 0) + 1
                     continue
-                result = {
-                    "format": "ds4-inference-cancelled-v1",
-                    "request_id": rid,
-                    "status": "cancelled",
-                    "reason": reason,
-                }
-                updated = conn.execute(
-                    """
-                    update requests
-                    set state = 'cancelled', result_json = ?, error = ?, completed_at = ?, updated_at = ?
-                    where request_id = ? and state = 'queued'
-                    """,
-                    (json.dumps(result, sort_keys=True), reason, now, now, rid),
+                if state == "running":
+                    if force_running:
+                        result = {"format": "ds4-inference-cancelled-v1", "request_id": rid, "status": "cancelled", "reason": reason, "forced": True}
+                        conn.execute("update requests set state='cancelled', cancel_requested=1, result_json=?, error=?, completed_at=?, updated_at=?, lease_id=null, leased_by=null, lease_expires_at=null, heartbeat_at=null where request_id=?", (json.dumps(result, sort_keys=True), reason, now, now, rid))
+                        self._delete_request_kv(conn, rid)
+                        self._release_unused_compute_lease(conn, row["compute_lease_id"])
+                        self._event(conn, rid, "cancelled", "cancelled", {"batch_id": row["batch_id"], "reason": reason, "forced": True})
+                        self._write_notice(rid, "cancelled", result)
+                        cancelled.append(rid)
+                    else:
+                        conn.execute("update requests set cancel_requested=1, updated_at=? where request_id=?", (now, rid))
+                        skipped["running"] = skipped.get("running", 0) + 1
+                    continue
+                result = {"format": "ds4-inference-cancelled-v1", "request_id": rid, "status": "cancelled", "reason": reason}
+                conn.execute("update requests set state='cancelled', result_json=?, error=?, completed_at=?, updated_at=? where request_id=?", (json.dumps(result, sort_keys=True), reason, now, now, rid))
+                self._delete_request_kv(conn, rid)
+                self._release_unused_compute_lease(conn, row["compute_lease_id"])
+                self._event(conn, rid, "cancelled", "cancelled", {"batch_id": row["batch_id"], "reason": reason})
+                self._write_notice(rid, "cancelled", result)
+                cancelled.append(rid)
+            for bid in {str(row["batch_id"]) for row in rows}:
+                self._refresh_batch(conn, bid)
+        return {"format": QUEUE_FORMAT, "state": "cancelled" if cancelled and not skipped else "partial" if cancelled else "unchanged", "request_id": request_id, "batch_id": batch_id, "job_id": batch_id, "cancelled_count": len(cancelled), "cancelled_request_ids": cancelled, "skipped_state_counts": skipped}
+
+    def requeue_expired_leases(self, *, max_attempts: int = 3, now: float | None = None) -> dict[str, Any]:
+        now = time.time() if now is None else now
+        requeued = failed = 0
+        with closing(self._connect()) as conn, conn:
+            conn.execute("delete from compute_leases where lease_expires_at <= ? and compute_lease_id not in (select coalesce(compute_lease_id, '') from requests where state='running')", (now,))
+            rows = conn.execute("select * from requests where state in ('prefilling','running') and lease_expires_at is not null and lease_expires_at <= ? order by lease_expires_at, request_id", (now,)).fetchall()
+            for row in rows:
+                attempts = int(row["attempt_count"] or 0)
+                state = "failed" if attempts >= max_attempts else "queued"
+                if state == "queued":
+                    requeued += 1
+                    self._delete_request_kv(conn, str(row["request_id"]))
+                    conn.execute("update requests set state='queued', selected_node_id=case when selected_service_id is null then null else selected_node_id end, selected_node_ids_json=case when selected_service_id is null then null else selected_node_ids_json end, selected_compute_domain=case when selected_service_id is null then null else selected_compute_domain end, lease_id=null, compute_lease_id=null, leased_by=null, lease_expires_at=null, heartbeat_at=null, updated_at=? where request_id=?", (now, row["request_id"]))
+                else:
+                    failed += 1
+                    result = _failure(str(row["request_id"]), f"lease expired after {attempts} attempts")
+                    conn.execute("update requests set state='failed', result_json=?, error='lease_expired', completed_at=?, updated_at=?, lease_id=null, leased_by=null, lease_expires_at=null, heartbeat_at=null where request_id=?", (json.dumps(result, sort_keys=True), now, now, row["request_id"]))
+                    self._write_notice(str(row["request_id"]), "failed", result)
+                self._release_unused_compute_lease(conn, row["compute_lease_id"])
+                self._event(conn, str(row["request_id"]), "lease_expired", state, {"batch_id": row["batch_id"], "attempt_count": attempts})
+                self._refresh_batch(conn, str(row["batch_id"]))
+        return {"format": QUEUE_FORMAT, "state": "reaped" if requeued or failed else "idle", "requeued_count": requeued, "failed_count": failed}
+
+    def heartbeat(self, *, lease_ids: Iterable[str], lease_ttl_s: int) -> int:
+        ids = [str(lease_id) for lease_id in lease_ids if lease_id]
+        if not ids:
+            return 0
+        now = time.time()
+        with closing(self._connect()) as conn, conn:
+            placeholders = ",".join("?" for _ in ids)
+            rows = conn.execute(f"select distinct compute_lease_id from requests where state='running' and lease_id in ({placeholders}) and compute_lease_id is not null", tuple(ids)).fetchall()
+            compute_lease_ids = [str(row["compute_lease_id"]) for row in rows if row["compute_lease_id"]]
+            count = int(
+                conn.execute(
+                    f"update requests set heartbeat_at=?, lease_expires_at=?, updated_at=? where state='running' and lease_id in ({placeholders})",
+                    (now, now + lease_ttl_s, now, *ids),
                 ).rowcount
-                if updated == 1:
-                    cancelled.append(rid)
-                    notices.append((rid, result))
-                    self._insert_event(conn, rid, "cancelled", "cancelled", {"batch_id": str(row["batch_id"]), "reason": reason})
-            for touched_batch in touched_batches:
-                self._refresh_batch_row(conn, touched_batch)
-        for rid, result in notices:
-            self._write_notice(rid, "cancelled", result)
-        return {
-            "format": QUEUE_FORMAT,
-            "state": "cancelled" if cancelled else "unchanged",
-            "request_id": request_id,
-            "batch_id": batch_id,
-            "cancelled_count": len(cancelled),
-            "cancelled_request_ids": cancelled,
-            "skipped_state_counts": skipped,
-        }
+            )
+            if compute_lease_ids:
+                compute_placeholders = ",".join("?" for _ in compute_lease_ids)
+                conn.execute(
+                    f"update compute_leases set heartbeat_at=?, lease_expires_at=?, updated_at=? where compute_lease_id in ({compute_placeholders})",
+                    (now, now + lease_ttl_s, now, *compute_lease_ids),
+                )
+            return count
+
+    def status(self, *, request_id: str | None = None, batch_id: str | None = None, job_id: str | None = None, refresh: bool = True) -> dict[str, Any]:
+        batch_id = job_batch_id(batch_id=batch_id, job_id=job_id)
+        with closing(self._connect()) as conn, conn:
+            if request_id is not None:
+                row = conn.execute("select * from requests where request_id=?", (request_id,)).fetchone()
+                return {"format": REQUEST_STATUS_FORMAT, "request_id": request_id, "state": "unknown"} if row is None else _request_status(row)
+            if batch_id is not None:
+                if refresh:
+                    self._refresh_batch(conn, batch_id)
+                row = conn.execute("select * from batches where batch_id=?", (batch_id,)).fetchone()
+                return {"format": BATCH_STATUS_FORMAT, "batch_id": batch_id, "job_id": batch_id, "state": "unknown"} if row is None else _batch_status(row)
+            counts = {str(r["state"]): int(r["n"]) for r in conn.execute("select state,count(*) n from requests group by state order by state")}
+            event = conn.execute("select max(event_id) newest from events").fetchone()
+            leases = [dict(row) for row in conn.execute("select * from compute_leases order by compute_domain")]
+            return {"format": QUEUE_FORMAT, "state_counts": counts, "newest_event_id": int(event["newest"] or 0), "active_compute_leases": leases, "pipeline_status": self._pipeline_status_locked(conn)}
 
     def poll(self, *, after_event_id: int = 0, limit: int = 100) -> dict[str, Any]:
         with closing(self._connect()) as conn:
-            rows = conn.execute(
-                "select * from events where event_id > ? order by event_id limit ?",
-                (after_event_id, limit),
-            ).fetchall()
-        events = [self._row_to_event(row) for row in rows]
-        return {
-            "format": QUEUE_FORMAT,
-            "after_event_id": after_event_id,
-            "newest_event_id": events[-1]["event_id"] if events else after_event_id,
-            "events": events,
-        }
-
-    def collect(self, *, request_id: str | None = None, batch_id: str | None = None) -> dict[str, Any]:
-        if (request_id is None) == (batch_id is None):
-            raise ValueError("exactly one of request_id or batch_id is required")
-        with closing(self._connect()) as conn:
-            if request_id is not None:
-                row = conn.execute("select * from requests where request_id = ?", (request_id,)).fetchone()
-                if row is None:
-                    return {"format": QUEUE_FORMAT, "request_id": request_id, "state": "unknown"}
-                payload = {"format": QUEUE_FORMAT, "request": self._row_to_request_status(row)}
-                if row["result_json"]:
-                    payload["result"] = json.loads(str(row["result_json"]))
-                return payload
-            rows = conn.execute("select * from requests where batch_id = ? order by request_id", (batch_id,)).fetchall()
-            if not rows:
-                return {"format": QUEUE_FORMAT, "batch_id": batch_id, "state": "unknown", "results": []}
-            results = []
-            for row in rows:
-                item = {"request": self._row_to_request_status(row)}
-                if row["result_json"]:
-                    item["result"] = json.loads(str(row["result_json"]))
-                results.append(item)
-            return {"format": QUEUE_FORMAT, "batch_id": batch_id, "results": results}
-
-    def _connect(self) -> sqlite3.Connection:
-        busy_timeout_ms = _env_int("DS4_QUEUE_BUSY_TIMEOUT_MS", 5000)
-        conn = sqlite3.connect(self.db_path, timeout=max(0.001, busy_timeout_ms / 1000.0))
-        conn.row_factory = sqlite3.Row
-        conn.execute(f"pragma busy_timeout = {busy_timeout_ms}")
-        conn.execute("pragma journal_mode = wal")
-        conn.execute("pragma synchronous = normal")
-        for statement in QUEUE_SCHEMA_SQL:
-            conn.execute(statement)
-        self._ensure_request_columns(conn)
-        self._ensure_batch_columns(conn)
-        return conn
-
-    def _ensure_request_columns(self, conn: sqlite3.Connection) -> None:
-        existing = {str(row["name"]) for row in conn.execute("pragma table_info(requests)").fetchall()}
-        columns = {
-            "priority": "integer not null default 10",
-            "lease_id": "text",
-            "leased_by": "text",
-            "lease_expires_at": "real",
-            "heartbeat_at": "real",
-            "attempt_count": "integer not null default 0",
-            "request_kind": "text not null default 'model'",
-            "service_name": "text",
-        }
-        for name, spec in columns.items():
-            if name not in existing:
-                conn.execute(f"alter table requests add column {name} {spec}")
-
-    def _ensure_batch_columns(self, conn: sqlite3.Connection) -> None:
-        existing = {str(row["name"]) for row in conn.execute("pragma table_info(batches)").fetchall()}
-        columns = {
-            "cancelled_count": "integer not null default 0",
-        }
-        for name, spec in columns.items():
-            if name not in existing:
-                conn.execute(f"alter table batches add column {name} {spec}")
-
-    def _append_node_claim_filter(
-        self,
-        clauses: list[str],
-        params: list[Any],
-        *,
-        node_id: str | None,
-        include_unassigned: bool,
-        eligible_profile_ids: Iterable[str] | None,
-    ) -> None:
-        if node_id is None:
-            return
-        eligible = tuple(str(profile_id) for profile_id in (eligible_profile_ids or ()) if str(profile_id))
-        if include_unassigned and eligible:
-            placeholders = ",".join("?" for _ in eligible)
-            clauses.append(f"(selected_node_id = ? or (selected_node_id is null and selected_profile_id in ({placeholders})))")
-            params.append(node_id)
-            params.extend(eligible)
-        elif include_unassigned and eligible_profile_ids is None:
-            clauses.append("(selected_node_id = ? or selected_node_id is null)")
-            params.append(node_id)
-        else:
-            clauses.append("selected_node_id = ?")
-            params.append(node_id)
-
-    def _select_next_batch_key(
-        self,
-        conn: sqlite3.Connection,
-        *,
-        node_id: str | None,
-        batch_id: str | None,
-        request_kind: str | None = None,
-        profile_id: str | None = None,
-        service_name: str | None = None,
-        include_unassigned: bool = False,
-        eligible_profile_ids: Iterable[str] | None = None,
-    ) -> str | None:
-        clauses = ["state = 'queued'"]
-        params: list[Any] = []
-        self._append_node_claim_filter(clauses, params, node_id=node_id, include_unassigned=include_unassigned, eligible_profile_ids=eligible_profile_ids)
-        if batch_id is not None:
-            clauses.append("batch_id = ?")
-            params.append(batch_id)
-        if request_kind is not None:
-            clauses.append("request_kind = ?")
-            params.append(request_kind)
-        if profile_id is not None:
-            clauses.append("selected_profile_id = ?")
-            params.append(profile_id)
-        if service_name is not None:
-            clauses.append("service_name = ?")
-            params.append(service_name)
-        row = conn.execute(
-            f"""
-            select batch_key
-            from requests
-            where {' and '.join(clauses)}
-            order by priority asc, batch_key asc, created_at asc, request_id asc
-            limit 1
-            """,
-            tuple(params),
-        ).fetchone()
-        return str(row["batch_key"]) if row is not None else None
-
-    def _select_work_rows(
-        self,
-        conn: sqlite3.Connection,
-        *,
-        node_id: str | None,
-        batch_id: str | None,
-        batch_key: str | None,
-        request_kind: str | None = None,
-        profile_id: str | None = None,
-        service_name: str | None = None,
-        include_unassigned: bool = False,
-        eligible_profile_ids: Iterable[str] | None = None,
-        limit: int,
-    ) -> list[sqlite3.Row]:
-        clauses = ["state = 'queued'"]
-        params: list[Any] = []
-        self._append_node_claim_filter(clauses, params, node_id=node_id, include_unassigned=include_unassigned, eligible_profile_ids=eligible_profile_ids)
-        if batch_id is not None:
-            clauses.append("batch_id = ?")
-            params.append(batch_id)
-        if batch_key is not None:
-            clauses.append("batch_key = ?")
-            params.append(batch_key)
-        if request_kind is not None:
-            clauses.append("request_kind = ?")
-            params.append(request_kind)
-        if profile_id is not None:
-            clauses.append("selected_profile_id = ?")
-            params.append(profile_id)
-        if service_name is not None:
-            clauses.append("service_name = ?")
-            params.append(service_name)
-        params.append(limit)
-        return conn.execute(
-            f"""
-            select * from requests
-            where {' and '.join(clauses)}
-            order by priority asc, batch_key asc, created_at asc, request_id asc
-            limit ?
-            """,
-            tuple(params),
-        ).fetchall()
-
-    def _refresh_batch_row(self, conn: sqlite3.Connection, batch_id: str) -> None:
-        rows = conn.execute(
-            "select state, count(*) as count from requests where batch_id = ? group by state",
-            (batch_id,),
-        ).fetchall()
-        counts = {str(row["state"]): int(row["count"]) for row in rows}
-        request_count = sum(counts.values())
-        queued = counts.get("queued", 0)
-        running = counts.get("running", 0)
-        completed = counts.get("completed", 0)
-        failed = counts.get("failed", 0)
-        cancelled = counts.get("cancelled", 0)
-        if request_count == 0:
-            state = "unknown"
-        elif cancelled == request_count:
-            state = "cancelled"
-        elif completed + failed + cancelled == request_count:
-            if failed:
-                state = "completed_with_failures"
-            elif cancelled:
-                state = "completed_with_cancelled"
-            else:
-                state = "completed"
-        elif running:
-            state = "running"
-        else:
-            state = "queued"
-        conn.execute(
-            """
-            update batches
-            set state = ?, updated_at = ?, request_count = ?, queued_count = ?,
-                running_count = ?, completed_count = ?, failed_count = ?, cancelled_count = ?
-            where batch_id = ?
-            """,
-            (state, time.time(), request_count, queued, running, completed, failed, cancelled, batch_id),
-        )
-
-    def _queued_and_running_node_load(self) -> dict[str, int]:
-        return queue_depths(self.db_path, request_kind="model")
-
-    def _insert_event(
-        self,
-        conn: sqlite3.Connection,
-        request_id: str,
-        event_type: str,
-        state: str,
-        payload: dict[str, Any],
-    ) -> None:
-        conn.execute(
-            "insert into events(created_at, request_id, event_type, state, payload_json) values (?, ?, ?, ?, ?)",
-            (time.time(), request_id, event_type, state, json.dumps(payload, sort_keys=True)),
-        )
-
-    def _prefix_groups(
-        self,
-        conn: sqlite3.Connection,
-        *,
-        node_id: str | None,
-        batch_id: str | None,
-        batch_key: str | None,
-        min_group_size: int,
-    ) -> list[dict[str, Any]]:
-        clauses = ["state = 'queued'", "request_kind = 'model'"]
-        params: list[Any] = []
-        if node_id is not None:
-            clauses.append("(selected_node_id = ? or selected_node_id is null)")
-            params.append(node_id)
-        if batch_id is not None:
-            clauses.append("batch_id = ?")
-            params.append(batch_id)
-        if batch_key is not None:
-            clauses.append("batch_key = ?")
-            params.append(batch_key)
-        rows = conn.execute(
-            f"select * from requests where {' and '.join(clauses)} order by selected_profile_id, selected_node_id, batch_key, created_at, request_id",
-            tuple(params),
-        ).fetchall()
-        groups: dict[str, dict[str, Any]] = {}
+            rows = conn.execute("select * from events where event_id>? order by event_id limit ?", (after_event_id, limit)).fetchall()
+        events = []
         for row in rows:
-            raw = json.loads(str(row["request_json"]))
-            input_data = dict(raw.get("input", {}))
-            if input_data.get("messages") is not None:
-                continue
-            shared_prefix = input_data.get("shared_prefix")
-            if not isinstance(shared_prefix, str) or not shared_prefix:
-                continue
-            skeleton_hash = str(input_data.get("skeleton_hash") or input_data.get("shared_prefix_hash") or _sha256_text(shared_prefix))
-            shared_prefix_hash = _sha256_text(shared_prefix)
-            system_hash = _sha256_text(str(input_data.get("system", "")))
-            profile_id = str(row["selected_profile_id"])
-            group_node_id = str(row["selected_node_id"]) if row["selected_node_id"] is not None else node_id
-            chat = bool(raw.get("chat", False))
-            warm_key = _prefix_warm_key(node_id=group_node_id, profile_id=profile_id, chat=chat, skeleton_hash=skeleton_hash, shared_prefix_hash=shared_prefix_hash, system_hash=system_hash)
-            group = groups.setdefault(
-                warm_key,
-                {
-                    "format": PREFIX_GROUP_FORMAT,
-                    "warm_key": warm_key,
-                    "skeleton_hash": skeleton_hash,
-                    "shared_prefix_hash": shared_prefix_hash,
-                    "shared_prefix": shared_prefix,
-                    "shared_prefix_bytes": len(shared_prefix.encode("utf-8")),
-                    "profile_id": profile_id,
-                    "node_id": group_node_id,
-                    "chat": chat,
-                    "system_hash": system_hash,
-                    "system": input_data.get("system") if isinstance(input_data.get("system"), str) else None,
-                    "sample_request_json": raw,
-                    "request_ids": [],
-                    "batch_keys": set(),
-                    "priority": int(row["priority"]),
-                    "created_at": float(row["created_at"]),
-                },
+            event = dict(row)
+            event["payload"] = json.loads(str(row["payload_json"]))
+            events.append(event)
+        return {"format": QUEUE_FORMAT, "events": events, "newest_event_id": max([after_event_id] + [int(e["event_id"]) for e in events])}
+
+    def collect(self, *, request_id: str | None = None, batch_id: str | None = None, job_id: str | None = None) -> dict[str, Any]:
+        batch_id = job_batch_id(batch_id=batch_id, job_id=job_id)
+        if sum(x is not None for x in (request_id, batch_id)) != 1:
+            raise ValueError("exactly one of request_id, batch_id, or job_id is required")
+        with closing(self._connect()) as conn:
+            rows = conn.execute("select * from requests where request_id=?" if request_id else "select * from requests where batch_id=? order by request_id", (request_id or batch_id,)).fetchall()
+        results = [{"request": _request_status(row), "result": json.loads(str(row["result_json"])) if row["result_json"] else None} for row in rows]
+        if request_id:
+            return results[0] if results else {"format": QUEUE_FORMAT, "request_id": request_id, "state": "unknown"}
+        return {"format": QUEUE_FORMAT, "batch_id": batch_id, "job_id": batch_id, "results": results}
+
+    def record_pipeline_telemetry(self, report: dict[str, Any]) -> dict[str, Any]:
+        if isinstance(report.get("stages"), list):
+            results = []
+            for item in report["stages"]:
+                if not isinstance(item, dict):
+                    raise ValueError("pipeline telemetry stages must be objects")
+                merged = dict(report)
+                merged.pop("stages", None)
+                merged.update(item)
+                results.append(self.record_pipeline_telemetry(merged))
+            return {"format": PIPELINE_STATUS_FORMAT, "state": "reported", "stage_count": len(results), "results": results}
+        if isinstance(report.get("payload"), dict):
+            payload = dict(report["payload"])
+        elif report.get("payload_json") is not None:
+            raw_payload = report.get("payload_json")
+            payload = json.loads(str(raw_payload)) if isinstance(raw_payload, str) else raw_payload
+            if not isinstance(payload, dict):
+                raise ValueError("pipeline telemetry payload_json must decode to an object")
+        else:
+            payload = {
+                key: value
+                for key, value in report.items()
+                if key not in {"service_id", "node_id", "stage_index", "stage_count", "layer_start", "layer_end", "kv_shard_bytes", "reported_at"}
+            }
+        return self.report_pipeline_telemetry(
+            service_id=str(report["service_id"]),
+            node_id=str(report["node_id"]),
+            stage_index=int(report["stage_index"]),
+            stage_count=int(report["stage_count"]),
+            layer_start=int(report["layer_start"]) if report.get("layer_start") is not None else None,
+            layer_end=int(report["layer_end"]) if report.get("layer_end") is not None else None,
+            kv_shard_bytes=int(report.get("kv_shard_bytes", 0) or 0),
+            payload=payload,
+            reported_at=float(report["reported_at"]) if report.get("reported_at") is not None else None,
+        )
+
+    def report_pipeline_telemetry(self, *, service_id: str, node_id: str, stage_index: int, stage_count: int, layer_start: int | None = None, layer_end: int | None = None, kv_shard_bytes: int = 0, payload: dict[str, Any] | None = None, reported_at: float | None = None) -> dict[str, Any]:
+        if stage_index < 0 or stage_count < 1 or stage_index >= stage_count:
+            raise ValueError("invalid pipeline stage index/count")
+        layer_count = None if layer_start is None or layer_end is None else int(layer_end) - int(layer_start)
+        now = time.time() if reported_at is None else float(reported_at)
+        body = dict(payload or {})
+        with closing(self._connect()) as conn, conn:
+            conn.execute(
+                """
+                insert or replace into pipeline_telemetry(service_id,node_id,stage_index,stage_count,layer_start,layer_end,layer_count,kv_shard_bytes,payload_json,reported_at)
+                values (?,?,?,?,?,?,?,?,?,?)
+                """,
+                (service_id, node_id, stage_index, stage_count, layer_start, layer_end, layer_count, max(0, int(kv_shard_bytes)), json.dumps(body, sort_keys=True), now),
             )
-            group["request_ids"].append(str(row["request_id"]))
-            group["batch_keys"].add(str(row["batch_key"]))
-            group["priority"] = min(int(group["priority"]), int(row["priority"]))
-            group["created_at"] = min(float(group["created_at"]), float(row["created_at"]))
-        result = []
-        for group in groups.values():
-            if len(group["request_ids"]) < min_group_size:
-                continue
-            group["batch_keys"] = sorted(group["batch_keys"])
-            result.append(group)
-        return sorted(result, key=lambda item: (str(item["node_id"] or ""), int(item["priority"]), float(item["created_at"]), item["warm_key"]))
+        return {"format": PIPELINE_STATUS_FORMAT, "state": "reported", "service_id": service_id, "node_id": node_id, "stage_index": stage_index, "reported_at": now}
 
-    def _prefix_warm_status(self, conn: sqlite3.Connection, warm_key: str) -> dict[str, Any] | None:
-        row = conn.execute("select * from prefix_warms where warm_key = ?", (warm_key,)).fetchone()
-        return self._row_to_prefix_warm_status(row) if row is not None else None
+    def pipeline_status(self, *, service_id: str | None = None) -> dict[str, Any]:
+        with closing(self._connect()) as conn:
+            return self._pipeline_status_locked(conn, service_id=service_id)
 
-    def _record_prefix_warm(self, conn: sqlite3.Connection, group: dict[str, Any], *, state: str, result: dict[str, Any] | None, error: str | None) -> None:
+    def _pipeline_status_locked(self, conn: sqlite3.Connection, *, service_id: str | None = None) -> dict[str, Any]:
+        params: tuple[Any, ...] = (service_id,) if service_id else ()
+        where = "where service_id=?" if service_id else ""
+        rows = conn.execute(f"select * from pipeline_telemetry {where} order by service_id, stage_index, node_id", params).fetchall()
+        kv_rows = conn.execute(f"""
+            select service_id,node_id,stage_index,stage_count,min(layer_start) layer_start,max(layer_end) layer_end,
+                   count(*) entries,coalesce(sum(bytes),0) bytes
+            from kv_shard_entries {where}
+            group by service_id,node_id,stage_index,stage_count
+            order by service_id,stage_index,node_id
+        """, params).fetchall()
+        leases = conn.execute("select * from compute_leases order by compute_domain").fetchall()
+        return {
+            "format": PIPELINE_STATUS_FORMAT,
+            "service_id": service_id,
+            "stages": [_telemetry_status(row) for row in rows],
+            "kv_shards": [dict(row) for row in kv_rows],
+            "active_compute_leases": [dict(row) for row in leases],
+        }
+
+    def upsert_external_kv_object(
+        self,
+        *,
+        namespace: str,
+        kv_key: str,
+        service_id: str,
+        profile_id: str | None = None,
+        model_id: str | None = None,
+        owner: str | None = None,
+        content_hash: str | None = None,
+        total_bytes: int = 0,
+        total_tokens: int = 0,
+        state: str = "declared",
+        pin_count: int = 0,
+        priority: int = 100,
+        ttl_s: float | None = None,
+        metadata: dict[str, Any] | None = None,
+        shards: Iterable[dict[str, Any]] = (),
+    ) -> dict[str, Any]:
+        namespace = _normalize_namespace(namespace)
+        kv_key = _require_kv_key(kv_key)
+        service_id = _require_service_id(service_id)
         now = time.time()
-        warmed_at = now if state == "warm" else None
+        ttl_expires_at = None if ttl_s is None else now + max(0.0, float(ttl_s))
+        shard_list = [dict(shard) for shard in shards]
+        if not shard_list:
+            shard_list = [
+                {
+                    "namespace": namespace,
+                    "kv_key": kv_key,
+                    "service_id": service_id,
+                    "node_id": "spark0",
+                    "stage_index": 0,
+                    "stage_count": 1,
+                    "layer_start": None,
+                    "layer_end": None,
+                    "bytes": max(0, int(total_bytes)),
+                    "state": state,
+                    "storage_uri": None,
+                }
+            ]
+        with closing(self._connect()) as conn, conn:
+            conn.execute(
+                """
+                insert into kv_memory_objects(namespace,kv_key,service_id,profile_id,model_id,owner,content_hash,total_bytes,total_tokens,state,pin_count,priority,ttl_expires_at,metadata_json,created_at,updated_at,last_used_at)
+                values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                on conflict(namespace,kv_key,service_id) do update set
+                    profile_id=excluded.profile_id, model_id=excluded.model_id, owner=excluded.owner,
+                    content_hash=excluded.content_hash, total_bytes=excluded.total_bytes, total_tokens=excluded.total_tokens,
+                    state=excluded.state, pin_count=excluded.pin_count, priority=excluded.priority,
+                    ttl_expires_at=excluded.ttl_expires_at, metadata_json=excluded.metadata_json,
+                    updated_at=excluded.updated_at, last_used_at=excluded.last_used_at
+                """,
+                (
+                    namespace,
+                    kv_key,
+                    service_id,
+                    profile_id,
+                    model_id,
+                    owner,
+                    content_hash,
+                    max(0, int(total_bytes)),
+                    max(0, int(total_tokens)),
+                    state,
+                    max(0, int(pin_count)),
+                    int(priority),
+                    ttl_expires_at,
+                    json.dumps(dict(metadata or {}), sort_keys=True),
+                    now,
+                    now,
+                    now,
+                ),
+            )
+            conn.execute("delete from kv_memory_shards where namespace=? and kv_key=? and service_id=?", (namespace, kv_key, service_id))
+            for shard in shard_list:
+                conn.execute(
+                    """
+                    insert into kv_memory_shards(namespace,kv_key,service_id,node_id,stage_index,stage_count,layer_start,layer_end,bytes,state,storage_uri,gpu_resident,metadata_json,created_at,updated_at,last_used_at)
+                    values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        namespace,
+                        kv_key,
+                        service_id,
+                        str(shard["node_id"]),
+                        int(shard.get("stage_index", 0) or 0),
+                        int(shard.get("stage_count", len(shard_list)) or len(shard_list)),
+                        int(shard["layer_start"]) if shard.get("layer_start") is not None else None,
+                        int(shard["layer_end"]) if shard.get("layer_end") is not None else None,
+                        max(0, int(shard.get("bytes", 0) or 0)),
+                        str(shard.get("state") or state),
+                        str(shard["storage_uri"]) if shard.get("storage_uri") is not None else None,
+                        1 if bool(shard.get("gpu_resident", False)) else 0,
+                        json.dumps(dict(shard.get("metadata") or {}), sort_keys=True),
+                        now,
+                        now,
+                        now,
+                    ),
+                )
+        return self.external_kv_lookup(namespace=namespace, kv_key=kv_key, service_id=service_id)
+
+    def external_kv_lookup(self, *, namespace: str, kv_key: str, service_id: str | None = None) -> dict[str, Any]:
+        namespace = _normalize_namespace(namespace)
+        kv_key = _require_kv_key(kv_key)
+        with closing(self._connect()) as conn:
+            conn.execute("delete from kv_memory_leases where expires_at <= ?", (time.time(),))
+            object_rows = _external_kv_object_rows(conn, namespace=namespace, kv_key=kv_key, service_id=service_id)
+            objects = [_external_kv_manifest(conn, row) for row in object_rows]
+        if service_id is not None:
+            return objects[0] if objects else {"format": "ds4-external-kv-cache-object-v1", "state": "missing", "namespace": namespace, "kv_key": kv_key, "service_id": service_id}
+        return {"format": "ds4-external-kv-cache-lookup-v1", "namespace": namespace, "kv_key": kv_key, "objects": objects, "state": "found" if objects else "missing"}
+
+    def external_kv_list(
+        self,
+        *,
+        namespace: str = "default",
+        service_id: str | None = None,
+        owner: str | None = None,
+        state: str | None = None,
+        prefix: str | None = None,
+        include_shards: bool = False,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        namespace = _normalize_namespace(namespace)
+        clauses = ["namespace=?"]
+        params: list[Any] = [namespace]
+        if service_id is not None:
+            clauses.append("service_id=?")
+            params.append(str(service_id))
+        if owner is not None:
+            clauses.append("owner=?")
+            params.append(str(owner))
+        if state is not None:
+            clauses.append("state=?")
+            params.append(str(state))
+        if prefix is not None:
+            clauses.append("kv_key like ?")
+            params.append(str(prefix) + "%")
+        params.append(max(1, min(10000, int(limit))))
+        with closing(self._connect()) as conn:
+            conn.execute("delete from kv_memory_leases where expires_at <= ?", (time.time(),))
+            rows = conn.execute(
+                f"select * from kv_memory_objects where {' and '.join(clauses)} order by priority, last_used_at desc, updated_at desc limit ?",
+                tuple(params),
+            ).fetchall()
+            objects = [_external_kv_manifest(conn, row) if include_shards else _external_kv_object_summary(row) for row in rows]
+        return {
+            "format": "ds4-external-kv-cache-list-v1",
+            "namespace": namespace,
+            "service_id": service_id,
+            "owner": owner,
+            "state": state,
+            "prefix": prefix,
+            "objects": objects,
+            "count": len(objects),
+        }
+
+    def external_kv_touch(
+        self,
+        *,
+        namespace: str,
+        kv_key: str,
+        service_id: str,
+        owner: str | None = None,
+        state: str | None = None,
+        priority: int | None = None,
+        ttl_s: float | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        namespace = _normalize_namespace(namespace)
+        kv_key = _require_kv_key(kv_key)
+        service_id = _require_service_id(service_id)
+        now = time.time()
+        ttl_expires_at = None if ttl_s is None else now + max(0.0, float(ttl_s))
+        with closing(self._connect()) as conn, conn:
+            row = conn.execute("select * from kv_memory_objects where namespace=? and kv_key=? and service_id=?", (namespace, kv_key, service_id)).fetchone()
+            if row is None:
+                raise ValueError("external KV object is missing")
+            existing = json.loads(str(row["metadata_json"] or "{}"))
+            if metadata:
+                existing.update(metadata)
+            clauses = ["metadata_json=?", "updated_at=?", "last_used_at=?"]
+            params: list[Any] = [json.dumps(existing, sort_keys=True), now, now]
+            if owner is not None:
+                clauses.append("owner=?")
+                params.append(str(owner))
+            if state is not None:
+                clauses.append("state=?")
+                params.append(str(state))
+            if priority is not None:
+                clauses.append("priority=?")
+                params.append(int(priority))
+            if ttl_s is not None:
+                clauses.append("ttl_expires_at=?")
+                params.append(ttl_expires_at)
+            params.extend([namespace, kv_key, service_id])
+            conn.execute(f"update kv_memory_objects set {', '.join(clauses)} where namespace=? and kv_key=? and service_id=?", tuple(params))
+            conn.execute("update kv_memory_shards set updated_at=?, last_used_at=? where namespace=? and kv_key=? and service_id=?", (now, now, namespace, kv_key, service_id))
+        return self.external_kv_lookup(namespace=namespace, kv_key=kv_key, service_id=service_id)
+
+    def external_kv_lease(self, *, namespace: str, kv_key: str, service_id: str, owner: str | None = None, mode: str = "read", ttl_s: float = 300.0) -> dict[str, Any]:
+        namespace = _normalize_namespace(namespace)
+        kv_key = _require_kv_key(kv_key)
+        service_id = _require_service_id(service_id)
+        if mode not in {"read", "write", "prefetch", "pin"}:
+            raise ValueError("unsupported external KV lease mode")
+        now = time.time()
+        lease_id = f"kvlease-{uuid.uuid4().hex}"
+        with closing(self._connect()) as conn, conn:
+            row = conn.execute("select * from kv_memory_objects where namespace=? and kv_key=? and service_id=?", (namespace, kv_key, service_id)).fetchone()
+            if row is None:
+                raise ValueError("external KV object is missing")
+            conn.execute("delete from kv_memory_leases where expires_at <= ?", (now,))
+            conn.execute(
+                "insert into kv_memory_leases(lease_id,namespace,kv_key,service_id,mode,owner,expires_at,created_at,updated_at) values (?,?,?,?,?,?,?,?,?)",
+                (lease_id, namespace, kv_key, service_id, mode, owner, now + max(1.0, float(ttl_s)), now, now),
+            )
+            conn.execute("update kv_memory_objects set last_used_at=?, updated_at=? where namespace=? and kv_key=? and service_id=?", (now, now, namespace, kv_key, service_id))
+            conn.execute("update kv_memory_shards set last_used_at=?, updated_at=? where namespace=? and kv_key=? and service_id=?", (now, now, namespace, kv_key, service_id))
+            manifest = _external_kv_manifest(conn, row)
+        manifest["lease"] = {"lease_id": lease_id, "mode": mode, "owner": owner, "expires_at": now + max(1.0, float(ttl_s))}
+        return manifest
+
+    def external_kv_release(self, *, lease_id: str) -> dict[str, Any]:
+        with closing(self._connect()) as conn, conn:
+            deleted = conn.execute("delete from kv_memory_leases where lease_id=?", (str(lease_id),)).rowcount
+        return {"format": "ds4-external-kv-cache-lease-v1", "lease_id": str(lease_id), "released": bool(deleted)}
+
+    def external_kv_transition(self, *, namespace: str, kv_key: str, service_id: str, state: str, shard_state: str | None = None, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+        namespace = _normalize_namespace(namespace)
+        kv_key = _require_kv_key(kv_key)
+        service_id = _require_service_id(service_id)
+        now = time.time()
+        with closing(self._connect()) as conn, conn:
+            row = conn.execute("select * from kv_memory_objects where namespace=? and kv_key=? and service_id=?", (namespace, kv_key, service_id)).fetchone()
+            if row is None:
+                raise ValueError("external KV object is missing")
+            existing = json.loads(str(row["metadata_json"] or "{}"))
+            if metadata:
+                existing.update(metadata)
+            conn.execute("update kv_memory_objects set state=?, metadata_json=?, updated_at=?, last_used_at=? where namespace=? and kv_key=? and service_id=?", (state, json.dumps(existing, sort_keys=True), now, now, namespace, kv_key, service_id))
+            if shard_state is not None:
+                conn.execute("update kv_memory_shards set state=?, updated_at=?, last_used_at=? where namespace=? and kv_key=? and service_id=?", (shard_state, now, now, namespace, kv_key, service_id))
+        return self.external_kv_lookup(namespace=namespace, kv_key=kv_key, service_id=service_id)
+
+    def external_kv_pin(self, *, namespace: str, kv_key: str, service_id: str, delta: int) -> dict[str, Any]:
+        namespace = _normalize_namespace(namespace)
+        kv_key = _require_kv_key(kv_key)
+        service_id = _require_service_id(service_id)
+        now = time.time()
+        with closing(self._connect()) as conn, conn:
+            row = conn.execute("select pin_count from kv_memory_objects where namespace=? and kv_key=? and service_id=?", (namespace, kv_key, service_id)).fetchone()
+            if row is None:
+                raise ValueError("external KV object is missing")
+            pin_count = max(0, int(row["pin_count"] or 0) + int(delta))
+            conn.execute("update kv_memory_objects set pin_count=?, updated_at=?, last_used_at=? where namespace=? and kv_key=? and service_id=?", (pin_count, now, now, namespace, kv_key, service_id))
+        return self.external_kv_lookup(namespace=namespace, kv_key=kv_key, service_id=service_id)
+
+    def external_kv_evict(self, *, namespace: str, kv_key: str, service_id: str, reason: str | None = None) -> dict[str, Any]:
+        namespace = _normalize_namespace(namespace)
+        kv_key = _require_kv_key(kv_key)
+        service_id = _require_service_id(service_id)
+        now = time.time()
+        with closing(self._connect()) as conn, conn:
+            row = conn.execute("select pin_count from kv_memory_objects where namespace=? and kv_key=? and service_id=?", (namespace, kv_key, service_id)).fetchone()
+            if row is None:
+                return {"format": "ds4-external-kv-cache-object-v1", "state": "missing", "namespace": namespace, "kv_key": kv_key, "service_id": service_id}
+            if int(row["pin_count"] or 0) > 0:
+                raise ValueError("cannot evict a pinned external KV object")
+            metadata = {"evicted_reason": reason or "operator"}
+            conn.execute("update kv_memory_objects set state='evicted', metadata_json=?, updated_at=?, last_used_at=? where namespace=? and kv_key=? and service_id=?", (json.dumps(metadata, sort_keys=True), now, now, namespace, kv_key, service_id))
+            conn.execute("update kv_memory_shards set state='evicted', gpu_resident=0, updated_at=?, last_used_at=? where namespace=? and kv_key=? and service_id=?", (now, now, namespace, kv_key, service_id))
+        return self.external_kv_lookup(namespace=namespace, kv_key=kv_key, service_id=service_id)
+
+    def external_kv_commit_shards(self, *, namespace: str, kv_key: str, service_id: str, object_state: str = "available", shard_state: str = "ready_on_ssd", shard_updates: Iterable[dict[str, Any]] = ()) -> dict[str, Any]:
+        namespace = _normalize_namespace(namespace)
+        kv_key = _require_kv_key(kv_key)
+        service_id = _require_service_id(service_id)
+        now = time.time()
+        updates = [dict(item) for item in shard_updates]
+        with closing(self._connect()) as conn, conn:
+            row = conn.execute("select * from kv_memory_objects where namespace=? and kv_key=? and service_id=?", (namespace, kv_key, service_id)).fetchone()
+            if row is None:
+                raise ValueError("external KV object is missing")
+            conn.execute("update kv_memory_objects set state=?, updated_at=?, last_used_at=? where namespace=? and kv_key=? and service_id=?", (object_state, now, now, namespace, kv_key, service_id))
+            if not updates:
+                conn.execute("update kv_memory_shards set state=?, updated_at=?, last_used_at=? where namespace=? and kv_key=? and service_id=?", (shard_state, now, now, namespace, kv_key, service_id))
+            for update in updates:
+                clauses = ["state=?", "updated_at=?", "last_used_at=?"]
+                params: list[Any] = [str(update.get("state") or shard_state), now, now]
+                if "bytes" in update:
+                    clauses.append("bytes=?")
+                    params.append(max(0, int(update["bytes"] or 0)))
+                if "storage_uri" in update:
+                    clauses.append("storage_uri=?")
+                    params.append(str(update["storage_uri"]) if update.get("storage_uri") is not None else None)
+                if "gpu_resident" in update:
+                    clauses.append("gpu_resident=?")
+                    params.append(1 if bool(update.get("gpu_resident")) else 0)
+                if "metadata" in update:
+                    clauses.append("metadata_json=?")
+                    params.append(json.dumps(dict(update.get("metadata") or {}), sort_keys=True))
+                params.extend([namespace, kv_key, service_id])
+                where = "namespace=? and kv_key=? and service_id=?"
+                if update.get("node_id") is not None:
+                    where += " and node_id=?"
+                    params.append(str(update["node_id"]))
+                if update.get("stage_index") is not None:
+                    where += " and stage_index=?"
+                    params.append(int(update["stage_index"]))
+                conn.execute(f"update kv_memory_shards set {', '.join(clauses)} where {where}", tuple(params))
+        return self.external_kv_lookup(namespace=namespace, kv_key=kv_key, service_id=service_id)
+
+
+    def _existing_submission(self, batch_id: str, requests: list[InferenceRequest], priority: int | None) -> dict[str, Any] | None:
+        with closing(self._connect()) as conn:
+            rows = conn.execute("select request_id,priority,selected_profile_id,selected_node_id,selected_service_id from requests where batch_id=? order by request_id", (batch_id,)).fetchall()
+        if not rows:
+            return None
+        ids = sorted(req.request_id for req in requests)
+        existing = sorted(str(row["request_id"]) for row in rows)
+        if ids != existing:
+            raise ValueError(f"batch_id already exists with different requests: {batch_id}")
+        expected = {req.request_id: request_priority(req, priority_override=priority) for req in requests}
+        existing_priorities = {str(row["request_id"]): int(row["priority"]) for row in rows}
+        mismatches = sorted(rid for rid, prio in expected.items() if existing_priorities.get(rid) != prio)
+        if mismatches:
+            raise ValueError(f"batch_id already exists with different priority for requests: {mismatches}")
+        return {"format": QUEUE_FORMAT, "state": "queued", "batch_id": batch_id, "job_id": batch_id, "request_ids": existing, "request_count": len(existing), "selected_profiles": _count(row["selected_profile_id"] for row in rows), "selected_nodes": _count(row["selected_node_id"] for row in rows if row["selected_node_id"]), "selected_services": _count(row["selected_service_id"] for row in rows if row["selected_service_id"]), "priority_counts": {str(k): v for k, v in _count(int(row["priority"]) for row in rows).items()}}
+
+    def _reserve_kv(self, conn: sqlite3.Connection, row: sqlite3.Row, *, node_id: str | None, capacity: int, now: float, pipeline_layout: Any | None = None) -> bool:
+        key = row["kv_key"]
+        need = int(row["kv_bytes"] or 0)
+        if not key or need <= 0:
+            return True
+        service_id = str(row["selected_service_id"] or "")
+        node_ids = _row_node_ids(row, fallback_node_id=node_id)
+        if service_id and len(node_ids) > 1:
+            return self._reserve_pipeline_kv(conn, row, service_id=service_id, node_ids=node_ids, key=str(key), need=need, capacity=capacity, now=now, pipeline_layout=pipeline_layout)
+        return self._reserve_legacy_kv(conn, row, node_id=node_id, key=str(key), need=need, capacity=capacity, now=now)
+
+    def _reserve_legacy_kv(self, conn: sqlite3.Connection, row: sqlite3.Row, *, node_id: str | None, key: str, need: int, capacity: int, now: float) -> bool:
+        if node_id is None:
+            return False
+        victims = _kv_victims_to_fit(conn, table="kv_entries", service_id=None, node_id=node_id, need=need, capacity=capacity)
+        if victims is None:
+            return False
+        for victim in victims:
+            conn.execute("delete from kv_entries where node_id=? and kv_key=?", (node_id, victim))
+        conn.execute("insert or replace into kv_entries(node_id,kv_key,request_id,bytes,state,last_used_at,created_at,updated_at) values (?,?,?,?,?,?,?,?)", (node_id, key, row["request_id"], need, "ready", now, now, now))
+        return True
+
+    def _reserve_pipeline_kv(self, conn: sqlite3.Connection, row: sqlite3.Row, *, service_id: str, node_ids: tuple[str, ...], key: str, need: int, capacity: int, now: float, pipeline_layout: Any | None = None) -> bool:
+        if pipeline_layout is not None and hasattr(pipeline_layout, "cache_shards"):
+            shards = list(pipeline_layout.cache_shards(request_id=str(row["request_id"]), kv_key=key, total_bytes=need))
+        else:
+            shard_bytes = int(row["kv_shard_bytes"] or ceil(need / max(1, len(node_ids))))
+            shards = [
+                {
+                    "service_id": service_id,
+                    "node_id": stage_node,
+                    "stage_index": stage_index,
+                    "stage_count": len(node_ids),
+                    "layer_start": None,
+                    "layer_end": None,
+                    "bytes": shard_bytes,
+                }
+                for stage_index, stage_node in enumerate(node_ids)
+            ]
+        if not shards:
+            return True
+        evictions: list[tuple[str, list[str]]] = []
+        for shard in shards:
+            node_id = str(shard["node_id"])
+            shard_bytes = max(0, int(shard.get("bytes", 0) or 0))
+            victims = _kv_victims_to_fit(conn, table="kv_shard_entries", service_id=service_id, node_id=node_id, need=shard_bytes, capacity=capacity)
+            if victims is None:
+                return False
+            evictions.append((node_id, victims))
+        for node_id, victims in evictions:
+            for victim in victims:
+                conn.execute("delete from kv_shard_entries where service_id=? and node_id=? and kv_key=?", (service_id, node_id, victim))
+        stage_count = max(1, len(shards))
+        shard_bytes_values: list[int] = []
+        for shard in shards:
+            node_id = str(shard["node_id"])
+            shard_bytes = max(0, int(shard.get("bytes", 0) or 0))
+            shard_bytes_values.append(shard_bytes)
+            conn.execute(
+                """
+                insert or replace into kv_shard_entries(service_id,node_id,kv_key,request_id,stage_index,stage_count,layer_start,layer_end,bytes,state,last_used_at,created_at,updated_at)
+                values (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    service_id,
+                    node_id,
+                    key,
+                    row["request_id"],
+                    int(shard.get("stage_index", 0) or 0),
+                    int(shard.get("stage_count", stage_count) or stage_count),
+                    int(shard["layer_start"]) if shard.get("layer_start") is not None else None,
+                    int(shard["layer_end"]) if shard.get("layer_end") is not None else None,
+                    shard_bytes,
+                    "ready",
+                    now,
+                    now,
+                    now,
+                ),
+            )
+        conn.execute("update requests set kv_shard_count=?, kv_shard_bytes=? where request_id=?", (stage_count, max(shard_bytes_values) if shard_bytes_values else 0, row["request_id"]))
+        return True
+
+    def _acquire_compute_lease(self, conn: sqlite3.Connection, *, rows: list[sqlite3.Row], leased_by: str, lease_ttl_s: int, now: float) -> str | None | bool:
+        domain = str(rows[0]["selected_compute_domain"] or "")
+        if not domain:
+            return None
+        conn.execute("delete from compute_leases where lease_expires_at <= ?", (now,))
+        existing = conn.execute("select * from compute_leases where compute_domain=?", (domain,)).fetchone()
+        if existing is not None:
+            return False
+        service_id = str(rows[0]["selected_service_id"] or "") or None
+        compute_lease_id = f"{leased_by}:compute:{uuid.uuid4().hex}"
         conn.execute(
             """
-            insert into prefix_warms(
-                warm_key, skeleton_hash, shared_prefix_hash, profile_id, node_id,
-                chat, shared_prefix_bytes, request_count, state, warmed_at,
-                updated_at, result_json, error
-            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            on conflict(warm_key) do update set
-                state = excluded.state,
-                warmed_at = coalesce(excluded.warmed_at, prefix_warms.warmed_at),
-                updated_at = excluded.updated_at,
-                request_count = excluded.request_count,
-                result_json = excluded.result_json,
-                error = excluded.error
+            insert into compute_leases(compute_domain,compute_lease_id,service_id,leased_by,lease_expires_at,heartbeat_at,request_count,created_at,updated_at)
+            values (?,?,?,?,?,?,?,?,?)
             """,
-            (
-                group["warm_key"],
-                group["skeleton_hash"],
-                group["shared_prefix_hash"],
-                group["profile_id"],
-                group["node_id"],
-                1 if group["chat"] else 0,
-                int(group["shared_prefix_bytes"]),
-                len(group["request_ids"]),
-                state,
-                warmed_at,
-                now,
-                json.dumps(result, sort_keys=True) if result is not None else None,
-                error,
-            ),
+            (domain, compute_lease_id, service_id, leased_by, now + lease_ttl_s, now, len(rows), now, now),
         )
-        self._insert_event(
-            conn,
-            str(group["warm_key"]),
-            "prefix_warm_" + state,
-            state,
-            {
-                "skeleton_hash": group["skeleton_hash"],
-                "profile_id": group["profile_id"],
-                "node_id": group["node_id"],
-                "request_count": len(group["request_ids"]),
-            },
+        return compute_lease_id
+
+    def _extend_compute_lease(self, conn: sqlite3.Connection, *, rows: list[sqlite3.Row], compute_lease_id: str | None, leased_by: str, lease_ttl_s: int, now: float) -> str | None | bool:
+        domain = str(rows[0]["selected_compute_domain"] or "")
+        if not domain:
+            return None
+        if not compute_lease_id:
+            return False
+        row = conn.execute("select * from compute_leases where compute_lease_id=? and lease_expires_at>?", (compute_lease_id, now)).fetchone()
+        if row is None:
+            return False
+        service_id = str(rows[0]["selected_service_id"] or "")
+        if str(row["compute_domain"] or "") != domain:
+            return False
+        if str(row["leased_by"] or "") != leased_by:
+            return False
+        if str(row["service_id"] or "") != service_id:
+            return False
+        conn.execute(
+            """
+            update compute_leases set lease_expires_at=?, heartbeat_at=?, request_count=request_count+?,
+                updated_at=? where compute_lease_id=?
+            """,
+            (now + lease_ttl_s, now, len(rows), now, compute_lease_id),
         )
+        return compute_lease_id
+
+    def _release_unused_compute_lease(self, conn: sqlite3.Connection, compute_lease_id: Any) -> None:
+        if not compute_lease_id:
+            return
+        row = conn.execute("select count(*) n from requests where state='running' and compute_lease_id=?", (compute_lease_id,)).fetchone()
+        if int(row["n"] if row else 0) == 0:
+            conn.execute("delete from compute_leases where compute_lease_id=?", (compute_lease_id,))
+
+    def _delete_request_kv(self, conn: sqlite3.Connection, request_id: str) -> None:
+        conn.execute("delete from kv_entries where request_id=?", (request_id,))
+        conn.execute("delete from kv_shard_entries where request_id=?", (request_id,))
+
+    def _refresh_batch(self, conn: sqlite3.Connection, batch_id: str) -> None:
+        counts = {str(row["state"]): int(row["n"]) for row in conn.execute("select state,count(*) n from requests where batch_id=? group by state", (batch_id,))}
+        total = sum(counts.values())
+        terminal = counts.get("completed", 0) + counts.get("failed", 0) + counts.get("cancelled", 0)
+        state = "completed" if total and counts.get("completed", 0) == total else "cancelled" if total and counts.get("cancelled", 0) == total else "completed_with_failures" if total and terminal == total and counts.get("failed", 0) else "completed_with_cancelled" if total and terminal == total else "running" if counts.get("running", 0) else "ready" if counts.get("ready", 0) else "prefilling" if counts.get("prefilling", 0) else "queued"
+        conn.execute(
+            "update batches set state=?, updated_at=?, request_count=?, queued_count=?, prefilling_count=?, ready_count=?, running_count=?, completed_count=?, failed_count=?, cancelled_count=? where batch_id=?",
+            (state, time.time(), total, counts.get("queued", 0), counts.get("prefilling", 0), counts.get("ready", 0), counts.get("running", 0), counts.get("completed", 0), counts.get("failed", 0), counts.get("cancelled", 0), batch_id),
+        )
+
+    def _event(self, conn: sqlite3.Connection, request_id: str, event_type: str, state: str, payload: dict[str, Any]) -> None:
+        conn.execute("insert into events(created_at,request_id,event_type,state,payload_json) values (?,?,?,?,?)", (time.time(), request_id, event_type, state, json.dumps(payload, sort_keys=True)))
 
     def _write_notice(self, request_id: str, state: str, result: dict[str, Any]) -> None:
-        notice = {
-            "format": REQUEST_NOTICE_FORMAT,
-            "request_id": request_id,
-            "state": state,
-            "result": result,
-        }
-        (self.notices_dir / f"{request_id}.json").write_text(
-            json.dumps(notice, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-
-    def _row_to_request_status(self, row: sqlite3.Row) -> dict[str, Any]:
-        status = {
-            "format": REQUEST_STATUS_FORMAT,
-            "service_name": row["service_name"],
-            "immediate": bool(row["immediate"]),
-            "priority": int(row["priority"]),
-            "selected_node_id": row["selected_node_id"],
-            "created_at": float(row["created_at"]),
-            "updated_at": float(row["updated_at"]),
-            "started_at": row["started_at"],
-            "completed_at": row["completed_at"],
-            "lease_id": row["lease_id"],
-            "leased_by": row["leased_by"],
-            "lease_expires_at": row["lease_expires_at"],
-            "heartbeat_at": row["heartbeat_at"],
-            "attempt_count": int(row["attempt_count"] or 0),
-            "error": row["error"],
-        }
-        status.update(_row_strings(row, "request_id", "batch_id", "request_kind", "state", "batch_key", "selected_profile_id"))
-        return status
-
-    def _row_to_batch_status(self, row: sqlite3.Row) -> dict[str, Any]:
-        status = {
-            "format": BATCH_STATUS_FORMAT,
-            "created_at": float(row["created_at"]),
-            "updated_at": float(row["updated_at"]),
-        }
-        status.update(_row_strings(row, "batch_id", "state"))
-        status.update(_row_ints(row, "request_count", "queued_count", "running_count", "completed_count", "failed_count", "cancelled_count"))
-        return status
-
-    def _row_to_event(self, row: sqlite3.Row) -> dict[str, Any]:
-        return {
-            "event_id": int(row["event_id"]),
-            "created_at": float(row["created_at"]),
-            "request_id": str(row["request_id"]),
-            "event_type": str(row["event_type"]),
-            "state": str(row["state"]),
-            "payload": json.loads(str(row["payload_json"])),
-        }
-
-    def _row_to_prefix_warm_status(self, row: sqlite3.Row) -> dict[str, Any]:
-        return {
-            "format": PREFIX_WARM_STATUS_FORMAT,
-            "warm_key": str(row["warm_key"]),
-            "skeleton_hash": str(row["skeleton_hash"]),
-            "shared_prefix_hash": str(row["shared_prefix_hash"]),
-            "profile_id": str(row["profile_id"]),
-            "node_id": row["node_id"],
-            "state": str(row["state"]),
-            "request_count": int(row["request_count"]),
-            "shared_prefix_bytes": int(row["shared_prefix_bytes"]),
-            "warmed_at": row["warmed_at"],
-            "updated_at": float(row["updated_at"]),
-            "error": row["error"],
-        }
+        (self.root / "notices" / f"{request_id}.json").write_text(json.dumps({"format": QUEUE_FORMAT, "request_id": request_id, "state": state, "result": result}, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _prefix_warm_key(*, node_id: str | None, profile_id: str, chat: bool, skeleton_hash: str, shared_prefix_hash: str, system_hash: str) -> str:
-    return "|".join([node_id or "unassigned", profile_id, "chat" if chat else "completion", skeleton_hash, shared_prefix_hash, system_hash])
+def _ensure_request_columns(conn: sqlite3.Connection) -> None:
+    existing = {str(row["name"]) for row in conn.execute("pragma table_info(requests)")}
+    columns = {
+        "selected_service_id": "text",
+        "selected_node_ids_json": "text",
+        "selected_compute_domain": "text",
+        "compute_lease_id": "text",
+        "kv_shard_count": "integer not null default 0",
+        "kv_shard_bytes": "integer not null default 0",
+    }
+    for name, ddl in columns.items():
+        if name not in existing:
+            conn.execute(f"alter table requests add column {name} {ddl}")
 
 
-def _prefix_group_base_key(group: dict[str, Any]) -> tuple[str, bool, str, str, str]:
-    return (
-        str(group["profile_id"]),
-        bool(group["chat"]),
-        str(group["skeleton_hash"]),
-        str(group["shared_prefix_hash"]),
-        str(group.get("system_hash") or _sha256_text(str(group.get("system") or ""))),
+def _ensure_kv_shard_columns(conn: sqlite3.Connection) -> None:
+    existing = {str(row["name"]) for row in conn.execute("pragma table_info(kv_shard_entries)")}
+    columns = {
+        "layer_start": "integer",
+        "layer_end": "integer",
+    }
+    for name, ddl in columns.items():
+        if name not in existing:
+            conn.execute(f"alter table kv_shard_entries add column {name} {ddl}")
+
+
+def _queued_rows(conn: sqlite3.Connection, *, node_id: str | None, eligible: tuple[str, ...], batch_id: str | None, limit: int) -> list[sqlite3.Row]:
+    clauses = ["state='queued'"]
+    params: list[Any] = []
+    if node_id is not None:
+        clauses.append("(selected_node_id is null or selected_node_id=?)")
+        params.append(node_id)
+    if eligible:
+        clauses.append("selected_profile_id in (%s)" % ",".join("?" for _ in eligible))
+        params.extend(eligible)
+    if batch_id:
+        clauses.append("batch_id=?")
+        params.append(batch_id)
+    params.append(max(1, int(limit)))
+    return conn.execute(f"select * from requests where {' and '.join(clauses)} order by priority, created_at, request_id limit ?", tuple(params)).fetchall()
+
+
+
+def _normalize_namespace(namespace: str | None) -> str:
+    namespace = str(namespace or "default")
+    if not namespace:
+        raise ValueError("namespace is required")
+    return namespace
+
+
+def _require_kv_key(kv_key: str | None) -> str:
+    kv_key = str(kv_key or "")
+    if not kv_key:
+        raise ValueError("kv_key is required")
+    return kv_key
+
+
+def _require_service_id(service_id: str | None) -> str:
+    service_id = str(service_id or "")
+    if not service_id:
+        raise ValueError("service_id is required")
+    return service_id
+
+
+def _external_kv_object_rows(conn: sqlite3.Connection, *, namespace: str, kv_key: str, service_id: str | None = None) -> list[sqlite3.Row]:
+    if service_id is None:
+        return conn.execute("select * from kv_memory_objects where namespace=? and kv_key=? order by service_id", (namespace, kv_key)).fetchall()
+    return conn.execute("select * from kv_memory_objects where namespace=? and kv_key=? and service_id=?", (namespace, kv_key, service_id)).fetchall()
+
+
+def _external_kv_object_summary(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "format": "ds4-external-kv-cache-object-summary-v1",
+        "namespace": row["namespace"],
+        "kv_key": row["kv_key"],
+        "service_id": row["service_id"],
+        "profile_id": row["profile_id"],
+        "model_id": row["model_id"],
+        "owner": row["owner"],
+        "content_hash": row["content_hash"],
+        "total_bytes": int(row["total_bytes"] or 0),
+        "total_tokens": int(row["total_tokens"] or 0),
+        "state": row["state"],
+        "pin_count": int(row["pin_count"] or 0),
+        "priority": int(row["priority"] or 0),
+        "ttl_expires_at": row["ttl_expires_at"],
+        "metadata": json.loads(str(row["metadata_json"] or "{}")),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "last_used_at": row["last_used_at"],
+    }
+
+
+def _external_kv_manifest(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
+    now = time.time()
+    conn.execute("delete from kv_memory_leases where expires_at <= ?", (now,))
+    shards = conn.execute(
+        """
+        select * from kv_memory_shards
+        where namespace=? and kv_key=? and service_id=?
+        order by stage_index, node_id
+        """,
+        (row["namespace"], row["kv_key"], row["service_id"]),
+    ).fetchall()
+    leases = conn.execute(
+        """
+        select lease_id,mode,owner,expires_at,created_at from kv_memory_leases
+        where namespace=? and kv_key=? and service_id=?
+        order by created_at
+        """,
+        (row["namespace"], row["kv_key"], row["service_id"]),
+    ).fetchall()
+    return {
+        "format": "ds4-external-kv-cache-object-v1",
+        "namespace": row["namespace"],
+        "kv_key": row["kv_key"],
+        "service_id": row["service_id"],
+        "profile_id": row["profile_id"],
+        "model_id": row["model_id"],
+        "owner": row["owner"],
+        "content_hash": row["content_hash"],
+        "total_bytes": int(row["total_bytes"] or 0),
+        "total_tokens": int(row["total_tokens"] or 0),
+        "state": row["state"],
+        "pin_count": int(row["pin_count"] or 0),
+        "priority": int(row["priority"] or 0),
+        "ttl_expires_at": row["ttl_expires_at"],
+        "metadata": json.loads(str(row["metadata_json"] or "{}")),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "last_used_at": row["last_used_at"],
+        "routing": {"sharding": "pipeline_layers", "entry_node_id": "spark0"},
+        "shards": [_external_kv_shard_status(shard) for shard in shards],
+        "leases": [dict(lease) for lease in leases],
+    }
+
+
+def _external_kv_shard_status(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "namespace": row["namespace"],
+        "kv_key": row["kv_key"],
+        "service_id": row["service_id"],
+        "node_id": row["node_id"],
+        "stage_index": int(row["stage_index"]),
+        "stage_count": int(row["stage_count"]),
+        "layer_start": row["layer_start"],
+        "layer_end": row["layer_end"],
+        "bytes": int(row["bytes"] or 0),
+        "state": row["state"],
+        "storage_uri": row["storage_uri"],
+        "gpu_resident": bool(row["gpu_resident"]),
+        "metadata": json.loads(str(row["metadata_json"] or "{}")),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "last_used_at": row["last_used_at"],
+    }
+
+def _next_queued(conn: sqlite3.Connection, *, node_id: str | None, eligible: tuple[str, ...], batch_id: str | None) -> sqlite3.Row | None:
+    clauses = ["state='queued'"]
+    params: list[Any] = []
+    if node_id is not None:
+        clauses.append("(selected_node_id is null or selected_node_id=?)")
+        params.append(node_id)
+    if eligible:
+        clauses.append("selected_profile_id in (%s)" % ",".join("?" for _ in eligible))
+        params.extend(eligible)
+    if batch_id:
+        clauses.append("batch_id=?")
+        params.append(batch_id)
+    return conn.execute(f"select * from requests where {' and '.join(clauses)} order by priority, created_at, request_id limit 1", tuple(params)).fetchone()
+
+
+def _ready_rows(conn: sqlite3.Connection, *, node_id: str | None, batch_id: str | None, limit: int, batch_limits_by_service: Mapping[str, int] | None = None, selected_service_id: str | None = None) -> list[sqlite3.Row]:
+    clauses = ["state='ready'"]
+    params: list[Any] = []
+    if node_id is not None:
+        clauses.append("selected_node_id=?")
+        params.append(node_id)
+    if batch_id:
+        clauses.append("batch_id=?")
+        params.append(batch_id)
+    if selected_service_id is not None:
+        clauses.append("selected_service_id=?")
+        params.append(selected_service_id)
+    first = conn.execute(f"select * from requests where {' and '.join(clauses)} order by priority, ready_at, created_at, request_id limit 1", tuple(params)).fetchone()
+    if first is None:
+        return []
+    clauses.append("selected_profile_id=?")
+    params.append(first["selected_profile_id"])
+    service_id = first["selected_service_id"]
+    if service_id is None:
+        clauses.append("selected_service_id is null")
+    else:
+        clauses.append("selected_service_id=?")
+        params.append(service_id)
+    compute_domain = first["selected_compute_domain"]
+    if compute_domain is None:
+        clauses.append("selected_compute_domain is null")
+    else:
+        clauses.append("selected_compute_domain=?")
+        params.append(compute_domain)
+    service_limit = _service_batch_limit(service_id, batch_limits_by_service or {}, limit)
+    params.append(service_limit)
+    return conn.execute(f"select * from requests where {' and '.join(clauses)} order by priority, ready_at, created_at, request_id limit ?", tuple(params)).fetchall()
+
+
+def _service_batch_limit(service_id: Any, batch_limits_by_service: Mapping[str, int], default_limit: int) -> int:
+    limit = max(1, int(default_limit))
+    if service_id is None:
+        return limit
+    configured = batch_limits_by_service.get(str(service_id))
+    if configured is None:
+        return limit
+    return min(limit, max(1, int(configured)))
+
+
+def _claim(row: sqlite3.Row, lease_id: str, compute_lease_id: str | None) -> QueueClaim:
+    return QueueClaim(
+        request_id=str(row["request_id"]),
+        batch_id=str(row["batch_id"]),
+        request_kind=str(row["request_kind"]),
+        selected_profile_id=str(row["selected_profile_id"]),
+        selected_node_id=str(row["selected_node_id"]) if row["selected_node_id"] else None,
+        lease_id=lease_id,
+        attempt_count=int(row["attempt_count"] or 0) + 1,
+        request=InferenceRequest.from_json(json.loads(str(row["request_json"]))) if row["request_kind"] == "model" else None,
+        service_name=str(row["service_name"]) if row["service_name"] else None,
+        payload=json.loads(str(row["request_json"])),
+        selected_service_id=str(row["selected_service_id"]) if row["selected_service_id"] else None,
+        selected_node_ids=_row_node_ids(row, fallback_node_id=row["selected_node_id"]),
+        selected_compute_domain=str(row["selected_compute_domain"]) if row["selected_compute_domain"] else None,
+        compute_lease_id=compute_lease_id,
     )
 
 
-def _replicate_prefix_groups_to_resident_nodes(groups: list[dict[str, Any]], *, registry: ProfileRegistry, topology: SparkTopology | None) -> list[dict[str, Any]]:
-    if topology is None:
-        raise ValueError("topology is required to warm all resident nodes")
-    merged: dict[tuple[str, bool, str, str, str], dict[str, Any]] = {}
-    for group in groups:
-        key = _prefix_group_base_key(group)
-        combined = merged.setdefault(key, dict(group, node_id=None, request_ids=[], batch_keys=set()))
-        combined["request_ids"].extend(str(request_id) for request_id in group["request_ids"])
-        combined["batch_keys"].update(str(batch_key) for batch_key in group["batch_keys"])
-    replicated: list[dict[str, Any]] = []
-    for group in merged.values():
-        profile = registry.get(str(group["profile_id"]))
-        node_ids = [node.node_id for node in topology.nodes_for_profile(profile)]
-        if not node_ids:
-            raise ValueError(f"no resident nodes for profile {profile.profile_id!r}")
-        system_hash = str(group.get("system_hash") or _sha256_text(str(group.get("system") or "")))
-        for node_id in sorted(node_ids):
-            clone = dict(group)
-            clone["node_id"] = node_id
-            clone["system_hash"] = system_hash
-            clone["batch_keys"] = sorted(set(str(batch_key) for batch_key in group["batch_keys"]))
-            clone["request_ids"] = sorted(set(str(request_id) for request_id in group["request_ids"]))
-            clone["warm_key"] = _prefix_warm_key(
-                node_id=node_id,
-                profile_id=str(group["profile_id"]),
-                chat=bool(group["chat"]),
-                skeleton_hash=str(group["skeleton_hash"]),
-                shared_prefix_hash=str(group["shared_prefix_hash"]),
-                system_hash=system_hash,
-            )
-            replicated.append(clone)
-    return sorted(replicated, key=lambda item: (str(item["node_id"] or ""), int(item.get("priority", 0)), float(item.get("created_at", 0.0)), item["warm_key"]))
+def _request_status(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "format": REQUEST_STATUS_FORMAT,
+        "request_id": row["request_id"],
+        "batch_id": row["batch_id"],
+        "job_id": row["batch_id"],
+        "request_kind": row["request_kind"],
+        "state": row["state"],
+        "priority": int(row["priority"]),
+        "immediate": bool(row["immediate"]),
+        "selected_profile_id": row["selected_profile_id"],
+        "selected_node_id": row["selected_node_id"],
+        "selected_node_ids": list(_row_node_ids(row, fallback_node_id=row["selected_node_id"])),
+        "selected_service_id": row["selected_service_id"],
+        "selected_compute_domain": row["selected_compute_domain"],
+        "compute_lease_id": row["compute_lease_id"],
+        "service_name": row["service_name"],
+        "lease_id": row["lease_id"],
+        "leased_by": row["leased_by"],
+        "lease_expires_at": row["lease_expires_at"],
+        "heartbeat_at": row["heartbeat_at"],
+        "attempt_count": int(row["attempt_count"] or 0),
+        "cancel_requested": bool(row["cancel_requested"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "ready_at": row["ready_at"],
+        "started_at": row["started_at"],
+        "completed_at": row["completed_at"],
+        "error": row["error"],
+        "kv_key": row["kv_key"],
+        "kv_bytes": int(row["kv_bytes"] or 0),
+        "kv_shard_count": int(row["kv_shard_count"] or 0),
+        "kv_shard_bytes": int(row["kv_shard_bytes"] or 0),
+    }
 
 
-def _limit_prefix_warm_groups(
-    groups: list[dict[str, Any]],
-    *,
-    max_groups: int | None,
-    max_groups_per_node: int | None,
-) -> list[dict[str, Any]]:
-    if max_groups is None and max_groups_per_node is None:
-        return list(groups)
-    selected: list[dict[str, Any]] = []
-    per_node: dict[str, int] = {}
-    for group in groups:
-        node_key = str(group.get("node_id") or "unassigned")
-        if max_groups is not None and len(selected) >= max_groups:
-            break
-        if max_groups_per_node is not None and per_node.get(node_key, 0) >= max_groups_per_node:
-            continue
-        selected.append(group)
-        per_node[node_key] = per_node.get(node_key, 0) + 1
-    return selected
+def _batch_status(row: sqlite3.Row) -> dict[str, Any]:
+    return {"format": BATCH_STATUS_FORMAT, "batch_id": row["batch_id"], "job_id": row["batch_id"], "state": row["state"], "request_count": int(row["request_count"]), "queued_count": int(row["queued_count"]), "prefilling_count": int(row["prefilling_count"]), "ready_count": int(row["ready_count"]), "running_count": int(row["running_count"]), "completed_count": int(row["completed_count"]), "failed_count": int(row["failed_count"]), "cancelled_count": int(row["cancelled_count"])}
 
 
-def request_batch_key(request: InferenceRequest, profile: ModelProfile, assignment: SparkAssignment | None) -> str:
+def _telemetry_status(row: sqlite3.Row) -> dict[str, Any]:
+    payload = json.loads(str(row["payload_json"])) if row["payload_json"] else {}
+    return {
+        "service_id": row["service_id"],
+        "node_id": row["node_id"],
+        "stage_index": int(row["stage_index"]),
+        "stage_count": int(row["stage_count"]),
+        "layer_start": row["layer_start"],
+        "layer_end": row["layer_end"],
+        "layer_count": row["layer_count"],
+        "kv_shard_bytes": int(row["kv_shard_bytes"] or 0),
+        "reported_at": row["reported_at"],
+        "payload": payload,
+    }
+
+
+def _node_depth(conn: sqlite3.Connection, node_id: str) -> int:
+    row = conn.execute("select count(*) n from requests where request_kind='model' and state in ('prefilling','ready','running') and selected_node_id=?", (node_id,)).fetchone()
+    return int(row["n"] if row else 0)
+
+
+def _kv_need(request: InferenceRequest) -> tuple[str | None, int]:
+    meta = request.raw.get("metadata") if isinstance(request.raw.get("metadata"), dict) else {}
+    key = request.input.get("kv_cache_key") or meta.get("kv_cache_key") or request.input.get("shared_prefix_hash") or request.input.get("skeleton_hash")
+    bytes_value = request.input.get("kv_bytes_estimate", meta.get("kv_bytes_estimate", 0))
+    try:
+        bytes_int = max(0, int(bytes_value or 0))
+    except (TypeError, ValueError):
+        bytes_int = 0
+    return (str(key) if key else None), bytes_int
+
+
+def request_batch_key(request: InferenceRequest, profile: Any, assignment: Any | None) -> str:
     prefix_key = str(request.input.get("shared_prefix_hash") or request.input.get("skeleton_hash") or "no_prefix")
     kv_key = request_kv_cache_batch_key(request.input)
     if kv_key is not None:
         prefix_key = prefix_key + "|kv=" + kv_key
     return "|".join(
         [
-            assignment.node_id if assignment is not None else "unassigned",
-            profile.profile_id,
+            str(getattr(assignment, "node_id", None) or "unassigned"),
+            str(profile.profile_id),
             "chat" if request.chat else "completion",
             request.job_class,
             input_bucket(request),
@@ -1376,149 +1432,6 @@ def request_batch_key(request: InferenceRequest, profile: ModelProfile, assignme
             "immediate" if request.immediate else "queued",
         ]
     )
-
-
-def cpu_batch_key(*, service: str, node_id: str | None, immediate: bool, timeout_s: float | None = None) -> str:
-    return "|".join(
-        [
-            node_id or "unassigned",
-            "cpu",
-            service,
-            _timeout_bucket(timeout_s),
-            "immediate" if immediate else "queued",
-        ]
-    )
-
-
-def queue_depths(db_path: str | Path, *, request_kind: str | None = None) -> dict[str, int]:
-    path = Path(db_path)
-    if not path.exists():
-        return {}
-    clauses = ["state in ('queued', 'running')", "selected_node_id is not null"]
-    params: list[Any] = []
-    if request_kind is not None:
-        clauses.append("request_kind = ?")
-        params.append(request_kind)
-    with closing(sqlite3.connect(path)) as conn:
-        rows = conn.execute(
-            f"""
-            select selected_node_id, count(*) as count
-            from requests
-            where {' and '.join(clauses)}
-            group by selected_node_id
-            """,
-            tuple(params),
-        ).fetchall()
-    return {str(node_id): int(count) for node_id, count in rows}
-
-
-def _env_int(name: str, default: int) -> int:
-    value = os.environ.get(name)
-    return default if value in (None, "") else int(value)
-
-
-def _timeout_bucket(timeout_s: float | None) -> str:
-    if timeout_s is None:
-        return "timeout_default"
-    return f"timeout_{max(1, int(float(timeout_s)))}s"
-
-
-def _validated_cpu_items(
-    service: str,
-    items: Iterable[dict[str, Any]],
-    timeout_s: float | None,
-) -> tuple[str, list[dict[str, Any]]]:
-    service = str(service)
-    item_list = [dict(item) for item in items]
-    if not item_list:
-        raise ValueError("cannot submit an empty CPU request set")
-    if timeout_s is not None and timeout_s <= 0:
-        raise ValueError("timeout_s must be positive")
-    from ds4_tools.cpu_batch import validate_cpu_submission
-    validate_cpu_submission(service, len(item_list))
-    return service, item_list
-
-
-def _cpu_request_rows(
-    service: str,
-    item_list: list[dict[str, Any]],
-    timeout_s: float | None,
-) -> Iterable[tuple[str, dict[str, Any]]]:
-    seen: set[str] = set()
-    for index, item in enumerate(item_list):
-        custom_id = str(item.get("custom_id") or item.get("request_id") or f"{service}-{index}")
-        request_id = safe_request_id(custom_id, index, seen)
-        item.setdefault("custom_id", request_id)
-        if timeout_s is not None:
-            item[CPU_QUEUE_TIMEOUT_KEY] = float(timeout_s)
-        yield request_id, item
-
-
-def _row_strings(row: sqlite3.Row, *names: str) -> dict[str, str]:
-    return {name: str(row[name]) for name in names}
-
-
-def _row_ints(row: sqlite3.Row, *names: str) -> dict[str, int]:
-    return {name: int(row[name]) for name in names}
-
-
-def _lease_payload(row: sqlite3.Row, attempts: int) -> dict[str, Any]:
-    return {
-        "batch_id": row["batch_id"],
-        "batch_key": row["batch_key"],
-        "lease_id": row["lease_id"],
-        "attempt_count": attempts,
-    }
-
-
-def _lease_failure(request_id: str, attempts: int) -> dict[str, Any]:
-    return {
-        "format": "ds4-inference-failure-v1",
-        "request_id": request_id,
-        "status": "lease_expired",
-        "error": f"lease expired after {attempts} attempts",
-    }
-
-
-def _row_claim(row: sqlite3.Row, *, request_id: str, lease_id: str, selected_node_id: str | None = None) -> QueueClaim:
-    node_id = selected_node_id if selected_node_id is not None else (str(row["selected_node_id"]) if row["selected_node_id"] else None)
-    return QueueClaim(
-        request_id=request_id,
-        batch_id=str(row["batch_id"]),
-        batch_key=str(row["batch_key"]),
-        request_kind=str(row["request_kind"]),
-        selected_profile_id=str(row["selected_profile_id"]),
-        selected_node_id=node_id,
-        lease_id=lease_id,
-        request=_row_request(row),
-        service_name=str(row["service_name"]) if row["service_name"] else None,
-        payload=json.loads(str(row["request_json"])),
-    )
-
-
-def _row_request(row: sqlite3.Row) -> InferenceRequest | None:
-    if str(row["request_kind"]) != "model":
-        return None
-    return InferenceRequest.from_json(json.loads(str(row["request_json"])))
-
-
-def _validated_priority(priority: int | None, *, immediate: bool | None = None) -> int | None:
-    if priority is None:
-        if immediate is None:
-            return None
-        return IMMEDIATE_QUEUE_PRIORITY if immediate else DEFAULT_QUEUE_PRIORITY
-    value = int(priority)
-    if value < 0:
-        raise ValueError("priority must be non-negative")
-    return value
-
-
-def _request_priority(request: InferenceRequest, *, priority_override: int | None) -> int:
-    if priority_override is not None:
-        return priority_override
-    if request.priority is not None:
-        return _validated_priority(request.priority)
-    return IMMEDIATE_QUEUE_PRIORITY if request.immediate else DEFAULT_QUEUE_PRIORITY
 
 
 def input_bucket(request: InferenceRequest) -> str:
@@ -1553,134 +1466,79 @@ def thinking_bucket(thinking_budget_tokens: int) -> str:
     return "think_2049_plus"
 
 
-def _warm_request_from_group(group: dict[str, Any], *, max_output_tokens: int) -> InferenceRequest:
-    raw = dict(group["sample_request_json"])
-    warm_input: dict[str, Any] = {
-        "shared_prefix": group["shared_prefix"],
-        "suffix": "\nCACHE_WARM_ONLY",
-        "skeleton_hash": group["skeleton_hash"],
-        "shared_prefix_hash": group["shared_prefix_hash"],
-    }
-    if group.get("system"):
-        warm_input["system"] = group["system"]
-    raw.update(
-        {
-            "request_id": "prefix-warm-" + hashlib.sha256(str(group["warm_key"]).encode("utf-8")).hexdigest()[:16],
-            "immediate": True,
-            "max_output_tokens": max_output_tokens,
-            "thinking_budget_tokens": 0,
-            "temperature": 0,
-            "input": warm_input,
-            "output_contract": {"format": "ds4-prefix-cache-warm-v1"},
-        }
-    )
-    return InferenceRequest.from_json(raw)
-
-
-def _run_warm_request(runner: Runner, request: InferenceRequest, profile: ModelProfile, node_id: str | None) -> dict[str, Any]:
-    if hasattr(runner, "run_one_on_node"):
-        return runner.run_one_on_node(request, profile, node_id)  # type: ignore[attr-defined]
-    if hasattr(runner, "run_one"):
-        return runner.run_one(request, profile)
-    return make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text="warm skipped: runner lacks run_one", status="transport_failed")
-
-
-def _run_warm_groups(
-    *,
-    registry: ProfileRegistry,
-    runner: Runner,
-    groups: list[dict[str, Any]],
-    max_output_tokens: int,
-    concurrency: int,
-) -> list[tuple[dict[str, Any], str, dict[str, Any]]]:
-    if not groups:
-        return []
-    if hasattr(runner, "run_many_on_node"):
-        return _run_warm_groups_batched(registry=registry, runner=runner, groups=groups, max_output_tokens=max_output_tokens, concurrency=concurrency)
-    outcomes = []
-    for group in groups:
+def _row_node_ids(row: sqlite3.Row, *, fallback_node_id: Any) -> tuple[str, ...]:
+    raw = row["selected_node_ids_json"] if "selected_node_ids_json" in row.keys() else None
+    if raw:
         try:
-            profile = registry.get(group["profile_id"])
-            request = _warm_request_from_group(group, max_output_tokens=max_output_tokens)
-            result = _run_warm_request(runner, request, profile, group["node_id"])
-            state = "warm" if result.get("status") == "completed" else "failed"
-        except Exception as exc:
-            result = {"format": "ds4-prefix-warm-failure-v1", "status": "failed", "error": str(exc)}
-            state = "failed"
-        outcomes.append((group, state, result))
-    return outcomes
+            parsed = json.loads(str(raw))
+        except json.JSONDecodeError:
+            parsed = []
+        if isinstance(parsed, list):
+            values = tuple(str(item) for item in parsed if str(item))
+            if values:
+                return values
+    return (str(fallback_node_id),) if fallback_node_id else ()
 
 
-def _run_warm_groups_batched(
-    *,
-    registry: ProfileRegistry,
-    runner: Runner,
-    groups: list[dict[str, Any]],
-    max_output_tokens: int,
-    concurrency: int,
-) -> list[tuple[dict[str, Any], str, dict[str, Any]]]:
-    outcomes: list[tuple[dict[str, Any], str, dict[str, Any]]] = []
-    grouped: dict[tuple[str | None, str], list[tuple[dict[str, Any], InferenceRequest]]] = {}
-    for group in groups:
-        request = _warm_request_from_group(group, max_output_tokens=max_output_tokens)
-        grouped.setdefault((group["node_id"], group["profile_id"]), []).append((group, request))
-    with ThreadPoolExecutor(max_workers=max(1, min(len(grouped), concurrency))) as executor:
-        futures = {
-            executor.submit(_run_one_warm_batch, registry, runner, node_id, profile_id, entries, concurrency): (node_id, profile_id, entries)
-            for (node_id, profile_id), entries in sorted(grouped.items(), key=lambda item: ((item[0][0] or ""), item[0][1]))
-        }
-        for future in as_completed(futures):
-            outcomes.extend(future.result())
-    return outcomes
+def _kv_victims_to_fit(conn: sqlite3.Connection, *, table: str, service_id: str | None, node_id: str, need: int, capacity: int) -> list[str] | None:
+    if capacity <= 0:
+        return []
+    if table == "kv_shard_entries":
+        row = conn.execute("select coalesce(sum(bytes),0) n from kv_shard_entries where service_id=? and node_id=?", (service_id, node_id)).fetchone()
+        used = int(row["n"] if row else 0)
+        victims = conn.execute("select kv_key,bytes from kv_shard_entries where service_id=? and node_id=? and state='idle' order by last_used_at, created_at", (service_id, node_id)).fetchall()
+    else:
+        row = conn.execute("select coalesce(sum(bytes),0) n from kv_entries where node_id=?", (node_id,)).fetchone()
+        used = int(row["n"] if row else 0)
+        victims = conn.execute("select kv_key,bytes from kv_entries where node_id=? and state='idle' order by last_used_at, created_at", (node_id,)).fetchall()
+    out: list[str] = []
+    for victim in victims:
+        if used + need <= capacity:
+            break
+        out.append(str(victim["kv_key"]))
+        used -= int(victim["bytes"] or 0)
+    if used + need > capacity:
+        return None
+    return out
 
 
-def _run_one_warm_batch(
-    registry: ProfileRegistry,
-    runner: Runner,
-    node_id: str | None,
-    profile_id: str,
-    entries: list[tuple[dict[str, Any], InferenceRequest]],
-    concurrency: int,
-) -> list[tuple[dict[str, Any], str, dict[str, Any]]]:
-    outcomes: list[tuple[dict[str, Any], str, dict[str, Any]]] = []
-    requests = [request for _, request in entries]
-    profile = registry.get(profile_id)
-    try:
-        by_id = runner.run_many_on_node(requests, profile, node_id, concurrency=concurrency)  # type: ignore[attr-defined]
-    except Exception as exc:
-        by_id = {request.request_id: make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=str(exc), status="transport_failed") for request in requests}
-    for group, request in entries:
-        result = by_id.get(request.request_id)
-        if result is None:
-            result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text="missing warm batch result", status="transport_failed")
-        outcomes.append((group, "warm" if result.get("status") == "completed" else "failed", result))
-    return outcomes
+def _failure(request_id: str, error: str) -> dict[str, Any]:
+    return {"format": "ds4-inference-failure-v1", "request_id": request_id, "status": "failed", "error": error}
 
 
-def _public_prefix_group(group: dict[str, Any], *, state: str, skipped: bool, status: dict[str, Any] | None = None, result: dict[str, Any] | None = None) -> dict[str, Any]:
-    payload = {
-        "format": PREFIX_GROUP_FORMAT,
-        "warm_key": group["warm_key"],
-        "skeleton_hash": group["skeleton_hash"],
-        "shared_prefix_hash": group["shared_prefix_hash"],
-        "profile_id": group["profile_id"],
-        "node_id": group["node_id"],
-        "chat": group["chat"],
-        "request_count": len(group["request_ids"]),
-        "request_ids": list(group["request_ids"]),
-        "batch_keys": list(group["batch_keys"]),
-        "shared_prefix_bytes": group["shared_prefix_bytes"],
-        "state": state,
-        "skipped": skipped,
-    }
-    if status is not None:
-        payload["status"] = status
-    if result is not None:
-        payload["result_status"] = result.get("status")
-        payload["usage"] = result.get("usage")
-        payload["transport"] = result.get("transport")
-    return payload
+def _result_error(result: dict[str, Any]) -> str:
+    transport = result.get("transport")
+    if isinstance(transport, dict) and transport.get("error"):
+        return str(transport.get("error"))
+    if result.get("error"):
+        return str(result.get("error"))
+    output = result.get("output")
+    if isinstance(output, dict) and output.get("text"):
+        try:
+            parsed = json.loads(str(output.get("text")))
+        except json.JSONDecodeError:
+            return str(output.get("text"))[:4000]
+        if isinstance(parsed, dict) and parsed.get("error"):
+            return str(parsed.get("error"))
+    return ""
 
 
-def _sha256_text(text: str) -> str:
-    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+def _count(values: Iterable[Any]) -> dict[Any, int]:
+    out: dict[Any, int] = {}
+    for value in values:
+        out[value] = out.get(value, 0) + 1
+    return out
+
+
+def queue_depths(db_path: str | Path, *, request_kind: str | None = None) -> dict[str, int]:
+    if not Path(db_path).exists():
+        return {}
+    clauses = ["state in ('prefilling','ready','running')", "selected_node_id is not null"]
+    params: list[Any] = []
+    if request_kind:
+        clauses.append("request_kind=?")
+        params.append(request_kind)
+    with closing(sqlite3.connect(db_path)) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(f"select selected_node_id,count(*) n from requests where {' and '.join(clauses)} group by selected_node_id", tuple(params)).fetchall()
+    return {str(row["selected_node_id"]): int(row["n"]) for row in rows}
