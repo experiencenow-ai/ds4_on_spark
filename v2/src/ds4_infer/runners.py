@@ -11,6 +11,7 @@ from typing import Any, Callable, Iterator, Protocol
 from urllib import error, request as urlrequest
 
 from .builders import model_batch_payload, request_messages, request_prompt
+from .cohort_safety import coalesced_completion_token_budget, coalesced_failure_should_bisect, mark_coalesced_split, prompt_token_estimate
 from .kv_cache import kv_cache_extra_body, kv_cache_vllm_request_fields
 from .profiles import ModelProfile
 from .schemas import InferenceRequest, make_result
@@ -300,35 +301,39 @@ class OpenAICompatibleRunner:
         if len(request_list) < minimum:
             return None
         max_cohort = max(1, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MAX", "512") or "512"))
-        token_budget = max(0, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET", "0") or "0"))
+        token_budget = coalesced_completion_token_budget()
         out: dict[str, dict] = {}
         for chunk in _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget):
             payload = _coalesced_completion_payload(chunk, profile, self.default_extra_body)
             if payload is None:
                 return None
-            started = time.time()
-            try:
-                prefetch_info = _maybe_prestage_common_kv_prefix(self, payload, chunk)
-                data = self._post_json(self.completion_endpoint, payload)
-                out.update(
-                    _coalesced_completion_results(
-                        chunk,
-                        profile,
-                        data,
-                        base_url=self.base_url,
-                        endpoint=self.completion_endpoint,
-                        started=started,
-                        prefetch_info=prefetch_info,
-                    )
-                )
-            except Exception as exc:
-                out.update(
-                    {
-                        item.request_id: self._transport_failure(item, profile, started, str(exc), endpoint=self.completion_endpoint, coalesced_batch_size=len(chunk))
-                        for item in chunk
-                    }
-                )
+            out.update(self._run_completion_chunk(chunk, profile, payload, original_batch_size=len(chunk)))
         return out
+
+    def _run_completion_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, original_batch_size: int) -> dict[str, dict]:
+        started = time.time()
+        try:
+            prefetch_info = _maybe_prestage_common_kv_prefix(self, payload, chunk)
+            data = self._post_json(self.completion_endpoint, payload)
+            out = _coalesced_completion_results(chunk, profile, data, base_url=self.base_url, endpoint=self.completion_endpoint, started=started, prefetch_info=prefetch_info)
+            if original_batch_size != len(chunk):
+                mark_coalesced_split(out, original_batch_size=original_batch_size)
+            return out
+        except Exception as exc:
+            if len(chunk) > 1 and _env_bool("DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE", True) and coalesced_failure_should_bisect(str(exc)):
+                midpoint = max(1, len(chunk) // 2)
+                out: dict[str, dict] = {}
+                for subchunk in (chunk[:midpoint], chunk[midpoint:]):
+                    subpayload = _coalesced_completion_payload(subchunk, profile, self.default_extra_body)
+                    if subpayload is None:
+                        break
+                    out.update(self._run_completion_chunk(subchunk, profile, subpayload, original_batch_size=original_batch_size))
+                if len(out) == len(chunk):
+                    return out
+            return {
+                item.request_id: self._transport_failure(item, profile, started, str(exc), endpoint=self.completion_endpoint, coalesced_batch_size=len(chunk))
+                for item in chunk
+            }
 
     def run_many_completion_incremental(self, requests: list[InferenceRequest], profile: ModelProfile, *, on_result: Callable[[str, dict[str, Any]], None]) -> dict[str, dict] | None:
         if not _env_bool("DS4_PIPELINE_COHORT_COMPLETION_STREAMING", True):
@@ -338,7 +343,7 @@ class OpenAICompatibleRunner:
         if len(request_list) < minimum:
             return None
         max_cohort = max(1, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MAX", "512") or "512"))
-        token_budget = max(0, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET", "0") or "0"))
+        token_budget = coalesced_completion_token_budget()
         chunks = _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget)
         payloads: list[tuple[list[InferenceRequest], dict[str, Any]]] = []
         for chunk in chunks:
@@ -794,18 +799,11 @@ def _completion_cohort_chunks(requests: list[InferenceRequest], *, max_cohort: i
 
 
 def _completion_request_token_estimate(request: InferenceRequest) -> int:
-    return max(1, _prompt_token_estimate(request_prompt(request)) + int(request.max_output_tokens))
+    return max(1, prompt_token_estimate(request_prompt(request)) + int(request.max_output_tokens))
 
 
 def _requests_need_client_stream(requests: list[InferenceRequest]) -> bool:
     return bool(requests and all(bool(item.input.get("ds4_client_stream")) for item in requests))
-
-
-def _prompt_token_estimate(prompt: str) -> int:
-    words = len(str(prompt).split())
-    if words > 0:
-        return words
-    return max(1, len(str(prompt).encode("utf-8")) // 4)
 
 
 def _coalesced_completion_results(

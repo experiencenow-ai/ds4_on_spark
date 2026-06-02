@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from contextlib import closing
 from dataclasses import dataclass
+import hashlib
 from math import ceil
 import json
+import os
 from pathlib import Path
 import sqlite3
 import time
@@ -80,7 +82,7 @@ class InferenceQueue:
                     service_name text, state text not null, priority integer not null, immediate integer not null default 0,
                     selected_profile_id text not null, selected_node_id text, selected_service_id text,
                     selected_node_ids_json text, selected_compute_domain text, compute_lease_id text,
-                    request_json text not null, result_json text, error text, cancel_requested integer not null default 0,
+                    request_json text not null, request_json_hash text, result_json text, error text, cancel_requested integer not null default 0,
                     kv_key text, kv_bytes integer not null default 0, kv_shard_count integer not null default 0,
                     kv_shard_bytes integer not null default 0,
                     created_at real not null, updated_at real not null, ready_at real,
@@ -193,12 +195,14 @@ class InferenceQueue:
                         kv_shard_bytes = int(ceil(kv_bytes / max(1, kv_shard_count))) if kv_bytes > 0 else 0
                 else:
                     late_bound_count += 1
+                request_json = _canonical_request_json(req.raw)
+                request_json_hash = _request_json_hash(request_json)
                 conn.execute(
                     """
                     insert into requests(request_id,batch_id,request_kind,state,priority,immediate,selected_profile_id,
                         selected_node_id,selected_service_id,selected_node_ids_json,selected_compute_domain,request_json,
-                        kv_key,kv_bytes,kv_shard_count,kv_shard_bytes,created_at,updated_at)
-                    values (?,?,'model','queued',?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        request_json_hash,kv_key,kv_bytes,kv_shard_count,kv_shard_bytes,created_at,updated_at)
+                    values (?,?,'model','queued',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         req.request_id,
@@ -210,7 +214,8 @@ class InferenceQueue:
                         selected_service_id,
                         selected_node_ids_json,
                         selected_compute_domain,
-                        json.dumps(req.raw, sort_keys=True),
+                        request_json,
+                        request_json_hash,
                         kv_key,
                         kv_bytes,
                         kv_shard_count,
@@ -908,7 +913,7 @@ class InferenceQueue:
 
     def _existing_submission(self, batch_id: str, requests: list[InferenceRequest], priority: int | None) -> dict[str, Any] | None:
         with closing(self._connect()) as conn:
-            rows = conn.execute("select request_id,priority,selected_profile_id,selected_node_id,selected_service_id from requests where batch_id=? order by request_id", (batch_id,)).fetchall()
+            rows = conn.execute("select request_id,priority,selected_profile_id,selected_node_id,selected_service_id,request_json,request_json_hash from requests where batch_id=? order by request_id", (batch_id,)).fetchall()
         if not rows:
             return None
         ids = sorted(req.request_id for req in requests)
@@ -920,6 +925,16 @@ class InferenceQueue:
         mismatches = sorted(rid for rid, prio in expected.items() if existing_priorities.get(rid) != prio)
         if mismatches:
             raise ValueError(f"batch_id already exists with different priority for requests: {mismatches}")
+        expected_hashes = {req.request_id: _request_json_hash(_canonical_request_json(req.raw)) for req in requests}
+        existing_hashes: dict[str, str] = {}
+        for row in rows:
+            stored = row["request_json_hash"]
+            if not stored:
+                stored = _request_json_hash(_canonical_existing_request_json(str(row["request_json"])))
+            existing_hashes[str(row["request_id"])] = str(stored)
+        payload_mismatches = sorted(rid for rid, digest in expected_hashes.items() if existing_hashes.get(rid) != digest)
+        if payload_mismatches:
+            raise ValueError(f"batch_id already exists with different request payloads: {payload_mismatches}")
         return {"format": QUEUE_FORMAT, "state": "queued", "batch_id": batch_id, "job_id": batch_id, "request_ids": existing, "request_count": len(existing), "selected_profiles": _count(row["selected_profile_id"] for row in rows), "selected_nodes": _count(row["selected_node_id"] for row in rows if row["selected_node_id"]), "selected_services": _count(row["selected_service_id"] for row in rows if row["selected_service_id"]), "priority_counts": {str(k): v for k, v in _count(int(row["priority"]) for row in rows).items()}}
 
     def _reserve_kv(self, conn: sqlite3.Connection, row: sqlite3.Row, *, node_id: str | None, capacity: int, now: float, pipeline_layout: Any | None = None) -> bool:
@@ -1014,6 +1029,8 @@ class InferenceQueue:
         if existing is not None:
             existing_service_id = str(existing["service_id"] or "") or None
             if existing_service_id == service_id and str(existing["leased_by"]) == leased_by:
+                if _compute_lease_should_drain(conn, existing, now=now):
+                    return False
                 conn.execute(
                     """
                     update compute_leases set lease_expires_at=?, heartbeat_at=?, request_count=request_count+?, updated_at=?
@@ -1048,6 +1065,8 @@ class InferenceQueue:
         if str(row["leased_by"] or "") != leased_by:
             return False
         if str(row["service_id"] or "") != service_id:
+            return False
+        if _compute_lease_should_drain(conn, row, now=now):
             return False
         conn.execute(
             """
@@ -1093,6 +1112,7 @@ def _ensure_request_columns(conn: sqlite3.Connection) -> None:
         "selected_node_ids_json": "text",
         "selected_compute_domain": "text",
         "compute_lease_id": "text",
+        "request_json_hash": "text",
         "kv_shard_count": "integer not null default 0",
         "kv_shard_bytes": "integer not null default 0",
     }
@@ -1112,6 +1132,59 @@ def _ensure_kv_shard_columns(conn: sqlite3.Connection) -> None:
             conn.execute(f"alter table kv_shard_entries add column {name} {ddl}")
 
 
+def _canonical_request_json(raw: dict[str, Any]) -> str:
+    return json.dumps(raw, sort_keys=True, separators=(",", ":"))
+
+
+def _canonical_existing_request_json(raw: str) -> str:
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+    if isinstance(value, dict):
+        return _canonical_request_json(value)
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _request_json_hash(request_json: str) -> str:
+    return "sha256:" + hashlib.sha256(request_json.encode("utf-8")).hexdigest()
+
+
+def _compute_lease_quantum_s() -> float:
+    try:
+        return max(0.0, float(os.environ.get("DS4_COMPUTE_LEASE_QUANTUM_S", "0") or "0"))
+    except ValueError:
+        return 0.0
+
+
+def _compute_lease_should_prefer(conn: sqlite3.Connection, lease: sqlite3.Row, *, now: float) -> bool:
+    return not _compute_lease_should_drain(conn, lease, now=now)
+
+
+def _compute_lease_should_drain(conn: sqlite3.Connection, lease: sqlite3.Row, *, now: float) -> bool:
+    quantum_s = _compute_lease_quantum_s()
+    if quantum_s <= 0:
+        return False
+    created_at = float(lease["created_at"] or now)
+    if (now - created_at) < quantum_s:
+        return False
+    service_id = str(lease["service_id"] or "")
+    domain = str(lease["compute_domain"] or "")
+    if not service_id or not domain:
+        return False
+    row = conn.execute(
+        """
+        select 1 from requests
+        where state in ('queued','ready')
+          and selected_compute_domain=?
+          and coalesce(selected_service_id,'') != ?
+        limit 1
+        """,
+        (domain, service_id),
+    ).fetchone()
+    return row is not None
+
+
 def _queued_rows(conn: sqlite3.Connection, *, node_id: str | None, eligible: tuple[str, ...], batch_id: str | None, limit: int) -> list[sqlite3.Row]:
     clauses = ["state='queued'"]
     params: list[Any] = []
@@ -1125,8 +1198,9 @@ def _queued_rows(conn: sqlite3.Connection, *, node_id: str | None, eligible: tup
         clauses.append("batch_id=?")
         params.append(batch_id)
     else:
-        existing_lease = conn.execute("select * from compute_leases where lease_expires_at > ? order by created_at limit 1", (time.time(),)).fetchone()
-        if existing_lease is not None:
+        now = time.time()
+        existing_lease = conn.execute("select * from compute_leases where lease_expires_at > ? order by created_at limit 1", (now,)).fetchone()
+        if existing_lease is not None and _compute_lease_should_prefer(conn, existing_lease, now=now):
             if existing_lease["service_id"]:
                 clauses.append("selected_service_id=?")
                 params.append(existing_lease["service_id"])
@@ -1281,8 +1355,9 @@ def _ready_rows(conn: sqlite3.Connection, *, node_id: str | None, batch_id: str 
         clauses.append("selected_service_id=?")
         params.append(selected_service_id)
     elif not batch_id:
-        existing_lease = conn.execute("select * from compute_leases where lease_expires_at > ? order by created_at limit 1", (time.time(),)).fetchone()
-        if existing_lease is not None:
+        now = time.time()
+        existing_lease = conn.execute("select * from compute_leases where lease_expires_at > ? order by created_at limit 1", (now,)).fetchone()
+        if existing_lease is not None and _compute_lease_should_prefer(conn, existing_lease, now=now):
             if existing_lease["service_id"]:
                 clauses.append("selected_service_id=?")
                 params.append(existing_lease["service_id"])

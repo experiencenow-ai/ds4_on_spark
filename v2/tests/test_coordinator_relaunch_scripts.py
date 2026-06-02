@@ -50,7 +50,9 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         defaults = relaunch._profile_defaults("throughput")
 
         self.assertEqual(defaults["DS4_PIPELINE_COHORT_COMPLETIONS"], "1")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "0")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "262144")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE"], "1")
+        self.assertEqual(defaults["DS4_COMPUTE_LEASE_QUANTUM_S"], "180")
         self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "512")
         self.assertIn("dsv4_flash_pp8", defaults["DS4_API_BATCH_LIMITS_JSON"])
 

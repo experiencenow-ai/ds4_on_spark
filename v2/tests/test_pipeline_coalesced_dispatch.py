@@ -52,6 +52,14 @@ class RecordingOpenAIRunner(OpenAICompatibleRunner):
         }
 
 
+class FailingLargeCohortOpenAIRunner(RecordingOpenAIRunner):
+    def _post_json(self, endpoint: str, payload: dict) -> dict:
+        prompts = payload["prompt"]
+        if isinstance(prompts, list) and len(prompts) > 2:
+            raise RuntimeError("HTTP 413: payload exceeds token budget")
+        return super()._post_json(endpoint, payload)
+
+
 class RecordingBatchRunner:
     def __init__(self) -> None:
         self.batch_sizes: list[int] = []
@@ -109,12 +117,12 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 os.environ["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"] = old
 
         self.assertIsNotNone(results)
-        self.assertEqual([len(call[1]["prompt"]) for call in runner.calls], [3, 3, 2])
+        self.assertEqual([len(call[1]["prompt"]) for call in runner.calls], [2, 2, 2, 2])
         assert results is not None
         self.assertEqual(len(results), 8)
         self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_batch"] for index in range(8)))
 
-    def test_default_coalesced_completion_token_budget_does_not_split_large_cohort(self) -> None:
+    def test_default_coalesced_completion_token_budget_splits_large_cohort(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
         runner = RecordingOpenAIRunner()
@@ -129,7 +137,30 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 os.environ["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"] = old
 
         self.assertIsNotNone(results)
-        self.assertEqual([len(call[1]["prompt"]) for call in runner.calls], [256])
+        sizes = [len(call[1]["prompt"]) for call in runner.calls]
+        self.assertEqual(sum(sizes), 256)
+        self.assertLess(max(sizes), 256)
+
+    def test_coalesced_completion_bisects_oversized_transport_failure(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
+        runner = FailingLargeCohortOpenAIRunner()
+        requests = [completion_request(f"r{index}", f"prompt-{index}") for index in range(4)]
+        old_budget = os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET")
+        os.environ["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"] = "0"
+        try:
+            results = runner.run_many_completion(requests, profile)
+        finally:
+            if old_budget is None:
+                os.environ.pop("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET", None)
+            else:
+                os.environ["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"] = old_budget
+
+        self.assertIsNotNone(results)
+        assert results is not None
+        self.assertEqual([len(call[1]["prompt"]) for call in runner.calls], [2, 2])
+        self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_split_retry"] for index in range(4)))
+        self.assertTrue(all(results[f"r{index}"]["transport"]["original_coalesced_batch_size"] == 4 for index in range(4)))
 
     def test_background_dispatcher_claims_one_cohort_instead_of_one_future_per_request(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

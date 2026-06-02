@@ -99,7 +99,9 @@ def _profile_defaults(profile: str) -> dict[str, str]:
     common = {
         "DS4_API_BACKGROUND_DISPATCH": "1",
         "DS4_PIPELINE_COHORT_COMPLETIONS": "1",
-        "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "0",
+        "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "65536",
+        "DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE": "1",
+        "DS4_COMPUTE_LEASE_QUANTUM_S": "180",
         "DS4_API_TRANSPORT_TIMEOUT_S": "3600",
         "DS4_API_TRANSPORT_MAX_ATTEMPTS": "1",
     }
@@ -119,6 +121,7 @@ def _profile_defaults(profile: str) -> dict[str, str]:
                 "DS4_API_DISPATCH_REFILL_BATCH": "512",
                 "DS4_API_DISPATCH_BATCH_LINGER_S": "0.25",
                 "DS4_PIPELINE_COMPLETION_COHORT_MAX": "512",
+                "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "262144",
                 "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": 512, "qwen27_nvfp4_pp8": 512, "dsv4_flash_pp8": 512}, separators=(",", ":")),
             }
         )
