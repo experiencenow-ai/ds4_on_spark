@@ -12,6 +12,7 @@ from .runners import Runner
 
 FinishHook = Callable[[QueueClaim, dict[str, Any]], None]
 _CPU_SERVICE: Any | None = None
+_TERMINAL_STATES = {"completed", "failed", "cancelled"}
 
 
 class BatchWorker:
@@ -312,9 +313,25 @@ class BatchWorker:
         return future.result()
 
     def _heartbeat(self, claims: list[QueueClaim]) -> None:
-        count = self.queue.heartbeat(lease_ids=[claim.lease_id for claim in claims], lease_ttl_s=self.lease_ttl_s)
-        if count != len(claims):
-            raise RuntimeError(f"lost queue lease during heartbeat: refreshed {count}/{len(claims)}")
+        active = [claim for claim in claims if claim.lease_id]
+        if not active:
+            return
+        count = self.queue.heartbeat(lease_ids=[claim.lease_id for claim in active], lease_ttl_s=self.lease_ttl_s)
+        if count == len(active):
+            return
+        lost = []
+        for claim in active:
+            state = str(self.queue.status(request_id=claim.request_id).get("state") or "")
+            if state in _TERMINAL_STATES:
+                continue
+            refreshed = self.queue.heartbeat(lease_ids=[claim.lease_id], lease_ttl_s=self.lease_ttl_s)
+            if refreshed == 1:
+                continue
+            state = str(self.queue.status(request_id=claim.request_id).get("state") or "")
+            if state not in _TERMINAL_STATES:
+                lost.append(f"{claim.request_id}:{state or 'unknown'}")
+        if lost:
+            raise RuntimeError(f"lost queue lease during heartbeat: refreshed {count}/{len(active)}; unresolved={','.join(lost[:8])}")
 
     def _run_one(self, claim: QueueClaim) -> dict[str, Any]:
         if claim.request_kind != "model" or claim.request is None:
