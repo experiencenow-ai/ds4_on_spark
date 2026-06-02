@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -87,6 +88,16 @@ class InferenceQueueTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 queue.submit_requests(requests=[req("a", priority=2)], registry=registry, batch_id="job-a")
 
+    def test_batch_id_reuse_rejects_changed_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(requests=[req("a", output_tokens=16)], registry=registry, batch_id="job-a")
+            repeated = queue.submit_requests(requests=[req("a", output_tokens=16)], registry=registry, batch_id="job-a")
+            self.assertEqual(repeated["request_ids"], ["a"])
+            with self.assertRaisesRegex(ValueError, "different request payloads"):
+                queue.submit_requests(requests=[req("a", output_tokens=32)], registry=registry, batch_id="job-a")
+
     def test_node_worker_binds_prefills_and_dispatches_one_batch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             queue = InferenceQueue(tmp)
@@ -115,6 +126,33 @@ class InferenceQueueTests(unittest.TestCase):
             self.assertEqual(worked["batch_dispatch_count"], 1)
             self.assertEqual(worked["batch_dispatch_mode"], "batch")
             self.assertEqual(runner.calls, [("spark0", [f"cohort-{idx:03d}" for idx in range(12)], 12)])
+
+    def test_compute_lease_quantum_drains_when_another_service_waits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            old = os.environ.get("DS4_COMPUTE_LEASE_QUANTUM_S")
+            os.environ["DS4_COMPUTE_LEASE_QUANTUM_S"] = "0.01"
+            try:
+                queue = InferenceQueue(tmp)
+                registry = ProfileRegistry.load(PROFILES)
+                queue.submit_requests(requests=[req("a")], registry=registry, batch_id="a")
+                queue.submit_requests(requests=[req("b")], registry=registry, batch_id="b")
+                with queue._connect() as conn:
+                    conn.execute("update requests set selected_service_id='svc-a', selected_compute_domain='fleet', selected_node_id='spark0' where request_id='a'")
+                    conn.execute("update requests set selected_service_id='svc-b', selected_compute_domain='fleet', selected_node_id='spark0' where request_id='b'")
+                queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=2, leased_by="worker", lease_ttl_s=30)
+                first = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=1, leased_by="worker", lease_ttl_s=30)
+                self.assertEqual([claim.request_id for claim in first], ["a"])
+                time.sleep(0.02)
+                second = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=1, leased_by="worker", lease_ttl_s=30)
+                self.assertEqual(second, [])
+                queue.finish_request(request_id="a", lease_id=first[0].lease_id, state="completed", result=make_result(request=first[0].request, profile_id=QWEN, model_id="test", backend="fake", text="a"))
+                third = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=1, leased_by="worker", lease_ttl_s=30)
+                self.assertEqual([claim.request_id for claim in third], ["b"])
+            finally:
+                if old is None:
+                    os.environ.pop("DS4_COMPUTE_LEASE_QUANTUM_S", None)
+                else:
+                    os.environ["DS4_COMPUTE_LEASE_QUANTUM_S"] = old
 
     def test_partial_batch_waits_for_linger_then_dispatches(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
