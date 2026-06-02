@@ -53,13 +53,14 @@ def main() -> int:
     while True:
         if args.drive_worker:
             _post(args.base_url, "/ds4/queue/work", {"batch_id": batch_id, "limit": args.limit, "concurrency": args.concurrency, "timeout_s": args.timeout_s})
-        status = _get(args.base_url, "/ds4/queue/status", {"batch_id": batch_id})
+        status = _get(args.base_url, "/ds4/queue/status", {"batch_id": batch_id, "refresh": 0})
         if str(status.get("state")) in TERMINAL:
             break
         poll = _get(args.base_url, "/ds4/queue/poll", {"after_event_id": newest_event_id, "limit": 100})
         newest_event_id = int(poll.get("newest_event_id") or newest_event_id)
         time.sleep(args.poll_s)
         if time.time() - started_run > args.timeout_s:
+            _cancel_on_timeout(args, batch_id)
             raise TimeoutError(f"batch {batch_id} did not finish in {args.timeout_s}s")
     run_s = time.time() - started_run
     if out_dir is not None:
@@ -146,6 +147,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--output-tokens", type=int, default=256)
     parser.add_argument("--timeout-s", type=int, default=1800)
     parser.add_argument("--poll-s", type=float, default=0.02)
+    parser.add_argument("--cancel-on-timeout", action="store_true", help="Force-cancel the benchmark batch if polling times out.")
     parser.add_argument("--drive-worker", action="store_true", help="Also call the synchronous /ds4/queue/work endpoint. Production benchmarks should leave this off and run ds4_pipeline_queue_worker.sh separately.")
     parser.add_argument("--ignore-eos", dest="ignore_eos", action="store_true", default=True, help="Force benchmark decode to the requested output token count by passing ignore_eos/min_tokens through to vLLM.")
     parser.add_argument("--allow-eos", dest="ignore_eos", action="store_false", help="Let EOS stop generation early. This is useful for behavior tests, not throughput targets.")
@@ -328,6 +330,15 @@ def _post(base_url: str, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[-4000:]
         raise RuntimeError(f"POST {endpoint} HTTP {exc.code}: {detail}") from exc
+
+
+def _cancel_on_timeout(args: argparse.Namespace, batch_id: str) -> None:
+    if not args.cancel_on_timeout:
+        return
+    try:
+        _post(args.base_url, "/ds4/queue/cancel", {"batch_id": batch_id, "reason": "benchmark timed out", "force_running": True})
+    except Exception:
+        return
 
 
 def _get(base_url: str, endpoint: str, params: dict[str, Any]) -> dict[str, Any]:

@@ -191,6 +191,30 @@ class InferenceQueueTests(unittest.TestCase):
             queue.finish_request(request_id="run", lease_id=claims[0].lease_id, state="completed", result=result)
             self.assertEqual(queue.status(request_id="run")["state"], "cancelled")
 
+    def test_force_cancel_job_marks_running_terminal_immediately(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(requests=[req("run"), req("wait")], registry=registry, batch_id="job")
+            queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id="job", limit=2, leased_by="worker", lease_ttl_s=30)
+            claims = queue.claim_ready_batch(node_id="spark0", batch_id="job", limit=1, leased_by="worker", lease_ttl_s=30)
+            cancelled = queue.cancel(job_id="job", reason="operator force", force_running=True)
+            self.assertEqual(cancelled["cancelled_count"], 2)
+            self.assertEqual(queue.status(request_id="run")["state"], "cancelled")
+            self.assertEqual(queue.status(request_id="wait")["state"], "cancelled")
+            result = make_result(request=claims[0].request, profile_id=QWEN, model_id="m", backend="fake", text="late")
+            self.assertFalse(queue.finish_request(request_id="run", lease_id=claims[0].lease_id, state="completed", result=result))
+
+    def test_batch_status_can_skip_write_refresh(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(requests=[req("stale")], registry=registry, batch_id="job")
+            with sqlite3.connect(Path(tmp) / "queue.sqlite3") as conn:
+                conn.execute("update requests set state='completed', result_json='{}', completed_at=?, updated_at=? where request_id='stale'", (time.time(), time.time()))
+            self.assertEqual(queue.status(batch_id="job", refresh=False)["state"], "queued")
+            self.assertEqual(queue.status(batch_id="job", refresh=True)["state"], "completed")
+
     def test_expired_lease_requeues_then_fails_after_attempt_budget(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             queue = InferenceQueue(tmp)

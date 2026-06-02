@@ -428,7 +428,7 @@ class InferenceQueue:
         self._write_notice(request_id, "failed", result)
         return "failed"
 
-    def cancel(self, *, request_id: str | None = None, batch_id: str | None = None, job_id: str | None = None, reason: str = "cancelled by operator") -> dict[str, Any]:
+    def cancel(self, *, request_id: str | None = None, batch_id: str | None = None, job_id: str | None = None, reason: str = "cancelled by operator", force_running: bool = False) -> dict[str, Any]:
         batch_id = job_batch_id(batch_id=batch_id, job_id=job_id)
         if sum(x is not None for x in (request_id, batch_id)) != 1:
             raise ValueError("exactly one of request_id, batch_id, or job_id is required")
@@ -444,8 +444,17 @@ class InferenceQueue:
                     skipped[state] = skipped.get(state, 0) + 1
                     continue
                 if state == "running":
-                    conn.execute("update requests set cancel_requested=1, updated_at=? where request_id=?", (now, rid))
-                    skipped["running"] = skipped.get("running", 0) + 1
+                    if force_running:
+                        result = {"format": "ds4-inference-cancelled-v1", "request_id": rid, "status": "cancelled", "reason": reason, "forced": True}
+                        conn.execute("update requests set state='cancelled', cancel_requested=1, result_json=?, error=?, completed_at=?, updated_at=?, lease_id=null, leased_by=null, lease_expires_at=null, heartbeat_at=null where request_id=?", (json.dumps(result, sort_keys=True), reason, now, now, rid))
+                        self._delete_request_kv(conn, rid)
+                        self._release_unused_compute_lease(conn, row["compute_lease_id"])
+                        self._event(conn, rid, "cancelled", "cancelled", {"batch_id": row["batch_id"], "reason": reason, "forced": True})
+                        self._write_notice(rid, "cancelled", result)
+                        cancelled.append(rid)
+                    else:
+                        conn.execute("update requests set cancel_requested=1, updated_at=? where request_id=?", (now, rid))
+                        skipped["running"] = skipped.get("running", 0) + 1
                     continue
                 result = {"format": "ds4-inference-cancelled-v1", "request_id": rid, "status": "cancelled", "reason": reason}
                 conn.execute("update requests set state='cancelled', result_json=?, error=?, completed_at=?, updated_at=? where request_id=?", (json.dumps(result, sort_keys=True), reason, now, now, rid))
@@ -504,14 +513,15 @@ class InferenceQueue:
                 )
             return count
 
-    def status(self, *, request_id: str | None = None, batch_id: str | None = None, job_id: str | None = None) -> dict[str, Any]:
+    def status(self, *, request_id: str | None = None, batch_id: str | None = None, job_id: str | None = None, refresh: bool = True) -> dict[str, Any]:
         batch_id = job_batch_id(batch_id=batch_id, job_id=job_id)
         with closing(self._connect()) as conn, conn:
             if request_id is not None:
                 row = conn.execute("select * from requests where request_id=?", (request_id,)).fetchone()
                 return {"format": REQUEST_STATUS_FORMAT, "request_id": request_id, "state": "unknown"} if row is None else _request_status(row)
             if batch_id is not None:
-                self._refresh_batch(conn, batch_id)
+                if refresh:
+                    self._refresh_batch(conn, batch_id)
                 row = conn.execute("select * from batches where batch_id=?", (batch_id,)).fetchone()
                 return {"format": BATCH_STATUS_FORMAT, "batch_id": batch_id, "job_id": batch_id, "state": "unknown"} if row is None else _batch_status(row)
             counts = {str(r["state"]): int(r["n"]) for r in conn.execute("select state,count(*) n from requests group by state order by state")}
