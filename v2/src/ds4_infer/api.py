@@ -748,17 +748,32 @@ def _external_kv_plan(raw: dict[str, Any], *, profile: ModelProfile, topology: S
         load["lease_id"] = str(raw["lease_id"])
     if raw.get("content_hash") is not None:
         load["content_hash"] = str(raw["content_hash"])
+    miss_policy = str(raw.get("miss_policy") or "compute")
+    store_mode = str(raw.get("store_mode") or raw.get("store_policy") or "")
+    if not store_mode:
+        store_mode = "write_back" if miss_policy == "compute_and_store" else "skip"
+    if store_mode == "skip":
+        store = {"mode": "skip", "transport": "none"}
+    else:
+        store = {
+            "mode": store_mode,
+            "transport": "external_manifest",
+            "namespace": namespace,
+            "kv_key": kv_key,
+            "service_id": service_id,
+        }
+    operation = "load_store" if load["mode"] != "skip" and store["mode"] != "skip" else ("store" if store["mode"] != "skip" else "load")
     plan = {
         "format": KV_CACHE_PLAN_FORMAT,
         "backend": str(raw.get("backend") or "auto"),
         "cache_id": kv_key,
         "prefix_hash": _optional_str(raw.get("prefix_hash")),
         "load": load,
-        "store": {"mode": "skip", "transport": "none"},
-        "miss_policy": str(raw.get("miss_policy") or "compute"),
+        "store": store,
+        "miss_policy": miss_policy,
         "route_affinity": str(raw.get("route_affinity") or "required"),
         "model_fingerprint": dict(raw.get("model_fingerprint") or {}),
-        "operation": "load",
+        "operation": operation,
     }
     plan["batch_key_hash"] = "sha256:" + hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     return plan
