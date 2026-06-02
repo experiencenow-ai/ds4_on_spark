@@ -580,6 +580,12 @@ class CoordinatorApi:
                 pairs = future.result()
             except Exception as exc:
                 pairs = [(claim, _dispatcher_transport_failure(claim, str(exc))) for claim in claims]
+            if len(pairs) == 1 and pairs[0][0] is _DISPATCHER_BATCH_FINISHED:
+                summary = pairs[0][1]
+                completed += int(summary.get("completed") or 0)
+                failed += int(summary.get("failed") or 0)
+                retried += int(summary.get("retried") or 0)
+                continue
             for claim, result in pairs:
                 item_completed, item_failed, item_retried = worker._finish_pair(claim, result, None)
                 completed += item_completed
@@ -1179,12 +1185,18 @@ def _pending_claim_count(pending: dict[Any, list[QueueClaim]]) -> int:
     return sum(len(cohort) for cohort in pending.values())
 
 
-def _dispatcher_run_claims(worker: BatchWorker, claims: list[QueueClaim], concurrency: int) -> list[tuple[QueueClaim, dict[str, Any]]]:
+_DISPATCHER_BATCH_FINISHED: Any = object()
+
+
+def _dispatcher_run_claims(worker: BatchWorker, claims: list[QueueClaim], concurrency: int) -> list[tuple[Any, dict[str, Any]]]:
     if not claims:
         return []
     if claims[0].request_kind == "cpu":
         return worker._run_cpu_claims(claims, max(1, concurrency))
     if _dispatcher_can_batch_models(worker, claims):
+        if hasattr(worker.runner, "run_many_on_node_incremental"):
+            completed, failed, retried = worker._run_model_batch_incremental(claims, max(1, concurrency), None)
+            return [(_DISPATCHER_BATCH_FINISHED, {"completed": completed, "failed": failed, "retried": retried})]
         return worker._run_model_batch(claims, max(1, concurrency))
     out: list[tuple[QueueClaim, dict[str, Any]]] = []
     max_workers = max(1, min(max(1, concurrency), len(claims)))

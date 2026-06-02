@@ -12,8 +12,8 @@ import unittest
 from unittest.mock import patch
 
 from ds4_chat.cli import QueueChatModel
-from ds4_infer.profiles import ProfileRegistry
-from ds4_infer.runners import AntirezRunner, OpenAICompatibleRunner, SparkHttpRunner, extract_openai_completion_text, request_messages, request_prompt
+from ds4_infer.profiles import ModelProfile, ProfileRegistry
+from ds4_infer.runners import AntirezRunner, OpenAICompatibleRunner, PipelineOpenAIRunner, SparkHttpRunner, extract_openai_completion_text, request_messages, request_prompt
 from ds4_infer.schemas import InferenceRequest
 from ds4_tools.builtin import spark7_run_command, web_fetch
 from ds4_tools.registry import ToolRegistry
@@ -76,6 +76,31 @@ class CapturingAntirezRunner(AntirezRunner):
         if endpoint == "/completion":
             raise RuntimeError("HTTP 404: not found")
         return {"choices": [{"text": "thinking out loud</think>ANTIREZ_OK"}], "usage": {"total_tokens": 5}}
+
+
+class StreamingCompletionBackend(OpenAICompatibleRunner):
+    def __init__(self) -> None:
+        super().__init__(base_url="http://unused")
+
+    def _post_sse_json(self, endpoint: str, payload: dict):
+        assert endpoint == self.completion_endpoint
+        assert payload["stream"] is True
+        assert len(payload["prompt"]) == 2
+        yield {"choices": [{"index": 1, "text": "second", "finish_reason": None}]}
+        yield {"choices": [{"index": 0, "text": "first", "finish_reason": None}]}
+        yield {"choices": [{"index": 1, "text": " done", "finish_reason": "stop"}]}
+        yield {"choices": [{"index": 0, "text": " done", "finish_reason": "stop"}]}
+
+    def _post_json(self, endpoint: str, payload: dict) -> dict:
+        raise AssertionError("streaming test should not use non-streaming post")
+
+
+class StreamingPipelineRunner(PipelineOpenAIRunner):
+    def __init__(self) -> None:
+        super().__init__(base_urls={"svc": "http://unused"})
+
+    def _runner_for(self, profile: ModelProfile, node_id: str | None) -> StreamingCompletionBackend:
+        return StreamingCompletionBackend()
 
 
 def _chat_payload(content: str = "ok") -> dict:
@@ -148,6 +173,34 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         runner = CapturingCoalescedRunner()
         self.assertIsNone(runner.run_many_completion([make_request(chat=True), make_request(chat=True)], profile))
         self.assertEqual(runner.calls, [])
+
+    def test_pipeline_runner_streams_coalesced_completion_results_incrementally(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": False,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {"served_model_name": "served-model"},
+            }
+        )
+        first = make_request(chat=False)
+        second_raw = make_request(chat=False).raw
+        second_raw["request_id"] = "r2"
+        seen = []
+        results = StreamingPipelineRunner().run_many_on_node_incremental(
+            [first, InferenceRequest.from_json(second_raw)],
+            profile,
+            None,
+            concurrency=2,
+            on_result=lambda request_id, result: seen.append((request_id, result["output"]["text"])),
+        )
+        self.assertEqual(seen, [("r2", "second done"), ("r", "first done")])
+        self.assertEqual(results["r"]["transport"]["coalesced_completion_streaming"], True)
 
     def test_antirez_runner_falls_back_to_openai_completion_endpoint(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
