@@ -999,16 +999,71 @@ def openai_sampling_controls(input_payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _served_model_id(profile: ModelProfile) -> str:
+    for key in _served_model_override_keys(profile):
+        override = _served_model_overrides().get(key)
+        if isinstance(override, str) and override:
+            return override
     for value in (profile.routing.get("served_model_name"), profile.routing.get("runner_model_id")):
         if isinstance(value, str) and value:
-            return value
+            return _served_model_with_pipeline_suffix(value)
     pipeline = profile.routing.get("pipeline")
     if isinstance(pipeline, dict):
         for key in ("served_model_name", "runner_model_id"):
             value = pipeline.get(key)
             if isinstance(value, str) and value:
-                return value
-    return profile.model_id
+                return _served_model_with_pipeline_suffix(value)
+    return _served_model_with_pipeline_suffix(profile.model_id)
+
+
+def _served_model_override_keys(profile: ModelProfile) -> tuple[str, ...]:
+    keys = [profile.profile_id, profile.model_id]
+    pipeline = profile.routing.get("pipeline")
+    if isinstance(pipeline, dict):
+        for key in ("service_id", "served_model_name", "runner_model_id"):
+            value = pipeline.get(key)
+            if isinstance(value, str) and value:
+                keys.append(value)
+    for key in ("pipeline_service_id", "served_model_name", "runner_model_id"):
+        value = profile.routing.get(key)
+        if isinstance(value, str) and value:
+            keys.append(value)
+    return tuple(dict.fromkeys(keys))
+
+
+def _served_model_overrides() -> dict[str, str]:
+    raw = os.environ.get("DS4_PIPELINE_SERVED_MODEL_OVERRIDES_JSON", "")
+    if not raw:
+        return {}
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise ValueError("DS4_PIPELINE_SERVED_MODEL_OVERRIDES_JSON must be an object")
+    return {str(key): str(value) for key, value in data.items() if str(value)}
+
+
+def _served_model_with_pipeline_suffix(model_id: str) -> str:
+    if not _env_bool_local("DS4_PIPELINE_AUTO_SERVED_MODEL_PP_SUFFIX", True):
+        return model_id
+    stage_count = _pipeline_node_count_override()
+    if stage_count < 1:
+        return model_id
+    for marker in ("-pp", "_pp"):
+        prefix, sep, suffix = model_id.rpartition(marker)
+        if sep and suffix.isdigit():
+            return prefix + marker + str(stage_count)
+    return model_id
+
+
+def _pipeline_node_count_override() -> int:
+    raw = os.environ.get("DS4_PIPELINE_NODES", "")
+    nodes = [item.strip() for item in raw.split(",") if item.strip()]
+    return len(nodes)
+
+
+def _env_bool_local(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
 
 
 def _usage_from_response(data: dict[str, Any]) -> dict[str, Any]:

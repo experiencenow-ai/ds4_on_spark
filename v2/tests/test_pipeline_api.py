@@ -47,6 +47,70 @@ class PipelineApiTests(unittest.TestCase):
         )
         self.assertEqual(_openai_payload(request, profile)["model"], "deepseek-v4-flash-pp8")
 
+    def test_pipeline_served_model_override_can_key_by_service_id(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
+        request = InferenceRequest.from_json(
+            {
+                "format": "ds4-inference-request-v1",
+                "request_id": "served-name-pp7",
+                "capability": "smartest",
+                "chat": False,
+                "immediate": False,
+                "job_class": "analysis",
+                "max_output_tokens": 8,
+                "thinking_budget_tokens": 0,
+                "temperature": 0,
+                "input": {"text": "ping"},
+                "output_contract": {"format": "text"},
+            }
+        )
+        old = os.environ.get("DS4_PIPELINE_SERVED_MODEL_OVERRIDES_JSON")
+        os.environ["DS4_PIPELINE_SERVED_MODEL_OVERRIDES_JSON"] = '{"dsv4_flash_pp8":"deepseek-v4-flash-pp7"}'
+        try:
+            payload = _openai_payload(request, profile)
+        finally:
+            if old is None:
+                os.environ.pop("DS4_PIPELINE_SERVED_MODEL_OVERRIDES_JSON", None)
+            else:
+                os.environ["DS4_PIPELINE_SERVED_MODEL_OVERRIDES_JSON"] = old
+        self.assertEqual(payload["model"], "deepseek-v4-flash-pp7")
+
+    def test_pipeline_node_override_rewrites_served_model_pp_suffix(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
+        request = InferenceRequest.from_json(
+            {
+                "format": "ds4-inference-request-v1",
+                "request_id": "served-name-pp7",
+                "capability": "smartest",
+                "chat": False,
+                "immediate": False,
+                "job_class": "analysis",
+                "max_output_tokens": 8,
+                "thinking_budget_tokens": 0,
+                "temperature": 0,
+                "input": {"text": "ping"},
+                "output_contract": {"format": "text"},
+            }
+        )
+        old_nodes = os.environ.get("DS4_PIPELINE_NODES")
+        old_auto = os.environ.get("DS4_PIPELINE_AUTO_SERVED_MODEL_PP_SUFFIX")
+        os.environ["DS4_PIPELINE_NODES"] = "spark0,spark1,spark2,spark3,spark4,spark5,spark6"
+        os.environ.pop("DS4_PIPELINE_AUTO_SERVED_MODEL_PP_SUFFIX", None)
+        try:
+            payload = _openai_payload(request, profile)
+        finally:
+            if old_nodes is None:
+                os.environ.pop("DS4_PIPELINE_NODES", None)
+            else:
+                os.environ["DS4_PIPELINE_NODES"] = old_nodes
+            if old_auto is None:
+                os.environ.pop("DS4_PIPELINE_AUTO_SERVED_MODEL_PP_SUFFIX", None)
+            else:
+                os.environ["DS4_PIPELINE_AUTO_SERVED_MODEL_PP_SUFFIX"] = old_auto
+        self.assertEqual(payload["model"], "deepseek-v4-flash-pp7")
+
     def test_submit_binds_to_spark0_pipeline_and_kv_shards_are_layer_local(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY)
