@@ -515,8 +515,14 @@ class PipelineOpenAIRunner:
         worker_count = max(1, min(int(concurrency), len(request_list)))
         runner = self._runner_for(profile, node_id)
         if _env_bool("DS4_PIPELINE_COHORT_COMPLETIONS", True):
-            coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result)
+            if _requests_need_client_stream(request_list):
+                coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result)
+                if coalesced is not None:
+                    return coalesced
+            coalesced = runner.run_many_completion(request_list, profile)
             if coalesced is not None:
+                for request_id, result in coalesced.items():
+                    on_result(request_id, result)
                 return coalesced
         out: dict[str, dict] = {}
         with ThreadPoolExecutor(max_workers=worker_count) as pool:
@@ -789,6 +795,10 @@ def _completion_cohort_chunks(requests: list[InferenceRequest], *, max_cohort: i
 
 def _completion_request_token_estimate(request: InferenceRequest) -> int:
     return max(1, _prompt_token_estimate(request_prompt(request)) + int(request.max_output_tokens))
+
+
+def _requests_need_client_stream(requests: list[InferenceRequest]) -> bool:
+    return bool(requests and all(bool(item.input.get("ds4_client_stream")) for item in requests))
 
 
 def _prompt_token_estimate(prompt: str) -> int:

@@ -22,14 +22,18 @@ def openai_completion_requests(body: dict[str, Any], registry: ProfileRegistry, 
     batch_id = str(body.get("batch_id") or base_request_id)
     prompts = api_module._completion_prompt_items(body.get("prompt"))
     raw_requests = []
+    client_stream = bool(body.get("stream"))
     for index, prompt in enumerate(prompts):
         request_id = base_request_id if len(prompts) == 1 else f"{base_request_id}-{index:06d}"
+        input_payload = api_module._input_with_api_kv({"prompt": prompt}, body, profile, topology)
+        if client_stream:
+            input_payload["ds4_client_stream"] = True
         raw_requests.append(
             api_module._make_inference_request_json(
                 request_id=request_id,
                 profile=profile,
                 chat=False,
-                input_payload=api_module._input_with_api_kv({"prompt": prompt}, body, profile, topology),
+                input_payload=input_payload,
                 output_contract={"format": "text"},
                 max_tokens=int(body.get("max_tokens") or 1024),
                 temperature=float(body.get("temperature") or 0.0),

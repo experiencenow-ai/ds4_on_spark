@@ -103,6 +103,15 @@ class StreamingPipelineRunner(PipelineOpenAIRunner):
         return StreamingCompletionBackend()
 
 
+class NonStreamingCoalescedPipelineRunner(PipelineOpenAIRunner):
+    def __init__(self) -> None:
+        super().__init__(base_urls={"svc": "http://unused"})
+        self.backend = CapturingCoalescedRunner()
+
+    def _runner_for(self, profile: ModelProfile, node_id: str | None) -> CapturingCoalescedRunner:
+        return self.backend
+
+
 def _chat_payload(content: str = "ok") -> dict:
     return {"choices": [{"message": {"role": "assistant", "content": content}}]}
 
@@ -191,11 +200,13 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         first = make_request(chat=False)
         first.raw["max_output_tokens"] = 11
         first.raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": 11}
+        first.raw["input"]["ds4_client_stream"] = True
         first = InferenceRequest.from_json(first.raw)
         second_raw = make_request(chat=False).raw
         second_raw["request_id"] = "r2"
         second_raw["max_output_tokens"] = 11
         second_raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": 11}
+        second_raw["input"]["ds4_client_stream"] = True
         seen = []
         results = StreamingPipelineRunner().run_many_on_node_incremental(
             [first, InferenceRequest.from_json(second_raw)],
@@ -207,6 +218,40 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(seen, [("r2", "second done"), ("r", "first done")])
         self.assertEqual(results["r"]["transport"]["coalesced_completion_streaming"], True)
         self.assertEqual(results["r"]["usage"]["completion_tokens"], 11)
+
+    def test_pipeline_runner_uses_nonstreaming_cohort_for_nonstreaming_incremental_worker(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": False,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {"served_model_name": "served-model"},
+            }
+        )
+        first = make_request(chat=False)
+        first.raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": 64}
+        first = InferenceRequest.from_json(first.raw)
+        second_raw = make_request(chat=False).raw
+        second_raw["request_id"] = "r2"
+        second_raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": 64}
+        seen = []
+        runner = NonStreamingCoalescedPipelineRunner()
+        results = runner.run_many_on_node_incremental(
+            [first, InferenceRequest.from_json(second_raw)],
+            profile,
+            None,
+            concurrency=2,
+            on_result=lambda request_id, result: seen.append((request_id, result["output"]["text"])),
+        )
+        self.assertEqual(len(runner.backend.calls), 1)
+        self.assertEqual(runner.backend.calls[0][1].get("stream"), None)
+        self.assertEqual(seen, [("r", "one"), ("r2", "two")])
+        self.assertEqual(results["r2"]["transport"]["coalesced_batch_size"], 2)
 
     def test_antirez_runner_falls_back_to_openai_completion_endpoint(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
