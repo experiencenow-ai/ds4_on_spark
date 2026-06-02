@@ -7,7 +7,7 @@ import shlex
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Protocol
+from typing import Any, Callable, Iterator, Protocol
 from urllib import error, request as urlrequest
 
 from .builders import model_batch_payload, request_messages, request_prompt
@@ -330,6 +330,72 @@ class OpenAICompatibleRunner:
                 )
         return out
 
+    def run_many_completion_incremental(self, requests: list[InferenceRequest], profile: ModelProfile, *, on_result: Callable[[str, dict[str, Any]], None]) -> dict[str, dict] | None:
+        if not _env_bool("DS4_PIPELINE_COHORT_COMPLETION_STREAMING", True):
+            return None
+        request_list = list(requests)
+        minimum = max(2, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MIN", "2") or "2"))
+        if len(request_list) < minimum:
+            return None
+        max_cohort = max(1, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MAX", "512") or "512"))
+        token_budget = max(0, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET", "0") or "0"))
+        chunks = _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget)
+        payloads: list[tuple[list[InferenceRequest], dict[str, Any]]] = []
+        for chunk in chunks:
+            payload = _coalesced_completion_payload(chunk, profile, self.default_extra_body)
+            if payload is None:
+                return None
+            payload["stream"] = True
+            payloads.append((chunk, payload))
+        out: dict[str, dict] = {}
+        for chunk, payload in payloads:
+            out.update(self._run_completion_stream_chunk(chunk, profile, payload, on_result=on_result))
+        return out
+
+    def _run_completion_stream_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, on_result: Callable[[str, dict[str, Any]], None]) -> dict[str, dict]:
+        started = time.time()
+        prefetch_info: dict[str, Any] | None = None
+        text_by_index = {idx: "" for idx in range(len(chunk))}
+        completed_indexes: set[int] = set()
+        out: dict[str, dict] = {}
+        try:
+            prefetch_info = _maybe_prestage_common_kv_prefix(self, payload, chunk)
+            for event in self._post_sse_json(self.completion_endpoint, payload):
+                choices = event.get("choices")
+                if not isinstance(choices, list):
+                    continue
+                for choice in choices:
+                    if not isinstance(choice, dict):
+                        continue
+                    index = _completion_choice_index(choice, len(completed_indexes))
+                    if index < 0 or index >= len(chunk) or index in completed_indexes:
+                        continue
+                    text_by_index[index] += _completion_stream_choice_text(choice)
+                    if choice.get("finish_reason") is None:
+                        continue
+                    result = _coalesced_stream_result(chunk[index], profile, text_by_index[index], base_url=self.base_url, endpoint=self.completion_endpoint, started=started, batch_size=len(chunk), prefetch_info=_copy_optional_dict(prefetch_info))
+                    out[chunk[index].request_id] = result
+                    completed_indexes.add(index)
+                    on_result(chunk[index].request_id, result)
+        except Exception as exc:
+            for index, item in enumerate(chunk):
+                if index in completed_indexes:
+                    continue
+                result = self._transport_failure(item, profile, started, str(exc), endpoint=self.completion_endpoint, coalesced_batch_size=len(chunk))
+                out[item.request_id] = result
+                completed_indexes.add(index)
+                on_result(item.request_id, result)
+            return out
+        for index, item in enumerate(chunk):
+            if index in completed_indexes:
+                continue
+            text = text_by_index.get(index) or ""
+            result = _coalesced_stream_result(item, profile, text, base_url=self.base_url, endpoint=self.completion_endpoint, started=started, batch_size=len(chunk), prefetch_info=_copy_optional_dict(prefetch_info)) if text else _coalesced_failure(item, profile, self.base_url, self.completion_endpoint, started, len(chunk), "stream ended before this coalesced completion finished")
+            out[item.request_id] = result
+            completed_indexes.add(index)
+            on_result(item.request_id, result)
+        return out
+
     def _transport_failure(self, request: InferenceRequest, profile: ModelProfile, started: float, error: str, *, endpoint: str | None = None, coalesced_batch_size: int | None = None) -> dict:
         result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": error}, sort_keys=True), status="transport_failed")
         result["transport"] = {"base_url": self.base_url, "duration_s": round(time.time() - started, 6), "error": error}
@@ -352,6 +418,38 @@ class OpenAICompatibleRunner:
             detail = exc.read().decode("utf-8", errors="replace")[-4000:]
             raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
         return json.loads(text)
+
+    def _post_sse_json(self, endpoint: str, payload: dict[str, Any]) -> Iterator[dict[str, Any]]:
+        body = json.dumps(payload).encode("utf-8")
+        headers = {"content-type": "application/json", "accept": "text/event-stream"}
+        if self.api_key:
+            headers["authorization"] = f"Bearer {self.api_key}"
+        req = urlrequest.Request(self.base_url + endpoint, data=body, headers=headers, method="POST")
+        try:
+            response = urlrequest.urlopen(req, timeout=self.timeout_s)
+        except error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[-4000:]
+            raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
+        with response:
+            event_data: list[str] = []
+            for raw_line in response:
+                line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
+                if line == "":
+                    if not event_data:
+                        continue
+                    text = "\n".join(event_data).strip()
+                    event_data = []
+                    if text == "[DONE]":
+                        break
+                    if text:
+                        yield json.loads(text)
+                    continue
+                if line.startswith("data:"):
+                    event_data.append(line[5:].strip())
+            if event_data:
+                text = "\n".join(event_data).strip()
+                if text and text != "[DONE]":
+                    yield json.loads(text)
 
 
 class PipelineOpenAIRunner:
@@ -400,6 +498,38 @@ class PipelineOpenAIRunner:
                     result = make_result(request=item, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": str(exc)}, sort_keys=True), status="transport_failed")
                     result["transport"] = {"node_id": node_id, "base_url": self._base_url(profile, node_id), "error": str(exc)}
                     out[item.request_id] = result
+        return out
+
+    def run_many_on_node_incremental(
+        self,
+        requests: list[InferenceRequest],
+        profile: ModelProfile,
+        node_id: str | None,
+        *,
+        concurrency: int = 1,
+        on_result: Callable[[str, dict[str, Any]], None],
+    ) -> dict[str, dict]:
+        request_list = list(requests)
+        if not request_list:
+            return {}
+        worker_count = max(1, min(int(concurrency), len(request_list)))
+        runner = self._runner_for(profile, node_id)
+        if _env_bool("DS4_PIPELINE_COHORT_COMPLETIONS", True):
+            coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result)
+            if coalesced is not None:
+                return coalesced
+        out: dict[str, dict] = {}
+        with ThreadPoolExecutor(max_workers=worker_count) as pool:
+            futures = {pool.submit(runner.run_one, item, profile): item for item in request_list}
+            for future in as_completed(futures):
+                item = futures[future]
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    result = make_result(request=item, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": str(exc)}, sort_keys=True), status="transport_failed")
+                    result["transport"] = {"node_id": node_id, "base_url": self._base_url(profile, node_id), "error": str(exc)}
+                out[item.request_id] = result
+                on_result(item.request_id, result)
         return out
 
     def _runner_for(self, profile: ModelProfile, node_id: str | None) -> OpenAICompatibleRunner:
@@ -707,6 +837,41 @@ def _coalesced_completion_results(
     return out
 
 
+def _completion_choice_index(choice: dict[str, Any], fallback: int) -> int:
+    raw = choice.get("index", fallback)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return int(fallback)
+
+
+def _coalesced_stream_result(
+    request: InferenceRequest,
+    profile: ModelProfile,
+    text: str,
+    *,
+    base_url: str,
+    endpoint: str,
+    started: float,
+    batch_size: int,
+    prefetch_info: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
+    result["usage"].update({"completion_tokens": _estimate_text_tokens(text), "completion_tokens_estimated": True})
+    result["transport"] = {
+        "base_url": base_url,
+        "endpoint": endpoint,
+        "duration_s": round(time.time() - started, 6),
+        "coalesced_completion_batch": True,
+        "coalesced_completion_streaming": True,
+        "coalesced_batch_size": batch_size,
+        "batch_size": batch_size,
+    }
+    if prefetch_info is not None:
+        result["transport"]["kv_prestage"] = dict(prefetch_info)
+    return result
+
+
 def _coalesced_failure(request: InferenceRequest, profile: ModelProfile, base_url: str, endpoint: str, started: float, batch_size: int, error: str) -> dict:
     result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": error}, sort_keys=True), status="transport_failed")
     result["transport"] = {"base_url": base_url, "endpoint": endpoint, "duration_s": round(time.time() - started, 6), "coalesced_batch_size": batch_size, "error": error}
@@ -741,6 +906,18 @@ def _forced_output_request(request: InferenceRequest) -> bool:
     except (TypeError, ValueError):
         return False
     return min_tokens >= int(request.max_output_tokens)
+
+
+def _completion_stream_choice_text(choice: dict[str, Any]) -> str:
+    text = choice.get("text")
+    if isinstance(text, str):
+        return strip_visible_thinking(text)
+    delta = choice.get("delta")
+    if isinstance(delta, dict):
+        value = delta.get("content") or delta.get("text")
+        if isinstance(value, str):
+            return strip_visible_thinking(value)
+    return ""
 
 
 def extract_completion_like_text(data: dict[str, Any]) -> str:
@@ -799,6 +976,9 @@ def _openai_payload(request: InferenceRequest, profile: ModelProfile) -> dict[st
             "max_tokens": request.max_output_tokens,
         }
     _merge_openai_request_fields(payload, request)
+    sampling = openai_sampling_controls(request.input)
+    if sampling:
+        payload.update(sampling)
     if request.thinking_budget_tokens > 0:
         payload["extra_body"] = {"thinking_budget_tokens": request.thinking_budget_tokens}
     extra_body = kv_cache_extra_body(request.input)
@@ -806,6 +986,11 @@ def _openai_payload(request: InferenceRequest, profile: ModelProfile) -> dict[st
         payload.update(kv_cache_vllm_request_fields(request.input))
         payload["extra_body"] = {**dict(payload.get("extra_body") or {}), **extra_body}
     return payload
+
+
+def openai_sampling_controls(input_payload: dict[str, Any]) -> dict[str, Any]:
+    value = input_payload.get("openai_sampling")
+    return dict(value) if isinstance(value, dict) else {}
 
 
 def _served_model_id(profile: ModelProfile) -> str:
@@ -824,6 +1009,14 @@ def _served_model_id(profile: ModelProfile) -> str:
 def _usage_from_response(data: dict[str, Any]) -> dict[str, Any]:
     usage = data.get("usage")
     return dict(usage) if isinstance(usage, dict) else {}
+
+
+def _estimate_text_tokens(text: str) -> int:
+    return max(0, len(text.encode("utf-8")) // 4)
+
+
+def _copy_optional_dict(value: dict[str, Any] | None) -> dict[str, Any] | None:
+    return dict(value) if isinstance(value, dict) else None
 
 
 def _json_env(name: str) -> dict[str, Any]:
