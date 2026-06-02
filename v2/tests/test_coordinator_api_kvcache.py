@@ -7,7 +7,7 @@ import tempfile
 import time
 import unittest
 
-from ds4_infer.api import CoordinatorApi
+from ds4_infer.api import CoordinatorApi, _openai_batch_error, _openai_result_error
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.runners import FakeRunner
 from ds4_infer.schemas import InferenceRequest
@@ -20,6 +20,35 @@ TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 
 
 class CoordinatorApiKvCacheTests(unittest.TestCase):
+    def test_openai_sync_result_errors_are_fail_closed(self) -> None:
+        payload = _openai_result_error(
+            {
+                "request": {"request_id": "r0", "state": "failed"},
+                "result": {"status": "transport_failed", "error": "cache miss"},
+            }
+        )
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertEqual(payload["error"]["code"], "transport_failed")
+        self.assertEqual(payload["error"]["type"], "ds4_transport_error")
+
+    def test_openai_sync_batch_errors_are_fail_closed(self) -> None:
+        payload = _openai_batch_error(
+            {
+                "batch_id": "b0",
+                "state": "completed_with_failures",
+                "results": [
+                    {"request": {"request_id": "r0"}, "result": {"status": "completed", "output": {"text": "ok"}}},
+                    {"request": {"request_id": "r1"}, "result": {"status": "transport_failed", "error": "cache miss"}},
+                ],
+            }
+        )
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertEqual(payload["error"]["code"], "completed_with_failures")
+        self.assertEqual(payload["ds4"]["failed_count"], 1)
+        self.assertEqual(payload["ds4"]["failed"][0]["status"], "transport_failed")
+
     def test_openai_chat_shape_uses_spark0_queue(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake", sync_timeout_s=3)

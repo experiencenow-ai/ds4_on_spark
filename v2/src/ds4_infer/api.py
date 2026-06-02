@@ -189,6 +189,9 @@ class CoordinatorApi:
         if _is_async_request(body):
             return 202, _async_queue_response("openai_chat", request_id, batch_id, submitted)
         result = self._run_until_collected(batch_id=batch_id, request_id=request_id, timeout_s=float(body.get("ds4_timeout_s") or self.sync_timeout_s))
+        error = _openai_result_error(result)
+        if error is not None:
+            return 502, error
         return 200, _openai_chat_response(request_id=request_id, model=str(body.get("model") or profile.model_id), result=result)
 
     def _handle_openai_completion(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
@@ -223,8 +226,14 @@ class CoordinatorApi:
         timeout_s = float(body.get("ds4_timeout_s") or self.sync_timeout_s)
         if len(requests) == 1:
             result = self._run_until_collected(batch_id=batch_id, request_id=requests[0].request_id, timeout_s=timeout_s)
+            error = _openai_result_error(result)
+            if error is not None:
+                return 502, error
             return 200, _openai_completion_response(request_id=requests[0].request_id, model=str(body.get("model") or profile.model_id), result=result)
         result = self._run_batch_until_collected(batch_id=batch_id, timeout_s=timeout_s)
+        error = _openai_batch_error(result)
+        if error is not None:
+            return 502, error
         return 200, _openai_completion_batch_response(request_id=base_request_id, model=str(body.get("model") or profile.model_id), result=result)
 
     def _handle_anthropic_messages(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
@@ -252,6 +261,9 @@ class CoordinatorApi:
         if _is_async_request(body):
             return 202, _async_queue_response("anthropic_messages", request_id, batch_id, submitted)
         result = self._run_until_collected(batch_id=batch_id, request_id=request_id, timeout_s=float(body.get("ds4_timeout_s") or self.sync_timeout_s))
+        error = _openai_result_error(result)
+        if error is not None:
+            return 502, error
         return 200, _anthropic_message_response(request_id=request_id, model=str(body.get("model") or profile.model_id), result=result)
 
     def _kv_declare(self, body: dict[str, Any]) -> dict[str, Any]:
@@ -863,6 +875,47 @@ OPENAI_REQUEST_FIELDS = {
     "top_p",
     "truncate_prompt_tokens",
 }
+
+
+def _openai_result_error(result: dict[str, Any]) -> dict[str, Any] | None:
+    text, status = _result_text_and_status(result)
+    if status == "completed":
+        return None
+    return {
+        "error": {
+            "message": text or status,
+            "type": "ds4_transport_error",
+            "code": status,
+        },
+        "ds4": {"request": result.get("request"), "status": status},
+    }
+
+
+def _openai_batch_error(result: dict[str, Any]) -> dict[str, Any] | None:
+    rows = result.get("results") if isinstance(result.get("results"), list) else []
+    failed = []
+    for index, row in enumerate(rows):
+        item = row if isinstance(row, dict) else {}
+        text, status = _result_text_and_status(item)
+        if status != "completed":
+            failed.append({"index": index, "status": status, "message": text or status})
+    state = str(result.get("state") or "")
+    if not failed and state not in {"failed", "cancelled", "completed_with_failures", "completed_with_cancelled"}:
+        return None
+    return {
+        "error": {
+            "message": f"DS4 batch completed with {len(failed)} failed result(s)" if failed else f"DS4 batch state {state}",
+            "type": "ds4_transport_error",
+            "code": state or "failed",
+        },
+        "ds4": {
+            "batch_id": result.get("batch_id"),
+            "state": state,
+            "result_count": len(rows),
+            "failed": failed[:16],
+            "failed_count": len(failed),
+        },
+    }
 
 
 def _openai_chat_response(*, request_id: str, model: str, result: dict[str, Any]) -> dict[str, Any]:
