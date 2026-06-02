@@ -10,6 +10,7 @@ import unittest
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.queue import InferenceQueue
 from ds4_infer.schemas import InferenceRequest, make_result
+from ds4_infer.worker import BatchWorker
 
 ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "profiles" / "models"
@@ -128,6 +129,22 @@ class InferenceQueueTests(unittest.TestCase):
             second = queue.work(registry=registry, runner=runner, node_id="spark0", node_profile_ids=(QWEN,), limit=12, concurrency=12, batch_linger_s=0.2)
             self.assertEqual(second["claimed_count"], 3)
             self.assertEqual(runner.calls, [("spark0", ["a", "b", "c"], 12)])
+
+    def test_heartbeat_allows_claims_that_finished_during_incremental_batch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            requests = [req("a"), req("b"), req("c")]
+            queue.submit_requests(requests=requests, registry=registry, batch_id="job")
+            queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id="job", limit=3, leased_by="worker", lease_ttl_s=30)
+            claims = queue.claim_ready_batch(node_id="spark0", batch_id="job", limit=3, leased_by="worker", lease_ttl_s=30)
+            result = make_result(request=requests[0], profile_id=QWEN, model_id="model", backend="fake", text="done")
+            self.assertTrue(queue.finish_request(request_id="a", lease_id=claims[0].lease_id, state="completed", result=result))
+            worker = BatchWorker(queue=queue, registry=registry, runner=BatchRunner(), worker_id="worker")
+            worker._heartbeat(claims)
+            self.assertEqual(queue.status(request_id="a")["state"], "completed")
+            self.assertEqual(queue.status(request_id="b")["state"], "running")
+            self.assertEqual(queue.status(request_id="c")["state"], "running")
 
     def test_priority_takes_slots_but_background_fills_empty_capacity(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
