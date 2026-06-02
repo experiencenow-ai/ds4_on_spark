@@ -200,6 +200,8 @@ def _fast_copy_argv(topology: TransferTopology, request: TransferRequest) -> lis
         "--destination-path", request.destination_path,
         "--jobs-per-edge", str(topology.default_jobs_per_edge),
         "--port-base", str(topology.port_base),
+        "--striped-file-stripes", str(int(request.raw.get("striped_file_stripes", 8))),
+        "--striped-file-threshold-bytes", str(int(request.raw.get("striped_file_threshold_bytes", 64 * 1024 * 1024))),
     ]
     if request.dry_run:
         argv.append("--dry-run")
@@ -210,6 +212,7 @@ def _fast_copy_notes() -> list[str]:
     return [
         "Use the sparkN-200g / 10.10.100.N fabric for bulk payloads; plain sparkN names are control-plane only.",
         "The copier discovers both ring next-hops and binds parallel unencrypted streams per rail.",
+        "Large single files are striped over multiple TCP sockets so one KV blob is not limited by one slow stream.",
         "The Mac Studio starts and monitors the job only; model bytes flow Spark-to-Spark.",
     ]
 
