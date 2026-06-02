@@ -189,8 +189,13 @@ class LlmRunnersWebChatTests(unittest.TestCase):
             }
         )
         first = make_request(chat=False)
+        first.raw["max_output_tokens"] = 11
+        first.raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": 11}
+        first = InferenceRequest.from_json(first.raw)
         second_raw = make_request(chat=False).raw
         second_raw["request_id"] = "r2"
+        second_raw["max_output_tokens"] = 11
+        second_raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": 11}
         seen = []
         results = StreamingPipelineRunner().run_many_on_node_incremental(
             [first, InferenceRequest.from_json(second_raw)],
@@ -201,6 +206,7 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         )
         self.assertEqual(seen, [("r2", "second done"), ("r", "first done")])
         self.assertEqual(results["r"]["transport"]["coalesced_completion_streaming"], True)
+        self.assertEqual(results["r"]["usage"]["completion_tokens"], 11)
 
     def test_antirez_runner_falls_back_to_openai_completion_endpoint(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

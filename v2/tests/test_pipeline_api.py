@@ -7,6 +7,7 @@ import unittest
 
 from ds4_infer import api as api_module
 from ds4_infer.api import CoordinatorApi
+from ds4_infer.api_stream import openai_completion_stream_events
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.runners import OpenAICompatibleRunner, PipelineOpenAIRunner, _openai_payload
 from ds4_infer.schemas import InferenceRequest, make_result
@@ -162,6 +163,28 @@ class PipelineApiTests(unittest.TestCase):
             self.assertEqual(worked["completed_count"], 5)
             self.assertEqual(api.queue.status(batch_id="pipe-refill")["state"], "completed")
             self.assertEqual(sorted(runner.calls), [f"pipe-{idx}" for idx in range(5)])
+
+    def test_openai_completion_stream_emits_completed_choices(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            events = list(
+                openai_completion_stream_events(
+                    api,
+                    {
+                        "model": "qwen27_bf16_pp8",
+                        "prompt": ["alpha", "beta"],
+                        "max_tokens": 7,
+                        "stream": True,
+                        "ignore_eos": True,
+                        "min_tokens": 7,
+                    }
+                )
+            )
+        choice_events = [event for event in events if event["choices"]]
+        self.assertEqual([event["choices"][0]["index"] for event in choice_events], [0, 1])
+        self.assertEqual([event["choices"][0]["finish_reason"] for event in choice_events], ["stop", "stop"])
+        self.assertEqual(events[-1]["choices"], [])
+        self.assertEqual(events[-1]["ds4"]["result_count"], 2)
 
     def test_pipeline_runner_prestages_common_strict_kv_prefix(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

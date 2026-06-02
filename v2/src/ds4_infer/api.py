@@ -14,6 +14,7 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 import uuid
 
+from .api_stream import openai_completion_requests, openai_completion_stream_events, write_sse
 from .profiles import ModelProfile, ProfileRegistry
 from .kv_cache import KV_CACHE_DIRECTIVE_FORMAT, KV_CACHE_PLAN_FORMAT, normalize_kv_cache_directive
 from .runners import FakeRunner, PipelineOpenAIRunner, Runner
@@ -33,6 +34,9 @@ class DispatcherRuntime:
     batch_limits_by_service: dict[str, int]
     kv_shard_layouts_by_profile: dict[str, Any]
     next_heartbeat_at: float
+
+
+API_TERMINAL_STATES = {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled", "failed"}
 
 
 class CoordinatorApi:
@@ -197,32 +201,14 @@ class CoordinatorApi:
     def _handle_openai_completion(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         registry = self._registry()
         topology = self._topology()
-        profile = _resolve_profile(registry, topology, _optional_str(body.get("model")))
-        base_request_id = str(body.get("request_id") or f"cmpl-{uuid.uuid4().hex}")
-        batch_id = str(body.get("batch_id") or base_request_id)
-        prompts = _completion_prompt_items(body.get("prompt"))
-        raw_requests = []
-        for index, prompt in enumerate(prompts):
-            request_id = base_request_id if len(prompts) == 1 else f"{base_request_id}-{index:06d}"
-            raw_requests.append(
-                _make_inference_request_json(
-                    request_id=request_id,
-                    profile=profile,
-                    chat=False,
-                    input_payload=_input_with_api_kv({"prompt": prompt}, body, profile, topology),
-                    output_contract={"format": "text"},
-                    max_tokens=int(body.get("max_tokens") or 1024),
-                    temperature=float(body.get("temperature") or 0.0),
-                    job_class=str(body.get("ds4_job_class") or "analysis"),
-                    capability=_optional_str(body.get("ds4_capability")),
-                )
-            )
-        requests = [InferenceRequest.from_json(raw_request) for raw_request in raw_requests]
+        profile, base_request_id, batch_id, requests = openai_completion_requests(body, registry, topology)
         submitted = self.queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id=batch_id, priority=_optional_int(body.get("priority")))
         if _is_async_request(body):
             response = _async_queue_response("openai_completion", base_request_id, batch_id, submitted)
             response["request_ids"] = [request.request_id for request in requests]
             return 202, response
+        if body.get("stream"):
+            return 400, {"error": "stream=true must be handled by the streaming response path"}
         timeout_s = float(body.get("ds4_timeout_s") or self.sync_timeout_s)
         if len(requests) == 1:
             result = self._run_until_collected(batch_id=batch_id, request_id=requests[0].request_id, timeout_s=timeout_s)
@@ -620,6 +606,9 @@ def serve(*, host: str, port: int, queue_dir: str | Path, profiles_dir: str | Pa
             parsed = urlparse(self.path)
             try:
                 body = _read_json(self)
+                if parsed.path == "/v1/completions" and body.get("stream"):
+                    write_sse(self, openai_completion_stream_events(api, body))
+                    return
                 code, payload = api.handle_post(parsed.path, body)
             except Exception as exc:
                 code, payload = 400, {"error": str(exc)}
