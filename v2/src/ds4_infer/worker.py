@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from queue import Empty, Queue
 import socket
 from typing import Any, Callable, Mapping
 
@@ -69,6 +70,9 @@ class BatchWorker:
             pairs = self._run_cpu_claims(claims, concurrency)
             mode = "cpu_batch"
         elif _can_batch_models(self.runner, claims):
+            if _can_batch_models_incremental(self.runner, claims):
+                completed, failed, retried = self._run_model_batch_incremental(claims, concurrency, on_result)
+                return _summary(len(claims), completed, failed, reap, prefilled_count=prefilled, retried_count=retried, batch_dispatch_count=1, batch_dispatch_mode="batch_incremental")
             pairs = self._run_model_batch(claims, concurrency)
             mode = "batch"
         elif _service_refill_low_watermark(claims[0].selected_service_id, refill_low_watermarks_by_service or {}) > 0:
@@ -122,6 +126,56 @@ class BatchWorker:
         except Exception as exc:
             return [(claim, _failure(claim, str(exc))) for claim in claims]
         return [(claim, _result_for_claim(claim, results.get(claim.request_id))) for claim in claims]
+
+    def _run_model_batch_incremental(self, claims: list[QueueClaim], concurrency: int, on_result: FinishHook | None) -> tuple[int, int, int]:
+        profile = self.registry.get(claims[0].selected_profile_id)
+        requests = [claim.request for claim in claims if claim.request is not None]
+        claim_by_id = {claim.request_id: claim for claim in claims}
+        result_queue: Queue[tuple[str, dict[str, Any]]] = Queue()
+        finished: set[str] = set()
+        completed = failed = retried = 0
+
+        def push_result(request_id: str, result: dict[str, Any]) -> None:
+            result_queue.put((request_id, result))
+
+        def drain_results() -> None:
+            nonlocal completed, failed, retried
+            while True:
+                try:
+                    request_id, result = result_queue.get_nowait()
+                except Empty:
+                    return
+                claim = claim_by_id.get(request_id)
+                if claim is None or request_id in finished:
+                    continue
+                item_completed, item_failed, item_retried = self._finish_pair(claim, _result_for_claim(claim, result), on_result)
+                completed += item_completed
+                failed += item_failed
+                retried += item_retried
+                finished.add(request_id)
+
+        try:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(self.runner.run_many_on_node_incremental, requests, profile, claims[0].selected_node_id, concurrency=concurrency, on_result=push_result)  # type: ignore[attr-defined]
+                while not future.done():
+                    wait([future], timeout=self.heartbeat_interval_s)
+                    drain_results()
+                    pending = [claim for claim in claims if claim.request_id not in finished]
+                    if pending and not future.done():
+                        self._heartbeat(pending)
+                drain_results()
+                results = future.result()
+        except Exception as exc:
+            results = {claim.request_id: _failure(claim, str(exc)) for claim in claims if claim.request_id not in finished}
+        for claim in claims:
+            if claim.request_id in finished:
+                continue
+            item_completed, item_failed, item_retried = self._finish_pair(claim, _result_for_claim(claim, results.get(claim.request_id)), on_result)
+            completed += item_completed
+            failed += item_failed
+            retried += item_retried
+            finished.add(claim.request_id)
+        return completed, failed, retried
 
     def _run_stream(self, claims: list[QueueClaim], concurrency: int, on_result: FinishHook | None) -> tuple[int, int, int]:
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
@@ -288,6 +342,10 @@ class BatchWorker:
 
 def _can_batch_models(runner: Runner, claims: list[QueueClaim]) -> bool:
     return bool(claims and claims[0].request_kind == "model" and hasattr(runner, "run_many_on_node") and all(claim.request_kind == "model" and claim.selected_profile_id == claims[0].selected_profile_id and claim.selected_node_id == claims[0].selected_node_id and claim.selected_service_id == claims[0].selected_service_id for claim in claims))
+
+
+def _can_batch_models_incremental(runner: Runner, claims: list[QueueClaim]) -> bool:
+    return bool(_can_batch_models(runner, claims) and hasattr(runner, "run_many_on_node_incremental"))
 
 
 def _service_refill_low_watermark(service_id: str | None, values: Mapping[str, int]) -> int:

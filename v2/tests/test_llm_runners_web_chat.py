@@ -12,8 +12,8 @@ import unittest
 from unittest.mock import patch
 
 from ds4_chat.cli import QueueChatModel
-from ds4_infer.profiles import ProfileRegistry
-from ds4_infer.runners import AntirezRunner, OpenAICompatibleRunner, SparkHttpRunner, extract_openai_completion_text, request_messages, request_prompt
+from ds4_infer.profiles import ModelProfile, ProfileRegistry
+from ds4_infer.runners import AntirezRunner, OpenAICompatibleRunner, PipelineOpenAIRunner, SparkHttpRunner, extract_openai_completion_text, request_messages, request_prompt
 from ds4_infer.schemas import InferenceRequest
 from ds4_tools.builtin import spark7_run_command, web_fetch
 from ds4_tools.registry import ToolRegistry
@@ -65,6 +65,27 @@ class CapturingAntirezRunner(AntirezRunner):
         return {"choices": [{"text": "thinking out loud</think>ANTIREZ_OK"}], "usage": {"total_tokens": 5}}
 
 
+class StreamingCompletionBackend:
+    completion_endpoint = "/v1/completions"
+
+    def _post_sse_json(self, endpoint: str, payload: dict):
+        assert endpoint == self.completion_endpoint
+        assert payload["stream"] is True
+        assert len(payload["prompt"]) == 2
+        yield {"choices": [{"index": 1, "text": "second", "finish_reason": None}]}
+        yield {"choices": [{"index": 0, "text": "first", "finish_reason": None}]}
+        yield {"choices": [{"index": 1, "text": " done", "finish_reason": "stop"}]}
+        yield {"choices": [{"index": 0, "text": " done", "finish_reason": "stop"}]}
+
+
+class StreamingPipelineRunner(PipelineOpenAIRunner):
+    def __init__(self) -> None:
+        super().__init__(base_urls={"svc": "http://unused"})
+
+    def _runner_for(self, profile: ModelProfile, node_id: str | None) -> StreamingCompletionBackend:
+        return StreamingCompletionBackend()
+
+
 def _chat_payload(content: str = "ok") -> dict:
     return {"choices": [{"message": {"role": "assistant", "content": content}}]}
 
@@ -106,6 +127,34 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(completion_result["output"]["text"], "completion ok")
         self.assertEqual(runner.calls[0][0], "/v1/chat/completions")
         self.assertEqual(runner.calls[1][0], "/v1/completions")
+
+    def test_pipeline_runner_streams_coalesced_completion_results_incrementally(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": False,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {"served_model_name": "served-model"},
+            }
+        )
+        first = make_request(chat=False)
+        second_raw = make_request(chat=False).raw
+        second_raw["request_id"] = "r2"
+        seen = []
+        results = StreamingPipelineRunner().run_many_on_node_incremental(
+            [first, InferenceRequest.from_json(second_raw)],
+            profile,
+            None,
+            concurrency=2,
+            on_result=lambda request_id, result: seen.append((request_id, result["output"]["text"])),
+        )
+        self.assertEqual(seen, [("r2", "second done"), ("r", "first done")])
+        self.assertEqual(results["r"]["transport"]["coalesced_completion_streaming"], True)
 
     def test_antirez_runner_falls_back_to_openai_completion_endpoint(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
@@ -165,7 +214,8 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         request = make_request(chat=True)
         result = SparkHttpRunner(timeout_s=30, command_runner=_json_runner(calls, payload)).run_one_on_node(request, profile, "spark4+spark5")
         self.assertEqual(result["output"]["text"], "ok")
-        self.assertEqual(calls[0]["command"][5], "spark5")
+        self.assertEqual(calls[0]["command"][-2], "spark5")
+        self.assertIn("ControlMaster=auto", calls[0]["command"])
         payload = json.loads(calls[0]["input"])
         self.assertEqual(payload["batch_payload"]["model"], "deepseek-ai/DeepSeek-V4-Flash")
         self.assertEqual(payload["batch_payload"]["items"][0]["thinking"], {"type": "disabled"})
@@ -220,7 +270,7 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         profile = ProfileRegistry.load(PROFILES).get("dsv4_vllm_mtp_smartest_v1")
         with patch.dict(os.environ, {"DS4_SPARK_NODE_MAP_JSON": json.dumps({"spark4+spark5": "spark5"})}):
             SparkHttpRunner(command_runner=_json_runner(calls, _chat_payload(), capture="command")).run_one_on_node(make_request(chat=True), profile, "spark4+spark5")
-        self.assertEqual(calls[0][5], "spark5")
+        self.assertEqual(calls[0][-2], "spark5")
 
     def test_spark_http_runner_rejects_failed_ds4_batch_item(self) -> None:
         with _local_json_server({"results": [{"ok": False, "status": 500, "response": {"error": "backend down"}}]}) as url:
@@ -234,6 +284,32 @@ class LlmRunnersWebChatTests(unittest.TestCase):
             result = SparkHttpRunner(timeout_s=5, command_runner=runner).run_one_on_node(make_request(chat=True), profile, "spark0")
         self.assertEqual(result["status"], "transport_failed")
         self.assertIn("backend down", result["transport"]["error"])
+
+    def test_spark_http_runner_reports_empty_ssh_failure(self) -> None:
+        def runner(command, **kwargs):
+            return subprocess.CompletedProcess(command, 255, stdout="", stderr="")
+
+        profile = ProfileRegistry.load(PROFILES).get("qwen3_6_27b_fp8_efficient_v1")
+        result = SparkHttpRunner(timeout_s=5, command_runner=runner).run_one_on_node(make_request(chat=True), profile, "spark0")
+        self.assertEqual(result["status"], "transport_failed")
+        self.assertIn("ssh to spark0 exited 255", result["transport"]["error"])
+
+    def test_spark_http_runner_can_preconnect_control_master(self) -> None:
+        calls = []
+
+        def runner(command, **kwargs):
+            calls.append(command)
+            if "-O" in command:
+                return subprocess.CompletedProcess(command, 255, stdout="", stderr="No ControlPath")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        result = SparkHttpRunner(timeout_s=5, command_runner=runner).preconnect(["spark0"])
+        self.assertEqual(result["results"]["spark0"]["state"], "started")
+        self.assertEqual(calls[0][-1], "spark0")
+        self.assertIn("ControlMaster=no", calls[0])
+        self.assertIn("-M", calls[1])
+        self.assertIn("ControlMaster=yes", calls[1])
+        self.assertEqual(calls[1][-1], "spark0")
 
     def test_completion_extractor_accepts_chat_shaped_response(self) -> None:
         data = {"choices": [{"message": {"content": "dsv4 antirez ok", "reasoning_content": "hidden"}}]}
