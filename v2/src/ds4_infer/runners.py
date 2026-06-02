@@ -857,7 +857,10 @@ def _coalesced_stream_result(
     prefetch_info: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
-    result["usage"].update({"completion_tokens": _estimate_text_tokens(text), "completion_tokens_estimated": True})
+    if _forced_output_request(request):
+        result["usage"].update({"completion_tokens": request.max_output_tokens, "completion_tokens_forced": True})
+    else:
+        result["usage"].update({"completion_tokens": _estimate_text_tokens(text), "completion_tokens_estimated": True})
     result["transport"] = {
         "base_url": base_url,
         "endpoint": endpoint,
@@ -897,6 +900,8 @@ def _coalesced_usage(data: dict[str, Any], choice: dict[str, Any], request: Infe
 
 def _forced_output_request(request: InferenceRequest) -> bool:
     raw = request.input.get("openai")
+    if not isinstance(raw, dict):
+        raw = request.input.get("openai_sampling")
     if not isinstance(raw, dict):
         return False
     if not bool(raw.get("ignore_eos")):
