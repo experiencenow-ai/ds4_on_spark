@@ -78,7 +78,7 @@ class CoordinatorApi:
         if path == "/ds4/dispatcher/status":
             return 200, self.dispatcher_status()
         if path == "/ds4/queue/status":
-            return 200, self.queue.status(request_id=_one(query, "request_id"), batch_id=_one(query, "batch_id"), job_id=_one(query, "job_id"))
+            return 200, self.queue.status(request_id=_one(query, "request_id"), batch_id=_one(query, "batch_id"), job_id=_one(query, "job_id"), refresh=_query_bool(query, "refresh", False))
         if path == "/ds4/queue/poll":
             return 200, self.queue.poll(after_event_id=int(_one(query, "after_event_id") or 0), limit=int(_one(query, "limit") or 100))
         if path == "/ds4/queue/collect":
@@ -117,7 +117,7 @@ class CoordinatorApi:
         if path == "/ds4/queue/work":
             return 200, self._work_once(body)
         if path == "/ds4/queue/cancel":
-            return 200, self.queue.cancel(request_id=_optional_str(body.get("request_id")), batch_id=_optional_str(body.get("batch_id")), job_id=_optional_str(body.get("job_id")), reason=str(body.get("reason") or "cancelled by operator"))
+            return 200, self.queue.cancel(request_id=_optional_str(body.get("request_id")), batch_id=_optional_str(body.get("batch_id")), job_id=_optional_str(body.get("job_id")), reason=str(body.get("reason") or "cancelled by operator"), force_running=bool(body.get("force_running")))
         if path == "/ds4/pipeline/telemetry":
             topology = self._topology()
             return 200, self.queue.record_pipeline_telemetry(_pipeline_telemetry_with_topology(body, topology))
@@ -346,7 +346,7 @@ class CoordinatorApi:
         deadline = time.time() + max(0.1, timeout_s)
         idle_sleep = self.poll_interval_s
         while time.time() < deadline:
-            status = self.queue.status(batch_id=batch_id)
+            status = self.queue.status(batch_id=batch_id, refresh=False)
             state = str(status.get("state") or "")
             if state in {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled", "failed"}:
                 return self.queue.collect(request_id=request_id)
@@ -361,7 +361,7 @@ class CoordinatorApi:
         deadline = time.time() + max(0.1, timeout_s)
         idle_sleep = self.poll_interval_s
         while time.time() < deadline:
-            status = self.queue.status(batch_id=batch_id)
+            status = self.queue.status(batch_id=batch_id, refresh=False)
             state = str(status.get("state") or "")
             if state in {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled", "failed"}:
                 return self.queue.collect(batch_id=batch_id)
@@ -1147,6 +1147,13 @@ def _required_query(query: dict[str, list[str]], key: str) -> str:
     if value is None:
         raise ValueError(f"query parameter {key!r} is required")
     return value
+
+
+def _query_bool(query: dict[str, list[str]], key: str, default: bool) -> bool:
+    value = _one(query, key)
+    if value is None or value == "":
+        return default
+    return value.strip().lower() not in {"0", "false", "no", "off"}
 
 
 def _optional_str(value: Any) -> str | None:
