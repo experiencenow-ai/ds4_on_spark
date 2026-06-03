@@ -40,7 +40,7 @@
     "TRITON_ATTN",
     "--enable-chunked-prefill",
     "--enable-prefix-caching",
-    "--async-scheduling",
+    "--no-async-scheduling",
     "--reasoning-parser",
     "qwen3",
     "--no-disable-hybrid-kv-cache-manager",
@@ -52,7 +52,12 @@
     "LMCACHE_LOG_LEVEL": "INFO",
     "LMCACHE_ROOT": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv",
     "PYTHONHASHSEED": "0",
-    "VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1"
+    "VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1",
+    "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR": "0",
+    "VLLM_DS4_PP_DIRECT_CUDA_TENSOR_DICT": "1",
+    "VLLM_DS4_PP_OVERLAP_SEND": "1",
+    "VLLM_DS4_PP_SEND_BUFFER_SLOTS": "4",
+    "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "32"
   },
   "format": "ds4-vllm-kv-cache-deployment-v1",
   "host": "0.0.0.0",

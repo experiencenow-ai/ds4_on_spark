@@ -39,6 +39,7 @@ def openai_completion_requests(body: dict[str, Any], registry: ProfileRegistry, 
                 temperature=float(body.get("temperature") or 0.0),
                 job_class=str(body.get("ds4_job_class") or "analysis"),
                 capability=api_module._optional_str(body.get("ds4_capability")),
+                thinking_budget_tokens=api_module._thinking_budget_tokens(body),
             )
         )
     return profile, base_request_id, batch_id, [InferenceRequest.from_json(raw) for raw in raw_requests]
