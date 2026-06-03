@@ -335,7 +335,14 @@ class OpenAICompatibleRunner:
                 for item in chunk
             }
 
-    def run_many_completion_incremental(self, requests: list[InferenceRequest], profile: ModelProfile, *, on_result: Callable[[str, dict[str, Any]], None]) -> dict[str, dict] | None:
+    def run_many_completion_incremental(
+        self,
+        requests: list[InferenceRequest],
+        profile: ModelProfile,
+        *,
+        on_result: Callable[[str, dict[str, Any]], None],
+        on_delta: Callable[[str, str, dict[str, Any]], None] | None = None,
+    ) -> dict[str, dict] | None:
         if not _env_bool("DS4_PIPELINE_COHORT_COMPLETION_STREAMING", True):
             return None
         request_list = list(requests)
@@ -354,10 +361,10 @@ class OpenAICompatibleRunner:
             payloads.append((chunk, payload))
         out: dict[str, dict] = {}
         for chunk, payload in payloads:
-            out.update(self._run_completion_stream_chunk(chunk, profile, payload, on_result=on_result))
+            out.update(self._run_completion_stream_chunk(chunk, profile, payload, on_result=on_result, on_delta=on_delta))
         return out
 
-    def _run_completion_stream_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, on_result: Callable[[str, dict[str, Any]], None]) -> dict[str, dict]:
+    def _run_completion_stream_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, on_result: Callable[[str, dict[str, Any]], None], on_delta: Callable[[str, str, dict[str, Any]], None] | None = None) -> dict[str, dict]:
         started = time.time()
         prefetch_info: dict[str, Any] | None = None
         text_by_index = {idx: "" for idx in range(len(chunk))}
@@ -375,7 +382,10 @@ class OpenAICompatibleRunner:
                     index = _completion_choice_index(choice, len(completed_indexes))
                     if index < 0 or index >= len(chunk) or index in completed_indexes:
                         continue
-                    text_by_index[index] += _completion_stream_choice_text(choice)
+                    delta = _completion_stream_choice_text(choice)
+                    text_by_index[index] += delta
+                    if delta and on_delta is not None:
+                        on_delta(chunk[index].request_id, delta, {"coalesced_batch_size": len(chunk), "choice_index": index})
                     if choice.get("finish_reason") is None:
                         continue
                     result = _coalesced_stream_result(chunk[index], profile, text_by_index[index], base_url=self.base_url, endpoint=self.completion_endpoint, started=started, batch_size=len(chunk), prefetch_info=_copy_optional_dict(prefetch_info))
@@ -513,6 +523,7 @@ class PipelineOpenAIRunner:
         *,
         concurrency: int = 1,
         on_result: Callable[[str, dict[str, Any]], None],
+        on_delta: Callable[[str, str, dict[str, Any]], None] | None = None,
     ) -> dict[str, dict]:
         request_list = list(requests)
         if not request_list:
@@ -521,7 +532,7 @@ class PipelineOpenAIRunner:
         runner = self._runner_for(profile, node_id)
         if _env_bool("DS4_PIPELINE_COHORT_COMPLETIONS", True):
             if _requests_need_client_stream(request_list):
-                coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result)
+                coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result, on_delta=on_delta)
                 if coalesced is not None:
                     return coalesced
             coalesced = runner.run_many_completion(request_list, profile)

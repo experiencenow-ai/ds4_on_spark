@@ -87,6 +87,10 @@ def _check_relaunch_defaults(errors: list[str], checks: list[str]) -> None:
         errors.append("coordinator relaunch must set compute lease quantum")
     else:
         checks.append("coordinator relaunch sets compute lease quantum")
+    if '"DS4_API_DISPATCH_KV_CAPACITY_BYTES": "51539607552"' not in text:
+        errors.append("coordinator relaunch must bound dispatcher KV admission")
+    else:
+        checks.append("coordinator relaunch bounds dispatcher KV admission")
 
 
 def _require_arg(args: list[Any], flag: str, expected: str, label: str, errors: list[str], checks: list[str]) -> None:

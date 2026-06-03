@@ -544,6 +544,16 @@ class InferenceQueue:
             events.append(event)
         return {"format": QUEUE_FORMAT, "events": events, "newest_event_id": max([after_event_id] + [int(e["event_id"]) for e in events])}
 
+    def stream_delta(self, *, request_id: str, text: str, payload: dict[str, Any] | None = None) -> None:
+        if not text:
+            return
+        data = dict(payload or {})
+        data["text"] = text
+        with closing(self._connect()) as conn, conn:
+            row = conn.execute("select state from requests where request_id=?", (request_id,)).fetchone()
+            state = str(row["state"] if row else "running")
+            self._event(conn, request_id, "delta", state, data)
+
     def collect(self, *, request_id: str | None = None, batch_id: str | None = None, job_id: str | None = None) -> dict[str, Any]:
         batch_id = job_batch_id(batch_id=batch_id, job_id=job_id)
         if sum(x is not None for x in (request_id, batch_id)) != 1:

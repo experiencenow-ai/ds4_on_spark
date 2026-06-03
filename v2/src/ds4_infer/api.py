@@ -65,6 +65,7 @@ class CoordinatorApi:
         self.dispatcher_heartbeat_s = max(0.25, _env_float("DS4_API_DISPATCH_HEARTBEAT_S", 2.0))
         self.dispatcher_transport_timeout_s = max(1, _env_int("DS4_API_TRANSPORT_TIMEOUT_S", 3600))
         self.dispatcher_transport_max_attempts = max(1, _env_int("DS4_API_TRANSPORT_MAX_ATTEMPTS", 1))
+        self.dispatcher_kv_capacity_bytes = max(0, _env_int("DS4_API_DISPATCH_KV_CAPACITY_BYTES", 0))
         self.dispatcher_stop = threading.Event()
         self.dispatcher_thread: threading.Thread | None = None
         self.dispatcher_lock = threading.Lock()
@@ -417,6 +418,9 @@ class CoordinatorApi:
             "idle_count": 0,
             "transport_timeout_s": self.dispatcher_transport_timeout_s,
             "transport_max_attempts": self.dispatcher_transport_max_attempts,
+            "kv_capacity_bytes": self.dispatcher_kv_capacity_bytes,
+            "kv_admission_unlimited": self.dispatcher_kv_capacity_bytes <= 0,
+            "kv_admission_warning": "unlimited_kv_admission" if self.dispatcher_kv_capacity_bytes <= 0 else None,
             "last_summary": None,
             "last_claimed_cohort_size": 0,
             "largest_claimed_cohort_size": 0,
@@ -533,7 +537,7 @@ class CoordinatorApi:
             leased_by=worker.worker_id,
             lease_ttl_s=worker.lease_ttl_s,
             max_node_depth=0,
-            kv_capacity_bytes=0,
+            kv_capacity_bytes=self.dispatcher_kv_capacity_bytes,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
         )
         claims = self.queue.claim_ready_batch(

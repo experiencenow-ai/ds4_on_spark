@@ -21,6 +21,7 @@ The audit must pass. It checks that:
 - Qwen production profiles keep vLLM async scheduling disabled.
 - Coordinator relaunch uses a bounded coalesced token budget and a compute
   lease quantum.
+- Dispatcher KV admission is bounded instead of unlimited.
 
 ## Coordinator Relaunch
 
@@ -37,10 +38,14 @@ The throughput profile intentionally uses:
 DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET=131072
 DS4_API_BATCH_LIMITS_JSON includes dsv4_flash_pp8=512
 DS4_COMPUTE_LEASE_QUANTUM_S=180
+DS4_API_DISPATCH_KV_CAPACITY_BYTES=51539607552
 ```
 
 The token budget is below the raw DSV4 vLLM launch budget so realistic long
 prompts split before vLLM sees an oversized prompt array.
+The KV capacity is a per-node/per-shard admission guard. Set it explicitly for
+realistic profiles; `0` is accepted only for deliberate debug runs and is
+reported as `kv_admission_warning=unlimited_kv_admission` in dispatcher status.
 
 ## Telemetry Bridge
 
@@ -103,6 +108,16 @@ Rendered-chat coalescing also marks:
 ```text
 coalesced_rendered_chat_completion_batch=true
 ```
+
+## Streaming
+
+`/v1/completions` with `stream=true` stays on the queue path. vLLM SSE token
+deltas are forwarded as request-scoped queue `delta` events and then emitted to
+the caller as OpenAI text-completion chunks. Terminal chunks carry usage and an
+empty text body when deltas were already streamed for that request.
+
+Chat streaming remains disabled unless the chat request is first converted into
+a canonical rendered-prompt completion request.
 
 ## Qwen Baseline
 
