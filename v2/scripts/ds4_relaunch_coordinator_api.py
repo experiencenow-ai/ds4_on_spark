@@ -91,8 +91,20 @@ def _coordinator_env(args: argparse.Namespace, v2_dir: Path) -> dict[str, str]:
     env["PYTHONPATH"] = str(v2_dir / "src") if not env.get("PYTHONPATH") else f"{v2_dir / 'src'}:{env['PYTHONPATH']}"
     defaults = _profile_defaults(args.profile)
     for key, value in defaults.items():
-        env.setdefault(key, value)
+        if key in _SAFETY_PROFILE_DEFAULTS:
+            env[key] = value
+        else:
+            env.setdefault(key, value)
     return env
+
+
+_SAFETY_PROFILE_DEFAULTS = {
+    "DS4_API_DISPATCH_KV_CAPACITY_BYTES",
+    "DS4_API_TRANSPORT_MAX_ATTEMPTS",
+    "DS4_COMPUTE_LEASE_QUANTUM_S",
+    "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET",
+    "DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE",
+}
 
 
 def _profile_defaults(profile: str) -> dict[str, str]:

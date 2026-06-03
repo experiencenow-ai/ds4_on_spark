@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
 import sys
 import unittest
@@ -56,6 +57,20 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "51539607552")
         self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "512")
         self.assertIn("dsv4_flash_pp8", defaults["DS4_API_BATCH_LIMITS_JSON"])
+
+    def test_relaunch_safety_defaults_override_inherited_env(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+        old = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")
+        os.environ["DS4_API_DISPATCH_KV_CAPACITY_BYTES"] = "0"
+        try:
+            args = type("Args", (), {"profile": "throughput"})()
+            env = relaunch._coordinator_env(args, ROOT)
+        finally:
+            if old is None:
+                os.environ.pop("DS4_API_DISPATCH_KV_CAPACITY_BYTES", None)
+            else:
+                os.environ["DS4_API_DISPATCH_KV_CAPACITY_BYTES"] = old
+        self.assertEqual(env["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "51539607552")
 
 
 if __name__ == "__main__":
