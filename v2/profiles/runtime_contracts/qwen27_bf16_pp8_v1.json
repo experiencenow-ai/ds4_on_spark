@@ -3,9 +3,10 @@
   "description": "Qwen3.6-27B BF16 text-only 8-stage vLLM layer-pipeline runtime. spark0 is the API ingress; all Sparks own one layer shard and one KV shard.",
   "format": "ds4-runtime-contract-v1",
   "kv_cache": {
-    "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8",
+    "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv",
     "connector": "LMCacheConnectorV1",
     "deployment": "profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json",
+    "dtype": "fp8",
     "expected_node_fraction": "1/8",
     "sharding": "pipeline_layers"
   },
@@ -14,6 +15,10 @@
     "args": [
       "--dtype",
       "bfloat16",
+      "--kv-cache-dtype",
+      "fp8",
+      "--attention-backend",
+      "TRITON_ATTN",
       "--pipeline-parallel-size",
       "8",
       "--tensor-parallel-size",

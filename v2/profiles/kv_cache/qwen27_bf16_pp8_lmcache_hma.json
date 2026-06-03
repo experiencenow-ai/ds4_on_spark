@@ -1,6 +1,6 @@
 {
   "cache_directories": [
-    "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8"
+    "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv"
   ],
   "cache_sharding": "pipeline_layers",
   "connector": {
@@ -34,6 +34,10 @@
     "0.35",
     "--dtype",
     "bfloat16",
+    "--kv-cache-dtype",
+    "fp8",
+    "--attention-backend",
+    "TRITON_ATTN",
     "--enable-chunked-prefill",
     "--enable-prefix-caching",
     "--async-scheduling",
@@ -44,9 +48,9 @@
     "align"
   ],
   "extra_env": {
-    "LMCACHE_CONFIG_FILE": "/tmp/lmcache_qwen27_bf16_pp8.yaml",
+    "LMCACHE_CONFIG_FILE": "/tmp/lmcache_qwen27_bf16_pp8_fp8kv.yaml",
     "LMCACHE_LOG_LEVEL": "INFO",
-    "LMCACHE_ROOT": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8",
+    "LMCACHE_ROOT": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv",
     "PYTHONHASHSEED": "0",
     "VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1"
   },

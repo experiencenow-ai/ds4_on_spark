@@ -41,7 +41,7 @@
       "type": "nixl_store",
       "backend": "POSIX",
       "backend_params": {
-        "file_path": "/home/spark7/ds4_nvme/ds4_lmcache/qwen27/l2",
+        "file_path": "/home/spark7/ds4_nvme/ds4_lmcache/qwen27_fp8kv/l2",
         "use_direct_io": "false"
       },
       "pool_size": 64
@@ -55,10 +55,12 @@
     "TORCH_CUDA_ARCH_LIST": "12.1a"
   },
   "cache_directories": [
-    "/home/spark7/ds4_nvme/ds4_lmcache/qwen27/l2"
+    "/home/spark7/ds4_nvme/ds4_lmcache/qwen27_fp8kv/l2"
   ],
   "extra_args": [
     "--trust-remote-code",
+    "--kv-cache-dtype", "fp8",
+    "--attention-backend", "TRITON_ATTN",
     "--max-model-len", "262144",
     "--max-num-seqs", "12",
     "--max-num-batched-tokens", "32768",
