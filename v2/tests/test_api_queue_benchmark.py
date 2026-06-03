@@ -267,6 +267,62 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         self.assertEqual(counts["coalesced_completion_split_retry"], 1)
         self.assertEqual(counts["transport_failed"], 1)
 
+    def test_submit_and_collect_posts_prepared_requests(self) -> None:
+        calls: list[tuple[str, dict[str, object]]] = []
+
+        def fake_post(base_url: str, path: str, payload: dict[str, object]) -> dict[str, object]:
+            calls.append((path, payload))
+            return {"ok": True}
+
+        def fake_get(base_url: str, path: str, query: dict[str, object]) -> dict[str, object]:
+            if path == "/ds4/queue/status":
+                return {"state": "completed"}
+            if path == "/ds4/queue/collect":
+                return {"results": []}
+            return {}
+
+        args = argparse.Namespace(base_url="http://127.0.0.1:8700", drive_worker=False, limit=2, concurrency=2, timeout_s=30, poll_s=0.001, cancel_on_timeout=True, priority=None)
+        requests_payload = [{"request_id": "req-a"}, {"request_id": "req-b"}]
+        old_post = bench._post
+        old_get = bench._get
+        try:
+            bench._post = fake_post
+            bench._get = fake_get
+            submit_s, run_s, collected = bench._submit_and_collect(args, "batch-a", None, requests_payload)
+        finally:
+            bench._post = old_post
+            bench._get = old_get
+
+        self.assertGreaterEqual(submit_s, 0.0)
+        self.assertGreaterEqual(run_s, 0.0)
+        self.assertEqual(collected, {"results": []})
+        self.assertEqual(calls[0][0], "/ds4/queue/submit")
+        self.assertEqual(calls[0][1]["requests"], requests_payload)
+
+    def test_benchmark_summary_uses_metric_output_target(self) -> None:
+        args = argparse.Namespace(
+            base_url="http://127.0.0.1:8700",
+            model="dsv4",
+            concurrency=2,
+            limit=2,
+            input_tokens=128,
+            output_tokens=256,
+            drive_worker=False,
+            requests_jsonl=None,
+            preserve_request_ids=False,
+            ignore_eos=True,
+            cancel_on_timeout=True,
+            pipeline_stages=8,
+            equivalent_sparks=2,
+            reference_tok_s=144.6,
+        )
+        requests_payload = [{"request_id": "req-a", "max_output_tokens": 16}, {"request_id": "req-b", "max_output_tokens": 16}]
+        collected = {"results": []}
+
+        summary = bench._benchmark_summary(args, "batch-a", None, requests_payload, 0.1, 1.0, collected)
+
+        self.assertEqual(summary["output_tokens_target"], 16)
+
 
 if __name__ == "__main__":
     unittest.main()
