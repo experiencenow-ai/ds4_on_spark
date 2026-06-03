@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -176,7 +177,7 @@ class PipelineApiTests(unittest.TestCase):
             stage = status["queue"]["stages"][0]
             self.assertEqual(stage["service_id"], "dsv4_flash_pp8")
             self.assertEqual(stage["node_id"], "spark4")
-            self.assertEqual((stage["layer_start"], stage["layer_end"], stage["layer_count"]), (23, 28, 5))
+            self.assertEqual((stage["layer_start"], stage["layer_end"], stage["layer_count"]), (32, 40, 8))
 
     def test_pipeline_worker_refills_under_existing_compute_lease(self) -> None:
         class Runner:
@@ -249,6 +250,25 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual([event["choices"][0]["finish_reason"] for event in choice_events], ["stop", "stop"])
         self.assertEqual(events[-1]["choices"], [])
         self.assertEqual(events[-1]["ds4"]["result_count"], 2)
+
+    def test_openai_api_preserves_thinking_budget_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            api.handle_post(
+                "/v1/chat/completions",
+                {
+                    "model": "qwen27_bf16_pp8",
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "max_tokens": 8,
+                    "thinking_budget_tokens": 123,
+                    "ds4_async": True,
+                    "batch_id": "thinking-chat",
+                },
+            )
+            with api.queue._connect() as conn:
+                row = conn.execute("select request_json from requests where batch_id=?", ("thinking-chat",)).fetchone()
+            request_json = json.loads(str(row["request_json"]))
+        self.assertEqual(request_json["thinking_budget_tokens"], 123)
 
     def test_pipeline_runner_prestages_common_strict_kv_prefix(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

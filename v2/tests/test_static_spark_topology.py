@@ -60,7 +60,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(qwen.compute_domain, "spark-fleet-0")
         self.assertEqual(dsv4.compute_domain, "spark-fleet-0")
         self.assertEqual(qwen.layer_partition, (9, 9, 9, 8, 8, 8, 8, 5))
-        self.assertEqual(dsv4.layer_partition, (6, 6, 6, 5, 5, 5, 5, 5))
+        self.assertEqual(dsv4.layer_partition, (8, 8, 8, 8, 8, 1, 1, 1))
         self.assertEqual(qwen.stages()[-1].layer_end, 64)
         self.assertEqual(dsv4.stages()[-1].layer_end, 43)
 

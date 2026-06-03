@@ -188,6 +188,7 @@ class CoordinatorApi:
             temperature=float(body.get("temperature") or 0.0),
             job_class=str(body.get("ds4_job_class") or metadata.get("job_class") or "analysis"),
             capability=_optional_str(body.get("ds4_capability") or metadata.get("capability")),
+            thinking_budget_tokens=_thinking_budget_tokens(body, metadata),
         )
         submitted = self.queue.submit_requests(requests=[InferenceRequest.from_json(raw_request)], registry=registry, topology=topology, batch_id=batch_id, priority=_optional_int(body.get("priority")))
         if _is_async_request(body):
@@ -242,6 +243,7 @@ class CoordinatorApi:
             temperature=float(body.get("temperature") or 0.0),
             job_class=str(body.get("ds4_job_class") or metadata.get("job_class") or "analysis"),
             capability=_optional_str(body.get("ds4_capability") or metadata.get("capability")),
+            thinking_budget_tokens=_thinking_budget_tokens(body, metadata),
         )
         submitted = self.queue.submit_requests(requests=[InferenceRequest.from_json(raw_request)], registry=registry, topology=topology, batch_id=batch_id, priority=_optional_int(body.get("priority")))
         if _is_async_request(body):
@@ -655,6 +657,7 @@ def _make_inference_request_json(
     temperature: float,
     job_class: str,
     capability: str | None,
+    thinking_budget_tokens: int = 0,
 ) -> dict[str, Any]:
     if job_class not in profile.supported_job_classes:
         job_class = "analysis" if "analysis" in profile.supported_job_classes else profile.supported_job_classes[0]
@@ -666,7 +669,7 @@ def _make_inference_request_json(
         "immediate": False,
         "job_class": job_class,
         "max_output_tokens": max(1, int(max_tokens)),
-        "thinking_budget_tokens": 0,
+        "thinking_budget_tokens": max(0, int(thinking_budget_tokens)),
         "temperature": float(temperature),
         "input": input_payload,
         "output_contract": output_contract,
@@ -706,6 +709,17 @@ def _input_with_api_kv(input_payload: dict[str, Any], body: dict[str, Any], prof
     if raw.get("total_bytes") is not None or raw.get("bytes") is not None:
         out["kv_bytes_estimate"] = int(raw.get("total_bytes") or raw.get("bytes") or 0)
     return out
+
+
+def _thinking_budget_tokens(body: dict[str, Any], metadata: dict[str, Any] | None = None) -> int:
+    extra_body = body.get("extra_body") if isinstance(body.get("extra_body"), dict) else {}
+    for container in (body, extra_body, metadata or {}):
+        for key in ("thinking_budget_tokens", "thinking_token_budget"):
+            value = container.get(key) if isinstance(container, dict) else None
+            if value is None:
+                continue
+            return max(0, int(value))
+    return 0
 
 
 def _prepare_queue_request_json(item: Any) -> dict[str, Any]:

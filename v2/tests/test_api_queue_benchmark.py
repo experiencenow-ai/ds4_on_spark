@@ -108,6 +108,32 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         self.assertEqual(prompt.count("shared-prefix-benchmark"), 6)
         self.assertEqual(prompt.count("request-specific-detail"), 4)
 
+    def test_benchmark_generates_mixed_shapes(self) -> None:
+        args = argparse.Namespace(
+            input_tokens=128,
+            output_tokens=64,
+            shared_prefix_tokens=0,
+            suffix_tokens=None,
+            shape_mix_json=json.dumps(
+                [
+                    {"count": 2, "input_tokens": 32, "output_tokens": 16},
+                    {"count": 1, "input_tokens": 256, "output_tokens": 128, "shared_prefix_tokens": 64},
+                ]
+            ),
+            shape_mix_file=None,
+            temperature=0.0,
+            job_class="analysis",
+            ignore_eos=True,
+        )
+
+        requests = bench._generated_requests(args, "mixed", "profile-a")
+
+        self.assertEqual(len(requests), 3)
+        self.assertEqual([item["max_output_tokens"] for item in requests], [16, 16, 128])
+        self.assertEqual([item["input"]["openai"]["min_tokens"] for item in requests], [16, 16, 128])
+        self.assertEqual(requests[-1]["input"]["benchmark_shape"]["shared_prefix_tokens"], 64)
+        self.assertEqual(requests[-1]["input"]["prompt"].count("shared-prefix-benchmark"), 64)
+
     def test_bubble_corrected_two_spark_equivalent_score(self) -> None:
         score = bench._performance_score(aggregate_tok_s=420.0, concurrency=64, pipeline_stages=8, equivalent_sparks=2, reference_tok_s=144.6)
         self.assertEqual(score["aggregate_tok_s_needed_for_reference"], 521.374648)
@@ -226,6 +252,20 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         self.assertEqual(timings["queue_wait_s"], 10.0)
         self.assertEqual(timings["request_window_s"], 41.0)
         self.assertEqual(timings["transport_duration_s_max"], 41.0)
+
+    def test_transport_counts_expose_fast_path_evidence(self) -> None:
+        results = [
+            {"result": {"status": "completed", "transport": {"coalesced_completion_batch": True}}},
+            {"result": {"status": "completed", "transport": {"coalesced_completion_batch": True, "coalesced_rendered_chat_completion_batch": True, "coalesced_completion_split_retry": True}}},
+            {"result": {"status": "transport_failed", "transport": {"error": "boom"}}},
+        ]
+
+        counts = bench._transport_counts(results)
+
+        self.assertEqual(counts["coalesced_completion_batch"], 2)
+        self.assertEqual(counts["coalesced_rendered_chat_completion_batch"], 1)
+        self.assertEqual(counts["coalesced_completion_split_retry"], 1)
+        self.assertEqual(counts["transport_failed"], 1)
 
 
 if __name__ == "__main__":

@@ -183,6 +183,26 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertIsNone(runner.run_many_completion([make_request(chat=True), make_request(chat=True)], profile))
         self.assertEqual(runner.calls, [])
 
+    def test_openai_runner_coalesces_rendered_chat_batch_as_completion_prompts(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
+        first_raw = make_request(chat=True).raw
+        first_raw["input"]["rendered_prompt"] = "rendered chat one"
+        second_raw = make_request(chat=True).raw
+        second_raw["request_id"] = "r2"
+        second_raw["input"]["rendered_prompt"] = "rendered chat two"
+        runner = CapturingCoalescedRunner()
+
+        result = runner.run_many_completion([InferenceRequest.from_json(first_raw), InferenceRequest.from_json(second_raw)], profile)
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(len(runner.calls), 1)
+        self.assertEqual(runner.calls[0][0], "/v1/completions")
+        self.assertEqual(runner.calls[0][1]["prompt"], ["rendered chat one", "rendered chat two"])
+        self.assertTrue(result["r"]["transport"]["coalesced_rendered_chat_completion_batch"])
+        self.assertTrue(result["r2"]["transport"]["coalesced_completion_batch"])
+
     def test_pipeline_runner_streams_coalesced_completion_results_incrementally(self) -> None:
         profile = ModelProfile.from_json(
             {

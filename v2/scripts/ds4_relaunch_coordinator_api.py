@@ -121,7 +121,7 @@ def _profile_defaults(profile: str) -> dict[str, str]:
                 "DS4_API_DISPATCH_REFILL_BATCH": "512",
                 "DS4_API_DISPATCH_BATCH_LINGER_S": "0.25",
                 "DS4_PIPELINE_COMPLETION_COHORT_MAX": "512",
-                "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "262144",
+                "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "131072",
                 "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": 512, "qwen27_nvfp4_pp8": 512, "dsv4_flash_pp8": 512}, separators=(",", ":")),
             }
         )

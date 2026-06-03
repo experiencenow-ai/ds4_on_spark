@@ -138,14 +138,14 @@
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
-          6,
-          6,
-          6,
-          5,
-          5,
-          5,
-          5,
-          5
+          8,
+          8,
+          8,
+          8,
+          8,
+          1,
+          1,
+          1
         ],
         "max_batch_size": 512,
         "model_id": "deepseek-ai/DeepSeek-V4-Flash",
@@ -168,7 +168,7 @@
           "queue_concurrency": 512,
           "queue_limit": 512,
           "refill_low_watermark": 384,
-          "vllm_max_num_batched_tokens": 65536,
+          "vllm_max_num_batched_tokens": 262144,
           "vllm_max_num_seqs": 512
         },
         "service_id": "dsv4_flash_pp8",
@@ -186,7 +186,7 @@
         "dtype": "bfloat16",
         "entry_node_id": "spark0",
         "kv_cache": {
-          "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8",
+          "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv",
           "expected_entry_fraction_per_node": 0.125,
           "sharding": "pipeline_layers"
         },

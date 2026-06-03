@@ -16,6 +16,20 @@ TERMINAL = {"completed", "completed_with_failures", "completed_with_cancelled", 
 
 def main() -> int:
     args = _parse_args()
+    batch_id, out_dir, requests_payload = _prepare_benchmark_requests(args)
+    if args.write_only:
+        summary = {"format": "ds4-api-queue-benchmark-plan-v1", "batch_id": batch_id, "request_count": len(requests_payload), "out_dir": str(out_dir) if out_dir else None}
+        print(json.dumps(summary, sort_keys=True))
+        return 0
+    submit_s, run_s, collected = _submit_and_collect(args, batch_id, out_dir)
+    summary = _benchmark_summary(args, batch_id, out_dir, requests_payload, submit_s, run_s, collected)
+    if out_dir is not None:
+        _write_json(out_dir / "summary.json", summary)
+    print(json.dumps(summary, sort_keys=True))
+    return 0 if int(summary["failed"]) == 0 else 2
+
+
+def _prepare_benchmark_requests(args: argparse.Namespace) -> tuple[str, Path | None, list[dict[str, Any]]]:
     batch_id = args.batch_id or f"bench-{uuid.uuid4().hex[:16]}"
     out_dir = Path(args.out_dir) if args.out_dir else None
     if out_dir is not None:
@@ -26,14 +40,14 @@ def main() -> int:
             requests_payload = _remap_request_ids(requests_payload, batch_id)
     else:
         profile_id = _profile_id_for_model(args.base_url, args.model)
-        requests_payload = [_request_json(args, batch_id, profile_id, idx) for idx in range(args.batch_size)]
+        requests_payload = _generated_requests(args, batch_id, profile_id)
     if out_dir is not None:
         _write_requests_jsonl(out_dir / "requests.jsonl", requests_payload)
         _write_json(out_dir / "manifest.json", _manifest_json(args, batch_id, requests_payload))
-    if args.write_only:
-        summary = {"format": "ds4-api-queue-benchmark-plan-v1", "batch_id": batch_id, "request_count": len(requests_payload), "out_dir": str(out_dir) if out_dir else None}
-        print(json.dumps(summary, sort_keys=True))
-        return 0
+    return batch_id, out_dir, requests_payload
+
+
+def _submit_and_collect(args: argparse.Namespace, batch_id: str, out_dir: Path | None) -> tuple[float, float, dict[str, Any]]:
     started_submit = time.time()
     submit_response = _post(
         args.base_url,
@@ -68,30 +82,19 @@ def main() -> int:
     collected = _get(args.base_url, "/ds4/queue/collect", {"batch_id": batch_id})
     if out_dir is not None:
         _write_json(out_dir / "collect.json", collected)
-    results = collected.get("results", [])
-    completed = [row for row in results if isinstance(row, dict) and (row.get("result") or {}).get("status") == "completed"]
-    failed = len(results) - len(completed)
-    tokens = sum(_completion_tokens(row.get("result") or {}) for row in completed)
-    timings = _result_timings(results, run_s=run_s)
-    aggregate_tok_s = tokens / run_s if run_s > 0 else 0.0
-    transport_aggregate_tok_s = tokens / timings["transport_duration_s_max"] if timings["transport_duration_s_max"] > 0 else 0.0
-    perf = _performance_score(
-        aggregate_tok_s=aggregate_tok_s,
-        concurrency=args.concurrency,
-        pipeline_stages=args.pipeline_stages,
-        equivalent_sparks=args.equivalent_sparks,
-        reference_tok_s=args.reference_tok_s,
-    )
-    transport_perf = _performance_score(
-        aggregate_tok_s=transport_aggregate_tok_s,
-        concurrency=args.concurrency,
-        pipeline_stages=args.pipeline_stages,
-        equivalent_sparks=args.equivalent_sparks,
-        reference_tok_s=args.reference_tok_s,
-    )
-    target_tokens = _target_completion_tokens(requests_payload)
-    output_tokens_target = _uniform_request_int(requests_payload, "max_output_tokens", args.output_tokens)
-    perf_valid = int(timings["attempt_count_max"]) <= 1
+    return submit_s, run_s, collected
+
+
+def _benchmark_summary(
+    args: argparse.Namespace,
+    batch_id: str,
+    out_dir: Path | None,
+    requests_payload: list[dict[str, Any]],
+    submit_s: float,
+    run_s: float,
+    collected: dict[str, Any],
+) -> dict[str, Any]:
+    metrics = _benchmark_metrics(args, requests_payload, run_s, collected)
     summary = {
         "format": "ds4-api-queue-benchmark-v1",
         "base_url": args.base_url,
@@ -107,26 +110,50 @@ def main() -> int:
         "preserved_request_ids": bool(args.preserve_request_ids),
         "out_dir": str(out_dir) if out_dir else None,
         "ignore_eos": bool(args.ignore_eos),
-        "min_tokens": output_tokens_target if args.ignore_eos else 0,
+        "cancel_on_timeout": bool(args.cancel_on_timeout),
+        "min_tokens": metrics["output_tokens_target"] if args.ignore_eos else 0,
         "submit_s": round(submit_s, 6),
         "run_s": round(run_s, 6),
+    }
+    summary.update(metrics)
+    return summary
+
+
+def _benchmark_metrics(args: argparse.Namespace, requests_payload: list[dict[str, Any]], run_s: float, collected: dict[str, Any]) -> dict[str, Any]:
+    results = collected.get("results", [])
+    completed = [row for row in results if isinstance(row, dict) and (row.get("result") or {}).get("status") == "completed"]
+    tokens = sum(_completion_tokens(row.get("result") or {}) for row in completed)
+    timings = _result_timings(results, run_s=run_s)
+    aggregate_tok_s = tokens / run_s if run_s > 0 else 0.0
+    transport_tok_s = tokens / timings["transport_duration_s_max"] if timings["transport_duration_s_max"] > 0 else 0.0
+    target_tokens = _target_completion_tokens(requests_payload)
+    perf_valid = int(timings["attempt_count_max"]) <= 1
+    return {
         "timings": timings,
+        "transport_counts": _transport_counts(results),
         "completed": len(completed),
-        "failed": failed,
+        "failed": len(results) - len(completed),
         "completion_tokens": tokens,
         "completion_tokens_target": target_tokens,
         "completion_tokens_target_ratio": round(tokens / target_tokens, 6) if target_tokens > 0 else 0.0,
         "aggregate_completion_tok_s": round(aggregate_tok_s, 6),
-        "transport_aggregate_completion_tok_s": round(transport_aggregate_tok_s, 6),
+        "transport_aggregate_completion_tok_s": round(transport_tok_s, 6),
         "perf_valid": perf_valid,
         "perf_invalid_reason": None if perf_valid else "transport_retries_detected",
-        "performance_target": perf,
-        "transport_performance_target": transport_perf,
+        "performance_target": _benchmark_performance_score(args, aggregate_tok_s),
+        "transport_performance_target": _benchmark_performance_score(args, transport_tok_s),
+        "output_tokens_target": _uniform_request_int(requests_payload, "max_output_tokens", args.output_tokens),
     }
-    if out_dir is not None:
-        _write_json(out_dir / "summary.json", summary)
-    print(json.dumps(summary, sort_keys=True))
-    return 0 if failed == 0 else 2
+
+
+def _benchmark_performance_score(args: argparse.Namespace, aggregate_tok_s: float) -> dict[str, Any]:
+    return _performance_score(
+        aggregate_tok_s=aggregate_tok_s,
+        concurrency=args.concurrency,
+        pipeline_stages=args.pipeline_stages,
+        equivalent_sparks=args.equivalent_sparks,
+        reference_tok_s=args.reference_tok_s,
+    )
 
 
 def _parse_args() -> argparse.Namespace:
@@ -142,12 +169,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--concurrency", type=int, default=32)
     parser.add_argument("--limit", type=int, default=32)
     parser.add_argument("--input-tokens", type=int, default=512)
+    parser.add_argument("--shape-mix-json", help="JSON array of request shapes, for example '[{\"count\":64,\"input_tokens\":256,\"output_tokens\":128},{\"count\":64,\"input_tokens\":2048,\"output_tokens\":128}]'.")
+    parser.add_argument("--shape-mix-file", help="Read --shape-mix-json from a file.")
     parser.add_argument("--shared-prefix-tokens", type=int, default=0, help="Approximate token count for a token-identical prefix placed before each unique suffix.")
     parser.add_argument("--suffix-tokens", type=int, help="Approximate token count for the per-request suffix when --shared-prefix-tokens is used. Defaults to input_tokens - shared_prefix_tokens.")
     parser.add_argument("--output-tokens", type=int, default=256)
     parser.add_argument("--timeout-s", type=int, default=1800)
     parser.add_argument("--poll-s", type=float, default=0.02)
-    parser.add_argument("--cancel-on-timeout", action="store_true", help="Force-cancel the benchmark batch if polling times out.")
+    parser.add_argument("--cancel-on-timeout", dest="cancel_on_timeout", action="store_true", default=True, help="Force-cancel the benchmark batch if polling times out.")
+    parser.add_argument("--no-cancel-on-timeout", dest="cancel_on_timeout", action="store_false", help="Leave a timed-out benchmark batch in place for debugging.")
     parser.add_argument("--drive-worker", action="store_true", help="Also call the synchronous /ds4/queue/work endpoint. Production benchmarks should leave this off and run ds4_pipeline_queue_worker.sh separately.")
     parser.add_argument("--ignore-eos", dest="ignore_eos", action="store_true", default=True, help="Force benchmark decode to the requested output token count by passing ignore_eos/min_tokens through to vLLM.")
     parser.add_argument("--allow-eos", dest="ignore_eos", action="store_false", help="Let EOS stop generation early. This is useful for behavior tests, not throughput targets.")
@@ -224,6 +254,7 @@ def _manifest_json(args: argparse.Namespace, batch_id: str, requests_payload: li
         "model": args.model,
         "request_count": len(requests_payload),
         "input_tokens_target": args.input_tokens,
+        "shape_mix": _shape_mix_manifest(args),
         "shared_prefix_tokens_target": int(getattr(args, "shared_prefix_tokens", 0) or 0),
         "suffix_tokens_target": _suffix_tokens(args),
         "output_tokens_target": output_tokens_target,
@@ -251,11 +282,72 @@ def _uniform_request_int(requests_payload: list[dict[str, Any]], key: str, fallb
     return next(iter(values)) if len(values) == 1 else int(fallback)
 
 
-def _request_json(args: argparse.Namespace, batch_id: str, profile_id: str, idx: int) -> dict[str, Any]:
+def _generated_requests(args: argparse.Namespace, batch_id: str, profile_id: str) -> list[dict[str, Any]]:
+    shapes = _shape_mix(args)
+    if not shapes:
+        return [_request_json(args, batch_id, profile_id, idx) for idx in range(args.batch_size)]
+    requests_payload: list[dict[str, Any]] = []
+    for shape_index, shape in enumerate(shapes):
+        count = max(1, int(shape.get("count", 1) or 1))
+        for _ in range(count):
+            idx = len(requests_payload)
+            requests_payload.append(_request_json(args, batch_id, profile_id, idx, shape=shape, shape_index=shape_index))
+    return requests_payload
+
+
+def _shape_mix(args: argparse.Namespace) -> list[dict[str, Any]]:
+    raw_json = getattr(args, "shape_mix_json", None)
+    raw_file = getattr(args, "shape_mix_file", None)
+    if raw_json and raw_file:
+        raise ValueError("provide only one of --shape-mix-json or --shape-mix-file")
+    if raw_file:
+        raw_json = Path(str(raw_file)).read_text(encoding="utf-8")
+    if not raw_json:
+        return []
+    data = json.loads(str(raw_json))
+    if not isinstance(data, list) or not data:
+        raise ValueError("shape mix must be a non-empty JSON array")
+    shapes: list[dict[str, Any]] = []
+    for index, item in enumerate(data):
+        if not isinstance(item, dict):
+            raise ValueError(f"shape mix entry {index} must be an object")
+        shape = dict(item)
+        shape.setdefault("count", 1)
+        shape.setdefault("input_tokens", args.input_tokens)
+        shape.setdefault("output_tokens", args.output_tokens)
+        shapes.append(shape)
+    return shapes
+
+
+def _shape_mix_manifest(args: argparse.Namespace) -> list[dict[str, Any]]:
+    return [
+        {
+            "count": max(1, int(shape.get("count", 1) or 1)),
+            "input_tokens": max(1, int(shape.get("input_tokens", args.input_tokens) or args.input_tokens)),
+            "output_tokens": max(1, int(shape.get("output_tokens", args.output_tokens) or args.output_tokens)),
+            "shared_prefix_tokens": max(0, int(shape.get("shared_prefix_tokens", getattr(args, "shared_prefix_tokens", 0) or 0) or 0)),
+            "suffix_tokens": _shape_suffix_tokens(args, shape),
+        }
+        for shape in _shape_mix(args)
+    ]
+
+
+def _request_json(args: argparse.Namespace, batch_id: str, profile_id: str, idx: int, *, shape: dict[str, Any] | None = None, shape_index: int | None = None) -> dict[str, Any]:
+    output_tokens = _shape_int(args, shape, "output_tokens", args.output_tokens, minimum=1)
     input_payload = {
-        "prompt": _prompt(args, idx),
+        "prompt": _prompt(args, idx, shape=shape),
         "openai": _openai_benchmark_fields(args),
     }
+    if args.ignore_eos:
+        input_payload["openai"]["min_tokens"] = output_tokens
+    if shape is not None:
+        input_payload["benchmark_shape"] = {
+            "shape_index": shape_index,
+            "input_tokens": _shape_int(args, shape, "input_tokens", args.input_tokens, minimum=1),
+            "output_tokens": output_tokens,
+            "shared_prefix_tokens": _shape_int(args, shape, "shared_prefix_tokens", getattr(args, "shared_prefix_tokens", 0) or 0, minimum=0),
+            "suffix_tokens": _shape_suffix_tokens(args, shape),
+        }
     _attach_cache_fields(input_payload, args)
     return {
         "format": "ds4-inference-request-v1",
@@ -264,7 +356,7 @@ def _request_json(args: argparse.Namespace, batch_id: str, profile_id: str, idx:
         "chat": False,
         "immediate": False,
         "job_class": args.job_class,
-        "max_output_tokens": args.output_tokens,
+        "max_output_tokens": output_tokens,
         "thinking_budget_tokens": 0,
         "temperature": args.temperature,
         "input": input_payload,
@@ -347,13 +439,14 @@ def _get(base_url: str, endpoint: str, params: dict[str, Any]) -> dict[str, Any]
         return json.loads(response.read().decode("utf-8"))
 
 
-def _prompt(args: argparse.Namespace, idx: int) -> str:
-    shared_tokens = int(getattr(args, "shared_prefix_tokens", 0) or 0)
+def _prompt(args: argparse.Namespace, idx: int, *, shape: dict[str, Any] | None = None) -> str:
+    input_tokens = _shape_int(args, shape, "input_tokens", args.input_tokens, minimum=1)
+    shared_tokens = _shape_int(args, shape, "shared_prefix_tokens", getattr(args, "shared_prefix_tokens", 0) or 0, minimum=0)
     if shared_tokens > 0:
         shared = " ".join("shared-prefix-benchmark" for _ in range(shared_tokens))
-        suffix = " ".join("request-specific-detail" for _ in range(_suffix_tokens(args)))
+        suffix = " ".join("request-specific-detail" for _ in range(_shape_suffix_tokens(args, shape)))
         return f"{shared}\n\nRequest {idx}. Continue with useful, non-repetitive details until the token budget is used. {suffix}"
-    filler = " ".join("benchmark" for _ in range(max(1, int(args.input_tokens))))
+    filler = " ".join("benchmark" for _ in range(input_tokens))
     return f"Request {idx}. Continue with useful, non-repetitive details until the token budget is used. {filler}"
 
 
@@ -365,6 +458,22 @@ def _suffix_tokens(args: argparse.Namespace) -> int:
     if suffix is not None:
         return max(1, int(suffix))
     return max(1, int(args.input_tokens) - shared_tokens)
+
+
+def _shape_suffix_tokens(args: argparse.Namespace, shape: dict[str, Any] | None) -> int:
+    if shape is None:
+        return _suffix_tokens(args)
+    shared_tokens = _shape_int(args, shape, "shared_prefix_tokens", getattr(args, "shared_prefix_tokens", 0) or 0, minimum=0)
+    suffix = shape.get("suffix_tokens")
+    if suffix is not None:
+        return max(1, int(suffix))
+    input_tokens = _shape_int(args, shape, "input_tokens", args.input_tokens, minimum=1)
+    return max(1, input_tokens - shared_tokens) if shared_tokens > 0 else input_tokens
+
+
+def _shape_int(args: argparse.Namespace, shape: dict[str, Any] | None, key: str, fallback: int, *, minimum: int) -> int:
+    value = shape.get(key) if shape is not None and shape.get(key) is not None else fallback
+    return max(minimum, int(value))
 
 
 def _attach_cache_fields(input_payload: dict[str, Any], args: argparse.Namespace) -> None:
@@ -571,6 +680,33 @@ def _result_timings(results: list[Any], *, run_s: float) -> dict[str, Any]:
         "transport_duration_s_avg": round(sum(transports) / len(transports), 6) if transports else 0.0,
         "end_to_end_run_s": round(max(0.0, run_s), 6),
     }
+
+
+def _transport_counts(results: list[Any]) -> dict[str, int]:
+    counts = {
+        "coalesced_completion_batch": 0,
+        "coalesced_completion_streaming": 0,
+        "coalesced_rendered_chat_completion_batch": 0,
+        "coalesced_completion_split_retry": 0,
+        "transport_failed": 0,
+    }
+    for row in results:
+        if not isinstance(row, dict):
+            continue
+        result = row.get("result")
+        if not isinstance(result, dict):
+            continue
+        if result.get("status") == "transport_failed":
+            counts["transport_failed"] += 1
+        transport = result.get("transport")
+        if not isinstance(transport, dict):
+            continue
+        for key in counts:
+            if key == "transport_failed":
+                continue
+            if bool(transport.get(key)):
+                counts[key] += 1
+    return counts
 
 
 def _append_float(values: list[float], value: Any) -> None:
