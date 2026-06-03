@@ -21,7 +21,7 @@ def main() -> int:
         summary = {"format": "ds4-api-queue-benchmark-plan-v1", "batch_id": batch_id, "request_count": len(requests_payload), "out_dir": str(out_dir) if out_dir else None}
         print(json.dumps(summary, sort_keys=True))
         return 0
-    submit_s, run_s, collected = _submit_and_collect(args, batch_id, out_dir)
+    submit_s, run_s, collected = _submit_and_collect(args, batch_id, out_dir, requests_payload)
     summary = _benchmark_summary(args, batch_id, out_dir, requests_payload, submit_s, run_s, collected)
     if out_dir is not None:
         _write_json(out_dir / "summary.json", summary)
@@ -47,7 +47,7 @@ def _prepare_benchmark_requests(args: argparse.Namespace) -> tuple[str, Path | N
     return batch_id, out_dir, requests_payload
 
 
-def _submit_and_collect(args: argparse.Namespace, batch_id: str, out_dir: Path | None) -> tuple[float, float, dict[str, Any]]:
+def _submit_and_collect(args: argparse.Namespace, batch_id: str, out_dir: Path | None, requests_payload: list[dict[str, Any]]) -> tuple[float, float, dict[str, Any]]:
     started_submit = time.time()
     submit_response = _post(
         args.base_url,
@@ -104,7 +104,7 @@ def _benchmark_summary(
         "concurrency": args.concurrency,
         "limit": args.limit,
         "input_tokens_target": args.input_tokens,
-        "output_tokens_target": output_tokens_target,
+        "output_tokens_target": metrics["output_tokens_target"],
         "worker_mode": "api_sync_work" if args.drive_worker else "external_worker",
         "request_source": str(args.requests_jsonl) if args.requests_jsonl else "generated",
         "preserved_request_ids": bool(args.preserve_request_ids),
