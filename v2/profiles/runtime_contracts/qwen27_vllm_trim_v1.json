@@ -32,6 +32,10 @@
       }
     },
     "args": [
+      "--kv-cache-dtype",
+      "fp8",
+      "--attention-backend",
+      "TRITON_ATTN",
       "--max-model-len",
       "262144",
       "--max-num-seqs",
