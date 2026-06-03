@@ -300,14 +300,30 @@ class OpenAICompatibleRunner:
         minimum = max(2, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MIN", "2") or "2"))
         if len(request_list) < minimum:
             return None
-        max_cohort = max(1, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MAX", "512") or "512"))
+        max_cohort = _completion_effective_max_cohort(profile)
         token_budget = coalesced_completion_token_budget()
-        out: dict[str, dict] = {}
-        for chunk in _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget):
+        payloads: list[tuple[list[InferenceRequest], dict[str, Any]]] = []
+        chunks = _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget)
+        for chunk in chunks:
             payload = _coalesced_completion_payload(chunk, profile, self.default_extra_body)
             if payload is None:
                 return None
-            out.update(self._run_completion_chunk(chunk, profile, payload, original_batch_size=len(chunk)))
+            payloads.append((chunk, payload))
+        out: dict[str, dict] = {}
+        concurrency = _completion_chunk_concurrency(profile)
+        if concurrency > 1 and len(payloads) > 1:
+            with ThreadPoolExecutor(max_workers=min(concurrency, len(payloads))) as executor:
+                futures = [
+                    executor.submit(self._run_completion_chunk, chunk, profile, payload, original_batch_size=len(chunk))
+                    for chunk, payload in payloads
+                ]
+                for future in as_completed(futures):
+                    out.update(future.result())
+        else:
+            for chunk, payload in payloads:
+                out.update(self._run_completion_chunk(chunk, profile, payload, original_batch_size=len(chunk)))
+        if len(chunks) > 1:
+            _mark_coalesced_planned_split(out, original_batch_size=len(request_list), chunk_count=len(chunks), max_cohort=max_cohort, concurrency=concurrency)
         return out
 
     def _run_completion_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, original_batch_size: int) -> dict[str, dict]:
@@ -349,7 +365,7 @@ class OpenAICompatibleRunner:
         minimum = max(2, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MIN", "2") or "2"))
         if len(request_list) < minimum:
             return None
-        max_cohort = max(1, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MAX", "512") or "512"))
+        max_cohort = _completion_effective_max_cohort(profile)
         token_budget = coalesced_completion_token_budget()
         chunks = _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget)
         payloads: list[tuple[list[InferenceRequest], dict[str, Any]]] = []
@@ -360,8 +376,20 @@ class OpenAICompatibleRunner:
             payload["stream"] = True
             payloads.append((chunk, payload))
         out: dict[str, dict] = {}
-        for chunk, payload in payloads:
-            out.update(self._run_completion_stream_chunk(chunk, profile, payload, on_result=on_result, on_delta=on_delta))
+        concurrency = _completion_chunk_concurrency(profile)
+        if concurrency > 1 and len(payloads) > 1:
+            with ThreadPoolExecutor(max_workers=min(concurrency, len(payloads))) as executor:
+                futures = [
+                    executor.submit(self._run_completion_stream_chunk, chunk, profile, payload, on_result=on_result, on_delta=on_delta)
+                    for chunk, payload in payloads
+                ]
+                for future in as_completed(futures):
+                    out.update(future.result())
+        else:
+            for chunk, payload in payloads:
+                out.update(self._run_completion_stream_chunk(chunk, profile, payload, on_result=on_result, on_delta=on_delta))
+        if len(chunks) > 1:
+            _mark_coalesced_planned_split(out, original_batch_size=len(request_list), chunk_count=len(chunks), max_cohort=max_cohort, concurrency=concurrency)
         return out
 
     def _run_completion_stream_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, on_result: Callable[[str, dict[str, Any]], None], on_delta: Callable[[str, str, dict[str, Any]], None] | None = None) -> dict[str, dict]:
@@ -808,6 +836,40 @@ def _completion_cohort_chunks(requests: list[InferenceRequest], *, max_cohort: i
     if current:
         chunks.append(current)
     return chunks
+
+
+def _completion_effective_max_cohort(profile: ModelProfile) -> int:
+    max_cohort = max(1, _env_int("DS4_PIPELINE_COMPLETION_COHORT_MAX", 512))
+    if not _profile_uses_pipeline(profile):
+        return max_cohort
+    pp_safe = _env_int("DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX", 16)
+    if pp_safe <= 0:
+        return max_cohort
+    return max(1, min(max_cohort, pp_safe))
+
+
+def _completion_chunk_concurrency(profile: ModelProfile) -> int:
+    if not _profile_uses_pipeline(profile):
+        return 1
+    return max(1, _env_int("DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY", 4))
+
+
+def _profile_uses_pipeline(profile: ModelProfile) -> bool:
+    backend = str(profile.backend).lower()
+    if "pipeline" in backend:
+        return True
+    pipeline = profile.routing.get("pipeline")
+    return isinstance(pipeline, dict) and bool(pipeline)
+
+
+def _mark_coalesced_planned_split(out: dict[str, dict], *, original_batch_size: int, chunk_count: int, max_cohort: int, concurrency: int) -> None:
+    for result in out.values():
+        transport: dict[str, Any] = result.setdefault("transport", {})
+        transport["coalesced_completion_planned_split"] = True
+        transport["original_coalesced_batch_size"] = original_batch_size
+        transport["coalesced_completion_chunk_count"] = chunk_count
+        transport["coalesced_completion_effective_max_cohort"] = max_cohort
+        transport["coalesced_completion_chunk_concurrency"] = concurrency
 
 
 def _completion_request_token_estimate(request: InferenceRequest) -> int:

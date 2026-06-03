@@ -4,6 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import os
 import tempfile
+import threading
+import time
 import unittest
 
 from ds4_infer.api import CoordinatorApi
@@ -58,6 +60,25 @@ class FailingLargeCohortOpenAIRunner(RecordingOpenAIRunner):
         if isinstance(prompts, list) and len(prompts) > 2:
             raise RuntimeError("HTTP 413: payload exceeds token budget")
         return super()._post_json(endpoint, payload)
+
+
+class ConcurrentRecordingOpenAIRunner(RecordingOpenAIRunner):
+    def __init__(self) -> None:
+        super().__init__()
+        self.active = 0
+        self.max_active = 0
+        self.lock = threading.Lock()
+
+    def _post_json(self, endpoint: str, payload: dict) -> dict:
+        with self.lock:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+        try:
+            time.sleep(0.02)
+            return super()._post_json(endpoint, payload)
+        finally:
+            with self.lock:
+                self.active -= 1
 
 
 class RecordingBatchRunner:
@@ -161,6 +182,39 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
         self.assertEqual([len(call[1]["prompt"]) for call in runner.calls], [2, 2])
         self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_split_retry"] for index in range(4)))
         self.assertTrue(all(results[f"r{index}"]["transport"]["original_coalesced_batch_size"] == 4 for index in range(4)))
+
+    def test_pipeline_completion_cohort_uses_concurrent_pp_safe_chunks(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
+        runner = ConcurrentRecordingOpenAIRunner()
+        requests = [completion_request(f"r{index}", f"prompt-{index}") for index in range(8)]
+        old_values = {
+            "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"),
+            "DS4_PIPELINE_COMPLETION_COHORT_MAX": os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MAX"),
+            "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": os.environ.get("DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"),
+            "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": os.environ.get("DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"),
+        }
+        os.environ["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"] = "0"
+        os.environ["DS4_PIPELINE_COMPLETION_COHORT_MAX"] = "512"
+        os.environ["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"] = "3"
+        os.environ["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"] = "4"
+        try:
+            results = runner.run_many_completion(requests, profile)
+        finally:
+            for key, value in old_values.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.assertIsNotNone(results)
+        assert results is not None
+        self.assertEqual(sorted(len(call[1]["prompt"]) for call in runner.calls), [2, 3, 3])
+        self.assertGreater(runner.max_active, 1)
+        self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_planned_split"] for index in range(8)))
+        self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_chunk_count"] == 3 for index in range(8)))
+        self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_effective_max_cohort"] == 3 for index in range(8)))
+        self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_chunk_concurrency"] == 4 for index in range(8)))
 
     def test_background_dispatcher_claims_one_cohort_instead_of_one_future_per_request(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
