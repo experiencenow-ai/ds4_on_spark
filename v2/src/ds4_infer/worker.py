@@ -157,7 +157,7 @@ class BatchWorker:
 
         try:
             with ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(self.runner.run_many_on_node_incremental, requests, profile, claims[0].selected_node_id, concurrency=concurrency, on_result=push_result)  # type: ignore[attr-defined]
+                future = pool.submit(self.runner.run_many_on_node_incremental, requests, profile, claims[0].selected_node_id, concurrency=concurrency, on_result=push_result, on_delta=lambda request_id, text, payload: _push_stream_delta(self.queue, request_id, text, payload))  # type: ignore[attr-defined]
                 while not future.done():
                     wait([future], timeout=self.heartbeat_interval_s)
                     drain_results()
@@ -363,6 +363,11 @@ def _can_batch_models(runner: Runner, claims: list[QueueClaim]) -> bool:
 
 def _can_batch_models_incremental(runner: Runner, claims: list[QueueClaim]) -> bool:
     return bool(_can_batch_models(runner, claims) and hasattr(runner, "run_many_on_node_incremental"))
+
+
+def _push_stream_delta(queue: Any, request_id: str, text: str, payload: dict[str, Any] | None) -> None:
+    if hasattr(queue, "stream_delta"):
+        queue.stream_delta(request_id=request_id, text=text, payload=payload or {})
 
 
 def _service_refill_low_watermark(service_id: str | None, values: Mapping[str, int]) -> int:

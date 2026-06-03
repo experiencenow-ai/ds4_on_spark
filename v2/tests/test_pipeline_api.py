@@ -8,7 +8,7 @@ import unittest
 
 from ds4_infer import api as api_module
 from ds4_infer.api import CoordinatorApi
-from ds4_infer.api_stream import openai_completion_stream_events
+from ds4_infer.api_stream import _drain_completion_stream_events, openai_completion_stream_events
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.runners import OpenAICompatibleRunner, PipelineOpenAIRunner, _openai_payload
 from ds4_infer.schemas import InferenceRequest, make_result
@@ -250,6 +250,32 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual([event["choices"][0]["finish_reason"] for event in choice_events], ["stop", "stop"])
         self.assertEqual(events[-1]["choices"], [])
         self.assertEqual(events[-1]["ds4"]["result_count"], 2)
+
+    def test_openai_completion_stream_forwards_delta_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            request = InferenceRequest.from_json(
+                {
+                    "format": "ds4-inference-request-v1",
+                    "request_id": "stream-delta",
+                    "chat": False,
+                    "immediate": False,
+                    "job_class": "analysis",
+                    "max_output_tokens": 8,
+                    "thinking_budget_tokens": 0,
+                    "temperature": 0,
+                    "input": {"prompt": "delta"},
+                    "output_contract": {"format": "text"},
+                }
+            )
+            api.queue.stream_delta(request_id="stream-delta", text="tok")
+            streamed: set[str] = set()
+            usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            _after, chunks = _drain_completion_stream_events(api, "cmpl", "model", "batch", {"stream-delta": (0, request)}, streamed, usage, 0)
+        self.assertEqual(chunks[0]["choices"][0]["text"], "tok")
+        self.assertIsNone(chunks[0]["choices"][0]["finish_reason"])
+        self.assertEqual(chunks[0]["ds4"]["event_type"], "delta")
+        self.assertEqual(streamed, {"stream-delta"})
 
     def test_openai_api_preserves_thinking_budget_tokens(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

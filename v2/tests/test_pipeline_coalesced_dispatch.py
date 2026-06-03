@@ -189,6 +189,22 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual((completed, failed, retried), (8, 0, 0))
             self.assertEqual(runner.batch_sizes, [8])
 
+    def test_dispatcher_status_reports_kv_admission_bound(self) -> None:
+        old = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")
+        os.environ["DS4_API_DISPATCH_KV_CAPACITY_BYTES"] = "12345"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+                status = api.dispatcher_status()
+                self.assertEqual(status["kv_capacity_bytes"], 12345)
+                self.assertFalse(status["kv_admission_unlimited"])
+                self.assertIsNone(status["kv_admission_warning"])
+        finally:
+            if old is None:
+                os.environ.pop("DS4_API_DISPATCH_KV_CAPACITY_BYTES", None)
+            else:
+                os.environ["DS4_API_DISPATCH_KV_CAPACITY_BYTES"] = old
+
     def test_completion_prompt_array_is_submitted_as_one_ds4_batch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")

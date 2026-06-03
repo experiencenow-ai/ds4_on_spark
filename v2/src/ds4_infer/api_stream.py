@@ -63,10 +63,11 @@ def openai_completion_stream_events(api: Any, body: dict[str, Any]):
 
 def _iter_completion_stream(api: Any, request_id: str, model: str, batch_id: str, requests: list[InferenceRequest], after_event_id: int, timeout_s: float):
     pending = {request.request_id: (index, request) for index, request in enumerate(requests)}
+    streamed: set[str] = set()
     usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
     deadline = time.time() + max(0.1, timeout_s)
     while pending and time.time() < deadline:
-        after_event_id, chunks = _drain_completion_stream_events(api, request_id, model, batch_id, pending, usage, after_event_id)
+        after_event_id, chunks = _drain_completion_stream_events(api, request_id, model, batch_id, pending, streamed, usage, after_event_id)
         for chunk in chunks:
             yield chunk
         if pending:
@@ -81,23 +82,51 @@ def _iter_completion_stream(api: Any, request_id: str, model: str, batch_id: str
     yield _openai_completion_usage_chunk(request_id, model, batch_id, len(requests), usage)
 
 
-def _drain_completion_stream_events(api: Any, request_id: str, model: str, batch_id: str, pending: dict[str, tuple[int, InferenceRequest]], usage: dict[str, int], after_event_id: int):
+def _drain_completion_stream_events(
+    api: Any,
+    request_id: str,
+    model: str,
+    batch_id: str,
+    pending: dict[str, tuple[int, InferenceRequest]],
+    streamed: set[str],
+    usage: dict[str, int],
+    after_event_id: int,
+):
     poll = api.queue.poll(after_event_id=after_event_id, limit=200)
     chunks = []
     for event in poll.get("events") or []:
         request_key = str(event.get("request_id") or "")
+        event_type = str(event.get("event_type") or "")
         state = str(event.get("state") or "")
-        if request_key not in pending or state not in API_TERMINAL_STATES:
+        if request_key not in pending:
             continue
-        index, _request = pending.pop(request_key)
+        index, _request = pending[request_key]
+        if event_type == "delta":
+            chunks.append(_openai_completion_delta_chunk(request_id, model, batch_id, index, request_key, event.get("payload") or {}))
+            streamed.add(request_key)
+            continue
+        if state not in API_TERMINAL_STATES:
+            continue
+        pending.pop(request_key)
         row = api.queue.collect(request_id=request_key)
-        chunk, item_usage = _openai_completion_stream_chunk(request_id, model, batch_id, index, row)
+        chunk, item_usage = _openai_completion_stream_chunk(request_id, model, batch_id, index, row, include_text=request_key not in streamed)
         _add_usage(usage, item_usage)
         chunks.append(chunk)
     return int(poll.get("newest_event_id") or after_event_id), chunks
 
 
-def _openai_completion_stream_chunk(request_id: str, model: str, batch_id: str, index: int, row: dict[str, Any]) -> tuple[dict[str, Any], dict[str, int]]:
+def _openai_completion_delta_chunk(request_id: str, model: str, batch_id: str, index: int, request_key: str, payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": request_id,
+        "object": "text_completion.chunk",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [{"index": index, "text": str(payload.get("text") or ""), "finish_reason": None}],
+        "ds4": {"batch_id": batch_id, "request_id": request_key, "status": "running", "event_type": "delta"},
+    }
+
+
+def _openai_completion_stream_chunk(request_id: str, model: str, batch_id: str, index: int, row: dict[str, Any], *, include_text: bool = True) -> tuple[dict[str, Any], dict[str, int]]:
     from . import api as api_module
 
     text, status = api_module._result_text_and_status(row)
@@ -107,7 +136,7 @@ def _openai_completion_stream_chunk(request_id: str, model: str, batch_id: str, 
         "object": "text_completion.chunk",
         "created": int(time.time()),
         "model": model,
-        "choices": [{"index": index, "text": text, "finish_reason": "stop" if status == "completed" else "error"}],
+        "choices": [{"index": index, "text": text if include_text else "", "finish_reason": "stop" if status == "completed" else "error"}],
         "usage": usage,
         "ds4": {"batch_id": batch_id, "request": row.get("request"), "status": status},
     }

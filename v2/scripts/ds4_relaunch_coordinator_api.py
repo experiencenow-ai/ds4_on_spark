@@ -104,6 +104,7 @@ def _profile_defaults(profile: str) -> dict[str, str]:
         "DS4_COMPUTE_LEASE_QUANTUM_S": "180",
         "DS4_API_TRANSPORT_TIMEOUT_S": "3600",
         "DS4_API_TRANSPORT_MAX_ATTEMPTS": "1",
+        "DS4_API_DISPATCH_KV_CAPACITY_BYTES": "51539607552",
     }
     if profile == "production":
         common.update(
