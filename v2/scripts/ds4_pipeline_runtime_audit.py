@@ -91,6 +91,10 @@ def _check_relaunch_defaults(errors: list[str], checks: list[str]) -> None:
         errors.append("coordinator relaunch must bound dispatcher KV admission")
     else:
         checks.append("coordinator relaunch bounds dispatcher KV admission")
+    if '"DS4_API_DISPATCH_KV_CAPACITY_BYTES",' not in text or "env[key] = value" not in text:
+        errors.append("coordinator relaunch must override unsafe inherited KV admission env")
+    else:
+        checks.append("coordinator relaunch overrides unsafe inherited KV admission env")
 
 
 def _require_arg(args: list[Any], flag: str, expected: str, label: str, errors: list[str], checks: list[str]) -> None:
