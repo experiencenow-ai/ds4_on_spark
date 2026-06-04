@@ -300,6 +300,21 @@ def qwen36_27b_bf16_layer_partition(stage_count: int) -> tuple[int, ...]:
     return balanced_layer_partition(64, stage_count, tail_extra_layer_equivalent=3.33)
 
 
+def layer_partition_by_node(raw: Any, *, node_ids: tuple[str, ...], label: str = "layer_partition_by_node") -> tuple[int, ...] | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"{label} must be an object mapping node_id to layer count")
+    node_set = set(node_ids)
+    missing = [node_id for node_id in node_ids if node_id not in raw]
+    extra = [str(node_id) for node_id in raw if str(node_id) not in node_set]
+    if missing:
+        raise ValueError(f"{label} missing nodes: {missing}")
+    if extra:
+        raise ValueError(f"{label} references nodes outside node_ids: {extra}")
+    return tuple(int(raw[node_id]) for node_id in node_ids)
+
+
 def even_layer_partition(total_layers: int, stage_count: int) -> tuple[int, ...]:
     if stage_count < 1 or total_layers < 1 or stage_count > total_layers:
         raise ValueError("invalid layer/stage count")
@@ -307,28 +322,24 @@ def even_layer_partition(total_layers: int, stage_count: int) -> tuple[int, ...]
     return tuple(base + 1 if index < extra else base for index in range(stage_count))
 
 
+def layer_partition_from_preset(raw: str, *, total_layers: int, stage_count: int) -> tuple[tuple[int, ...], str]:
+    key = raw.strip().lower()
+    if key in {"auto", "even", "layers/n", "layers_per_n"}:
+        return even_layer_partition(total_layers, stage_count), "even"
+    if key in {"qwen3.6-27b-bf16", "qwen36_27b_bf16", "qwen27_bf16"}:
+        return qwen36_27b_bf16_layer_partition(stage_count), key
+    raise ValueError(f"unknown layer_partition preset: {raw}")
+
+
 def load_layer_partition_with_source(data: Mapping[str, Any], *, node_ids: tuple[str, ...], total_layers: int, stage_count: int) -> tuple[tuple[int, ...], str]:
-    by_node = data.get("layer_partition_by_node")
-    if by_node is not None:
-        if not isinstance(by_node, Mapping):
-            raise ValueError("layer_partition_by_node must be an object mapping node_id to layer count")
-        missing = [node_id for node_id in node_ids if node_id not in by_node]
-        extra = [str(node_id) for node_id in by_node if str(node_id) not in set(node_ids)]
-        if missing:
-            raise ValueError(f"layer_partition_by_node missing nodes: {missing}")
-        if extra:
-            raise ValueError(f"layer_partition_by_node references nodes outside node_ids: {extra}")
-        return tuple(int(by_node[node_id]) for node_id in node_ids), "by_node"
+    by_node_partition = layer_partition_by_node(data.get("layer_partition_by_node"), node_ids=node_ids)
+    if by_node_partition is not None:
+        return by_node_partition, "by_node"
     raw = data.get("layer_partition")
     if raw is None:
         return even_layer_partition(total_layers, stage_count), "even"
     if isinstance(raw, str):
-        key = raw.strip().lower()
-        if key in {"auto", "even", "layers/n", "layers_per_n"}:
-            return even_layer_partition(total_layers, stage_count), "even"
-        if key in {"qwen3.6-27b-bf16", "qwen36_27b_bf16", "qwen27_bf16"}:
-            return qwen36_27b_bf16_layer_partition(stage_count), key
-        raise ValueError(f"unknown layer_partition preset: {raw}")
+        return layer_partition_from_preset(raw, total_layers=total_layers, stage_count=stage_count)
     if not isinstance(raw, list):
         raise ValueError("layer_partition must be a list, object-by-node override, or known preset string")
     return tuple(int(item) for item in raw), "explicit"

@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Iterator, Protocol
 from urllib import error, request as urlrequest
 
-from .builders import model_batch_payload, request_messages, request_prompt
+from .builders import model_batch_payload, request_messages, request_prompt, thinking_request_fields
 from .cohort_safety import coalesced_completion_token_budget, coalesced_failure_should_bisect, mark_coalesced_split, prompt_token_estimate
 from .kv_cache import kv_cache_extra_body, kv_cache_vllm_request_fields
 from .profiles import ModelProfile
@@ -559,10 +559,9 @@ class PipelineOpenAIRunner:
         worker_count = max(1, min(int(concurrency), len(request_list)))
         runner = self._runner_for(profile, node_id)
         if _env_bool("DS4_PIPELINE_COHORT_COMPLETIONS", True):
-            if _requests_need_client_stream(request_list):
-                coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result, on_delta=on_delta)
-                if coalesced is not None:
-                    return coalesced
+            coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result, on_delta=on_delta)
+            if coalesced is not None:
+                return coalesced
             coalesced = runner.run_many_completion(request_list, profile)
             if coalesced is not None:
                 for request_id, result in coalesced.items():
@@ -912,10 +911,6 @@ def _completion_prompt_token_hint(request: InferenceRequest) -> int | None:
     return None
 
 
-def _requests_need_client_stream(requests: list[InferenceRequest]) -> bool:
-    return bool(requests and all(bool(item.input.get("ds4_client_stream")) for item in requests))
-
-
 def _coalesced_completion_results(
     requests: list[InferenceRequest],
     profile: ModelProfile,
@@ -1088,12 +1083,13 @@ def make_runner(kind: str, *, timeout_s: int, pipeline_base_urls: dict[str, str]
 
 def _openai_payload(request: InferenceRequest, profile: ModelProfile, *, render_chat_as_completion: bool = False) -> dict[str, Any]:
     model = _served_model_id(profile)
+    max_tokens = request.max_output_tokens + (request.thinking_budget_tokens if profile.supports_thinking else 0)
     if request.chat and not render_chat_as_completion:
         payload: dict[str, Any] = {
             "model": model,
             "messages": request_messages(request),
             "temperature": request.temperature,
-            "max_tokens": request.max_output_tokens,
+            "max_tokens": max_tokens,
         }
     else:
         prompt = request_prompt(request)
@@ -1106,14 +1102,15 @@ def _openai_payload(request: InferenceRequest, profile: ModelProfile, *, render_
             "model": model,
             "prompt": prompt,
             "temperature": request.temperature,
-            "max_tokens": request.max_output_tokens,
+            "max_tokens": max_tokens,
         }
     _merge_openai_request_fields(payload, request)
     sampling = openai_sampling_controls(request.input)
     if sampling:
         payload.update(sampling)
-    if request.thinking_budget_tokens > 0:
-        payload["extra_body"] = {"thinking_budget_tokens": request.thinking_budget_tokens}
+    thinking_body = thinking_request_fields(profile, chat=request.chat, thinking_budget_tokens=request.thinking_budget_tokens)
+    if thinking_body:
+        payload["extra_body"] = {**dict(payload.get("extra_body") or {}), **thinking_body}
     extra_body = kv_cache_extra_body(request.input)
     if extra_body:
         payload.update(kv_cache_vllm_request_fields(request.input))

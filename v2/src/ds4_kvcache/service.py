@@ -6,6 +6,8 @@ from pathlib import Path
 import shlex
 from typing import Any
 
+from ds4_infer.pipelines import even_layer_partition
+
 KV_CACHE_DEPLOYMENT_FORMAT = "ds4-vllm-kv-cache-deployment-v1"
 KV_CACHE_PLAN_FORMAT = "ds4-vllm-kv-cache-launch-plan-v1"
 
@@ -582,15 +584,8 @@ def _deployment_layer_partition(data: dict[str, Any], *, worker_nodes: tuple[str
     if parsed:
         return parsed
     if total_layers is not None and stage_count > 1:
-        return _even_layer_partition(total_layers, stage_count)
+        return even_layer_partition(total_layers, stage_count)
     return parsed
-
-
-def _even_layer_partition(total_layers: int, stage_count: int) -> tuple[int, ...]:
-    if total_layers < 1 or stage_count < 1 or stage_count > total_layers:
-        raise ValueError("invalid total_layers/stage_count for layer partition")
-    base, extra = divmod(total_layers, stage_count)
-    return tuple(base + (1 if index < extra else 0) for index in range(stage_count))
 
 
 def _parse_layer_partition(raw: Any) -> tuple[int, ...]:
