@@ -150,7 +150,7 @@ def _profile_defaults(profile: str) -> dict[str, str]:
                 "DS4_PIPELINE_COMPLETION_COHORT_MAX": "128",
                 "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "16384",
                 "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "16",
-                "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "4",
+                "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "8",
                 "DS4_PIPELINE_COMPLETION_COHORT_BUDGET_INCLUDE_OUTPUT": "0",
                 "DS4_API_DISPATCH_KV_CAPACITY_BYTES": "8589934592",
                 "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": 12, "qwen27_nvfp4_pp8": 12, "dsv4_flash_pp8": 128}, separators=(",", ":")),
