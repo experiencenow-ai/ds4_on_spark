@@ -30,6 +30,8 @@
   "kv_cache_memory_bytes": 8589934592,
   "gpu_memory_utilization": "0.35",
   "kv_cache_dtype": "fp8",
+  "pp_transport": "tcp-staged",
+  "pp_edge_rail": "enp",
   "compilation_config": {
     "cudagraph_mode": "NONE",
     "custom_ops": [
