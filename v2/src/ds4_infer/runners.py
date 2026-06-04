@@ -560,9 +560,10 @@ class PipelineOpenAIRunner:
         worker_count = max(1, min(int(concurrency), len(request_list)))
         runner = self._runner_for(profile, node_id)
         if _env_bool("DS4_PIPELINE_COHORT_COMPLETIONS", True):
-            if _env_bool("DS4_PIPELINE_INTERNAL_STREAM_ALL_COHORTS", True):
-                client_delta = on_delta if requests_need_client_stream(request_list) else None
-                coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result, on_delta=client_delta)
+            client_stream = requests_need_client_stream(request_list)
+            internal_stream = client_stream or _env_bool("DS4_PIPELINE_INTERNAL_STREAM_ALL_COHORTS", True)
+            if internal_stream:
+                coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result, on_delta=on_delta if client_stream else None)
                 if coalesced is not None:
                     return coalesced
             coalesced = runner.run_many_completion(request_list, profile)
