@@ -14,7 +14,7 @@ PYTHONPATH=src python3 scripts/ds4_pipeline_runtime_audit.py
 
 The audit must pass. It checks that:
 
-- `profiles/production/dsv4_flash_pp8_resident64.json` is the source of truth
+- `profiles/production/dsv4_flash_pp8_resident128.json` is the source of truth
   for the bounded DSV4 PP8 production envelope.
 - DSV4 topology, runtime contract, and KV deployment agree on `max_num_seqs`,
   `max_num_batched_tokens`, KV bytes, and layer partition.
@@ -31,26 +31,26 @@ Use the repo-owned relaunch script:
 
 ```bash
 cd /home/spark0/ds4_on_spark/v2
-python3 scripts/ds4_relaunch_coordinator_api.py --profile resident64
+python3 scripts/ds4_relaunch_coordinator_api.py --profile resident128
 ```
 
-The resident64 profile intentionally uses:
+The resident128 profile intentionally uses:
 
 ```text
-DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET=16384
-DS4_API_BATCH_LIMITS_JSON includes dsv4_flash_pp8=64
+DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET=32768
+DS4_API_BATCH_LIMITS_JSON includes dsv4_flash_pp8=128
 DS4_COMPUTE_LEASE_QUANTUM_S=180
 DS4_API_DISPATCH_KV_CAPACITY_BYTES=8589934592
 ```
 
 Those values are loaded from
-`profiles/production/dsv4_flash_pp8_resident64.json`; old profile names such as
+`profiles/production/dsv4_flash_pp8_resident128.json`; old profile names such as
 `throughput` are compatibility aliases for the same bounded envelope.
 
 The current DSV4 PP8 production launch profile is bounded, not max-KV:
 
 ```text
---max-num-seqs 64
+--max-num-seqs 128
 --max-num-batched-tokens 32768
 --kv-cache-memory-bytes 8589934592
 --gpu-memory-utilization 0.35

@@ -128,7 +128,7 @@ class BatchWorker:
             return [(claim, _failure(claim, str(exc))) for claim in claims]
         return [(claim, _result_for_claim(claim, results.get(claim.request_id))) for claim in claims]
 
-    def _run_model_batch_incremental(self, claims: list[QueueClaim], concurrency: int, on_result: FinishHook | None) -> tuple[int, int, int]:
+    def _run_model_batch_incremental(self, claims: list[QueueClaim], concurrency: int, on_result: FinishHook | None, *, on_item_finished: Callable[[str], None] | None = None) -> tuple[int, int, int]:
         profile = self.registry.get(claims[0].selected_profile_id)
         requests = [claim.request for claim in claims if claim.request is not None]
         claim_by_id = {claim.request_id: claim for claim in claims}
@@ -154,6 +154,7 @@ class BatchWorker:
                 failed += item_failed
                 retried += item_retried
                 finished.add(request_id)
+                _notify_item_finished(on_item_finished, request_id)
 
         try:
             with ThreadPoolExecutor(max_workers=1) as pool:
@@ -368,6 +369,11 @@ def _can_batch_models_incremental(runner: Runner, claims: list[QueueClaim]) -> b
 def _push_stream_delta(queue: Any, request_id: str, text: str, payload: dict[str, Any] | None) -> None:
     if hasattr(queue, "stream_delta"):
         queue.stream_delta(request_id=request_id, text=text, payload=payload or {})
+
+
+def _notify_item_finished(callback: Callable[[str], None] | None, request_id: str) -> None:
+    if callback is not None:
+        callback(request_id)
 
 
 def _service_refill_low_watermark(service_id: str | None, values: Mapping[str, int]) -> int:

@@ -15,23 +15,23 @@ The coordinator has two batching layers:
 This keeps the public API OpenAI-compatible while making vLLM see the entire
 cohort before prefill.
 
-## Resident64 benchmark knobs
+## Resident128 benchmark knobs
 
 For the stable resident DSV4 profile, feed enough work to keep PP8 busy without
 using the old max-KV shape.
 The source of truth is
-`profiles/production/dsv4_flash_pp8_resident64.json`; these shell variables are
+`profiles/production/dsv4_flash_pp8_resident128.json`; these shell variables are
 the materialized values that the relaunch/audit path verifies.
 
 ```bash
 export DS4_API_BACKGROUND_DISPATCH=1
-export DS4_API_DISPATCH_WINDOW=64
-export DS4_API_DISPATCH_REFILL_BATCH=64
+export DS4_API_DISPATCH_WINDOW=128
+export DS4_API_DISPATCH_REFILL_BATCH=128
 export DS4_API_DISPATCH_BATCH_LINGER_S=0.05
-export DS4_API_BATCH_LIMITS_JSON='{"qwen27_bf16_pp8":12,"dsv4_flash_pp8":64}'
+export DS4_API_BATCH_LIMITS_JSON='{"qwen27_bf16_pp8":12,"dsv4_flash_pp8":128}'
 export DS4_PIPELINE_COHORT_COMPLETIONS=1
-export DS4_PIPELINE_COMPLETION_COHORT_MAX=64
-export DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET=16384
+export DS4_PIPELINE_COMPLETION_COHORT_MAX=128
+export DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET=32768
 ```
 
 `DS4_API_DISPATCH_BATCH_LINGER_S` is deliberately larger for benchmarks than for

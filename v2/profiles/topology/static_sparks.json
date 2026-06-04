@@ -147,7 +147,7 @@
           5,
           4
         ],
-        "max_batch_size": 64,
+        "max_batch_size": 128,
         "model_id": "deepseek-ai/DeepSeek-V4-Flash",
         "node_ids": [
           "spark0",
@@ -165,11 +165,11 @@
           "admission_mode": "single_active_batch_per_compute_domain",
           "batch_linger_s": 0.0,
           "max_running_batches_per_compute_domain": 1,
-          "queue_concurrency": 64,
+          "queue_concurrency": 128,
           "queue_limit": 512,
-          "refill_low_watermark": 48,
+          "refill_low_watermark": 96,
           "vllm_max_num_batched_tokens": 32768,
-          "vllm_max_num_seqs": 64
+          "vllm_max_num_seqs": 128
         },
         "service_id": "dsv4_flash_pp8",
         "telemetry": {

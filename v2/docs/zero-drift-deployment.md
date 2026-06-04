@@ -50,7 +50,7 @@ commands:
 
 ```bash
 cd ~/src/ds4_on_spark/v2
-python3 scripts/ds4_relaunch_coordinator_api.py --profile resident64
+python3 scripts/ds4_relaunch_coordinator_api.py --profile resident128
 ```
 
 The relaunch script:

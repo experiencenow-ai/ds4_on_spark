@@ -21,7 +21,7 @@
     "--max-model-len",
     "262144",
     "--max-num-seqs",
-    "64",
+    "128",
     "--max-num-batched-tokens",
     "32768",
     "--kv-cache-memory-bytes",
@@ -122,5 +122,5 @@
   ],
   "working_directory": "/home/spark0/ds4_on_spark/v2",
   "performance_mode": "native_blackwell_strict_fastpath",
-  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 64-sequence admission and 8GiB resident KV per rank; raise DSV4_GPU_MEMORY_UTILIZATION only for DSV4-only runs."
+  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 128-sequence admission and 8GiB resident KV per rank; raise DSV4_GPU_MEMORY_UTILIZATION only for DSV4-only runs."
 }
