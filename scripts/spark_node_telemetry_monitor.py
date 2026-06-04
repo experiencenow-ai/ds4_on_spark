@@ -35,7 +35,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--out-dir", default=telemetry.TELEMETRY_DIR)
     p.add_argument("--summary-samples", type=int, default=720)
     p.add_argument("--nvidia-smi-timeout", type=float, default=3.0)
-    p.add_argument("--gateway-url", default="http://127.0.0.1:8000")
+    p.add_argument("--gateway-url", default="http://127.0.0.1:8700,http://127.0.0.1:8000")
     p.add_argument("--metrics-urls", default="http://127.0.0.1:8000/metrics,http://127.0.0.1:18000/metrics,http://127.0.0.1:18100/metrics,http://127.0.0.1:18101/metrics")
     p.add_argument("--http-timeout", type=float, default=1.5)
     p.add_argument("--queue-db", default=os.environ.get("DS4_QUEUE_DB",""))
@@ -289,8 +289,8 @@ def read_text_url(url: str, timeout: float) -> Tuple[str,str]:
         return("","%s" % e)
 
 
-def read_gateway(base_url: str, timeout: float) -> Dict[str,object]:
-    out: Dict[str,object] = {
+def empty_gateway() -> Dict[str,object]:
+    return({
         "ds4_gateway_up": 0,
         "ds4_gateway_active": 0,
         "ds4_gateway_idle_s": 0.0,
@@ -299,7 +299,23 @@ def read_gateway(base_url: str, timeout: float) -> Dict[str,object]:
         "ds4_gateway_cpu_active": 0,
         "ds4_gateway_cpu_completed": 0,
         "ds4_gateway_cpu_failed": 0,
-    }
+    })
+
+
+def queue_counts(data: Dict[str,object]) -> Tuple[int,int,int,int]:
+    counts_raw = data.get("state_counts",{})
+    if not isinstance(counts_raw,dict):
+        return(0,0,0,0)
+    counts = {str(k):int(telemetry.num(v)) for k,v in counts_raw.items()}
+    pending = int(counts.get("queued",0) + counts.get("prefilling",0) + counts.get("ready",0))
+    active = int(counts.get("running",0))
+    completed = int(counts.get("completed",0) + counts.get("completed_with_failures",0) + counts.get("completed_with_cancelled",0))
+    failed = int(counts.get("failed",0))
+    return(pending,active,completed,failed)
+
+
+def read_legacy_gateway(base_url: str, timeout: float) -> Dict[str,object]:
+    out = empty_gateway()
     data,error = read_json_url(base_url.rstrip("/") + "/ds4/status",timeout)
     if error != "" or data.get("detail") == "Not Found":
         return(out)
@@ -315,6 +331,40 @@ def read_gateway(base_url: str, timeout: float) -> Dict[str,object]:
         out["ds4_gateway_cpu_completed"] = int(telemetry.num(queue.get("completed",0)))
         out["ds4_gateway_cpu_failed"] = int(telemetry.num(queue.get("failed",0)))
     return(out)
+
+
+def read_coordinator_gateway(base_url: str, timeout: float) -> Dict[str,object]:
+    out = empty_gateway()
+    base = base_url.rstrip("/")
+    health,error = read_json_url(base + "/health",timeout)
+    dispatcher,dispatcher_error = read_json_url(base + "/ds4/dispatcher/status",timeout)
+    queue,queue_error = read_json_url(base + "/ds4/queue/status",timeout)
+    if error != "" and dispatcher_error != "" and queue_error != "":
+        return(out)
+    if not bool(health.get("ok",False)) and str(queue.get("format","")) != "ds4-inference-queue-v1" and not bool(dispatcher.get("running",False)):
+        return(out)
+    pending,active,completed,failed = queue_counts(queue)
+    out["ds4_gateway_up"] = 1
+    out["ds4_gateway_active"] = 1 if bool(dispatcher.get("running",False)) or active > 0 else 0
+    out["ds4_gateway_cpu_pending"] = pending
+    out["ds4_gateway_cpu_active"] = active
+    out["ds4_gateway_cpu_completed"] = completed
+    out["ds4_gateway_cpu_failed"] = failed
+    last_work_at = telemetry.num(dispatcher.get("last_work_at",0.0))
+    if last_work_at > 0.0:
+        out["ds4_gateway_idle_s"] = round(max(0.0,time.time() - last_work_at),2)
+    return(out)
+
+
+def read_gateway(raw_urls: str, timeout: float) -> Dict[str,object]:
+    for base_url in [item.strip() for item in str(raw_urls or "").split(",") if item.strip()]:
+        legacy = read_legacy_gateway(base_url,timeout)
+        if int(legacy.get("ds4_gateway_up",0)) != 0:
+            return(legacy)
+        coordinator = read_coordinator_gateway(base_url,timeout)
+        if int(coordinator.get("ds4_gateway_up",0)) != 0:
+            return(coordinator)
+    return(empty_gateway())
 
 
 def prometheus_value(line: str) -> float:

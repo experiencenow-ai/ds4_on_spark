@@ -9,6 +9,8 @@ import json
 import os
 import sqlite3
 import time
+import urllib.error
+import urllib.request
 from typing import Any, Dict, Iterable, List, Tuple
 
 
@@ -21,6 +23,7 @@ NODE_TELEMETRY_CSV = "node_telemetry.csv"
 NODE_TELEMETRY_SUMMARY = "node_telemetry.summary.json"
 QUEUE_DB_GLOB = "/tmp/ds4_v2_queue/queue.sqlite3,/tmp/ds4_queue/queue.sqlite3,/tmp/ds4_queue_saturation_*/queue/queue.sqlite3,/private/tmp/ds4_queue*/queue.sqlite3,/private/tmp/*/ds4_queue*/queue.sqlite3,/private/tmp/*/queue/queue.sqlite3"
 QUEUE_RATE_WINDOW_S = float(os.environ.get("DS4_QUEUE_RATE_WINDOW_S","300"))
+DEFAULT_DS4_API_URL = "http://10.20.0.10:8700,http://spark0:8700"
 
 BASE_GPU_FIELDS = [
     "index",
@@ -292,8 +295,8 @@ def result_completion_tokens(raw: object) -> int:
     return(result_usage_tokens(raw,"completion_tokens"))
 
 
-def read_local_queue(raw_path: str, raw_globs: str, rate_window_s: float = QUEUE_RATE_WINDOW_S) -> Dict[str,object]:
-    out: Dict[str,object] = {
+def empty_queue_summary() -> Dict[str,object]:
+    return({
         "local_queue_db": "",
         "local_queue_total": 0,
         "local_queue_depth": 0,
@@ -315,12 +318,97 @@ def read_local_queue(raw_path: str, raw_globs: str, rate_window_s: float = QUEUE
         "local_queue_completion_tokens_recent": 0,
         "local_queue_completion_tok_s": 0.0,
         "local_queue_completion_tok_s_by_node": "",
-    }
+    })
+
+
+def read_json_url(url: str, timeout: float) -> Tuple[Dict[str,object],str]:
+    try:
+        with urllib.request.urlopen(url,timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        try:
+            detail = e.read().decode("utf-8",errors="replace")[:300]
+        except Exception:
+            detail = str(e)
+        return({},detail)
+    except Exception as e:
+        return({},"%s" % e)
+    return(data if isinstance(data,dict) else {}, "")
+
+
+def ds4_api_queue_from_status(data: Dict[str,object], source: str) -> Dict[str,object]:
+    out = empty_queue_summary()
+    counts_raw = data.get("state_counts",{})
+    if not isinstance(counts_raw,dict):
+        return(out)
+    counts = {str(k):int(num(v)) for k,v in counts_raw.items()}
+    queued = int(counts.get("queued",0) + counts.get("prefilling",0) + counts.get("ready",0))
+    running = int(counts.get("running",0))
+    completed = int(counts.get("completed",0) + counts.get("completed_with_failures",0) + counts.get("completed_with_cancelled",0))
+    failed = int(counts.get("failed",0))
+    out.update({
+        "local_queue_db": source,
+        "local_queue_api_up": 1,
+        "local_queue_total": sum(counts.values()),
+        "local_queue_depth": queued + running,
+        "local_queue_queued": queued,
+        "local_queue_running": running,
+        "local_queue_completed": completed,
+        "local_queue_failed": failed,
+    })
+    return(out)
+
+
+def read_ds4_api_queue(raw_url: str, timeout: float, rate_window_s: float = QUEUE_RATE_WINDOW_S) -> Dict[str,object]:
+    del rate_window_s
+    for base in [item.strip().rstrip("/") for item in str(raw_url or "").split(",") if item.strip()]:
+        data,error = read_json_url(base + "/ds4/queue/status",timeout)
+        if error == "" and str(data.get("format","")) == "ds4-inference-queue-v1":
+            return(ds4_api_queue_from_status(data,"ds4-api:%s" % base))
+    return(empty_queue_summary())
+
+
+def merge_queue_summaries(primary: Dict[str,object], fallback: Dict[str,object]) -> Dict[str,object]:
+    if str(primary.get("local_queue_db","")) == "":
+        return(fallback)
+    if str(fallback.get("local_queue_db","")) == "":
+        return(primary)
+    out = dict(fallback)
+    out.update(primary)
+    preserve_keys = (
+        "local_queue_by_node",
+        "local_queue_queued_by_node",
+        "local_queue_running_by_node",
+        "local_queue_prompt_tok_s_by_node",
+        "local_queue_completion_req_s_by_node",
+        "local_queue_completion_tok_s_by_node",
+    )
+    for key in preserve_keys:
+        if str(primary.get(key,"")) == "" and str(fallback.get(key,"")) != "":
+            out[key] = fallback[key]
+    rate_keys = (
+        "local_queue_prompt_tokens_recent",
+        "local_queue_prompt_tok_s",
+        "local_queue_completion_requests_recent",
+        "local_queue_completion_req_s",
+        "local_queue_completion_tokens_recent",
+        "local_queue_completion_tok_s",
+    )
+    for key in rate_keys:
+        if num(primary.get(key,0)) <= 0.0 and num(fallback.get(key,0)) > 0.0:
+            out[key] = fallback[key]
+    out["local_queue_db"] = "%s;%s" % (primary.get("local_queue_db",""),fallback.get("local_queue_db",""))
+    return(out)
+
+
+def read_local_queue(raw_path: str, raw_globs: str, rate_window_s: float = QUEUE_RATE_WINDOW_S) -> Dict[str,object]:
+    out = empty_queue_summary()
     best: Tuple[int,float,int,int] | None = None
     best_out: Dict[str,object] | None = None
     for path in queue_db_candidates(raw_path,raw_globs):
         try:
-            with sqlite3.connect(path,timeout=0.25) as conn:
+            conn = sqlite3.connect(path,timeout=0.25)
+            try:
                 cols = {str(row[1]) for row in conn.execute("pragma table_info(requests)").fetchall()}
                 states = {str(k):int(v) for k,v in conn.execute("select state,count(*) from requests group by state").fetchall()}
                 kinds = {str(k):int(v) for k,v in conn.execute("select request_kind,count(*) from requests where state in ('queued','running') group by request_kind").fetchall()}
@@ -348,6 +436,8 @@ def read_local_queue(raw_path: str, raw_globs: str, rate_window_s: float = QUEUE
                             recent_prompt_by_node[str(node)] = recent_prompt_by_node.get(str(node),0.0) + float(prompt_tokens)
                             recent_requests_by_node[str(node)] = recent_requests_by_node.get(str(node),0.0) + 1.0
                             recent_by_node[str(node)] = recent_by_node.get(str(node),0.0) + float(tokens)
+            finally:
+                conn.close()
         except Exception:
             continue
         queued = int(states.get("queued",0))

@@ -214,6 +214,34 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(metrics["vllm_prefix_cache_hit_pct"],50.0)
         self.assertEqual(metrics["vllm_external_prefix_cache_hit_pct"],100.0)
 
+    def test_gateway_reads_current_coordinator_api(self):
+        def fake_read_json(url,timeout):
+            if url.endswith("/ds4/status"):
+                return({},"not found")
+            if url.endswith("/health"):
+                return({"ok": True},"")
+            if url.endswith("/ds4/dispatcher/status"):
+                return({"running": True, "last_work_at": 90.0},"")
+            if url.endswith("/ds4/queue/status"):
+                return({"format": "ds4-inference-queue-v1", "state_counts": {"queued": 2, "running": 1, "completed": 5, "failed": 1}},"")
+            return({},"bad url")
+        old_read = node_mon.read_json_url
+        old_time = node_mon.time.time
+        try:
+            node_mon.read_json_url = fake_read_json
+            node_mon.time.time = lambda: 100.0
+            gateway = node_mon.read_gateway("http://127.0.0.1:8700",1.0)
+        finally:
+            node_mon.read_json_url = old_read
+            node_mon.time.time = old_time
+        self.assertEqual(gateway["ds4_gateway_up"],1)
+        self.assertEqual(gateway["ds4_gateway_active"],1)
+        self.assertEqual(gateway["ds4_gateway_idle_s"],10.0)
+        self.assertEqual(gateway["ds4_gateway_cpu_pending"],2)
+        self.assertEqual(gateway["ds4_gateway_cpu_active"],1)
+        self.assertEqual(gateway["ds4_gateway_cpu_completed"],5)
+        self.assertEqual(gateway["ds4_gateway_cpu_failed"],1)
+
     def test_local_queue_depth_reads_sqlite_counts(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = os.path.join(tmp,"queue.sqlite3")
@@ -265,6 +293,31 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(q["local_queue_completion_tokens_recent"],120)
         self.assertEqual(q["local_queue_completion_tok_s"],2.0)
         self.assertIn("spark1:2", q["local_queue_completion_tok_s_by_node"])
+
+    def test_ds4_api_queue_reads_coordinator_status(self):
+        old = telemetry.read_json_url
+        try:
+            telemetry.read_json_url = lambda url,timeout: ({"format": "ds4-inference-queue-v1", "state_counts": {"queued": 3, "running": 2, "completed": 7, "failed": 1}},"")
+            q = telemetry.read_ds4_api_queue("http://spark0:8700",1.0)
+        finally:
+            telemetry.read_json_url = old
+        self.assertEqual(q["local_queue_db"],"ds4-api:http://spark0:8700")
+        self.assertEqual(q["local_queue_api_up"],1)
+        self.assertEqual(q["local_queue_depth"],5)
+        self.assertEqual(q["local_queue_queued"],3)
+        self.assertEqual(q["local_queue_running"],2)
+        self.assertEqual(q["local_queue_completed"],7)
+        self.assertEqual(q["local_queue_failed"],1)
+
+    def test_ds4_api_queue_merges_sqlite_rates(self):
+        api = telemetry.ds4_api_queue_from_status({"state_counts": {"queued": 1, "running": 0}}, "ds4-api:http://spark0:8700")
+        local = telemetry.empty_queue_summary()
+        local.update({"local_queue_db": "/tmp/queue.sqlite3", "local_queue_prompt_tok_s": 4.0, "local_queue_completion_tok_s": 2.0, "local_queue_completion_tok_s_by_node": "spark0:2"})
+        merged = telemetry.merge_queue_summaries(api,local)
+        self.assertEqual(merged["local_queue_depth"],1)
+        self.assertEqual(merged["local_queue_prompt_tok_s"],4.0)
+        self.assertEqual(merged["local_queue_completion_tok_s"],2.0)
+        self.assertIn("spark0:2", merged["local_queue_completion_tok_s_by_node"])
 
 
 if __name__ == "__main__":
