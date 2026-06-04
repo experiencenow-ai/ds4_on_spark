@@ -98,6 +98,11 @@ def summarize_node(rows: List[Dict[str,str]], error: str, fetch_error: str = "",
         return({"sample_count":0,"error":error})
     good = [r for r in rows if not r.get("error")]
     latest = rows[-1]
+    latest_gpu = latest
+    for row in reversed(good):
+        if telemetry.gpu_index(row) >= 0:
+            latest_gpu = row
+            break
     latest_age_s = max(0.0,time.time() - row_unix_ts(latest))
     gpu_vals = [telemetry.fnum(r,"gpu_util_pct") for r in good if telemetry.gpu_index(r) >= 0]
     gpu_temps = [telemetry.fnum(r,"gpu_temp_c") for r in good if telemetry.gpu_index(r) >= 0 and telemetry.fnum(r,"gpu_temp_c") > 0.0]
@@ -177,13 +182,13 @@ def summarize_node(rows: List[Dict[str,str]], error: str, fetch_error: str = "",
         "last_local_queue_completion_tokens_recent": telemetry.fnum(latest,"local_queue_completion_tokens_recent"),
         "last_local_queue_completion_tok_s": telemetry.fnum(latest,"local_queue_completion_tok_s"),
         "last_local_queue_completion_tok_s_by_node": latest.get("local_queue_completion_tok_s_by_node",""),
-        "last_gpu_util_pct": telemetry.fnum(latest,"gpu_util_pct"),
-        "last_gpu_temp_c": telemetry.fnum(latest,"gpu_temp_c"),
-        "last_gpu_fan_pct": telemetry.fnum(latest,"gpu_fan_pct"),
-        "last_gpu_clock_sm_mhz": telemetry.fnum(latest,"gpu_clock_sm_mhz"),
-        "last_gpu_clock_mem_mhz": telemetry.fnum(latest,"gpu_clock_mem_mhz"),
-        "last_gpu_power_w": telemetry.fnum(latest,"gpu_power_w"),
-        "last_gpu_pstate": latest.get("gpu_pstate",""),
+        "last_gpu_util_pct": telemetry.fnum(latest_gpu,"gpu_util_pct"),
+        "last_gpu_temp_c": telemetry.fnum(latest_gpu,"gpu_temp_c"),
+        "last_gpu_fan_pct": telemetry.fnum(latest_gpu,"gpu_fan_pct"),
+        "last_gpu_clock_sm_mhz": telemetry.fnum(latest_gpu,"gpu_clock_sm_mhz"),
+        "last_gpu_clock_mem_mhz": telemetry.fnum(latest_gpu,"gpu_clock_mem_mhz"),
+        "last_gpu_power_w": telemetry.fnum(latest_gpu,"gpu_power_w"),
+        "last_gpu_pstate": latest_gpu.get("gpu_pstate",""),
         "cpu_util_pct": telemetry.stats(telemetry.fnum(r,"cpu_util_pct") for r in rows),
         "mem_used_pct": telemetry.stats(telemetry.fnum(r,"mem_used_pct") for r in rows),
         "thermal_max_c": telemetry.stats(telemetry.fnum(r,"thermal_max_c") for r in rows if telemetry.fnum(r,"thermal_max_c") > 0.0),
@@ -269,44 +274,65 @@ def write_combined(out_dir: str, all_rows: Dict[str,List[Dict[str,str]]], errors
     queue_prompt_tok_s_by_node = telemetry.node_metric_map(queue.get("local_queue_prompt_tok_s_by_node",""))
     queue_req_s_by_node = telemetry.node_metric_map(queue.get("local_queue_completion_req_s_by_node",""))
     queue_tok_s_by_node = telemetry.node_metric_map(queue.get("local_queue_completion_tok_s_by_node",""))
-    lines.append("| node | samples | gpu % | gpu C | vLLM run/wait | KV % | local q | gateway cpu q | disk % | rx Mbps | tx Mbps | cpu % | mem % | model | error | req/s | in tok/s | out tok/s | cache hit % | ext hit % |")
-    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|")
+    global_queue_known = str(queue.get("local_queue_db","")) != ""
+    lines.append("| node | samples | gpu % | gpu C | gpu W | vLLM run/wait | KV % | local q | gateway cpu q | disk % | rx Mbps | tx Mbps | cpu % | mem % | model | error | req/s | in tok/s | out tok/s | cache hit % | ext hit % |")
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|")
     for node,row in summary["nodes"].items():
+        sample_known = int(float(row.get("sample_count",0))) > 0
+        vllm_known = float(row.get("last_vllm_metrics_up",0.0)) > 0.0
+        queue_known = global_queue_known or str(row.get("last_local_queue_db","")) != "" or node in queue_depth_by_node or node in queue_queued_by_node or node in queue_running_by_node or node in queue_prompt_tok_s_by_node or node in queue_req_s_by_node or node in queue_tok_s_by_node
+        work_known = vllm_known or queue_known
+        gateway_known = float(row.get("last_ds4_gateway_up",0.0)) > 0.0
         vllm_running = float(row.get("last_vllm_requests_running",0.0))
         vllm_waiting = float(row.get("last_vllm_requests_waiting",0.0))
         local_q = max(float(row.get("last_local_queue_depth",0.0)),float(queue_depth_by_node.get(node,0.0)))
-        if float(row.get("last_vllm_metrics_up",0.0)) <= 0.0:
+        if not vllm_known:
             vllm_running = max(vllm_running,float(queue_running_by_node.get(node,0.0)))
             vllm_waiting = max(vllm_waiting,float(queue_queued_by_node.get(node,0.0)))
-        kv_text = "%.2f" % float(row.get("last_vllm_kv_cache_pct",0.0)) if float(row.get("last_vllm_metrics_up",0.0)) > 0.0 else "n/a"
+        kv_text = "%.2f" % float(row.get("last_vllm_kv_cache_pct",0.0)) if vllm_known else "n/a"
         req_s = max(float(row.get("last_vllm_requests_per_s",0.0)),float(queue_req_s_by_node.get(node,0.0)))
         in_tok_s = max(float(row.get("last_vllm_prompt_tokens_per_s",0.0)),float(queue_prompt_tok_s_by_node.get(node,0.0)))
         out_tok_s = max(float(row.get("last_vllm_generation_tokens_per_s",0.0)),float(queue_tok_s_by_node.get(node,0.0)))
         cache_hit_pct = float(row.get("last_vllm_prompt_cache_hit_pct",0.0))
         ext_hit_pct = float(row.get("last_vllm_external_prefix_cache_hit_pct",0.0))
-        lines.append("| %s | %s | %.2f | %.2f | %.0f/%.0f | %s | %.0f | %.0f/%.0f | %.2f | %.4f | %.4f | %.2f | %.2f | %s | %s | %.1f | %.3f | %.3f | %.2f | %.2f |" % (
+        gpu_util_text = "%.2f" % float(row.get("last_gpu_util_pct",0.0)) if sample_known else "n/a"
+        gpu_temp_text = "%.2f" % float(row.get("last_gpu_temp_c",0.0)) if sample_known else "n/a"
+        gpu_power_text = "%.2f" % float(row.get("last_gpu_power_w",0.0)) if sample_known else "n/a"
+        work_text = "%.0f/%.0f" % (vllm_running,vllm_waiting) if work_known else "n/a"
+        local_q_text = "%.0f" % local_q if queue_known else "n/a"
+        gateway_text = "%.0f/%.0f" % (float(row.get("last_ds4_gateway_cpu_pending",0.0)),float(row.get("last_ds4_gateway_cpu_active",0.0))) if gateway_known else "n/a"
+        disk_text = "%.2f" % float(row.get("last_root_disk_used_pct",0.0)) if sample_known else "n/a"
+        rx_text = "%.4f" % float(row.get("last_net_rx_mbps",0.0)) if sample_known else "n/a"
+        tx_text = "%.4f" % float(row.get("last_net_tx_mbps",0.0)) if sample_known else "n/a"
+        cpu_text = "%.2f" % float(row.get("last_cpu_util_pct",0.0)) if sample_known else "n/a"
+        mem_text = "%.2f" % float(row.get("last_mem_used_pct",0.0)) if sample_known else "n/a"
+        req_s_text = "%.1f" % req_s if work_known else "n/a"
+        in_tok_s_text = "%.3f" % in_tok_s if work_known else "n/a"
+        out_tok_s_text = "%.3f" % out_tok_s if work_known else "n/a"
+        cache_text = "%.2f" % cache_hit_pct if vllm_known else "n/a"
+        ext_text = "%.2f" % ext_hit_pct if vllm_known else "n/a"
+        lines.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
             node,
             row.get("sample_count",0),
-            float(row.get("last_gpu_util_pct",0.0)),
-            float(row.get("last_gpu_temp_c",0.0)),
-            vllm_running,
-            vllm_waiting,
+            gpu_util_text,
+            gpu_temp_text,
+            gpu_power_text,
+            work_text,
             kv_text,
-            local_q,
-            float(row.get("last_ds4_gateway_cpu_pending",0.0)),
-            float(row.get("last_ds4_gateway_cpu_active",0.0)),
-            float(row.get("last_root_disk_used_pct",0.0)),
-            float(row.get("last_net_rx_mbps",0.0)),
-            float(row.get("last_net_tx_mbps",0.0)),
-            float(row.get("last_cpu_util_pct",0.0)),
-            float(row.get("last_mem_used_pct",0.0)),
+            local_q_text,
+            gateway_text,
+            disk_text,
+            rx_text,
+            tx_text,
+            cpu_text,
+            mem_text,
             str(row.get("last_ds4_gateway_current_model","")).replace("|","/")[:40],
             str(row.get("error","")).replace("|","/"),
-            req_s,
-            in_tok_s,
-            out_tok_s,
-            cache_hit_pct,
-            ext_hit_pct,
+            req_s_text,
+            in_tok_s_text,
+            out_tok_s_text,
+            cache_text,
+            ext_text,
         ))
     telemetry.write_text_atomic(md_path,"\n".join(lines) + "\n")
     return(summary)
