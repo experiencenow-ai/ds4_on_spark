@@ -44,11 +44,32 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         self.assertEqual(got, "12-13")
         self.assertTrue(ok)
 
-    def test_missing_final_answer_marker_fails_closed(self) -> None:
-        got, ok = self.runner._grade_one({"choices": ["x", "y", "z"], "answer": "B"}, "Reasoning mentions answer choices A, B, and C.")
+    def test_multiple_choice_preserves_loose_answer_fallback(self) -> None:
+        got, ok = self.runner._grade_one(
+            {"choices": ["A", "B", "C", "D", "E", "F", "G", "H"], "answer": "F"},
+            "</think>The answer is F. This answer is final; option H is tempting.",
+        )
 
-        self.assertEqual(got, "?")
-        self.assertFalse(ok)
+        self.assertEqual(got, "F")
+        self.assertTrue(ok)
+
+    def test_multiple_choice_answer_marker_beats_later_prose(self) -> None:
+        got, ok = self.runner._grade_one(
+            {"choices": ["A", "B", "C", "D", "E", "F", "G", "H"], "answer": "F"},
+            "</think>Answer: F\nThis answer is final; option H is tempting.",
+        )
+
+        self.assertEqual(got, "F")
+        self.assertTrue(ok)
+
+    def test_integer_preserves_loose_answer_fallback(self) -> None:
+        got, ok = self.runner._grade_one(
+            {"source": "AIME2025", "answer": "82"},
+            "</think>The answer is 082. This answer comes from AIME 2025.",
+        )
+
+        self.assertEqual(got, "82")
+        self.assertTrue(ok)
 
     def test_request_id_remap_preserves_eval_metadata(self) -> None:
         rows = [
