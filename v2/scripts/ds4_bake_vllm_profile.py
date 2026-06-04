@@ -12,6 +12,7 @@ from ds4_infer.baked_profiles import (
     parse_csv_strings,
     parse_key_value,
     parse_set_arg,
+    resolve_path,
     write_lock,
 )
 
@@ -25,11 +26,11 @@ def main() -> int:
     expected_banner = dict(parse_key_value(item) for item in args.expect_banner)
     lock = create_engine_lock(
         profile_name=args.profile_name,
-        runtime_contract_path=_path(args.runtime_contract, v2_dir),
-        topology_path=_path(args.topology, v2_dir) if args.topology else None,
+        runtime_contract_path=resolve_path(args.runtime_contract, v2_dir),
+        topology_path=resolve_path(args.topology, v2_dir) if args.topology else None,
         service_id=args.service_id,
-        ds4_repo=_path(args.ds4_repo, repo_dir),
-        vllm_repo=_path(args.vllm_repo, repo_dir) if args.vllm_repo else None,
+        ds4_repo=resolve_path(args.ds4_repo, repo_dir),
+        vllm_repo=resolve_path(args.vllm_repo, repo_dir) if args.vllm_repo else None,
         model_path=args.model_path or None,
         served_model_name=args.served_model_name or None,
         node_ids=parse_csv_strings(args.node_ids) if args.node_ids else None,
@@ -74,13 +75,6 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--semantic-preset", choices=("none", "dsv4-basic"), default="none")
     parser.add_argument("--allow-dirty", action="store_true")
     return parser.parse_args()
-
-
-def _path(raw: str, base: Path) -> Path:
-    path = Path(raw).expanduser()
-    if path.is_absolute():
-        return path
-    return (base / path).resolve()
 
 
 if __name__ == "__main__":

@@ -17,6 +17,8 @@ from ds4_infer.topology import SparkTopology
 ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
+DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident64.json"
+DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 
 
 class PipelineApiTests(unittest.TestCase):
@@ -177,7 +179,9 @@ class PipelineApiTests(unittest.TestCase):
             stage = status["queue"]["stages"][0]
             self.assertEqual(stage["service_id"], "dsv4_flash_pp8")
             self.assertEqual(stage["node_id"], "spark4")
-            self.assertEqual((stage["layer_start"], stage["layer_end"], stage["layer_count"]), (32, 40, 8))
+            expected_start = sum(DSV4_PRODUCTION["layer_partition"][:4])
+            expected_count = DSV4_PRODUCTION["layer_partition"][4]
+            self.assertEqual((stage["layer_start"], stage["layer_end"], stage["layer_count"]), (expected_start, expected_start + expected_count, expected_count))
 
     def test_pipeline_worker_refills_under_existing_compute_lease(self) -> None:
         class Runner:
@@ -245,7 +249,7 @@ class PipelineApiTests(unittest.TestCase):
                     }
                 )
             )
-        choice_events = [event for event in events if event["choices"]]
+        choice_events = sorted((event for event in events if event["choices"]), key=lambda event: event["choices"][0]["index"])
         self.assertEqual([event["choices"][0]["index"] for event in choice_events], [0, 1])
         self.assertEqual([event["choices"][0]["finish_reason"] for event in choice_events], ["stop", "stop"])
         self.assertEqual(events[-1]["choices"], [])

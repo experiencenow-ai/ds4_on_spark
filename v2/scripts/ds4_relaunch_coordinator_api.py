@@ -11,6 +11,10 @@ import time
 from urllib import request
 
 
+ROOT = Path(__file__).resolve().parents[1]
+DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident64.json"
+
+
 def main() -> int:
     args = _parse_args()
     script_path = Path(__file__).resolve()
@@ -58,7 +62,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-pull", action="store_true")
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--skip-tests", action="store_true")
-    parser.add_argument("--profile", choices=("throughput", "production", "resident64", "resident128"), default="throughput")
+    parser.add_argument("--profile", choices=("throughput", "production", "resident64", "resident128"), default="resident64")
     parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8700") or "8700"))
     parser.add_argument("--queue-dir", default=os.environ.get("QUEUE_DIR", str(Path.home() / "ds4_queue")))
@@ -113,6 +117,7 @@ _SAFETY_PROFILE_DEFAULTS = {
 
 
 def _profile_defaults(profile: str) -> dict[str, str]:
+    dsv4 = _load_dsv4_production_profile()
     common = {
         "DS4_API_BACKGROUND_DISPATCH": "1",
         "DS4_PIPELINE_COHORT_COMPLETIONS": "1",
@@ -125,58 +130,30 @@ def _profile_defaults(profile: str) -> dict[str, str]:
         "DS4_COMPUTE_LEASE_QUANTUM_S": "180",
         "DS4_API_TRANSPORT_TIMEOUT_S": "3600",
         "DS4_API_TRANSPORT_MAX_ATTEMPTS": "1",
-        "DS4_API_DISPATCH_KV_CAPACITY_BYTES": "51539607552",
+        "DS4_API_DISPATCH_KV_CAPACITY_BYTES": str(dsv4["coordinator"]["dispatch_kv_capacity_bytes"]),
     }
-    if profile == "resident64":
+    if profile in {"throughput", "production", "resident64", "resident128"}:
+        coordinator = dsv4["coordinator"]
+        service_id = str(dsv4["service_id"])
+        max_num_seqs = int(dsv4["max_num_seqs"])
         common.update(
             {
-                "DS4_API_DISPATCH_WINDOW": "64",
-                "DS4_API_DISPATCH_REFILL_BATCH": "64",
+                "DS4_API_DISPATCH_WINDOW": str(coordinator["dispatch_window"]),
+                "DS4_API_DISPATCH_REFILL_BATCH": str(coordinator["dispatch_refill_batch"]),
                 "DS4_API_DISPATCH_BATCH_LINGER_S": "0.05",
-                "DS4_PIPELINE_COMPLETION_COHORT_MAX": "64",
-                "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "16384",
-                "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "64",
-                "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "1",
-                "DS4_API_DISPATCH_KV_CAPACITY_BYTES": "8589934592",
-                "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": 12, "qwen27_nvfp4_pp8": 12, "dsv4_flash_pp8": 64}, separators=(",", ":")),
-            }
-        )
-    elif profile == "resident128":
-        common.update(
-            {
-                "DS4_API_DISPATCH_WINDOW": "128",
-                "DS4_API_DISPATCH_REFILL_BATCH": "128",
-                "DS4_API_DISPATCH_BATCH_LINGER_S": "0.05",
-                "DS4_PIPELINE_COMPLETION_COHORT_MAX": "128",
-                "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "16384",
-                "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "16",
-                "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "8",
-                "DS4_PIPELINE_COMPLETION_COHORT_BUDGET_INCLUDE_OUTPUT": "0",
-                "DS4_API_DISPATCH_KV_CAPACITY_BYTES": "8589934592",
-                "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": 12, "qwen27_nvfp4_pp8": 12, "dsv4_flash_pp8": 128}, separators=(",", ":")),
-            }
-        )
-    elif profile == "production":
-        common.update(
-            {
-                "DS4_API_DISPATCH_WINDOW": "64",
-                "DS4_API_DISPATCH_REFILL_BATCH": "16",
-                "DS4_API_DISPATCH_BATCH_LINGER_S": "0.02",
-                "DS4_PIPELINE_COMPLETION_COHORT_MAX": "128",
-            }
-        )
-    else:
-        common.update(
-            {
-                "DS4_API_DISPATCH_WINDOW": "512",
-                "DS4_API_DISPATCH_REFILL_BATCH": "512",
-                "DS4_API_DISPATCH_BATCH_LINGER_S": "0.25",
-                "DS4_PIPELINE_COMPLETION_COHORT_MAX": "512",
-                "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "131072",
-                "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": 512, "qwen27_nvfp4_pp8": 512, "dsv4_flash_pp8": 512}, separators=(",", ":")),
+                "DS4_PIPELINE_COMPLETION_COHORT_MAX": str(coordinator["completion_cohort_max"]),
+                "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": str(coordinator["completion_token_budget"]),
+                "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": str(coordinator["completion_pp_safe_cohort_max"]),
+                "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": str(coordinator["completion_chunk_concurrency"]),
+                "DS4_API_DISPATCH_KV_CAPACITY_BYTES": str(coordinator["dispatch_kv_capacity_bytes"]),
+                "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": 12, "qwen27_nvfp4_pp8": 12, service_id: max_num_seqs}, separators=(",", ":")),
             }
         )
     return common
+
+
+def _load_dsv4_production_profile() -> dict[str, object]:
+    return json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 
 
 def _log_path(raw: str) -> Path:

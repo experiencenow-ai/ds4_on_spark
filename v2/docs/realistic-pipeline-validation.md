@@ -14,6 +14,8 @@ PYTHONPATH=src python3 scripts/ds4_pipeline_runtime_audit.py
 
 The audit must pass. It checks that:
 
+- `profiles/production/dsv4_flash_pp8_resident64.json` is the source of truth
+  for the bounded DSV4 PP8 production envelope.
 - DSV4 topology, runtime contract, and KV deployment agree on `max_num_seqs`,
   `max_num_batched_tokens`, KV bytes, and layer partition.
 - DSV4 uses the native auto backend selection, not forced DeepGEMM or Marlin.
@@ -29,20 +31,33 @@ Use the repo-owned relaunch script:
 
 ```bash
 cd /home/spark0/ds4_on_spark/v2
-python3 scripts/ds4_relaunch_coordinator_api.py --profile throughput
+python3 scripts/ds4_relaunch_coordinator_api.py --profile resident64
 ```
 
-The throughput profile intentionally uses:
+The resident64 profile intentionally uses:
 
 ```text
-DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET=131072
-DS4_API_BATCH_LIMITS_JSON includes dsv4_flash_pp8=512
+DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET=16384
+DS4_API_BATCH_LIMITS_JSON includes dsv4_flash_pp8=64
 DS4_COMPUTE_LEASE_QUANTUM_S=180
-DS4_API_DISPATCH_KV_CAPACITY_BYTES=51539607552
+DS4_API_DISPATCH_KV_CAPACITY_BYTES=8589934592
 ```
 
-The token budget is below the raw DSV4 vLLM launch budget so realistic long
-prompts split before vLLM sees an oversized prompt array.
+Those values are loaded from
+`profiles/production/dsv4_flash_pp8_resident64.json`; old profile names such as
+`throughput` are compatibility aliases for the same bounded envelope.
+
+The current DSV4 PP8 production launch profile is bounded, not max-KV:
+
+```text
+--max-num-seqs 64
+--max-num-batched-tokens 32768
+--kv-cache-memory-bytes 8589934592
+--gpu-memory-utilization 0.35
+```
+
+The token budget is an API-side cohort guard so realistic long prompts split
+before vLLM sees an oversized prompt array.
 The KV capacity is a per-node/per-shard admission guard. Set it explicitly for
 realistic profiles; `0` is accepted only for deliberate debug runs and is
 reported as `kv_admission_warning=unlimited_kv_admission` in dispatcher status.
