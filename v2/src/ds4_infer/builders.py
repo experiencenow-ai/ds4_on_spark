@@ -180,6 +180,12 @@ def apply_thinking_fields(
     )
 
 
+def thinking_request_fields(profile: ModelProfile, *, chat: bool, thinking_budget_tokens: int) -> dict[str, Any]:
+    item: dict[str, Any] = {}
+    apply_thinking_fields(item, profile, chat=chat, thinking_budget_tokens=thinking_budget_tokens)
+    return item
+
+
 def apply_thinking_fields_for_model(
     item: dict[str, Any],
     *,

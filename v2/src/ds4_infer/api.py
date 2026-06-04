@@ -500,9 +500,9 @@ class CoordinatorApi:
         )
         if submitted:
             self._dispatcher_count(worked_count=1, claimed_count=submitted, submitted_count=submitted)
-            self._dispatcher_note(last_work_at=time.time(), pending=_pending_claim_count(runtime.pending), pending_cohorts=len(runtime.pending), last_error=None)
+            self._dispatcher_note(last_work_at=time.time(), pending=_pending_claim_count(runtime.pending, queue=self.queue), pending_cohorts=len(runtime.pending), last_error=None)
             return True
-        self._dispatcher_note(pending=_pending_claim_count(runtime.pending), pending_cohorts=len(runtime.pending), last_error=None)
+        self._dispatcher_note(pending=_pending_claim_count(runtime.pending, queue=self.queue), pending_cohorts=len(runtime.pending), last_error=None)
         return bool(completed or failed or retried)
 
     def _dispatcher_shutdown(self, runtime: DispatcherRuntime) -> None:
@@ -524,7 +524,7 @@ class CoordinatorApi:
         batch_limits_by_service: dict[str, int],
         kv_shard_layouts_by_profile: dict[str, Any],
     ) -> int:
-        available = self.dispatcher_window - _pending_claim_count(pending)
+        available = self.dispatcher_window - _pending_claim_count(pending, queue=self.queue)
         if available <= 0:
             return 0
         limit = min(available, self.dispatcher_refill_batch)
@@ -1195,8 +1195,11 @@ def _pending_claims(pending: dict[Any, list[QueueClaim]]) -> list[QueueClaim]:
     return claims
 
 
-def _pending_claim_count(pending: dict[Any, list[QueueClaim]]) -> int:
-    return sum(len(cohort) for cohort in pending.values())
+def _pending_claim_count(pending: dict[Any, list[QueueClaim]], *, queue: Any | None = None) -> int:
+    if queue is None or not hasattr(queue, "unfinished_request_count"):
+        return sum(len(cohort) for cohort in pending.values())
+    request_ids = [claim.request_id for cohort in pending.values() for claim in cohort]
+    return int(queue.unfinished_request_count(request_ids))
 
 
 _DISPATCHER_BATCH_FINISHED: Any = object()

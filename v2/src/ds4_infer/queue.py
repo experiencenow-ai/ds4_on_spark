@@ -534,6 +534,20 @@ class InferenceQueue:
             leases = [dict(row) for row in conn.execute("select * from compute_leases order by compute_domain")]
             return {"format": QUEUE_FORMAT, "state_counts": counts, "newest_event_id": int(event["newest"] or 0), "active_compute_leases": leases, "pipeline_status": self._pipeline_status_locked(conn)}
 
+    def unfinished_request_count(self, request_ids: Iterable[str]) -> int:
+        ids = tuple(str(request_id) for request_id in request_ids)
+        if not ids:
+            return 0
+        placeholders = ",".join("?" for _ in ids)
+        terminal = tuple(sorted(TERMINAL_STATES))
+        terminal_placeholders = ",".join("?" for _ in terminal)
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                f"select count(*) n from requests where request_id in ({placeholders}) and state not in ({terminal_placeholders})",
+                ids + terminal,
+            ).fetchone()
+        return int(row["n"] if row else 0)
+
     def poll(self, *, after_event_id: int = 0, limit: int = 100) -> dict[str, Any]:
         with closing(self._connect()) as conn:
             rows = conn.execute("select * from events where event_id>? order by event_id limit ?", (after_event_id, limit)).fetchall()

@@ -50,6 +50,30 @@ class PipelineApiTests(unittest.TestCase):
         )
         self.assertEqual(_openai_payload(request, profile)["model"], "deepseek-v4-flash-pp8")
 
+    def test_pipeline_openai_payload_uses_shared_thinking_fields(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
+        request = InferenceRequest.from_json(
+            {
+                "format": "ds4-inference-request-v1",
+                "request_id": "thinking-payload",
+                "capability": "efficient",
+                "chat": True,
+                "immediate": False,
+                "job_class": "analysis",
+                "max_output_tokens": 64,
+                "thinking_budget_tokens": 100,
+                "temperature": 0,
+                "input": {"messages": [{"role": "user", "content": "solve"}]},
+                "output_contract": {"format": "text"},
+            }
+        )
+        payload = _openai_payload(request, profile)
+        self.assertEqual(payload["max_tokens"], 164)
+        self.assertEqual(payload["extra_body"]["thinking_budget_tokens"], 100)
+        self.assertEqual(payload["extra_body"]["thinking_token_budget"], 100)
+        self.assertEqual(payload["extra_body"]["chat_template_kwargs"], {"enable_thinking": True})
+
     def test_pipeline_served_model_override_can_key_by_service_id(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
@@ -299,6 +323,65 @@ class PipelineApiTests(unittest.TestCase):
                 row = conn.execute("select request_json from requests where batch_id=?", ("thinking-chat",)).fetchone()
             request_json = json.loads(str(row["request_json"]))
         self.assertEqual(request_json["thinking_budget_tokens"], 123)
+
+    def test_dispatcher_pending_claim_count_uses_unfinished_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY)
+            registry = ProfileRegistry.load(PROFILES)
+            topology = SparkTopology.load(TOPOLOGY)
+            requests = [
+                InferenceRequest.from_json(
+                    {
+                        "format": "ds4-inference-request-v1",
+                        "request_id": f"pending-{idx}",
+                        "capability": "efficient",
+                        "chat": False,
+                        "immediate": False,
+                        "job_class": "analysis",
+                        "max_output_tokens": 8,
+                        "thinking_budget_tokens": 0,
+                        "temperature": 0,
+                        "input": {"prompt": f"prompt {idx}"},
+                        "output_contract": {"format": "text"},
+                    }
+                )
+                for idx in range(2)
+            ]
+            api.queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id="pending-count")
+            prepared = api.queue.prepare_ready(
+                node_id="spark0",
+                eligible_profile_ids=tuple(topology.pipeline_profiles),
+                batch_id="pending-count",
+                limit=2,
+                leased_by="test",
+                lease_ttl_s=30,
+                kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+            )
+            self.assertEqual(prepared, 2)
+            claims = api.queue.claim_ready_batch(
+                node_id="spark0",
+                batch_id="pending-count",
+                limit=2,
+                leased_by="test",
+                lease_ttl_s=30,
+                kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                batch_limits_by_service=api_module._batch_limits_by_service(topology),
+            )
+            self.assertEqual(api_module._pending_claim_count({object(): claims}, queue=api.queue), 2)
+            first = claims[0]
+            api.queue.finish_request(
+                request_id=first.request_id,
+                lease_id=first.lease_id,
+                state="completed",
+                result=make_result(
+                    request=first.request,
+                    profile_id=first.selected_profile_id,
+                    model_id="test",
+                    backend="test",
+                    text="done",
+                ),
+            )
+            self.assertEqual(api_module._pending_claim_count({object(): claims}, queue=api.queue), 1)
 
     def test_pipeline_runner_prestages_common_strict_kv_prefix(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

@@ -10,8 +10,9 @@ from .pipelines import (
     PipelineService,
     PipelineStage,
     even_layer_partition,
+    layer_partition_by_node,
+    layer_partition_from_preset,
     load_pipeline_services,
-    qwen36_27b_bf16_layer_partition,
 )
 from .profiles import ModelProfile
 
@@ -316,19 +317,14 @@ def _apply_pipeline_node_override(data: dict[str, Any]) -> dict[str, Any]:
 def _partition_for_service(service_id: str, service: dict[str, Any], stage_count: int, total_layers: int) -> tuple[int, ...]:
     if stage_count > total_layers:
         raise ValueError(f"service {service_id} has more pipeline stages than layers")
-    by_node = service.get("layer_partition_by_node")
-    if isinstance(by_node, dict):
-        node_ids = tuple(str(item) for item in service.get("node_ids", ()))
-        missing = [node_id for node_id in node_ids if node_id not in by_node]
-        extra = [node_id for node_id in by_node if node_id not in set(node_ids)]
-        if missing:
-            raise ValueError(f"service {service_id} layer_partition_by_node missing nodes: {missing}")
-        if extra:
-            raise ValueError(f"service {service_id} layer_partition_by_node references outside nodes: {extra}")
-        return tuple(int(by_node[node_id]) for node_id in node_ids)
+    node_ids = tuple(str(item) for item in service.get("node_ids", ()))
+    by_node_partition = layer_partition_by_node(service.get("layer_partition_by_node"), node_ids=node_ids, label=f"service {service_id} layer_partition_by_node")
+    if by_node_partition is not None:
+        return by_node_partition
     raw = service.get("layer_partition")
     if isinstance(raw, list) and len(raw) == stage_count:
         return tuple(int(item) for item in raw)
-    if isinstance(raw, str) and raw.strip().lower() in {"qwen3.6-27b-bf16", "qwen36_27b_bf16", "qwen27_bf16"}:
-        return qwen36_27b_bf16_layer_partition(stage_count)
+    if isinstance(raw, str):
+        partition, _source = layer_partition_from_preset(raw, total_layers=total_layers, stage_count=stage_count)
+        return partition
     return even_layer_partition(total_layers, stage_count)
