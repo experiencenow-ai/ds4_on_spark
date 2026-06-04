@@ -18,6 +18,13 @@ def load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def resolve_path(raw: str, base: Path) -> Path:
+    path = Path(raw).expanduser()
+    if path.is_absolute():
+        return path
+    return (base / path).resolve()
+
+
 def create_engine_lock(
     *,
     profile_name: str,

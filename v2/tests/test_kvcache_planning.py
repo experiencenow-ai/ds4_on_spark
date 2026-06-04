@@ -15,6 +15,8 @@ DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "dsv4_spark45_hma_cpu_offload.json
 QWEN_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_lmcache_mp_spark7.json"
 QWEN_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_lmcache_hma.json"
 DSV4_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "dsv4_flash_pp8_simple_offload.json"
+DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident64.json"
+DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 VLLM_COMMIT = "c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34"
 
 
@@ -168,16 +170,16 @@ class KvCachePlanningTests(unittest.TestCase):
         plan = plan_deployment(deployment)
 
         self.assertEqual(plan["profile_id"], "dsv4_vllm_mtp_pp8_smartest_v1")
-        self.assertEqual(plan["pipeline_parallel_size"], 8)
+        self.assertEqual(plan["pipeline_parallel_size"], DSV4_PRODUCTION["pipeline_parallel_size"])
         self.assertEqual(plan["cache_sharding"], "pipeline_layers")
-        self.assertEqual(plan["layer_partition"], [8, 8, 8, 8, 8, 1, 1, 1])
+        self.assertEqual(plan["layer_partition"], DSV4_PRODUCTION["layer_partition"])
         self.assertEqual(plan["vllm_nodes"][-1]["layer_end"], 43)
         self.assertIn("SimpleCPUOffloadConnector", plan["vllm_nodes"][0]["command"])
         self.assertIn("--kv-cache-dtype", plan["vllm_nodes"][0]["argv"])
-        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--kv-cache-dtype") + 1], "fp8")
-        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--max-num-seqs") + 1], "512")
-        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--max-num-batched-tokens") + 1], "262144")
-        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--kv-cache-memory-bytes") + 1], "51539607552")
+        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--kv-cache-dtype") + 1], DSV4_PRODUCTION["kv_cache_dtype"])
+        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--max-num-seqs") + 1], str(DSV4_PRODUCTION["max_num_seqs"]))
+        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--max-num-batched-tokens") + 1], str(DSV4_PRODUCTION["max_num_batched_tokens"]))
+        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--kv-cache-memory-bytes") + 1], str(DSV4_PRODUCTION["kv_cache_memory_bytes"]))
         self.assertIn("--headless", plan["vllm_nodes"][-1]["argv"])
 
     def test_write_pipeline_launch_scripts(self) -> None:

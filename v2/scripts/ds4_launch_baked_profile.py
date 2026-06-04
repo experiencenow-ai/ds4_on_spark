@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import sys
 
-from ds4_infer.baked_profiles import load_json, validate_lock, verify_repos, write_rank_files
+from ds4_infer.baked_profiles import load_json, resolve_path, validate_lock, verify_repos, write_rank_files
 
 
 def main() -> int:
@@ -20,8 +20,8 @@ def main() -> int:
         errors.extend(
             verify_repos(
                 lock,
-                ds4_repo=_path(args.ds4_repo, repo_dir),
-                vllm_repo=_path(args.vllm_repo, repo_dir) if args.vllm_repo else None,
+                ds4_repo=resolve_path(args.ds4_repo, repo_dir),
+                vllm_repo=resolve_path(args.vllm_repo, repo_dir) if args.vllm_repo else None,
             )
         )
     if errors:
@@ -62,13 +62,6 @@ def _summary(lock: dict[str, object]) -> dict[str, object]:
         "cache_root": (lock.get("env") or {}).get("VLLM_CACHE_ROOT") if isinstance(lock.get("env"), dict) else "",
         "semantic_gate_count": len(lock.get("semantic_gates") or []),
     }
-
-
-def _path(raw: str, base: Path) -> Path:
-    path = Path(raw).expanduser()
-    if path.is_absolute():
-        return path
-    return (base / path).resolve()
 
 
 if __name__ == "__main__":

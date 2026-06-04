@@ -20,6 +20,8 @@ VALIDATION_TASKS = ROOT / "profiles" / "validation" / "xhigh_live_validation_tas
 ALL_SPARKS = tuple(f"spark{index}" for index in range(8))
 QWEN_PP = "qwen3_6_27b_bf16_pp8_efficient_v1"
 DSV4_PP = "dsv4_vllm_mtp_pp8_smartest_v1"
+DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident64.json"
+DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 
 
 def make_request(request_id: str, *, capability: str, job_class: str, chat: bool = False, immediate: bool = False) -> InferenceRequest:
@@ -45,7 +47,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         topology = SparkTopology.load(TOPOLOGY)
         capacity = topology.estimate_capacity_by_profile()
         self.assertEqual(capacity[QWEN_PP], 12)
-        self.assertEqual(capacity[DSV4_PP], 512)
+        self.assertEqual(capacity[DSV4_PP], DSV4_PRODUCTION["max_num_seqs"])
         self.assertNotIn("qwen3_6_27b_fp8_efficient_v1", capacity)
         self.assertNotIn("dsv4_vllm_mtp_smartest_v1", capacity)
 
@@ -60,7 +62,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(qwen.compute_domain, "spark-fleet-0")
         self.assertEqual(dsv4.compute_domain, "spark-fleet-0")
         self.assertEqual(qwen.layer_partition, (9, 9, 9, 8, 8, 8, 8, 5))
-        self.assertEqual(dsv4.layer_partition, (8, 8, 8, 8, 8, 1, 1, 1))
+        self.assertEqual(dsv4.layer_partition, tuple(DSV4_PRODUCTION["layer_partition"]))
         self.assertEqual(qwen.stages()[-1].layer_end, 64)
         self.assertEqual(dsv4.stages()[-1].layer_end, 43)
 

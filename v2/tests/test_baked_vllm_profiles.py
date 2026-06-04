@@ -70,16 +70,16 @@ def _write_profile_inputs(tmp: Path) -> tuple[Path, Path]:
                 "--max-model-len",
                 "262144",
                 "--max-num-seqs",
-                "512",
+                "64",
                 "--max-num-batched-tokens",
-                "262144",
+                "32768",
                 "--speculative-config",
                 "{\"method\":\"deepseek_mtp\"}",
             ],
             "port": 8102,
         },
         "model": {"model_id": "deepseek-ai/DeepSeek-V4-Flash", "served_model_name": "deepseek-v4-flash"},
-        "pipeline": {"layer_partition": [8, 8, 8, 8, 8, 1, 1, 1]},
+        "pipeline": {"layer_partition": [5, 6, 6, 6, 6, 5, 5, 4]},
         "required_nodes": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7"],
     }
     topology = {
@@ -89,7 +89,7 @@ def _write_profile_inputs(tmp: Path) -> tuple[Path, Path]:
                     "model_id": "deepseek-ai/DeepSeek-V4-Flash",
                     "pipeline_parallel_size": 8,
                     "tensor_parallel_size": 1,
-                    "layer_partition": [8, 8, 8, 8, 8, 1, 1, 1],
+                    "layer_partition": [5, 6, 6, 6, 6, 5, 5, 4],
                     "node_ids": ["spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7"],
                 }
             }

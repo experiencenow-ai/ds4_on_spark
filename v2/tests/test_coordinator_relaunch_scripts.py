@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 from pathlib import Path
 import sys
@@ -10,6 +11,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 STOP_SCRIPT = ROOT / "scripts" / "ds4_stop_coordinator_api.py"
 RELAUNCH_SCRIPT = ROOT / "scripts" / "ds4_relaunch_coordinator_api.py"
+DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident64.json"
+DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 
 
 def load_script(path: Path):
@@ -45,85 +48,65 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
 
         self.assertEqual([row.pid for row in targets], [12, 11, 10])
 
-    def test_relaunch_throughput_profile_sets_safe_cohort_defaults(self) -> None:
+    def test_relaunch_legacy_profile_names_alias_to_bounded_source_defaults(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
 
-        defaults = relaunch._profile_defaults("throughput")
+        resident = relaunch._profile_defaults(DSV4_PRODUCTION["coordinator_profile"])
 
-        self.assertEqual(defaults["DS4_PIPELINE_COHORT_COMPLETIONS"], "1")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "131072")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE"], "1")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "16")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "4")
-        self.assertEqual(defaults["DS4_COMPUTE_LEASE_QUANTUM_S"], "180")
-        self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "51539607552")
-        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "512")
-        self.assertIn("dsv4_flash_pp8", defaults["DS4_API_BATCH_LIMITS_JSON"])
+        for profile_name in ("throughput", "production", "resident128"):
+            self.assertEqual(relaunch._profile_defaults(profile_name), resident)
 
     def test_relaunch_resident64_profile_sets_medium_safe_defaults(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
 
-        defaults = relaunch._profile_defaults("resident64")
+        defaults = relaunch._profile_defaults(DSV4_PRODUCTION["coordinator_profile"])
+        coordinator = DSV4_PRODUCTION["coordinator"]
 
-        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "64")
-        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "64")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "64")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "16384")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "64")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "1")
-        self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "8589934592")
+        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], str(coordinator["dispatch_window"]))
+        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], str(coordinator["dispatch_refill_batch"]))
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], str(coordinator["completion_cohort_max"]))
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], str(coordinator["completion_token_budget"]))
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], str(coordinator["completion_pp_safe_cohort_max"]))
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], str(coordinator["completion_chunk_concurrency"]))
+        self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(coordinator["dispatch_kv_capacity_bytes"]))
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS"], "1")
-        self.assertIn("dsv4_flash_pp8", defaults["DS4_API_BATCH_LIMITS_JSON"])
+        self.assertEqual(json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])[DSV4_PRODUCTION["service_id"]], DSV4_PRODUCTION["max_num_seqs"])
 
     def test_relaunch_arg_parser_accepts_resident64_profile(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
         old_argv = list(sys.argv)
-        sys.argv = [str(RELAUNCH_SCRIPT), "--profile", "resident64"]
+        sys.argv = [str(RELAUNCH_SCRIPT), "--profile", DSV4_PRODUCTION["coordinator_profile"]]
         try:
             args = relaunch._parse_args()
         finally:
             sys.argv = old_argv
 
-        self.assertEqual(args.profile, "resident64")
+        self.assertEqual(args.profile, DSV4_PRODUCTION["coordinator_profile"])
 
-    def test_relaunch_resident128_profile_keeps_compact_kv_defaults(self) -> None:
-        relaunch = load_script(RELAUNCH_SCRIPT)
-
-        defaults = relaunch._profile_defaults("resident128")
-
-        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "128")
-        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "128")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "128")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "16384")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "16")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "8")
-        self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "8589934592")
-        self.assertIn('"dsv4_flash_pp8":128', defaults["DS4_API_BATCH_LIMITS_JSON"])
-
-    def test_relaunch_arg_parser_accepts_resident128_profile(self) -> None:
+    def test_relaunch_arg_parser_defaults_to_source_owned_resident64_profile(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
         old_argv = list(sys.argv)
-        sys.argv = [str(RELAUNCH_SCRIPT), "--profile", "resident128"]
+        sys.argv = [str(RELAUNCH_SCRIPT)]
         try:
             args = relaunch._parse_args()
         finally:
             sys.argv = old_argv
 
-        self.assertEqual(args.profile, "resident128")
+        self.assertEqual(args.profile, DSV4_PRODUCTION["coordinator_profile"])
 
     def test_relaunch_safety_defaults_override_inherited_env(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
         old = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")
         os.environ["DS4_API_DISPATCH_KV_CAPACITY_BYTES"] = "0"
         try:
-            args = type("Args", (), {"profile": "throughput"})()
+            args = type("Args", (), {"profile": DSV4_PRODUCTION["coordinator_profile"]})()
             env = relaunch._coordinator_env(args, ROOT)
         finally:
             if old is None:
                 os.environ.pop("DS4_API_DISPATCH_KV_CAPACITY_BYTES", None)
             else:
                 os.environ["DS4_API_DISPATCH_KV_CAPACITY_BYTES"] = old
-        self.assertEqual(env["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "51539607552")
+        self.assertEqual(env["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(DSV4_PRODUCTION["coordinator"]["dispatch_kv_capacity_bytes"]))
 
 
 if __name__ == "__main__":

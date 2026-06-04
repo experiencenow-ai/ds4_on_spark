@@ -15,21 +15,23 @@ The coordinator has two batching layers:
 This keeps the public API OpenAI-compatible while making vLLM see the entire
 cohort before prefill.
 
-## Throughput benchmark knobs
+## Resident64 benchmark knobs
 
-For a forced c256 run through spark0, use a large dispatcher window and a large
-refill batch. The topology max batch can be overridden without editing the JSON
-topology.
+For the stable resident DSV4 profile, feed enough work to keep PP8 busy without
+using the old max-KV shape.
+The source of truth is
+`profiles/production/dsv4_flash_pp8_resident64.json`; these shell variables are
+the materialized values that the relaunch/audit path verifies.
 
 ```bash
 export DS4_API_BACKGROUND_DISPATCH=1
-export DS4_API_DISPATCH_WINDOW=256
-export DS4_API_DISPATCH_REFILL_BATCH=256
-export DS4_API_DISPATCH_BATCH_LINGER_S=0.25
-export DS4_API_BATCH_LIMITS_JSON='{"qwen27_bf16_pp8":256,"dsv4_flash_pp8":256}'
+export DS4_API_DISPATCH_WINDOW=64
+export DS4_API_DISPATCH_REFILL_BATCH=64
+export DS4_API_DISPATCH_BATCH_LINGER_S=0.05
+export DS4_API_BATCH_LIMITS_JSON='{"qwen27_bf16_pp8":12,"dsv4_flash_pp8":64}'
 export DS4_PIPELINE_COHORT_COMPLETIONS=1
-export DS4_PIPELINE_COMPLETION_COHORT_MAX=512
-export DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET=131072
+export DS4_PIPELINE_COMPLETION_COHORT_MAX=64
+export DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET=16384
 ```
 
 `DS4_API_DISPATCH_BATCH_LINGER_S` is deliberately larger for benchmarks than for
@@ -67,7 +69,7 @@ During the benchmark, verify:
 spark0 dispatcher last_claimed_cohort_size ~= requested concurrency
 spark0 dispatcher pending_cohorts stays low
 runner transport coalesced_completion_batch=true
-vLLM prefill does not show 1 + 20 + 123 + 112 style fragmentation for one c256 cohort
+vLLM prefill does not show 1 + 20 + 43 style fragmentation for one c64 cohort
 ```
 
 If vLLM still sees split prefill groups, increase linger slightly or use
@@ -83,8 +85,8 @@ smaller:
 
 ```bash
 export DS4_API_DISPATCH_WINDOW=64
-export DS4_API_DISPATCH_REFILL_BATCH=16
-export DS4_API_DISPATCH_BATCH_LINGER_S=0.02
+export DS4_API_DISPATCH_REFILL_BATCH=64
+export DS4_API_DISPATCH_BATCH_LINGER_S=0.05
 ```
 
 The benchmark knobs are for measuring saturated PP throughput, not for every

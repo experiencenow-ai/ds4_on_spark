@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident64.json"
 
 
 def main() -> int:
     errors: list[str] = []
     checks: list[str] = []
+    dsv4_profile = _load(DSV4_PRODUCTION_PROFILE)
     topology = _load(ROOT / "profiles" / "topology" / "static_sparks.json")
     routing = topology.get("routing_policy") if isinstance(topology.get("routing_policy"), dict) else {}
     services = routing["pipeline_services"]
-    _check_dsv4(services["dsv4_flash_pp8"], errors, checks)
+    service_id = str(dsv4_profile["service_id"])
+    _check_dsv4(dsv4_profile, services[service_id], errors, checks)
     _check_qwen(errors, checks)
-    _check_relaunch_defaults(errors, checks)
+    _check_relaunch_defaults(dsv4_profile, errors, checks)
     if errors:
         for error in errors:
             print(f"FAIL: {error}")
@@ -27,20 +31,45 @@ def main() -> int:
     return 0
 
 
-def _check_dsv4(service: dict[str, Any], errors: list[str], checks: list[str]) -> None:
-    contract = _load(ROOT / "profiles" / "runtime_contracts" / "dsv4_flash_pp8_mtp_v1.json")
-    deployment = _load(ROOT / "profiles" / "kv_cache" / "dsv4_flash_pp8_simple_offload.json")
+def _check_dsv4(profile: dict[str, Any], service: dict[str, Any], errors: list[str], checks: list[str]) -> None:
+    contract = _load(ROOT / str(profile["runtime_contract"]))
+    deployment = _load(ROOT / str(profile["kv_deployment"]))
     scheduler = service.get("scheduler") if isinstance(service.get("scheduler"), dict) else {}
+    layer_partition = _as_int_list(profile["layer_partition"])
+    compilation_config = json.dumps(profile["compilation_config"], separators=(",", ":"))
     for name, args in (("runtime contract", contract["launch"]["args"]), ("KV deployment", deployment["extra_args"])):
-        _require_arg(args, "--max-num-seqs", str(scheduler.get("vllm_max_num_seqs")), f"DSV4 {name} max seqs", errors, checks)
-        _require_arg(args, "--max-num-batched-tokens", str(scheduler.get("vllm_max_num_batched_tokens")), f"DSV4 {name} token budget", errors, checks)
-        _require_arg(args, "--kv-cache-memory-bytes", "51539607552", f"DSV4 {name} explicit KV bytes", errors, checks)
+        _require_arg(args, "--max-model-len", str(profile["max_model_len"]), f"DSV4 {name} max model len", errors, checks)
+        _require_arg(args, "--max-num-seqs", str(profile["max_num_seqs"]), f"DSV4 {name} max seqs", errors, checks)
+        _require_arg(args, "--max-num-batched-tokens", str(profile["max_num_batched_tokens"]), f"DSV4 {name} token budget", errors, checks)
+        _require_arg(args, "--kv-cache-memory-bytes", str(profile["kv_cache_memory_bytes"]), f"DSV4 {name} bounded resident KV bytes", errors, checks)
+        _require_arg(args, "--gpu-memory-utilization", str(profile["gpu_memory_utilization"]), f"DSV4 {name} bounded GPU memory utilization", errors, checks)
+        _require_arg(args, "--kv-cache-dtype", str(profile["kv_cache_dtype"]), f"DSV4 {name} KV dtype", errors, checks)
         _require_arg(args, "--linear-backend", "auto", f"DSV4 {name} native linear backend auto", errors, checks)
         _require_arg(args, "--moe-backend", "auto", f"DSV4 {name} native MoE backend auto", errors, checks)
-    expected_partition = [8, 8, 8, 8, 8, 1, 1, 1]
-    _require_equal(service.get("layer_partition"), expected_partition, "DSV4 topology front-loaded partition", errors, checks)
-    _require_equal(contract["pipeline"].get("layer_partition"), expected_partition, "DSV4 runtime partition", errors, checks)
-    _require_equal(deployment.get("layer_partition"), expected_partition, "DSV4 KV deployment partition", errors, checks)
+        _require_arg(args, "--compilation-config", compilation_config, f"DSV4 {name} compilation config", errors, checks)
+        if "--speculative-config" in [str(item) for item in args]:
+            errors.append(f"DSV4 {name}: resident production must not enable MTP/speculative decode")
+        else:
+            checks.append(f"DSV4 {name} keeps MTP/speculative decode off")
+    _require_arg(contract["launch"]["args"], "--pipeline-parallel-size", str(profile["pipeline_parallel_size"]), "DSV4 runtime contract PP size", errors, checks)
+    _require_arg(contract["launch"]["args"], "--tensor-parallel-size", str(profile["tensor_parallel_size"]), "DSV4 runtime contract TP size", errors, checks)
+    _require_equal(contract["pipeline"].get("pipeline_parallel_size"), profile["pipeline_parallel_size"], "DSV4 runtime pipeline PP size", errors, checks)
+    _require_equal(contract["pipeline"].get("tensor_parallel_size"), profile["tensor_parallel_size"], "DSV4 runtime pipeline TP size", errors, checks)
+    _require_equal(deployment.get("pipeline_parallel_size"), profile["pipeline_parallel_size"], "DSV4 KV deployment PP size", errors, checks)
+    _require_equal(deployment.get("tensor_parallel_size"), profile["tensor_parallel_size"], "DSV4 KV deployment TP size", errors, checks)
+    _require_equal(service.get("layer_partition"), layer_partition, "DSV4 topology source-owned PP8 partition", errors, checks)
+    _require_equal(contract["pipeline"].get("layer_partition"), layer_partition, "DSV4 runtime partition", errors, checks)
+    _require_equal(deployment.get("layer_partition"), layer_partition, "DSV4 KV deployment partition", errors, checks)
+    _require_equal(service.get("max_batch_size"), profile["max_batch_size"], "DSV4 topology max batch size", errors, checks)
+    for actual_key, profile_key in {
+        "queue_concurrency": "queue_concurrency",
+        "queue_limit": "queue_limit",
+        "refill_low_watermark": "refill_low_watermark",
+        "max_running_batches_per_compute_domain": "max_running_batches_per_compute_domain",
+        "vllm_max_num_batched_tokens": "max_num_batched_tokens",
+        "vllm_max_num_seqs": "max_num_seqs",
+    }.items():
+        _require_equal(scheduler.get(actual_key), profile[profile_key], f"DSV4 topology scheduler {actual_key}", errors, checks)
     env = deployment.get("extra_env") if isinstance(deployment.get("extra_env"), dict) else {}
     for key, value in {
         "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR": "0",
@@ -77,21 +106,23 @@ def _check_qwen(errors: list[str], checks: list[str]) -> None:
         checks.append("Qwen BF16 LMCache root is FP8-KV namespaced")
 
 
-def _check_relaunch_defaults(errors: list[str], checks: list[str]) -> None:
-    text = (ROOT / "scripts" / "ds4_relaunch_coordinator_api.py").read_text(encoding="utf-8")
-    if '"DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "131072"' not in text:
-        errors.append("coordinator throughput relaunch must use bounded 131072 token cohorts")
-    else:
-        checks.append("coordinator throughput relaunch uses bounded token cohorts")
-    if '"DS4_COMPUTE_LEASE_QUANTUM_S": "180"' not in text:
-        errors.append("coordinator relaunch must set compute lease quantum")
-    else:
-        checks.append("coordinator relaunch sets compute lease quantum")
-    if '"DS4_API_DISPATCH_KV_CAPACITY_BYTES": "51539607552"' not in text:
-        errors.append("coordinator relaunch must bound dispatcher KV admission")
-    else:
-        checks.append("coordinator relaunch bounds dispatcher KV admission")
-    if '"DS4_API_DISPATCH_KV_CAPACITY_BYTES",' not in text or "env[key] = value" not in text:
+def _check_relaunch_defaults(profile: dict[str, Any], errors: list[str], checks: list[str]) -> None:
+    module = _load_module(ROOT / "scripts" / "ds4_relaunch_coordinator_api.py")
+    defaults = module._profile_defaults(str(profile["coordinator_profile"]))
+    coordinator = profile["coordinator"]
+    for key, profile_key in {
+        "DS4_API_DISPATCH_WINDOW": "dispatch_window",
+        "DS4_API_DISPATCH_REFILL_BATCH": "dispatch_refill_batch",
+        "DS4_PIPELINE_COMPLETION_COHORT_MAX": "completion_cohort_max",
+        "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "completion_token_budget",
+        "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "completion_pp_safe_cohort_max",
+        "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "completion_chunk_concurrency",
+        "DS4_API_DISPATCH_KV_CAPACITY_BYTES": "dispatch_kv_capacity_bytes",
+    }.items():
+        _require_equal(defaults.get(key), str(coordinator[profile_key]), f"coordinator {profile['coordinator_profile']} {key}", errors, checks)
+    batch_limits = json.loads(defaults.get("DS4_API_BATCH_LIMITS_JSON", "{}"))
+    _require_equal(batch_limits.get(str(profile["service_id"])), profile["max_num_seqs"], f"coordinator {profile['coordinator_profile']} DSV4 batch limit", errors, checks)
+    if "DS4_API_DISPATCH_KV_CAPACITY_BYTES" not in module._SAFETY_PROFILE_DEFAULTS:
         errors.append("coordinator relaunch must override unsafe inherited KV admission env")
     else:
         checks.append("coordinator relaunch overrides unsafe inherited KV admission env")
@@ -119,6 +150,21 @@ def _require_equal(actual: Any, expected: Any, label: str, errors: list[str], ch
 
 def _load(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _load_module(path: Path):
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _as_int_list(raw: Any) -> list[int]:
+    if not isinstance(raw, list):
+        return []
+    return [int(item) for item in raw]
 
 
 if __name__ == "__main__":

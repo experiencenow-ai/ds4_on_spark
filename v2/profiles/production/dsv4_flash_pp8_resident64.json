@@ -1,0 +1,51 @@
+{
+  "format": "ds4-production-profile-v1",
+  "profile_id": "dsv4_flash_pp8_resident64",
+  "service_id": "dsv4_flash_pp8",
+  "runtime_contract": "profiles/runtime_contracts/dsv4_flash_pp8_mtp_v1.json",
+  "kv_deployment": "profiles/kv_cache/dsv4_flash_pp8_simple_offload.json",
+  "topology": "profiles/topology/static_sparks.json",
+  "runtime_contract_id": "dsv4_flash_pp8_mtp_v1",
+  "deployment_id": "dsv4_flash_pp8_simple_offload_v1",
+  "pipeline_parallel_size": 8,
+  "tensor_parallel_size": 1,
+  "layer_partition": [
+    5,
+    6,
+    6,
+    6,
+    6,
+    5,
+    5,
+    4
+  ],
+  "max_model_len": 262144,
+  "max_num_seqs": 64,
+  "max_num_batched_tokens": 32768,
+  "max_batch_size": 64,
+  "queue_concurrency": 64,
+  "queue_limit": 512,
+  "refill_low_watermark": 48,
+  "max_running_batches_per_compute_domain": 1,
+  "kv_cache_memory_bytes": 8589934592,
+  "gpu_memory_utilization": "0.35",
+  "kv_cache_dtype": "fp8",
+  "compilation_config": {
+    "cudagraph_mode": "NONE",
+    "custom_ops": [
+      "all"
+    ]
+  },
+  "speculative_decode": false,
+  "coordinator_profile": "resident64",
+  "coordinator": {
+    "dispatch_window": 64,
+    "dispatch_refill_batch": 64,
+    "completion_cohort_max": 64,
+    "completion_token_budget": 16384,
+    "completion_pp_safe_cohort_max": 64,
+    "completion_chunk_concurrency": 1,
+    "dispatch_kv_capacity_bytes": 8589934592
+  },
+  "notes": "Single source of truth for the stable DSV4 PP8 resident production envelope. Materialized topology/runtime/KV JSON files must match this file."
+}
