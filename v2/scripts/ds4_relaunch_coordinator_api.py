@@ -58,7 +58,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-pull", action="store_true")
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--skip-tests", action="store_true")
-    parser.add_argument("--profile", choices=("throughput", "production", "resident64"), default="throughput")
+    parser.add_argument("--profile", choices=("throughput", "production", "resident64", "resident128"), default="throughput")
     parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8700") or "8700"))
     parser.add_argument("--queue-dir", default=os.environ.get("QUEUE_DIR", str(Path.home() / "ds4_queue")))
@@ -138,6 +138,20 @@ def _profile_defaults(profile: str) -> dict[str, str]:
                 "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "1",
                 "DS4_API_DISPATCH_KV_CAPACITY_BYTES": "8589934592",
                 "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": 12, "qwen27_nvfp4_pp8": 12, "dsv4_flash_pp8": 64}, separators=(",", ":")),
+            }
+        )
+    elif profile == "resident128":
+        common.update(
+            {
+                "DS4_API_DISPATCH_WINDOW": "128",
+                "DS4_API_DISPATCH_REFILL_BATCH": "128",
+                "DS4_API_DISPATCH_BATCH_LINGER_S": "0.05",
+                "DS4_PIPELINE_COMPLETION_COHORT_MAX": "128",
+                "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "16384",
+                "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "128",
+                "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "1",
+                "DS4_API_DISPATCH_KV_CAPACITY_BYTES": "8589934592",
+                "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": 12, "qwen27_nvfp4_pp8": 12, "dsv4_flash_pp8": 128}, separators=(",", ":")),
             }
         )
     elif profile == "production":

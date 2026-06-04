@@ -86,6 +86,31 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
 
         self.assertEqual(args.profile, "resident64")
 
+    def test_relaunch_resident128_profile_keeps_compact_kv_defaults(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+
+        defaults = relaunch._profile_defaults("resident128")
+
+        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "128")
+        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "128")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "128")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "16384")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "128")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "1")
+        self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "8589934592")
+        self.assertIn('"dsv4_flash_pp8":128', defaults["DS4_API_BATCH_LIMITS_JSON"])
+
+    def test_relaunch_arg_parser_accepts_resident128_profile(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+        old_argv = list(sys.argv)
+        sys.argv = [str(RELAUNCH_SCRIPT), "--profile", "resident128"]
+        try:
+            args = relaunch._parse_args()
+        finally:
+            sys.argv = old_argv
+
+        self.assertEqual(args.profile, "resident128")
+
     def test_relaunch_safety_defaults_override_inherited_env(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
         old = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")
