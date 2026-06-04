@@ -96,10 +96,10 @@ def _check_relaunch_defaults(errors: list[str], checks: list[str]) -> None:
         errors.append("coordinator production relaunch must allow PP-safe DSV4 prompt-array cohorts")
     else:
         checks.append("coordinator production relaunch allows PP-safe DSV4 prompt-array cohorts")
-    if '"DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "1"' not in text:
-        errors.append("coordinator production relaunch must serialize resident chunks per active service")
+    if '"DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "2"' not in text or '"DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "4"' not in text:
+        errors.append("coordinator relaunch must overlap split resident chunks without changing vLLM KV caps")
     else:
-        checks.append("coordinator production relaunch serializes resident chunks")
+        checks.append("coordinator relaunch overlaps split resident chunks")
     if '"DS4_COMPUTE_LEASE_QUANTUM_S": "180"' not in text:
         errors.append("coordinator relaunch must set compute lease quantum")
     else:

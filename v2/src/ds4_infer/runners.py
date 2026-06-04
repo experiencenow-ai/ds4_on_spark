@@ -397,8 +397,26 @@ class OpenAICompatibleRunner:
             payload["stream"] = True
             payloads.append((chunk, payload))
         out: dict[str, dict] = {}
-        for chunk, payload in payloads:
-            out.update(self._run_completion_stream_chunk(chunk, profile, payload, on_result=on_result, on_delta=on_delta))
+        chunk_concurrency = max(1, int(os.environ.get("DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY", "1") or "1"))
+        if chunk_concurrency <= 1 or len(payloads) <= 1:
+            for chunk, payload in payloads:
+                out.update(self._run_completion_stream_chunk(chunk, profile, payload, on_result=on_result, on_delta=on_delta))
+            return out
+        workers = min(chunk_concurrency, len(payloads))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [
+                executor.submit(
+                    self._run_completion_stream_chunk,
+                    chunk,
+                    profile,
+                    payload,
+                    on_result=on_result,
+                    on_delta=on_delta,
+                )
+                for chunk, payload in payloads
+            ]
+            for future in as_completed(futures):
+                out.update(future.result())
         return out
 
     def _run_completion_stream_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, on_result: Callable[[str, dict[str, Any]], None], on_delta: Callable[[str, str, dict[str, Any]], None] | None = None) -> dict[str, dict]:

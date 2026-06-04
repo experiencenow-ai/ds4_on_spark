@@ -3,7 +3,9 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import os
+import threading
 import tempfile
+import time
 import unittest
 
 from ds4_infer.api import CoordinatorApi, DispatcherPendingCohort, _pending_claim_count
@@ -58,6 +60,34 @@ class FailingLargeCohortOpenAIRunner(RecordingOpenAIRunner):
         if isinstance(prompts, list) and len(prompts) > 2:
             raise RuntimeError("HTTP 413: payload exceeds token budget")
         return super()._post_json(endpoint, payload)
+
+
+class SlowStreamingOpenAIRunner(RecordingOpenAIRunner):
+    def __init__(self, delay_s: float = 0.05) -> None:
+        super().__init__()
+        self.delay_s = delay_s
+        self.active_chunks = 0
+        self.max_active_chunks = 0
+        self.lock = threading.Lock()
+
+    def _post_sse_json(self, endpoint: str, payload: dict):
+        self.calls.append((endpoint, payload))
+        prompts = payload["prompt"]
+        prompt_count = len(prompts) if isinstance(prompts, list) else 1
+        with self.lock:
+            self.active_chunks += 1
+            self.max_active_chunks = max(self.max_active_chunks, self.active_chunks)
+        try:
+            time.sleep(self.delay_s)
+            yield {
+                "choices": [
+                    {"index": index, "text": f"stream-{index}", "finish_reason": "stop"}
+                    for index in range(prompt_count)
+                ]
+            }
+        finally:
+            with self.lock:
+                self.active_chunks -= 1
 
 
 class RecordingBatchRunner:
@@ -121,6 +151,36 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
         assert results is not None
         self.assertEqual(len(results), 8)
         self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_batch"] for index in range(8)))
+
+    def test_incremental_completion_chunks_use_configured_concurrency(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
+        runner = SlowStreamingOpenAIRunner()
+        requests = [completion_request(f"r{index}", f"prompt-{index}") for index in range(8)]
+        completed: list[str] = []
+        old_budget = os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET")
+        old_concurrency = os.environ.get("DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY")
+        os.environ["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"] = "100"
+        os.environ["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"] = "4"
+        try:
+            results = runner.run_many_completion_incremental(requests, profile, on_result=lambda request_id, result: completed.append(request_id))
+        finally:
+            if old_budget is None:
+                os.environ.pop("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET", None)
+            else:
+                os.environ["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"] = old_budget
+            if old_concurrency is None:
+                os.environ.pop("DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY", None)
+            else:
+                os.environ["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"] = old_concurrency
+
+        self.assertIsNotNone(results)
+        assert results is not None
+        self.assertEqual([len(call[1]["prompt"]) for call in runner.calls], [2, 2, 2, 2])
+        self.assertGreater(runner.max_active_chunks, 1)
+        self.assertEqual(len(results), 8)
+        self.assertEqual(set(completed), {f"r{index}" for index in range(8)})
+        self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_streaming"] for index in range(8)))
 
     def test_default_coalesced_completion_token_budget_splits_large_cohort(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

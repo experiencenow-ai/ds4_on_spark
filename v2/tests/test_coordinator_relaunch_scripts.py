@@ -67,11 +67,18 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "262144")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "512")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "512")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "1")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "2")
         self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "4294967296")
         self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "512")
         self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "512")
         self.assertIn('"dsv4_flash_pp8":512', defaults["DS4_API_BATCH_LIMITS_JSON"])
+
+    def test_relaunch_throughput_profile_overlaps_split_chunks(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+
+        defaults = relaunch._profile_defaults("throughput")
+
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "4")
 
     def test_relaunch_safety_defaults_override_inherited_env(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
