@@ -50,6 +50,26 @@ class PipelineApiTests(unittest.TestCase):
         )
         self.assertEqual(_openai_payload(request, profile)["model"], "deepseek-v4-flash-pp8")
 
+    def test_qwen_pipeline_openai_payload_uses_live_served_model_name(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
+        request = InferenceRequest.from_json(
+            {
+                "format": "ds4-inference-request-v1",
+                "request_id": "qwen-served-name",
+                "capability": "efficient",
+                "chat": False,
+                "immediate": False,
+                "job_class": "analysis",
+                "max_output_tokens": 8,
+                "thinking_budget_tokens": 0,
+                "temperature": 0,
+                "input": {"text": "ping"},
+                "output_contract": {"format": "text"},
+            }
+        )
+        self.assertEqual(_openai_payload(request, profile)["model"], "qwen27-bf16-pp8")
+
     def test_pipeline_openai_payload_uses_shared_thinking_fields(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
