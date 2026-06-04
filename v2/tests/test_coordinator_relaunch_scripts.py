@@ -75,6 +75,17 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS"], "1")
         self.assertIn("dsv4_flash_pp8", defaults["DS4_API_BATCH_LIMITS_JSON"])
 
+    def test_relaunch_arg_parser_accepts_resident64_profile(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+        old_argv = list(sys.argv)
+        sys.argv = [str(RELAUNCH_SCRIPT), "--profile", "resident64"]
+        try:
+            args = relaunch._parse_args()
+        finally:
+            sys.argv = old_argv
+
+        self.assertEqual(args.profile, "resident64")
+
     def test_relaunch_safety_defaults_override_inherited_env(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
         old = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")

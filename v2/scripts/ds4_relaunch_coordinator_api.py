@@ -58,7 +58,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-pull", action="store_true")
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--skip-tests", action="store_true")
-    parser.add_argument("--profile", choices=("throughput", "production"), default="throughput")
+    parser.add_argument("--profile", choices=("throughput", "production", "resident64"), default="throughput")
     parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8700") or "8700"))
     parser.add_argument("--queue-dir", default=os.environ.get("QUEUE_DIR", str(Path.home() / "ds4_queue")))
