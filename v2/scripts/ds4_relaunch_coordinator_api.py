@@ -62,7 +62,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-pull", action="store_true")
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--skip-tests", action="store_true")
-    parser.add_argument("--profile", choices=("throughput", "production", "resident128"), default="resident128")
+    parser.add_argument("--profile", choices=("throughput", "production", "resident128", "resident256"), default="resident128")
+    parser.add_argument("--env", action="append", default=[], metavar="KEY=VALUE", help="Extra coordinator environment override; repeatable.")
     parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8700") or "8700"))
     parser.add_argument("--queue-dir", default=os.environ.get("QUEUE_DIR", str(Path.home() / "ds4_queue")))
@@ -99,6 +100,8 @@ def _coordinator_env(args: argparse.Namespace, v2_dir: Path) -> dict[str, str]:
             env[key] = value
         else:
             env.setdefault(key, value)
+    for key, value in _parse_env_overrides(getattr(args, "env", []) or []).items():
+        env[key] = value
     return env
 
 
@@ -132,10 +135,23 @@ def _profile_defaults(profile: str) -> dict[str, str]:
         "DS4_API_TRANSPORT_MAX_ATTEMPTS": "1",
         "DS4_API_DISPATCH_KV_CAPACITY_BYTES": str(dsv4["coordinator"]["dispatch_kv_capacity_bytes"]),
     }
-    if profile in {"throughput", "production", "resident128"}:
+    if profile in {"throughput", "production", "resident128", "resident256"}:
         coordinator = dsv4["coordinator"]
         service_id = str(dsv4["service_id"])
         max_num_seqs = int(dsv4["max_num_seqs"])
+        if profile == "resident256":
+            coordinator = dict(coordinator)
+            coordinator.update(
+                {
+                    "dispatch_window": 256,
+                    "dispatch_refill_batch": 256,
+                    "completion_cohort_max": 256,
+                    "completion_token_budget": 98304,
+                    "completion_pp_safe_cohort_max": 256,
+                    "completion_chunk_concurrency": 4,
+                }
+            )
+            max_num_seqs = 256
         common.update(
             {
                 "DS4_API_DISPATCH_WINDOW": str(coordinator["dispatch_window"]),
@@ -154,6 +170,19 @@ def _profile_defaults(profile: str) -> dict[str, str]:
 
 def _load_dsv4_production_profile() -> dict[str, object]:
     return json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
+
+
+def _parse_env_overrides(items: list[str]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for item in items:
+        if "=" not in item:
+            raise ValueError(f"--env must be KEY=VALUE, got {item!r}")
+        key, value = item.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise ValueError(f"--env key must not be empty, got {item!r}")
+        out[key] = value
+    return out
 
 
 def _log_path(raw: str) -> Path:

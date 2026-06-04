@@ -72,6 +72,21 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS"], "1")
         self.assertEqual(json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])[DSV4_PRODUCTION["service_id"]], DSV4_PRODUCTION["max_num_seqs"])
 
+    def test_relaunch_resident256_profile_widens_feed_without_kv_bloat(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+
+        defaults = relaunch._profile_defaults("resident256")
+        coordinator = DSV4_PRODUCTION["coordinator"]
+
+        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "256")
+        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "256")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "256")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "98304")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "256")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "4")
+        self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(coordinator["dispatch_kv_capacity_bytes"]))
+        self.assertEqual(json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])[DSV4_PRODUCTION["service_id"]], 256)
+
     def test_relaunch_arg_parser_accepts_resident128_profile(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
         old_argv = list(sys.argv)
@@ -83,6 +98,17 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
 
         self.assertEqual(args.profile, DSV4_PRODUCTION["coordinator_profile"])
 
+    def test_relaunch_arg_parser_accepts_resident256_profile(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+        old_argv = list(sys.argv)
+        sys.argv = [str(RELAUNCH_SCRIPT), "--profile", "resident256"]
+        try:
+            args = relaunch._parse_args()
+        finally:
+            sys.argv = old_argv
+
+        self.assertEqual(args.profile, "resident256")
+
     def test_relaunch_arg_parser_defaults_to_source_owned_resident128_profile(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
         old_argv = list(sys.argv)
@@ -93,6 +119,15 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
             sys.argv = old_argv
 
         self.assertEqual(args.profile, DSV4_PRODUCTION["coordinator_profile"])
+
+    def test_relaunch_env_overrides_apply_after_profile_defaults(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+        args = type("Args", (), {"profile": "resident256", "env": ["DS4_API_DISPATCH_WINDOW=192", "DS4_TEST_FLAG=yes"]})()
+
+        env = relaunch._coordinator_env(args, ROOT)
+
+        self.assertEqual(env["DS4_API_DISPATCH_WINDOW"], "192")
+        self.assertEqual(env["DS4_TEST_FLAG"], "yes")
 
     def test_relaunch_safety_defaults_override_inherited_env(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
