@@ -873,7 +873,42 @@ def _mark_coalesced_planned_split(out: dict[str, dict], *, original_batch_size: 
 
 
 def _completion_request_token_estimate(request: InferenceRequest) -> int:
-    return max(1, prompt_token_estimate(request_prompt(request)) + int(request.max_output_tokens))
+    prompt_tokens = _completion_prompt_token_hint(request)
+    if prompt_tokens is None:
+        prompt_tokens = prompt_token_estimate(request_prompt(request))
+    return max(1, int(prompt_tokens) + int(request.max_output_tokens))
+
+
+def _completion_prompt_token_hint(request: InferenceRequest) -> int | None:
+    if not _env_bool("DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS", True):
+        return None
+    sources: list[dict[str, Any]] = []
+    if isinstance(request.input, dict):
+        sources.append(request.input)
+        benchmark_shape = request.input.get("benchmark_shape")
+        if isinstance(benchmark_shape, dict):
+            sources.append(benchmark_shape)
+    raw_input = request.raw.get("input") if isinstance(request.raw, dict) else None
+    if isinstance(raw_input, dict) and raw_input is not request.input:
+        sources.append(raw_input)
+        benchmark_shape = raw_input.get("benchmark_shape")
+        if isinstance(benchmark_shape, dict):
+            sources.append(benchmark_shape)
+    for source in sources:
+        for key in ("estimated_prompt_tokens", "estimated_input_tokens", "prompt_tokens", "input_tokens"):
+            value = source.get(key)
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)) and int(value) > 0:
+                return int(value)
+            if isinstance(value, str):
+                try:
+                    parsed = int(value)
+                except ValueError:
+                    continue
+                if parsed > 0:
+                    return parsed
+    return None
 
 
 def _requests_need_client_stream(requests: list[InferenceRequest]) -> bool:

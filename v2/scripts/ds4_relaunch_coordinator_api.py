@@ -106,6 +106,8 @@ _SAFETY_PROFILE_DEFAULTS = {
     "DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE",
     "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX",
     "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY",
+    "DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS",
+    "DS4_PIPELINE_COMPLETION_TOKEN_ESTIMATE_MODE",
 }
 
 
@@ -117,12 +119,28 @@ def _profile_defaults(profile: str) -> dict[str, str]:
         "DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE": "1",
         "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "16",
         "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "4",
+        "DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS": "1",
+        "DS4_PIPELINE_COMPLETION_TOKEN_ESTIMATE_MODE": "conservative",
         "DS4_COMPUTE_LEASE_QUANTUM_S": "180",
         "DS4_API_TRANSPORT_TIMEOUT_S": "3600",
         "DS4_API_TRANSPORT_MAX_ATTEMPTS": "1",
         "DS4_API_DISPATCH_KV_CAPACITY_BYTES": "51539607552",
     }
-    if profile == "production":
+    if profile == "resident64":
+        common.update(
+            {
+                "DS4_API_DISPATCH_WINDOW": "64",
+                "DS4_API_DISPATCH_REFILL_BATCH": "64",
+                "DS4_API_DISPATCH_BATCH_LINGER_S": "0.05",
+                "DS4_PIPELINE_COMPLETION_COHORT_MAX": "64",
+                "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "16384",
+                "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "64",
+                "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "1",
+                "DS4_API_DISPATCH_KV_CAPACITY_BYTES": "8589934592",
+                "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": 12, "qwen27_nvfp4_pp8": 12, "dsv4_flash_pp8": 64}, separators=(",", ":")),
+            }
+        )
+    elif profile == "production":
         common.update(
             {
                 "DS4_API_DISPATCH_WINDOW": "64",

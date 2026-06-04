@@ -340,14 +340,13 @@ def _request_json(args: argparse.Namespace, batch_id: str, profile_id: str, idx:
     }
     if args.ignore_eos:
         input_payload["openai"]["min_tokens"] = output_tokens
-    if shape is not None:
-        input_payload["benchmark_shape"] = {
-            "shape_index": shape_index,
-            "input_tokens": _shape_int(args, shape, "input_tokens", args.input_tokens, minimum=1),
-            "output_tokens": output_tokens,
-            "shared_prefix_tokens": _shape_int(args, shape, "shared_prefix_tokens", getattr(args, "shared_prefix_tokens", 0) or 0, minimum=0),
-            "suffix_tokens": _shape_suffix_tokens(args, shape),
-        }
+    input_payload["benchmark_shape"] = {
+        "shape_index": shape_index if shape_index is not None else 0,
+        "input_tokens": _shape_int(args, shape, "input_tokens", args.input_tokens, minimum=1),
+        "output_tokens": output_tokens,
+        "shared_prefix_tokens": _shape_int(args, shape, "shared_prefix_tokens", getattr(args, "shared_prefix_tokens", 0) or 0, minimum=0),
+        "suffix_tokens": _shape_suffix_tokens(args, shape),
+    }
     _attach_cache_fields(input_payload, args)
     return {
         "format": "ds4-inference-request-v1",
