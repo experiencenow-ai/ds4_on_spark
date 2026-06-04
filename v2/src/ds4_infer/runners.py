@@ -561,7 +561,7 @@ class PipelineOpenAIRunner:
         runner = self._runner_for(profile, node_id)
         if _env_bool("DS4_PIPELINE_COHORT_COMPLETIONS", True):
             client_stream = requests_need_client_stream(request_list)
-            internal_stream = client_stream or _env_bool("DS4_PIPELINE_INTERNAL_STREAM_ALL_COHORTS", True)
+            internal_stream = client_stream or _internal_stream_nonclient_cohort(request_list)
             if internal_stream:
                 coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result, on_delta=on_delta if client_stream else None)
                 if coalesced is not None:
@@ -1032,6 +1032,20 @@ def _forced_output_request(request: InferenceRequest) -> bool:
     except (TypeError, ValueError):
         return False
     return min_tokens >= int(request.max_output_tokens)
+
+
+def _internal_stream_nonclient_cohort(requests: list[InferenceRequest]) -> bool:
+    raw = os.environ.get("DS4_PIPELINE_INTERNAL_STREAM_ALL_COHORTS")
+    if raw is not None:
+        return _env_bool("DS4_PIPELINE_INTERNAL_STREAM_ALL_COHORTS", True)
+    mode = os.environ.get("DS4_PIPELINE_INTERNAL_STREAM_MODE", "auto").strip().lower()
+    if mode in {"1", "true", "yes", "on", "always"}:
+        return True
+    if mode in {"0", "false", "no", "off", "never"}:
+        return False
+    if mode not in {"", "auto"}:
+        raise ValueError("DS4_PIPELINE_INTERNAL_STREAM_MODE must be auto, always, or never")
+    return not requests or not all(_forced_output_request(item) for item in requests)
 
 
 def _completion_stream_choice_text(choice: dict[str, Any]) -> str:

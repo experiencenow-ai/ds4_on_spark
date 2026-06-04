@@ -254,11 +254,9 @@ class LlmRunnersWebChatTests(unittest.TestCase):
             }
         )
         first = make_request(chat=False)
-        first.raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": 64}
         first = InferenceRequest.from_json(first.raw)
         second_raw = make_request(chat=False).raw
         second_raw["request_id"] = "r2"
-        second_raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": 64}
         seen = []
         results = StreamingPipelineRunner().run_many_on_node_incremental(
             [first, InferenceRequest.from_json(second_raw)],
@@ -270,6 +268,40 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(seen, [("r2", "second done"), ("r", "first done")])
         self.assertEqual(results["r"]["transport"]["coalesced_completion_streaming"], True)
         self.assertEqual(results["r2"]["transport"]["coalesced_batch_size"], 2)
+
+    def test_pipeline_runner_uses_final_only_for_forced_output_nonstreaming_worker(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": False,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {"served_model_name": "served-model"},
+            }
+        )
+        first = make_request(chat=False)
+        first.raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": 64}
+        first = InferenceRequest.from_json(first.raw)
+        second_raw = make_request(chat=False).raw
+        second_raw["request_id"] = "r2"
+        second_raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": 64}
+        seen = []
+        runner = NonStreamingCoalescedPipelineRunner()
+        results = runner.run_many_on_node_incremental(
+            [first, InferenceRequest.from_json(second_raw)],
+            profile,
+            None,
+            concurrency=2,
+            on_result=lambda request_id, result: seen.append((request_id, result["output"]["text"])),
+        )
+        self.assertEqual(seen, [("r", "one"), ("r2", "two")])
+        self.assertEqual(len(runner.backend.calls), 1)
+        self.assertNotIn("coalesced_completion_streaming", results["r"]["transport"])
+        self.assertTrue(results["r2"]["transport"]["coalesced_completion_batch"])
 
     def test_pipeline_runner_can_disable_internal_streaming_for_nonstreaming_worker(self) -> None:
         profile = ModelProfile.from_json(
