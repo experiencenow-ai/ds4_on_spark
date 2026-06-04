@@ -76,6 +76,8 @@ def _check_dsv4(profile: dict[str, Any], service: dict[str, Any], errors: list[s
         "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR": "0",
         "VLLM_DS4_PP_DIRECT_CUDA_TENSOR_DICT": "1",
         "VLLM_DS4_PP_OVERLAP_SEND": "1",
+        "DS4_PP_TRANSPORT": str(profile["pp_transport"]),
+        "VLLM_DS4_PP_EDGE_RAIL": str(profile["pp_edge_rail"]),
         "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "64",
         "VLLM_DS4_FINAL_ONLY_NONSTREAMING": "1",
     }.items():
