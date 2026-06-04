@@ -80,7 +80,10 @@ const modeLabels={queue:"Queue",gpu:"GPU"};
 const modeColors={queue:["#00e5ff","#ff4d4d","#ffe156","#53d18a","#a78bfa","#f4bf5f"],gpu:["#2f80ed","#ff7a00","#f4bf5f","#00c853","#e040fb","#f4d35e"]};
 function metric(label,value){return `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`}
 function bar(label,value,cls,known=true){let width=known?Math.max(0,Math.min(100,Number(value)||0)):0;return `<div class="barrow ${cls}"><span>${label}</span><div class="track"><div class="fill" style="width:${width}%"></div></div><span>${known?pct(value):"n/a"}</span></div>`}
-function card(n){let err=n.error||n.fetch_error||"";return `<article class="card ${n.state} ${n.node===selectedNode?"selected":""}" data-node="${n.node}"><header><div class="node">${n.node}</div><div class="pill">${n.state_label}</div></header><div class="bars">${bar("GPU",n.gpu_pct,"gpu")}${bar("KV",n.kv_pct,"kv",n.kv_known)}${bar("MEM",n.mem_pct,"mem")}</div><div class="details"><span>In <b>${val(n.input_tok_s)}</b></span><span>Out <b>${val(n.output_tok_s)}</b></span><span>Cache <b>${pct(n.cache_hit_pct)}</b></span><span>Ext <b>${pct(n.external_hit_pct)}</b></span><span>Run <b>${fmt(n.vllm_running)}/${fmt(n.vllm_waiting)}</b></span><span>Queue <b>${fmt(n.local_q_depth)}</b></span><span>CPU <b>${pct(n.cpu_pct)}</b></span><span>Temp <b>${fmt(n.gpu_temp_c)}C</b></span></div>${err?`<div class="error">${err}</div>`:""}</article>`}
+function workKnown(n){return n.vllm_metrics_up||n.local_queue_known||Number(n.local_q_depth)>0||Number(n.input_tok_s)>0||Number(n.output_tok_s)>0}
+function workVal(n,key,unit=""){return workKnown(n)?val(n[key],unit):"n/a"}
+function workRun(n){return workKnown(n)?`${fmt(n.vllm_running)}/${fmt(n.vllm_waiting)}`:"n/a"}
+function card(n){let err=n.error||n.fetch_error||"";return `<article class="card ${n.state} ${n.node===selectedNode?"selected":""}" data-node="${n.node}"><header><div class="node">${n.node}</div><div class="pill">${n.state_label}</div></header><div class="bars">${bar("GPU",n.gpu_pct,"gpu")}${bar("KV",n.kv_pct,"kv",n.kv_known)}${bar("MEM",n.mem_pct,"mem")}</div><div class="details"><span>In <b>${workVal(n,"input_tok_s")}</b></span><span>Out <b>${workVal(n,"output_tok_s")}</b></span><span>Cache <b>${n.vllm_metrics_up?pct(n.cache_hit_pct):"n/a"}</b></span><span>Ext <b>${n.vllm_metrics_up?pct(n.external_hit_pct):"n/a"}</b></span><span>Run <b>${workRun(n)}</b></span><span>Queue <b>${fmt(n.local_q_depth)}</b></span><span>CPU <b>${pct(n.cpu_pct)}</b></span><span>Pwr <b>${val(n.gpu_power_w,"W")}</b></span><span>Temp <b>${fmt(n.gpu_temp_c)}C</b></span></div>${err?`<div class="error">${err}</div>`:""}</article>`}
 function wireCards(){document.querySelectorAll(".card[data-node]").forEach(el=>el.onclick=()=>{selectedNode=el.dataset.node;document.querySelectorAll(".card").forEach(c=>c.classList.toggle("selected",c.dataset.node===selectedNode));startTelemetryStream()})}
 function modeButtons(){return `<div class="modes">${Object.keys(metricModes).map(k=>`<button class="${k===selectedMode?"active":""}" data-mode="${k}">${modeLabels[k]}</button>`).join("")}</div>`}
 function wireModes(){document.querySelectorAll(".modes button").forEach(el=>el.onclick=()=>{selectedMode=el.dataset.mode;drawHistory(lastHistory)})}
@@ -185,6 +188,7 @@ def normalize_node(node: str, row: dict[str,Any], error_streak: int = NODE_DOWN_
         "vllm_running": fnum(row.get("last_vllm_requests_running")),
         "vllm_waiting": fnum(row.get("last_vllm_requests_waiting")),
         "vllm_metrics_up": fnum(row.get("last_vllm_metrics_up")) > 0.0,
+        "local_queue_known": str(row.get("last_local_queue_db","")) != "",
         "kv_pct": fnum(row.get("last_vllm_kv_cache_pct")),
         "kv_known": fnum(row.get("last_vllm_metrics_up")) > 0.0,
         "tok_s": fnum(row.get("last_vllm_tokens_per_s")),
@@ -232,6 +236,9 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
         name = str(node.get("node",""))
         if name in queue_depth_by_node:
             node["local_q_depth"] = queue_depth_by_node[name]
+            node["local_queue_known"] = True
+        if name in queue_running_by_node or name in queue_queued_by_node or name in queue_prompt_tok_s_by_node or name in queue_tok_s_by_node:
+            node["local_queue_known"] = True
         if not node.get("vllm_metrics_up"):
             node["vllm_running"] = max(fnum(node.get("vllm_running")),queue_running_by_node.get(name,0.0))
             node["vllm_waiting"] = max(fnum(node.get("vllm_waiting")),queue_queued_by_node.get(name,0.0))

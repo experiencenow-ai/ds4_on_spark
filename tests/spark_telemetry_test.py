@@ -67,10 +67,31 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(summary["pct_gpu_samples_ge_90"],50.0)
         self.assertEqual(summary["gpu_temp_samples_ge_80"],1)
         self.assertEqual(summary["last_gpu_temp_c"],63.0)
+        self.assertEqual(summary["last_gpu_power_w"],12.0)
         self.assertEqual(summary["last_thermal_max_c"],65.0)
         self.assertEqual(summary["last_root_disk_used_pct"],72.0)
         self.assertEqual(summary["net_tx_mbps"]["max"],4.0)
         self.assertEqual(summary["cpu_util_pct"]["avg"],20.0)
+
+    def test_collect_markdown_summary_includes_gpu_watts(self):
+        text = "\n".join([
+            ",".join(node_mon.CSV_FIELDS),
+            telemetry_row(unix_ts=1,gpu_util_pct=10,gpu_power_w=12,gpu_temp_c=63),
+        ])
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = collect.read_rows(text)
+            collect.write_combined(tmp,{"spark0":rows},{},{})
+            with open(os.path.join(tmp,"cluster_summary.md"),encoding="utf-8") as fp:
+                md = fp.read()
+        self.assertIn("| node | samples | gpu % | gpu C | gpu W |", md)
+        self.assertIn("| spark0 | 1 | 10.00 | 63.00 | 12.00 |", md)
+
+    def test_collect_markdown_summary_marks_missing_sources_na(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            collect.write_combined(tmp,{"spark0":[]},{"spark0":"ssh timed out"},{})
+            with open(os.path.join(tmp,"cluster_summary.md"),encoding="utf-8") as fp:
+                md = fp.read()
+        self.assertIn("| spark0 | 0 | n/a | n/a | n/a | n/a | n/a | n/a | n/a |", md)
 
     def test_collect_summary_marks_cached_fetch_failures_as_stale(self):
         text = "\n".join([
@@ -83,6 +104,20 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(summary["error"],"")
         self.assertEqual(summary["fetch_error"],"ssh timed out")
         self.assertEqual(summary["stale_data"],1)
+
+    def test_collect_summary_uses_latest_good_gpu_sample_after_timeout(self):
+        text = "\n".join([
+            ",".join(node_mon.CSV_FIELDS),
+            telemetry_row(unix_ts=1,cpu_util_pct=10,mem_used_pct=50,gpu_util_pct=20,gpu_power_w=12,gpu_temp_c=63),
+            telemetry_row(unix_ts=2,iso_ts="2026-05-24T00:00:02+00:00",cpu_util_pct=30,mem_used_pct=60,gpu_index=-1,gpu_util_pct=0,gpu_power_w=0,gpu_temp_c=0,error="nvidia-smi timeout"),
+        ])
+        rows = collect.read_rows(text)
+        summary = collect.summarize_node(rows,"")
+        self.assertEqual(summary["last_cpu_util_pct"],30.0)
+        self.assertEqual(summary["last_mem_used_pct"],60.0)
+        self.assertEqual(summary["last_gpu_util_pct"],20.0)
+        self.assertEqual(summary["last_gpu_power_w"],12.0)
+        self.assertEqual(summary["last_gpu_temp_c"],63.0)
 
     def test_vllm_metrics_parser_sums_live_depth(self):
         text = "\n".join([

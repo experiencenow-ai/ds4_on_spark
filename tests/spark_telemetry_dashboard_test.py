@@ -25,7 +25,7 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
                 "local_queue_completion_tok_s_by_node": "spark0:6.5;spark1:3",
             },
             "nodes": {
-                "spark0": {"sample_count": 2, "last_gpu_util_pct": 96, "last_cpu_util_pct": 40, "last_vllm_metrics_up": 1, "last_vllm_requests_running": 4, "last_vllm_requests_waiting": 0, "last_vllm_kv_cache_pct": 50, "last_vllm_tokens_per_s": 2, "last_vllm_prompt_tokens_per_s": 7, "last_vllm_generation_tokens_per_s": 2, "last_vllm_prompt_tokens_cached_per_s": 3, "last_vllm_prompt_cache_hit_pct": 42},
+                "spark0": {"sample_count": 2, "last_gpu_util_pct": 96, "last_gpu_power_w": 37, "last_cpu_util_pct": 40, "last_vllm_metrics_up": 1, "last_vllm_requests_running": 4, "last_vllm_requests_waiting": 0, "last_vllm_kv_cache_pct": 50, "last_vllm_tokens_per_s": 2, "last_vllm_prompt_tokens_per_s": 7, "last_vllm_generation_tokens_per_s": 2, "last_vllm_prompt_tokens_cached_per_s": 3, "last_vllm_prompt_cache_hit_pct": 42},
                 "spark1": {"sample_count": 2, "last_gpu_util_pct": 96, "last_gpu_temp_c": 82, "last_vllm_requests_running": 0, "last_vllm_requests_waiting": 0, "last_vllm_kv_cache_pct": 92},
                 "spark2": {"sample_count": 2, "stale_data": 1, "fetch_error": "ssh timed out", "last_gpu_util_pct": 10},
                 "spark6": {"sample_count": 0, "error": "ssh timed out"},
@@ -52,8 +52,10 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["nodes"][2]["state_label"], "stale")
         self.assertEqual(snap["nodes"][3]["state_label"], "checking")
         self.assertEqual(snap["nodes"][0]["local_q_depth"], 5)
+        self.assertTrue(snap["nodes"][0]["local_queue_known"])
         self.assertEqual(snap["nodes"][1]["tok_s"], 6)
         self.assertEqual(snap["nodes"][0]["cpu_pct"], 800)
+        self.assertEqual(snap["nodes"][0]["gpu_power_w"], 37)
 
     def test_node_down_requires_three_distinct_error_snapshots(self):
         payload = {
@@ -160,6 +162,13 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertIn('"cpu_pct"', dashboard.DASHBOARD_HTML)
         self.assertIn("const CPU_PCT_MAX=2000", dashboard.DASHBOARD_HTML)
         self.assertIn("cpu_pct:CPU_PCT_MAX", dashboard.DASHBOARD_HTML)
+
+    def test_dashboard_card_shows_watts_and_marks_missing_vllm_na(self):
+        self.assertIn('Pwr <b>${val(n.gpu_power_w,"W")}</b>', dashboard.DASHBOARD_HTML)
+        self.assertIn('function workKnown(n)', dashboard.DASHBOARD_HTML)
+        self.assertIn('n.vllm_metrics_up||n.local_queue_known', dashboard.DASHBOARD_HTML)
+        self.assertIn('workKnown(n)?val(n[key],unit):"n/a"', dashboard.DASHBOARD_HTML)
+        self.assertIn('n.vllm_metrics_up?pct(n.cache_hit_pct):"n/a"', dashboard.DASHBOARD_HTML)
 
 
 if __name__ == "__main__":
