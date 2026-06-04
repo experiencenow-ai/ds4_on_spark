@@ -876,7 +876,8 @@ def _completion_request_token_estimate(request: InferenceRequest) -> int:
     prompt_tokens = _completion_prompt_token_hint(request)
     if prompt_tokens is None:
         prompt_tokens = prompt_token_estimate(request_prompt(request))
-    return max(1, int(prompt_tokens) + int(request.max_output_tokens))
+    output_tokens = int(request.max_output_tokens) if _env_bool("DS4_PIPELINE_COMPLETION_COHORT_BUDGET_INCLUDE_OUTPUT", True) else 0
+    return max(1, int(prompt_tokens) + output_tokens)
 
 
 def _completion_prompt_token_hint(request: InferenceRequest) -> int | None:
