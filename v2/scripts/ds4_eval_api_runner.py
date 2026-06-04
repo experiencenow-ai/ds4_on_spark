@@ -303,45 +303,69 @@ def _last_answer_marker(text: str) -> int:
     last = -1
     for match in re.finditer(r"(?i)\banswer\b\s*:", text):
         last = match.start()
-    return last
+    if last >= 0:
+        return last
+    match = re.search(r"(?i)\banswer\b", text)
+    return match.start() if match else -1
+
+
+def _letter_matches(text: str, nchoices: int) -> list[str]:
+    max_letter = chr(ord("A") + nchoices - 1)
+    letters: list[str] = []
+    for match in re.finditer(r"\b[A-Z]\b", text.upper()):
+        letter = match.group(0)
+        if "A" <= letter <= max_letter:
+            letters.append(letter)
+    return letters
 
 
 def _letter_answer(text: str, nchoices: int) -> str:
     visible = _answer_region(text)
     start = _last_answer_marker(visible)
-    if start < 0:
-        return "?"
-    max_letter = chr(ord("A") + nchoices - 1)
-    spans = [visible[start : start + 96]] if start >= 0 else []
-    for span in spans:
-        for match in reversed(list(re.finditer(r"\b[A-Z]\b", span.upper()))):
-            letter = match.group(0)
-            if "A" <= letter <= max_letter:
-                return letter
-    return "?"
+    if start >= 0:
+        letters = _letter_matches(visible[start : start + 96], nchoices)
+        if letters:
+            return letters[0]
+    letters = _letter_matches(visible, nchoices)
+    return letters[-1] if letters else "?"
+
+
+def _normalize_integer(raw: str) -> str:
+    try:
+        return str(int(raw))
+    except ValueError:
+        return raw.lstrip("0") or "0"
+
+
+def _first_integer(text: str) -> str:
+    match = re.search(r"\d+", text)
+    return _normalize_integer(match.group(0)) if match else "?"
+
+
+def _last_integer(text: str) -> str:
+    matches = re.findall(r"\d+", text)
+    return _normalize_integer(matches[-1]) if matches else "?"
 
 
 def _integer_answer(text: str) -> str:
     visible = _answer_region(text)
     start = _last_answer_marker(visible)
-    if start < 0:
-        return "?"
-    spans = [visible[start : start + 160]] if start >= 0 else []
-    for span in spans:
-        matches = re.findall(r"\d+", span)
-        if matches:
-            return str(int(matches[-1]))
-    return "?"
+    if start >= 0:
+        got = _first_integer(visible[start : start + 160])
+        if got != "?":
+            return got
+    return _last_integer(visible)
 
 
 def _line_spec(text: str) -> str:
     visible = _answer_region(text)
     start = _last_answer_marker(visible)
     if start < 0:
-        return "?"
-    span = visible[start : start + 160] if start >= 0 else visible
+        return _integer_answer(text)
+    span = visible[start : start + 160]
+    span = span.splitlines()[0] if span else span
     pieces = re.findall(r"\d+(?:\s*-\s*\d+)?", span)
-    return ",".join(piece.replace(" ", "") for piece in pieces) if pieces else "?"
+    return ",".join(piece.replace(" ", "") for piece in pieces) if pieces else _integer_answer(text)
 
 
 def _parse_line_spec(spec: str) -> set[int]:
