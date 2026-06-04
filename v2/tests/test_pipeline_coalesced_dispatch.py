@@ -21,7 +21,10 @@ PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 
 
-def completion_request(request_id: str, prompt: str = "prompt") -> InferenceRequest:
+def completion_request(request_id: str, prompt: str = "prompt", *, max_output_tokens: int = 32, input_extra: dict | None = None) -> InferenceRequest:
+    input_payload = {"prompt": prompt, "openai": {"ignore_eos": True, "min_tokens": max_output_tokens}}
+    if input_extra:
+        input_payload.update(input_extra)
     return InferenceRequest.from_json(
         {
             "format": "ds4-inference-request-v1",
@@ -30,10 +33,10 @@ def completion_request(request_id: str, prompt: str = "prompt") -> InferenceRequ
             "chat": False,
             "immediate": False,
             "job_class": "summary",
-            "max_output_tokens": 32,
+            "max_output_tokens": max_output_tokens,
             "thinking_budget_tokens": 0,
             "temperature": 0.0,
-            "input": {"prompt": prompt, "openai": {"ignore_eos": True, "min_tokens": 32}},
+            "input": input_payload,
             "output_contract": {"format": "text"},
         }
     )
@@ -142,6 +145,38 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
         assert results is not None
         self.assertEqual(len(results), 8)
         self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_batch"] for index in range(8)))
+
+    def test_runner_uses_explicit_benchmark_token_hint_for_admission(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
+        runner = RecordingOpenAIRunner()
+        prompt = "Request. " + " ".join("benchmark" for _ in range(128))
+        input_extra = {"benchmark_shape": {"input_tokens": 128, "output_tokens": 128}}
+        requests = [completion_request(f"r{index}", prompt, max_output_tokens=128, input_extra=input_extra) for index in range(32)]
+        old_values = {
+            "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"),
+            "DS4_PIPELINE_COMPLETION_COHORT_MAX": os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MAX"),
+            "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": os.environ.get("DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"),
+            "DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS": os.environ.get("DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS"),
+        }
+        os.environ["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"] = "16384"
+        os.environ["DS4_PIPELINE_COMPLETION_COHORT_MAX"] = "64"
+        os.environ["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"] = "64"
+        os.environ["DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS"] = "1"
+        try:
+            results = runner.run_many_completion(requests, profile)
+        finally:
+            for key, value in old_values.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.assertIsNotNone(results)
+        assert results is not None
+        self.assertEqual([len(call[1]["prompt"]) for call in runner.calls], [32])
+        self.assertEqual(len(results), 32)
+        self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_batch_size"] == 32 for index in range(32)))
 
     def test_default_coalesced_completion_token_budget_splits_large_cohort(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

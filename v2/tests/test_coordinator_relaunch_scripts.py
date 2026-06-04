@@ -60,6 +60,21 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "512")
         self.assertIn("dsv4_flash_pp8", defaults["DS4_API_BATCH_LIMITS_JSON"])
 
+    def test_relaunch_resident64_profile_sets_medium_safe_defaults(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+
+        defaults = relaunch._profile_defaults("resident64")
+
+        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "64")
+        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "64")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "64")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "16384")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "64")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "1")
+        self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "8589934592")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS"], "1")
+        self.assertIn("dsv4_flash_pp8", defaults["DS4_API_BATCH_LIMITS_JSON"])
+
     def test_relaunch_safety_defaults_override_inherited_env(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
         old = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")

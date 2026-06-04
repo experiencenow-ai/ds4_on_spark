@@ -134,6 +134,27 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         self.assertEqual(requests[-1]["input"]["benchmark_shape"]["shared_prefix_tokens"], 64)
         self.assertEqual(requests[-1]["input"]["prompt"].count("shared-prefix-benchmark"), 64)
 
+    def test_benchmark_generates_token_shape_hint_for_uniform_requests(self) -> None:
+        args = argparse.Namespace(
+            input_tokens=128,
+            output_tokens=64,
+            shared_prefix_tokens=0,
+            suffix_tokens=None,
+            shape_mix_json=None,
+            shape_mix_file=None,
+            temperature=0.0,
+            job_class="analysis",
+            ignore_eos=True,
+            batch_size=2,
+        )
+
+        requests = bench._generated_requests(args, "uniform", "profile-a")
+
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(requests[0]["input"]["benchmark_shape"]["input_tokens"], 128)
+        self.assertEqual(requests[0]["input"]["benchmark_shape"]["output_tokens"], 64)
+        self.assertEqual(requests[0]["input"]["benchmark_shape"]["suffix_tokens"], 128)
+
     def test_bubble_corrected_two_spark_equivalent_score(self) -> None:
         score = bench._performance_score(aggregate_tok_s=420.0, concurrency=64, pipeline_stages=8, equivalent_sparks=2, reference_tok_s=144.6)
         self.assertEqual(score["aggregate_tok_s_needed_for_reference"], 521.374648)

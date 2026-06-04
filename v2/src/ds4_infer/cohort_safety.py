@@ -11,10 +11,16 @@ def coalesced_completion_token_budget() -> int:
     return max(0, int(raw or "0"))
 
 
-def prompt_token_estimate(prompt: str) -> int:
+def prompt_token_estimate(prompt: str, *, mode: str | None = None) -> int:
     text = str(prompt)
     words = len(text.split())
-    bytes_estimate = (len(text.encode("utf-8")) + 1) // 2
+    byte_count = len(text.encode("utf-8"))
+    estimate_mode = (mode or os.environ.get("DS4_PIPELINE_COMPLETION_TOKEN_ESTIMATE_MODE") or "conservative").strip().lower()
+    if estimate_mode in {"balanced", "bytes4", "byte4"}:
+        return max(1, words, (byte_count + 3) // 4)
+    if estimate_mode in {"word", "words"}:
+        return max(1, words, (byte_count + 7) // 8)
+    bytes_estimate = (byte_count + 1) // 2
     return max(1, words, bytes_estimate)
 
 
