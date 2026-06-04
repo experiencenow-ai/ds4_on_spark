@@ -124,6 +124,36 @@ Rendered-chat coalescing also marks:
 coalesced_rendered_chat_completion_batch=true
 ```
 
+## DS4 Eval
+
+Run the 92-question eval through the spark0 API, not directly against vLLM.
+The repo-owned runner stores the fixture in `fixtures/ds4_eval/ds4_eval.c` and
+prints one live progress line per completed answer:
+
+```bash
+cd /Users/mac/Documents/New\ project\ 4/v2
+python3 scripts/ds4_eval_api_runner.py run \
+  --base-url http://10.20.0.10:8700 \
+  --requests-jsonl /private/tmp/ds4_bench/ds4_eval_api_92_512_requests.jsonl \
+  --out-dir /private/tmp/ds4_bench/ds4_eval_live_$(date -u +%Y%m%dT%H%M%SZ) \
+  --progress-every-s 10 \
+  --abort-after-completed 12 \
+  --abort-if-accuracy-below 0.20
+```
+
+Each completed row prints:
+
+```text
+elapsed completed/total running_accuracy running_tok_s pass/fail got/expected tokens answer_marker
+```
+
+The `cum_tok/s` field is cumulative completion tokens divided by elapsed wall
+time for the whole eval run so far, not just the single completed row.
+
+If `answer_marker=no`, the model did not emit the required final `Answer:`
+line. The grader fails closed for that row instead of scraping a letter or
+number out of the reasoning text.
+
 ## Streaming
 
 `/v1/completions` with `stream=true` stays on the queue path. vLLM SSE token
