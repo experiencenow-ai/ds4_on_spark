@@ -3,20 +3,30 @@ set -euo pipefail
 
 usage()
 {
+	local code="${1:-2}"
 	cat >&2 <<'EOF'
-usage: scripts/ds4_update_spark_nodes.sh [spark0 spark1 ...]
+usage: scripts/ds4_update_spark_nodes.sh [--code-only|--runtime-config] [spark0 spark1 ...]
 
-Updates reachable Spark nodes to the current merged DS4 repo ref, then
-optionally installs the spark4/spark5 local DSV4 service units.
+Updates reachable Spark nodes to the merged DS4 repo ref. The default mode is
+--code-only: pull origin/main on all reachable Spark checkouts and do not touch
+runtime env, systemd units, or running services.
+
+Modes:
+  --code-only                  pull Spark checkouts only; no service side effects
+  --runtime-config             pull code, configure Qwen runtime, install DSV4 units
+  --self-update                fetch/detach this Mac checkout before running
+  --restart-qwen               restart Qwen gateways after runtime env update
+  --restart-dsv4               restart spark5 worker then spark4 head
 
 Important environment knobs:
-  DS4_SELF_UPDATE=1               fetch and detach this local worktree first
+  DS4_UPDATE_MODE=code-only       code-only or runtime-config
+  DS4_SELF_UPDATE=0               set 1 to fetch/detach this local worktree first
   DS4_UPDATE_REF=origin/main        git ref to deploy on each Spark checkout
   DS4_REMOTE_REPO=$HOME/src/ds4_on_spark remote repo path on each Spark
-  DS4_CONFIGURE_QWEN_RUNTIME=1     point Qwen gateways at host-local vLLM
+  DS4_CONFIGURE_QWEN_RUNTIME=0     set 1 to point Qwen gateways at host-local vLLM
   DS4_RESTART_QWEN=0               restart Qwen model gateways after env update
   DS4_QWEN_RUNTIME_TARGET=...      trim-capable target for ~/ds4-vllm-local
-  DS4_INSTALL_DSV4_LOCAL=1         install spark4/spark5 local vLLM units
+  DS4_INSTALL_DSV4_LOCAL=0         set 1 to install spark4/spark5 local vLLM units
   DS4_RESTART_DSV4=0               set 1 to restart spark5 worker then spark4 head
   DS4_DSV4_KV_OFFLOAD_SIZE=4       recovery-safe total GiB for spark4+spark5
 
@@ -24,26 +34,82 @@ Zero-drift rule:
   this script refuses local sync payloads and installs service units from the
   pulled Spark checkout, not from the Mac working tree.
 EOF
-	exit 2
+	exit "$code"
 }
 
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
-	usage
+	usage 0
 fi
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+update_mode="${DS4_UPDATE_MODE:-code-only}"
+nodes=()
+while [ "$#" -gt 0 ]
+do
+	case "$1" in
+	-h|--help)
+		usage 0
+		;;
+	--code-only|--pull-only)
+		update_mode="code-only"
+		;;
+	--runtime-config|--configure-runtime)
+		update_mode="runtime-config"
+		;;
+	--self-update)
+		DS4_SELF_UPDATE=1
+		;;
+	--restart-qwen)
+		DS4_RESTART_QWEN=1
+		;;
+	--restart-dsv4)
+		DS4_RESTART_DSV4=1
+		;;
+	--)
+		shift
+		nodes+=("$@")
+		break
+		;;
+	-*)
+		echo "unknown option: $1" >&2
+		usage
+		;;
+	*)
+		nodes+=("$1")
+		;;
+	esac
+	shift
+done
+
+case "$update_mode" in
+code-only)
+	default_self_update=0
+	default_configure_qwen_runtime=0
+	default_install_dsv4_local=0
+	;;
+runtime-config)
+	default_self_update=1
+	default_configure_qwen_runtime=1
+	default_install_dsv4_local=1
+	;;
+*)
+	echo "unknown DS4_UPDATE_MODE: $update_mode" >&2
+	exit 14
+	;;
+esac
+
 remote_repo="${DS4_REMOTE_REPO:-}"
 update_remote="${DS4_UPDATE_REMOTE:-origin}"
 update_branch="${DS4_UPDATE_BRANCH:-main}"
 update_ref="${DS4_UPDATE_REF:-origin/main}"
-local_self_update="${DS4_SELF_UPDATE:-1}"
+local_self_update="${DS4_SELF_UPDATE:-$default_self_update}"
 skip_unreachable="${DS4_SKIP_UNREACHABLE:-1}"
 connect_timeout="${DS4_CONNECT_TIMEOUT:-8}"
 ssh_opts="${DS4_SSH_OPTS:-}"
-configure_qwen_runtime="${DS4_CONFIGURE_QWEN_RUNTIME:-1}"
+configure_qwen_runtime="${DS4_CONFIGURE_QWEN_RUNTIME:-$default_configure_qwen_runtime}"
 restart_qwen="${DS4_RESTART_QWEN:-0}"
 qwen_runtime_target="${DS4_QWEN_RUNTIME_TARGET:-~/standard-runtimes/vllm-main-gdn-nixl/venv}"
-install_dsv4_local="${DS4_INSTALL_DSV4_LOCAL:-1}"
+install_dsv4_local="${DS4_INSTALL_DSV4_LOCAL:-$default_install_dsv4_local}"
 restart_dsv4="${DS4_RESTART_DSV4:-0}"
 dsv4_kv_offload_size="${DS4_DSV4_KV_OFFLOAD_SIZE:-4}"
 dsv4_persist_store="${DS4_DSV4_PERSIST_STORE:-/var/tmp/ds4_hma_store/dsv4/simple_cpu_offload}"
@@ -79,15 +145,22 @@ self_update_local_checkout()
 	fi
 	echo "==> local: checkout --detach $update_ref"
 	git -C "$repo_dir" checkout --detach "$update_ref"
-	exec env DS4_SELF_UPDATE_DONE=1 "$0" "$@"
+	exec env \
+		DS4_SELF_UPDATE_DONE=1 \
+		DS4_UPDATE_MODE="$update_mode" \
+		DS4_RESTART_QWEN="$restart_qwen" \
+		DS4_RESTART_DSV4="$restart_dsv4" \
+		"$0" "$@"
 }
 
-self_update_local_checkout "$@"
+self_update_local_checkout "${nodes[@]}"
 
-nodes=("$@")
 if [ "${#nodes[@]}" -eq 0 ]; then
 	nodes=(spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7)
 fi
+
+echo "==> spark update mode: $update_mode"
+echo "==> actions: self_update=$local_self_update qwen_runtime=$configure_qwen_runtime qwen_restart=$restart_qwen dsv4_units=$install_dsv4_local dsv4_restart=$restart_dsv4"
 
 ssh_cmd()
 {

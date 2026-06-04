@@ -32,8 +32,13 @@ scripts/spark_sync_standard_repos.sh
 For DS4-only deployment updates:
 
 ```bash
-scripts/ds4_update_spark_nodes.sh
+scripts/ds4_pull_spark_nodes.sh
 ```
+
+That command only pulls `origin/main` on reachable Spark checkouts. It does not
+rewrite runtime env, install systemd units, or restart services. Use
+`scripts/ds4_update_spark_nodes.sh --runtime-config` only when the runtime
+configuration step is intentional.
 
 Those scripts require the remote repos to be on `main` and clean. They should
 fail rather than hide drift.

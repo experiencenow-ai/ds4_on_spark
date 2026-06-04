@@ -22,6 +22,7 @@ def main() -> int:
     _check_dsv4(dsv4_profile, services[service_id], errors, checks)
     _check_qwen(errors, checks)
     _check_relaunch_defaults(dsv4_profile, errors, checks)
+    _check_spark_update_scripts(errors, checks)
     if errors:
         for error in errors:
             print(f"FAIL: {error}")
@@ -126,6 +127,26 @@ def _check_relaunch_defaults(profile: dict[str, Any], errors: list[str], checks:
         errors.append("coordinator relaunch must override unsafe inherited KV admission env")
     else:
         checks.append("coordinator relaunch overrides unsafe inherited KV admission env")
+
+
+def _check_spark_update_scripts(errors: list[str], checks: list[str]) -> None:
+    update_script = (ROOT.parent / "scripts" / "ds4_update_spark_nodes.sh").read_text(encoding="utf-8")
+    pull_script = (ROOT.parent / "scripts" / "ds4_pull_spark_nodes.sh").read_text(encoding="utf-8")
+    required = {
+        "update_mode=\"${DS4_UPDATE_MODE:-code-only}\"": "Spark updater defaults to code-only mode",
+        "default_self_update=0": "Spark updater code-only avoids local self-update",
+        "default_configure_qwen_runtime=0": "Spark updater code-only avoids Qwen runtime edits",
+        "default_install_dsv4_local=0": "Spark updater code-only avoids DSV4 unit installs",
+    }
+    for needle, label in required.items():
+        if needle not in update_script:
+            errors.append(label)
+        else:
+            checks.append(label)
+    if "--code-only" not in pull_script or "ds4_update_spark_nodes.sh" not in pull_script:
+        errors.append("Spark pull wrapper must call ds4_update_spark_nodes.sh --code-only")
+    else:
+        checks.append("Spark pull wrapper calls updater in code-only mode")
 
 
 def _require_arg(args: list[Any], flag: str, expected: str, label: str, errors: list[str], checks: list[str]) -> None:
