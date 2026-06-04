@@ -46,6 +46,8 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["output_tok_s"], 9.5)
         self.assertEqual(snap["tok_s"], 20.5)
         self.assertEqual(snap["total_gpu_power_w"], 50.0)
+        self.assertTrue(snap["gpu_known"])
+        self.assertEqual(snap["avg_gpu_pct"], 67.33)
         self.assertEqual(snap["active_nodes"], 2)
         self.assertTrue(snap["kv_known"])
         self.assertTrue(snap["cache_known"])
@@ -188,6 +190,8 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertIn('n.vllm_metrics_up?pct(n.cache_hit_pct):"n/a"', dashboard.DASHBOARD_HTML)
 
     def test_dashboard_summary_combines_tokens_and_shows_total_power(self):
+        self.assertIn('grid-template-columns:repeat(7,minmax(110px,1fr))', dashboard.DASHBOARD_HTML)
+        self.assertIn('metric("GPU Avg",d.gpu_known?pct(d.avg_gpu_pct):"n/a")', dashboard.DASHBOARD_HTML)
         self.assertIn('metric("Tok/s In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`)', dashboard.DASHBOARD_HTML)
         self.assertIn('metric("Total Power",val(d.total_gpu_power_w,"W"))', dashboard.DASHBOARD_HTML)
         self.assertNotIn('metric("In tok/s"', dashboard.DASHBOARD_HTML)
