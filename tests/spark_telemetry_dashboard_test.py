@@ -26,7 +26,7 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
             },
             "nodes": {
                 "spark0": {"sample_count": 2, "last_gpu_util_pct": 96, "last_gpu_power_w": 37, "last_cpu_util_pct": 40, "last_vllm_metrics_up": 1, "last_vllm_requests_running": 4, "last_vllm_requests_waiting": 0, "last_vllm_kv_cache_pct": 50, "last_vllm_tokens_per_s": 2, "last_vllm_prompt_tokens_per_s": 7, "last_vllm_generation_tokens_per_s": 2, "last_vllm_prompt_tokens_cached_per_s": 3, "last_vllm_prompt_cache_hit_pct": 42},
-                "spark1": {"sample_count": 2, "last_gpu_util_pct": 96, "last_gpu_temp_c": 82, "last_vllm_requests_running": 0, "last_vllm_requests_waiting": 0, "last_vllm_kv_cache_pct": 92},
+                "spark1": {"sample_count": 2, "last_gpu_util_pct": 96, "last_gpu_power_w": 13, "last_gpu_temp_c": 82, "last_vllm_requests_running": 0, "last_vllm_requests_waiting": 0, "last_vllm_kv_cache_pct": 92},
                 "spark2": {"sample_count": 2, "stale_data": 1, "fetch_error": "ssh timed out", "last_gpu_util_pct": 10},
                 "spark6": {"sample_count": 0, "error": "ssh timed out"},
             },
@@ -45,6 +45,7 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["input_tok_s"], 11)
         self.assertEqual(snap["output_tok_s"], 9.5)
         self.assertEqual(snap["tok_s"], 20.5)
+        self.assertEqual(snap["total_gpu_power_w"], 50.0)
         self.assertEqual(snap["active_nodes"], 2)
         self.assertTrue(snap["kv_known"])
         self.assertTrue(snap["cache_known"])
@@ -169,6 +170,12 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertIn('n.vllm_metrics_up||n.local_queue_known', dashboard.DASHBOARD_HTML)
         self.assertIn('workKnown(n)?val(n[key],unit):"n/a"', dashboard.DASHBOARD_HTML)
         self.assertIn('n.vllm_metrics_up?pct(n.cache_hit_pct):"n/a"', dashboard.DASHBOARD_HTML)
+
+    def test_dashboard_summary_combines_tokens_and_shows_total_power(self):
+        self.assertIn('metric("Tok/s In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`)', dashboard.DASHBOARD_HTML)
+        self.assertIn('metric("Total Power",val(d.total_gpu_power_w,"W"))', dashboard.DASHBOARD_HTML)
+        self.assertNotIn('metric("In tok/s"', dashboard.DASHBOARD_HTML)
+        self.assertNotIn('metric("Out tok/s"', dashboard.DASHBOARD_HTML)
 
 
 if __name__ == "__main__":
