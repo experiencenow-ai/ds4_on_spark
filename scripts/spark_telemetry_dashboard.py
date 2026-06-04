@@ -230,10 +230,13 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
     queue_queued_by_node = node_metric_map(queue.get("local_queue_queued_by_node",""))
     queue_prompt_tok_s_by_node = node_metric_map(queue.get("local_queue_prompt_tok_s_by_node",""))
     queue_tok_s_by_node = node_metric_map(queue.get("local_queue_completion_tok_s_by_node",""))
+    global_queue_known = str(queue.get("local_queue_db","")) != ""
     summary_id = raw.get("updated_unix") or raw.get("updated_iso","")
     nodes = [normalize_node(node,row,node_error_streak(node,row,summary_id)) for node,row in sorted(raw.get("nodes",{}).items()) if isinstance(row,dict)]
     for node in nodes:
         name = str(node.get("node",""))
+        if global_queue_known:
+            node["local_queue_known"] = True
         if name in queue_depth_by_node:
             node["local_q_depth"] = queue_depth_by_node[name]
             node["local_queue_known"] = True

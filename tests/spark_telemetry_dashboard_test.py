@@ -84,6 +84,22 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(third["nodes"][0]["state"], "down")
         self.assertEqual(third["nodes"][0]["error_streak"], 3)
 
+    def test_snapshot_marks_global_ds4_api_queue_as_known(self):
+        payload = {
+            "updated_iso": "2026-05-26T00:00:00+00:00",
+            "updated_unix": 1,
+            "queue": {"local_queue_db": "ds4-api:http://spark0:8700", "local_queue_depth": 0},
+            "nodes": {"spark0": {"sample_count": 1, "last_gpu_util_pct": 0, "last_vllm_metrics_up": 0}},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "summary.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            snap = dashboard.build_snapshot(str(path))
+        self.assertTrue(snap["nodes"][0]["local_queue_known"])
+        self.assertEqual(snap["nodes"][0]["input_tok_s"],0.0)
+        self.assertEqual(snap["nodes"][0]["output_tok_s"],0.0)
+        self.assertEqual(snap["queue_depth"],0.0)
+
     def test_history_reads_last_csv_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "spark2.csv"

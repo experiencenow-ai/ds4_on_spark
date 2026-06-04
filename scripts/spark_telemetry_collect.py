@@ -30,6 +30,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--stale-ok-seconds", type=float, default=300.0)
     p.add_argument("--queue-db", default=os.environ.get("DS4_QUEUE_DB",""))
     p.add_argument("--queue-db-glob", default=telemetry.QUEUE_DB_GLOB)
+    p.add_argument("--ds4-api-url", default=os.environ.get("DS4_API_URL",telemetry.DEFAULT_DS4_API_URL))
+    p.add_argument("--ds4-api-timeout", type=float, default=1.5)
     p.add_argument("--ssh-control-dir", default="")
     p.add_argument("--ssh-control-persist", type=int, default=0)
     p.add_argument("--fetch-workers", type=int, default=1)
@@ -394,7 +396,9 @@ def collect_once(args: argparse.Namespace) -> Dict[str,object]:
             continue
         telemetry.write_text_atomic(os.path.join(raw_dir,name + ".csv"),text)
         all_rows[name] = read_rows(text)
-    queue = telemetry.read_local_queue(args.queue_db,args.queue_db_glob)
+    local_queue = telemetry.read_local_queue(args.queue_db,args.queue_db_glob)
+    api_queue = telemetry.read_ds4_api_queue(args.ds4_api_url,args.ds4_api_timeout)
+    queue = telemetry.merge_queue_summaries(api_queue,local_queue)
     return(write_combined(args.out_dir,all_rows,errors,queue,fetch_errors,stale_nodes))
 
 
