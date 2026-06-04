@@ -53,10 +53,10 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_PIPELINE_COHORT_COMPLETIONS"], "1")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "262144")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE"], "1")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "512")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "256")
         self.assertEqual(defaults["DS4_COMPUTE_LEASE_QUANTUM_S"], "180")
-        self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "51539607552")
-        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "512")
+        self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "8589934592")
+        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "256")
         self.assertIn("dsv4_flash_pp8", defaults["DS4_API_BATCH_LIMITS_JSON"])
 
     def test_relaunch_production_profile_sets_multi_resident_limits(self) -> None:
@@ -65,13 +65,13 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         defaults = relaunch._profile_defaults("production")
 
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "262144")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "512")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "512")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "256")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "256")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "2")
-        self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "4294967296")
-        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "512")
-        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "512")
-        self.assertIn('"dsv4_flash_pp8":512', defaults["DS4_API_BATCH_LIMITS_JSON"])
+        self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "8589934592")
+        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "256")
+        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "256")
+        self.assertIn('"dsv4_flash_pp8":256', defaults["DS4_API_BATCH_LIMITS_JSON"])
 
     def test_relaunch_throughput_profile_overlaps_split_chunks(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
@@ -92,7 +92,7 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
                 os.environ.pop("DS4_API_DISPATCH_KV_CAPACITY_BYTES", None)
             else:
                 os.environ["DS4_API_DISPATCH_KV_CAPACITY_BYTES"] = old
-        self.assertEqual(env["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "51539607552")
+        self.assertEqual(env["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "8589934592")
 
 
 if __name__ == "__main__":

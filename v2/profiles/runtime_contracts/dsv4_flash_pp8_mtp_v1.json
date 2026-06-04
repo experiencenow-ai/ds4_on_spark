@@ -27,8 +27,8 @@
       "--enable-prefix-caching",
       "--max-model-len",
       "65536",
-      "--max-num-seqs",
-      "64",
+            "--max-num-seqs",
+            "256",
       "--max-num-batched-tokens",
       "32768",
       "--kv-cache-memory-bytes",
@@ -46,8 +46,8 @@
       "auto",
       "--kv-cache-metrics",
       "--enable-logging-iteration-details",
-      "--compilation-config",
-      "{\"cudagraph_mode\":\"NONE\",\"custom_ops\":[\"all\"]}"
+            "--compilation-config",
+            "{\"mode\":0,\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"custom_ops\":[\"all\"],\"cudagraph_capture_sizes\":[256],\"max_cudagraph_capture_size\":256,\"cudagraph_copy_inputs\":false,\"cudagraph_num_of_warmups\":0}"
     ],
     "host": "0.0.0.0",
     "master_addr": "spark0",
@@ -62,16 +62,16 @@
     "dtype": "mixed-fp4-fp8",
     "entry_base_url": "http://127.0.0.1:8102",
     "head_node": "spark0",
-    "layer_partition": [
-      6,
-      6,
-      6,
-      5,
-      5,
-      5,
-      5,
-      5
-    ],
+        "layer_partition": [
+            5,
+            6,
+            6,
+            6,
+            6,
+            5,
+            5,
+            4
+        ],
     "pipeline_parallel_size": 8,
     "tensor_parallel_size": 1,
     "text_only": true,

@@ -14,7 +14,7 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 import uuid
 
-from .api_stream import openai_completion_requests, openai_completion_stream_events, write_sse
+from .api_stream import openai_chat_stream_events, openai_completion_requests, openai_completion_stream_events, write_sse
 from .profiles import ModelProfile, ProfileRegistry
 from .kv_cache import KV_CACHE_DIRECTIVE_FORMAT, KV_CACHE_PLAN_FORMAT, normalize_kv_cache_directive
 from .runners import FakeRunner, PipelineOpenAIRunner, Runner, coalescing_telemetry_snapshot
@@ -85,7 +85,8 @@ class CoordinatorApi:
         self.sync_timeout_s = float(sync_timeout_s)
         self.poll_interval_s = max(0.001, float(poll_interval_s))
         self.dispatcher_enabled = _env_bool("DS4_API_BACKGROUND_DISPATCH", True)
-        self.dispatcher_window = max(1, _env_int("DS4_API_DISPATCH_WINDOW", 512))
+        topology_default_window = _topology_dispatch_window(self.topology_path)
+        self.dispatcher_window = max(1, _env_int("DS4_API_DISPATCH_WINDOW", topology_default_window))
         self.dispatcher_refill_batch = max(1, _env_int("DS4_API_DISPATCH_REFILL_BATCH", self.dispatcher_window))
         self.dispatcher_idle_sleep_s = max(0.001, _env_float("DS4_API_DISPATCH_IDLE_SLEEP_S", 0.005))
         self.dispatcher_batch_linger_s = max(0.0, _env_float("DS4_API_DISPATCH_BATCH_LINGER_S", 0.03))
@@ -207,12 +208,12 @@ class CoordinatorApi:
         request_id = str(body.get("request_id") or f"chatcmpl-{uuid.uuid4().hex}")
         batch_id = str(body.get("batch_id") or request_id)
         metadata = dict(body.get("metadata") or {})
-        input_payload = _openai_chat_input_payload(body, metadata)
+        input_payload = _openai_chat_input_payload(body, profile=profile, topology=topology, metadata=metadata)
         raw_request = _make_inference_request_json(
             request_id=request_id,
             profile=profile,
             chat=True,
-            input_payload=_input_with_api_kv(input_payload, body, profile, topology),
+            input_payload=input_payload,
             output_contract=_openai_output_contract(body),
             max_tokens=int(body.get("max_completion_tokens") or body.get("max_tokens") or 1024),
             temperature=float(body.get("temperature") or 0.0),
@@ -262,7 +263,7 @@ class CoordinatorApi:
         request_id = str(body.get("request_id") or f"msg_{uuid.uuid4().hex}")
         batch_id = str(body.get("batch_id") or request_id)
         metadata = dict(body.get("metadata") or {})
-        input_payload = _input_with_api_kv({"system": body.get("system"), "messages": list(body.get("messages") or []), "tools": body.get("tools"), "metadata": metadata}, body, profile, topology)
+        input_payload = _anthropic_messages_input_payload(body, profile=profile, topology=topology, metadata=metadata)
         raw_request = _make_inference_request_json(
             request_id=request_id,
             profile=profile,
@@ -648,6 +649,9 @@ def serve(*, host: str, port: int, queue_dir: str | Path, profiles_dir: str | Pa
                 if parsed.path == "/v1/completions" and body.get("stream"):
                     write_sse(self, openai_completion_stream_events(api, body))
                     return
+                if parsed.path == "/v1/chat/completions" and body.get("stream"):
+                    write_sse(self, openai_chat_stream_events(api, body))
+                    return
                 code, payload = api.handle_post(parsed.path, body)
             except Exception as exc:
                 code, payload = 400, {"error": str(exc)}
@@ -677,6 +681,20 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     serve(host=args.host, port=args.port, queue_dir=args.queue_dir, profiles_dir=args.profiles_dir, topology_path=args.topology, runner_kind=args.runner_kind, sync_timeout_s=args.sync_timeout_s)
     return 0
+
+
+def _topology_dispatch_window(topology_path: Path) -> int:
+    try:
+        topology = SparkTopology.load(topology_path)
+    except Exception:
+        return 64
+    values: list[int] = []
+    for service in topology.pipeline_services.values():
+        try:
+            values.append(int(service.scheduler.get("queue_concurrency") or service.scheduler.get("queue_limit") or service.max_batch_size or 0))
+        except Exception:
+            continue
+    return max([64] + values)
 
 
 def _default_sync_timeout_s() -> float:
@@ -722,6 +740,11 @@ def _input_with_api_kv(input_payload: dict[str, Any], body: dict[str, Any], prof
     openai.update({key: extra_body[key] for key in OPENAI_REQUEST_FIELDS if key in extra_body and extra_body[key] is not None})
     if openai:
         out["openai"] = {**dict(out.get("openai") or {}), **openai}
+    if extra_body:
+        excluded_extra_keys = {"ds4_async", *OPENAI_REQUEST_FIELDS}
+        preserved_extra = {key: value for key, value in extra_body.items() if key not in excluded_extra_keys}
+        if preserved_extra:
+            out["openai_extra_body"] = {**dict(out.get("openai_extra_body") or {}), **preserved_extra}
     has_kv_cache = body.get("kv_cache") is not None
     has_external_kv = body.get("external_kv") is not None
     if has_kv_cache and has_external_kv and body.get("kv_cache") != body.get("external_kv"):
@@ -748,19 +771,70 @@ def _input_with_api_kv(input_payload: dict[str, Any], body: dict[str, Any], prof
     return out
 
 
-def _openai_chat_input_payload(body: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {"messages": list(body.get("messages") or []), "metadata": metadata}
+def _openai_chat_input_payload(body: dict[str, Any], *, profile: ModelProfile, topology: SparkTopology, metadata: dict[str, Any]) -> dict[str, Any]:
+    messages = _normalize_openai_messages(body.get("messages"))
+    payload: dict[str, Any] = {"messages": messages, "metadata": metadata}
     for key in ("tools", "tool_choice", "response_format"):
         if body.get(key) is not None:
-            out[key] = body[key]
-    rendered_prompt = _rendered_prompt_from_openai_chat(body, metadata)
-    if rendered_prompt:
-        out["rendered_prompt"] = rendered_prompt
-        out["prompt"] = rendered_prompt
-    return out
+            payload[key] = body[key]
+    prompt = _explicit_rendered_prompt(body, metadata)
+    if not prompt and _env_bool("DS4_API_RENDER_CHAT_PROMPTS", True):
+        prompt = _render_chat_prompt(profile, messages, body=body, metadata=metadata)
+    if prompt:
+        payload["rendered_prompt"] = prompt
+        payload["prompt"] = prompt
+        payload["estimated_prompt_tokens"] = _rough_prompt_tokens(prompt)
+    return _input_with_api_kv(payload, body, profile, topology)
 
 
-def _rendered_prompt_from_openai_chat(body: dict[str, Any], metadata: dict[str, Any]) -> str:
+def _anthropic_messages_input_payload(body: dict[str, Any], *, profile: ModelProfile, topology: SparkTopology, metadata: dict[str, Any]) -> dict[str, Any]:
+    messages = _normalize_openai_messages(body.get("messages"))
+    system = body.get("system")
+    if isinstance(system, str) and system:
+        messages = [{"role": "system", "content": system}, *messages]
+    payload: dict[str, Any] = {"system": system, "messages": messages, "tools": body.get("tools"), "metadata": metadata}
+    prompt = _explicit_rendered_prompt(body, metadata)
+    if not prompt and _env_bool("DS4_API_RENDER_CHAT_PROMPTS", True):
+        prompt = _render_chat_prompt(profile, messages, body=body, metadata=metadata)
+    if prompt:
+        payload["rendered_prompt"] = prompt
+        payload["prompt"] = prompt
+        payload["estimated_prompt_tokens"] = _rough_prompt_tokens(prompt)
+    return _input_with_api_kv(payload, body, profile, topology)
+
+
+def _normalize_openai_messages(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    messages: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        message = {"role": str(item.get("role") or "user"), "content": _message_content_text(item.get("content"))}
+        for key in ("name", "tool_call_id", "tool_calls"):
+            if key in item:
+                message[key] = item[key]
+        messages.append(message)
+    return messages
+
+
+def _message_content_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            if isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                if isinstance(text, str):
+                    parts.append(text)
+            elif isinstance(item, str):
+                parts.append(item)
+        return "\n".join(parts)
+    return "" if value is None else str(value)
+
+
+def _explicit_rendered_prompt(body: dict[str, Any], metadata: dict[str, Any]) -> str:
     extra_body = body.get("extra_body") if isinstance(body.get("extra_body"), dict) else {}
     for container in (body, extra_body, metadata):
         if not isinstance(container, dict):
@@ -770,6 +844,84 @@ def _rendered_prompt_from_openai_chat(body: dict[str, Any], metadata: dict[str, 
             if isinstance(value, str) and value:
                 return value
     return ""
+
+
+def _render_chat_prompt(profile: ModelProfile, messages: list[dict[str, Any]], *, body: dict[str, Any], metadata: dict[str, Any]) -> str:
+    if not messages:
+        return ""
+    rendered = _render_chat_prompt_with_tokenizer(profile, messages, body=body, metadata=metadata)
+    if rendered:
+        return rendered
+    if _env_bool("DS4_API_REQUIRE_TOKENIZER_CHAT_RENDER", False):
+        raise ValueError(f"tokenizer chat-template rendering failed for {profile.profile_id}; refuse fallback prompt")
+    return _fallback_render_chat_prompt(profile, messages, body=body, metadata=metadata)
+
+
+def _render_chat_prompt_with_tokenizer(profile: ModelProfile, messages: list[dict[str, Any]], *, body: dict[str, Any], metadata: dict[str, Any]) -> str:
+    if not _env_bool("DS4_API_RENDER_CHAT_WITH_TOKENIZER", True):
+        return ""
+    try:
+        from transformers import AutoTokenizer  # type: ignore
+    except Exception:
+        return ""
+    model_path = str(profile.routing.get("tokenizer_path") or profile.routing.get("model_path") or profile.model_id)
+    try:
+        tokenizer = _tokenizer_for_chat_render(model_path)
+        kwargs = _chat_template_kwargs_for_body(profile, body, metadata)
+        if body.get("tools") is not None and "tools" not in kwargs:
+            kwargs["tools"] = body.get("tools")
+        rendered = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, **kwargs)
+    except Exception:
+        return ""
+    return rendered if isinstance(rendered, str) else ""
+
+
+_TOKENIZER_CACHE: dict[str, Any] = {}
+_TOKENIZER_CACHE_LOCK = threading.Lock()
+
+
+def _tokenizer_for_chat_render(model_path: str) -> Any:
+    with _TOKENIZER_CACHE_LOCK:
+        tokenizer = _TOKENIZER_CACHE.get(model_path)
+        if tokenizer is not None:
+            return tokenizer
+        from transformers import AutoTokenizer  # type: ignore
+        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+        _TOKENIZER_CACHE[model_path] = tokenizer
+        return tokenizer
+
+
+def _chat_template_kwargs_for_body(profile: ModelProfile, body: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
+    extra_body = body.get("extra_body") if isinstance(body.get("extra_body"), dict) else {}
+    merged: dict[str, Any] = {}
+    for container in (extra_body.get("chat_template_kwargs"), body.get("chat_template_kwargs"), metadata.get("chat_template_kwargs")):
+        if isinstance(container, dict):
+            merged.update(container)
+    key = profile.routing.get("chat_template_thinking_key")
+    if isinstance(key, str) and key and key not in merged and profile.supports_thinking:
+        merged[key] = _thinking_budget_tokens(body, metadata) > 0
+    return merged
+
+
+def _fallback_render_chat_prompt(profile: ModelProfile, messages: list[dict[str, Any]], *, body: dict[str, Any], metadata: dict[str, Any]) -> str:
+    lowered = profile.model_id.lower()
+    if "qwen" in lowered:
+        parts = []
+        for message in messages:
+            parts.append(f"<|im_start|>{message.get('role', 'user')}\n{message.get('content', '')}<|im_end|>")
+        parts.append("<|im_start|>assistant\n")
+        return "\n".join(parts)
+    parts = []
+    for message in messages:
+        role = str(message.get("role") or "user")
+        content = str(message.get("content") or "")
+        parts.append(f"{role}: {content}")
+    parts.append("assistant:")
+    return "\n".join(parts)
+
+
+def _rough_prompt_tokens(prompt: str) -> int:
+    return max(1, len(prompt.encode("utf-8")) // 3)
 
 
 def _thinking_budget_tokens(body: dict[str, Any], metadata: dict[str, Any] | None = None) -> int:

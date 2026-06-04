@@ -61,6 +61,40 @@ def openai_completion_stream_events(api: Any, body: dict[str, Any]):
     return _iter_completion_stream(api, base_request_id, model, batch_id, requests, after_event_id, timeout_s)
 
 
+def openai_chat_stream_events(api: Any, body: dict[str, Any]):
+    from . import api as api_module
+
+    registry = api._registry()
+    topology = api._topology()
+    profile = api_module._resolve_profile(registry, topology, api_module._optional_str(body.get("model")))
+    if api_module._is_async_request(body):
+        raise ValueError("stream=true cannot be combined with ds4_async")
+    request_id = str(body.get("request_id") or f"chatcmpl-{uuid.uuid4().hex}")
+    batch_id = str(body.get("batch_id") or request_id)
+    metadata = dict(body.get("metadata") or {})
+    input_payload = api_module._openai_chat_input_payload(body, profile=profile, topology=topology, metadata=metadata)
+    input_payload["ds4_client_stream"] = True
+    raw_request = api_module._make_inference_request_json(
+        request_id=request_id,
+        profile=profile,
+        chat=True,
+        input_payload=input_payload,
+        output_contract=api_module._openai_output_contract(body),
+        max_tokens=int(body.get("max_completion_tokens") or body.get("max_tokens") or 1024),
+        temperature=float(body.get("temperature") or 0.0),
+        job_class=str(body.get("ds4_job_class") or metadata.get("job_class") or "analysis"),
+        capability=api_module._optional_str(body.get("ds4_capability") or metadata.get("capability")),
+        thinking_budget_tokens=api_module._thinking_budget_tokens(body, metadata),
+    )
+    request_item = InferenceRequest.from_json(raw_request)
+    status = api.queue.status()
+    after_event_id = int(status.get("newest_event_id") or 0)
+    api.queue.submit_requests(requests=[request_item], registry=registry, topology=topology, batch_id=batch_id, priority=api_module._optional_int(body.get("priority")))
+    timeout_s = float(body.get("ds4_timeout_s") or api.sync_timeout_s)
+    model = str(body.get("model") or profile.model_id)
+    return _iter_chat_stream(api, request_id, model, batch_id, request_item, after_event_id, timeout_s)
+
+
 def _iter_completion_stream(api: Any, request_id: str, model: str, batch_id: str, requests: list[InferenceRequest], after_event_id: int, timeout_s: float):
     pending = {request.request_id: (index, request) for index, request in enumerate(requests)}
     streamed: set[str] = set()
@@ -141,6 +175,87 @@ def _openai_completion_stream_chunk(request_id: str, model: str, batch_id: str, 
         "ds4": {"batch_id": batch_id, "request": row.get("request"), "status": status},
     }
     return chunk, usage
+
+
+def _iter_chat_stream(api: Any, request_id: str, model: str, batch_id: str, request_item: InferenceRequest, after_event_id: int, timeout_s: float):
+    pending = {request_item.request_id}
+    streamed = False
+    deadline = time.time() + max(0.1, timeout_s)
+    while pending and time.time() < deadline:
+        poll = api.queue.poll(after_event_id=after_event_id, limit=200)
+        after_event_id = int(poll.get("newest_event_id") or after_event_id)
+        for event in poll.get("events") or []:
+            if str(event.get("request_id") or "") != request_item.request_id:
+                continue
+            event_type = str(event.get("event_type") or "")
+            state = str(event.get("state") or "")
+            if event_type == "delta":
+                text = str((event.get("payload") or {}).get("text") or "")
+                if text:
+                    streamed = True
+                    yield _openai_chat_delta_chunk(request_id, model, batch_id, request_item.request_id, text)
+                continue
+            if state not in API_TERMINAL_STATES:
+                continue
+            pending.discard(request_item.request_id)
+            row = api.queue.collect(request_id=request_item.request_id)
+            text, status = _api_result_text_and_status(row)
+            if text and not streamed:
+                yield _openai_chat_delta_chunk(request_id, model, batch_id, request_item.request_id, text)
+            yield _openai_chat_final_chunk(request_id, model, batch_id, row, status)
+            break
+        if pending:
+            if not api._dispatcher_is_active():
+                if api.dispatcher_enabled and api.dispatcher_thread is not None:
+                    break
+                api._work_once({"batch_id": batch_id})
+            time.sleep(api.poll_interval_s)
+    if pending:
+        yield _openai_chat_timeout_chunk(request_id, model, batch_id, request_item.request_id)
+
+
+def _api_result_text_and_status(row: dict[str, Any]) -> tuple[str, str]:
+    from . import api as api_module
+    return api_module._result_text_and_status(row)
+
+
+def _openai_chat_delta_chunk(request_id: str, model: str, batch_id: str, request_key: str, text: str) -> dict[str, Any]:
+    return {
+        "id": request_id,
+        "object": "chat.completion.chunk",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [{"index": 0, "delta": {"content": text}, "finish_reason": None}],
+        "ds4": {"batch_id": batch_id, "request_id": request_key, "status": "running", "event_type": "delta"},
+    }
+
+
+def _openai_chat_final_chunk(request_id: str, model: str, batch_id: str, row: dict[str, Any], status: str) -> dict[str, Any]:
+    return {
+        "id": request_id,
+        "object": "chat.completion.chunk",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop" if status == "completed" else "error"}],
+        "usage": _usage_from_row(row),
+        "ds4": {"batch_id": batch_id, "request": row.get("request"), "status": status},
+    }
+
+
+def _openai_chat_timeout_chunk(request_id: str, model: str, batch_id: str, request_key: str) -> dict[str, Any]:
+    return {
+        "id": request_id,
+        "object": "chat.completion.chunk",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [{"index": 0, "delta": {"content": "coordinator stream timeout"}, "finish_reason": "error"}],
+        "ds4": {"batch_id": batch_id, "request_id": request_key, "status": "failed"},
+    }
+
+
+def _usage_from_row(row: dict[str, Any]) -> dict[str, int]:
+    from . import api as api_module
+    return api_module._result_usage(row)
 
 
 def _openai_completion_timeout_chunk(request_id: str, model: str, batch_id: str, index: int, request_key: str) -> dict[str, Any]:

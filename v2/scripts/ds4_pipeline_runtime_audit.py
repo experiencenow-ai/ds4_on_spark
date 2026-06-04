@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 from typing import Any
@@ -31,18 +32,19 @@ def _check_dsv4(service: dict[str, Any], errors: list[str], checks: list[str]) -
     contract = _load(ROOT / "profiles" / "runtime_contracts" / "dsv4_flash_pp8_mtp_v1.json")
     deployment = _load(ROOT / "profiles" / "kv_cache" / "dsv4_flash_pp8_simple_offload.json")
     scheduler = service.get("scheduler") if isinstance(service.get("scheduler"), dict) else {}
+    decode_graph_config = "{\"mode\":0,\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"custom_ops\":[\"all\"],\"cudagraph_capture_sizes\":[256],\"max_cudagraph_capture_size\":256,\"cudagraph_copy_inputs\":false,\"cudagraph_num_of_warmups\":0}"
     for name, args in (("runtime contract", contract["launch"]["args"]), ("KV deployment", deployment["extra_args"])):
         _require_arg(args, "--max-num-seqs", str(scheduler.get("vllm_max_num_seqs")), f"DSV4 {name} max seqs", errors, checks)
         _require_arg(args, "--max-num-batched-tokens", str(scheduler.get("vllm_max_num_batched_tokens")), f"DSV4 {name} token budget", errors, checks)
         _require_arg(args, "--kv-cache-memory-bytes", "8589934592", f"DSV4 {name} bounded resident KV bytes", errors, checks)
         _require_arg(args, "--linear-backend", "auto", f"DSV4 {name} native linear backend auto", errors, checks)
         _require_arg(args, "--moe-backend", "auto", f"DSV4 {name} native MoE backend auto", errors, checks)
-        _require_arg(args, "--compilation-config", "{\"cudagraph_mode\":\"NONE\",\"custom_ops\":[\"all\"]}", f"DSV4 {name} disables CUDA graphs for resident production", errors, checks)
+        _require_arg(args, "--compilation-config", decode_graph_config, f"DSV4 {name} uses bounded decode-only CUDA graph", errors, checks)
         if "--speculative-config" in [str(item) for item in args]:
             errors.append(f"DSV4 {name}: resident production must not enable MTP/speculative decode")
         else:
             checks.append(f"DSV4 {name} keeps MTP/speculative decode off")
-    expected_partition = [6, 6, 6, 5, 5, 5, 5, 5]
+    expected_partition = [5, 6, 6, 6, 6, 5, 5, 4]
     _require_equal(service.get("layer_partition"), expected_partition, "DSV4 topology balanced PP8 partition", errors, checks)
     _require_equal(contract["pipeline"].get("layer_partition"), expected_partition, "DSV4 runtime partition", errors, checks)
     _require_equal(deployment.get("layer_partition"), expected_partition, "DSV4 KV deployment partition", errors, checks)
@@ -51,6 +53,8 @@ def _check_dsv4(service: dict[str, Any], errors: list[str], checks: list[str]) -
         "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR": "0",
         "VLLM_DS4_PP_DIRECT_CUDA_TENSOR_DICT": "1",
         "VLLM_DS4_PP_OVERLAP_SEND": "1",
+        "DS4_PP_TRANSPORT": "tcp-staged",
+        "VLLM_DS4_PP_EDGE_RAIL": "enp",
         "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "64",
         "VLLM_DS4_FINAL_ONLY_NONSTREAMING": "1",
     }.items():
@@ -83,35 +87,47 @@ def _check_qwen(errors: list[str], checks: list[str]) -> None:
 
 
 def _check_relaunch_defaults(errors: list[str], checks: list[str]) -> None:
-    text = (ROOT / "scripts" / "ds4_relaunch_coordinator_api.py").read_text(encoding="utf-8")
-    if '"DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "262144"' not in text:
+    production = _coordinator_defaults("production")
+    throughput = _coordinator_defaults("throughput")
+    if production.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET") != "262144" or throughput.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET") != "262144":
         errors.append("coordinator throughput relaunch must use bounded 262144 token cohorts")
     else:
         checks.append("coordinator throughput relaunch uses bounded token cohorts")
-    if '"DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "262144"' not in text:
+    if production.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET") != "262144":
         errors.append("coordinator production relaunch must use high-feed DSV4 token cohorts")
     else:
         checks.append("coordinator production relaunch uses high-feed DSV4 token cohorts")
-    if '"DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "512"' not in text:
+    if production.get("DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX") != "256" or throughput.get("DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX") != "256":
         errors.append("coordinator production relaunch must allow PP-safe DSV4 prompt-array cohorts")
     else:
         checks.append("coordinator production relaunch allows PP-safe DSV4 prompt-array cohorts")
-    if '"DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "2"' not in text or '"DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "4"' not in text:
+    if production.get("DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY") != "2" or throughput.get("DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY") != "4":
         errors.append("coordinator relaunch must overlap split resident chunks without changing vLLM KV caps")
     else:
         checks.append("coordinator relaunch overlaps split resident chunks")
-    if '"DS4_COMPUTE_LEASE_QUANTUM_S": "180"' not in text:
+    if production.get("DS4_COMPUTE_LEASE_QUANTUM_S") != "180" or throughput.get("DS4_COMPUTE_LEASE_QUANTUM_S") != "180":
         errors.append("coordinator relaunch must set compute lease quantum")
     else:
         checks.append("coordinator relaunch sets compute lease quantum")
-    if '"DS4_API_DISPATCH_KV_CAPACITY_BYTES": "51539607552"' not in text:
+    if production.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES") != "8589934592" or throughput.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES") != "8589934592":
         errors.append("coordinator relaunch must bound dispatcher KV admission")
     else:
         checks.append("coordinator relaunch bounds dispatcher KV admission")
+    text = (ROOT / "scripts" / "ds4_relaunch_coordinator_api.py").read_text(encoding="utf-8")
     if '"DS4_API_DISPATCH_KV_CAPACITY_BYTES",' not in text or "env[key] = value" not in text:
         errors.append("coordinator relaunch must override unsafe inherited KV admission env")
     else:
         checks.append("coordinator relaunch overrides unsafe inherited KV admission env")
+
+
+def _coordinator_defaults(profile: str) -> dict[str, str]:
+    path = ROOT / "scripts" / "ds4_relaunch_coordinator_api.py"
+    spec = importlib.util.spec_from_file_location("ds4_relaunch_coordinator_api", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return dict(module._profile_defaults(profile))
 
 
 def _require_arg(args: list[Any], flag: str, expected: str, label: str, errors: list[str], checks: list[str]) -> None:

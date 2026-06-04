@@ -317,6 +317,33 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(request_json["input"]["rendered_prompt"], "<|user|>hello<|assistant|>")
         self.assertEqual(request_json["input"]["prompt"], "<|user|>hello<|assistant|>")
 
+    def test_openai_chat_input_payload_renders_prompt_for_coalescing(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        topology = SparkTopology.load(TOPOLOGY)
+        profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
+        old = os.environ.get("DS4_API_RENDER_CHAT_WITH_TOKENIZER")
+        os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = "0"
+        try:
+            payload = api_module._openai_chat_input_payload(
+                {
+                    "messages": [{"role": "user", "content": "What is 2+2?"}],
+                    "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+                },
+                profile=profile,
+                topology=topology,
+                metadata={},
+            )
+        finally:
+            if old is None:
+                os.environ.pop("DS4_API_RENDER_CHAT_WITH_TOKENIZER", None)
+            else:
+                os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = old
+
+        self.assertIn("rendered_prompt", payload)
+        self.assertEqual(payload["prompt"], payload["rendered_prompt"])
+        self.assertIn("<|im_start|>user", payload["rendered_prompt"])
+        self.assertEqual(payload["openai_extra_body"]["chat_template_kwargs"], {"enable_thinking": False})
+
     def test_openai_runner_uses_builder_thinking_contract(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")

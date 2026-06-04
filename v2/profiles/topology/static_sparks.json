@@ -137,17 +137,17 @@
           "expected_entry_fraction_per_node": 0.125,
           "sharding": "pipeline_layers"
         },
-        "layer_partition": [
-          6,
-          6,
-          6,
-          5,
-          5,
-          5,
-          5,
-          5
-        ],
-        "max_batch_size": 64,
+                "layer_partition": [
+                    5,
+                    6,
+                    6,
+                    6,
+                    6,
+                    5,
+                    5,
+                    4
+                ],
+                "max_batch_size": 256,
         "model_id": "deepseek-ai/DeepSeek-V4-Flash",
         "node_ids": [
           "spark0",
@@ -165,12 +165,12 @@
           "admission_mode": "single_active_batch_per_compute_domain",
           "batch_linger_s": 0.0,
           "max_running_batches_per_compute_domain": 1,
-          "queue_concurrency": 64,
-          "queue_limit": 512,
-          "refill_low_watermark": 48,
-          "vllm_max_num_batched_tokens": 32768,
-          "vllm_max_num_seqs": 64
-        },
+                    "queue_concurrency": 256,
+                    "queue_limit": 512,
+                    "refill_low_watermark": 192,
+                    "vllm_max_num_batched_tokens": 32768,
+                    "vllm_max_num_seqs": 256
+                },
         "service_id": "dsv4_flash_pp8",
         "telemetry": {
           "expected_stage_count": 8,
