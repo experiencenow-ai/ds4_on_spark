@@ -223,6 +223,7 @@
           "vllm_max_num_batched_tokens": 65536,
           "vllm_max_num_seqs": 12
         },
+        "served_model_name": "qwen27-bf16-pp8",
         "service_id": "qwen27_bf16_pp8",
         "telemetry": {
           "expected_stage_count": 8,

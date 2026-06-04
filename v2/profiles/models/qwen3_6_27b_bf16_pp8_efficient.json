@@ -28,6 +28,7 @@
       "api_base_url": "http://127.0.0.1:8101",
       "compute_domain": "spark-fleet-0",
       "entry_node_id": "spark0",
+      "served_model_name": "qwen27-bf16-pp8",
       "service_id": "qwen27_bf16_pp8"
     },
     "rank": 80
