@@ -143,6 +143,14 @@ def _check_spark_update_scripts(errors: list[str], checks: list[str]) -> None:
             errors.append(label)
         else:
             checks.append(label)
+    default_nodes = "nodes=(spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7)"
+    self_update_call = "self_update_local_checkout \"${nodes[@]}\""
+    if default_nodes not in update_script:
+        errors.append("Spark updater must default no-arg runs to spark0..spark7")
+    elif update_script.find(default_nodes) > update_script.find(self_update_call):
+        errors.append("Spark updater must set default nodes before self-update expansion")
+    else:
+        checks.append("Spark updater no-arg default nodes are set before self-update")
     if "--code-only" not in pull_script or "ds4_update_spark_nodes.sh" not in pull_script:
         errors.append("Spark pull wrapper must call ds4_update_spark_nodes.sh --code-only")
     else:

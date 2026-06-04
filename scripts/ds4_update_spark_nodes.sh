@@ -81,6 +81,10 @@ do
 	shift
 done
 
+if [ "${#nodes[@]}" -eq 0 ]; then
+	nodes=(spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7)
+fi
+
 case "$update_mode" in
 code-only)
 	default_self_update=0
@@ -154,10 +158,6 @@ self_update_local_checkout()
 }
 
 self_update_local_checkout "${nodes[@]}"
-
-if [ "${#nodes[@]}" -eq 0 ]; then
-	nodes=(spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7)
-fi
 
 echo "==> spark update mode: $update_mode"
 echo "==> actions: self_update=$local_self_update qwen_runtime=$configure_qwen_runtime qwen_restart=$restart_qwen dsv4_units=$install_dsv4_local dsv4_restart=$restart_dsv4"
