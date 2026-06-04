@@ -28,7 +28,7 @@
       "--max-model-len",
       "262144",
       "--max-num-seqs",
-      "64",
+      "128",
       "--max-num-batched-tokens",
       "32768",
       "--kv-cache-memory-bytes",

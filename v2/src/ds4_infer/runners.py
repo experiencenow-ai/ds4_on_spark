@@ -10,10 +10,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Iterator, Protocol
 from urllib import error, request as urlrequest
 
-from .builders import model_batch_payload, request_messages, request_prompt, thinking_request_fields
+from .builders import model_batch_payload, request_messages, request_prompt
 from .cohort_safety import coalesced_completion_token_budget, coalesced_failure_should_bisect, mark_coalesced_split, prompt_token_estimate
 from .kv_cache import kv_cache_extra_body, kv_cache_vllm_request_fields
 from .profiles import ModelProfile
+from .runner_payloads import merge_request_extra_body, requests_need_client_stream
 from .schemas import InferenceRequest, make_result
 
 
@@ -559,9 +560,11 @@ class PipelineOpenAIRunner:
         worker_count = max(1, min(int(concurrency), len(request_list)))
         runner = self._runner_for(profile, node_id)
         if _env_bool("DS4_PIPELINE_COHORT_COMPLETIONS", True):
-            coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result, on_delta=on_delta)
-            if coalesced is not None:
-                return coalesced
+            if _env_bool("DS4_PIPELINE_INTERNAL_STREAM_ALL_COHORTS", True):
+                client_delta = on_delta if requests_need_client_stream(request_list) else None
+                coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result, on_delta=client_delta)
+                if coalesced is not None:
+                    return coalesced
             coalesced = runner.run_many_completion(request_list, profile)
             if coalesced is not None:
                 for request_id, result in coalesced.items():
@@ -841,7 +844,7 @@ def _completion_effective_max_cohort(profile: ModelProfile) -> int:
     max_cohort = max(1, _env_int("DS4_PIPELINE_COMPLETION_COHORT_MAX", 512))
     if not _profile_uses_pipeline(profile):
         return max_cohort
-    pp_safe = _env_int("DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX", 16)
+    pp_safe = _env_int("DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX", 0)
     if pp_safe <= 0:
         return max_cohort
     return max(1, min(max_cohort, pp_safe))
@@ -1083,7 +1086,7 @@ def make_runner(kind: str, *, timeout_s: int, pipeline_base_urls: dict[str, str]
 
 def _openai_payload(request: InferenceRequest, profile: ModelProfile, *, render_chat_as_completion: bool = False) -> dict[str, Any]:
     model = _served_model_id(profile)
-    max_tokens = request.max_output_tokens + (request.thinking_budget_tokens if profile.supports_thinking else 0)
+    max_tokens = max(1, int(request.max_output_tokens) + int(request.thinking_budget_tokens))
     if request.chat and not render_chat_as_completion:
         payload: dict[str, Any] = {
             "model": model,
@@ -1108,9 +1111,7 @@ def _openai_payload(request: InferenceRequest, profile: ModelProfile, *, render_
     sampling = openai_sampling_controls(request.input)
     if sampling:
         payload.update(sampling)
-    thinking_body = thinking_request_fields(profile, chat=request.chat, thinking_budget_tokens=request.thinking_budget_tokens)
-    if thinking_body:
-        payload["extra_body"] = {**dict(payload.get("extra_body") or {}), **thinking_body}
+    merge_request_extra_body(payload, request, profile)
     extra_body = kv_cache_extra_body(request.input)
     if extra_body:
         payload.update(kv_cache_vllm_request_fields(request.input))

@@ -20,7 +20,7 @@ VALIDATION_TASKS = ROOT / "profiles" / "validation" / "xhigh_live_validation_tas
 ALL_SPARKS = tuple(f"spark{index}" for index in range(8))
 QWEN_PP = "qwen3_6_27b_bf16_pp8_efficient_v1"
 DSV4_PP = "dsv4_vllm_mtp_pp8_smartest_v1"
-DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident64.json"
+DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 
 

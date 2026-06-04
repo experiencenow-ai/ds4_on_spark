@@ -8,7 +8,7 @@ import unittest
 
 from ds4_infer import api as api_module
 from ds4_infer.api import CoordinatorApi
-from ds4_infer.api_stream import _drain_completion_stream_events, openai_completion_stream_events
+from ds4_infer.api_stream import _drain_completion_stream_events, openai_chat_stream_events, openai_completion_stream_events
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.runners import OpenAICompatibleRunner, PipelineOpenAIRunner, _openai_payload
 from ds4_infer.schemas import InferenceRequest, make_result
@@ -17,7 +17,7 @@ from ds4_infer.topology import SparkTopology
 ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
-DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident64.json"
+DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 
 
@@ -304,6 +304,61 @@ class PipelineApiTests(unittest.TestCase):
         self.assertIsNone(chunks[0]["choices"][0]["finish_reason"])
         self.assertEqual(chunks[0]["ds4"]["event_type"], "delta")
         self.assertEqual(streamed, {"stream-delta"})
+
+    def test_openai_chat_request_gets_rendered_prompt_for_coalescing(self) -> None:
+        old = os.environ.get("DS4_API_RENDER_CHAT_WITH_TOKENIZER")
+        os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = "0"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+                api.handle_post(
+                    "/v1/chat/completions",
+                    {
+                        "model": "qwen27_bf16_pp8",
+                        "messages": [{"role": "user", "content": "hello"}],
+                        "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+                        "ds4_async": True,
+                        "batch_id": "rendered-chat",
+                    },
+                )
+                with api.queue._connect() as conn:
+                    row = conn.execute("select request_json from requests where batch_id=?", ("rendered-chat",)).fetchone()
+                request_json = json.loads(str(row["request_json"]))
+        finally:
+            if old is None:
+                os.environ.pop("DS4_API_RENDER_CHAT_WITH_TOKENIZER", None)
+            else:
+                os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = old
+        self.assertIn("<|im_start|>user\nhello<|im_end|>", request_json["input"]["rendered_prompt"])
+        self.assertEqual(request_json["input"]["prompt"], request_json["input"]["rendered_prompt"])
+        self.assertEqual(request_json["input"]["openai_extra_body"]["chat_template_kwargs"], {"enable_thinking": False})
+
+    def test_openai_chat_stream_emits_queue_completion(self) -> None:
+        old = os.environ.get("DS4_API_RENDER_CHAT_WITH_TOKENIZER")
+        os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = "0"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+                events = list(
+                    openai_chat_stream_events(
+                        api,
+                        {
+                            "model": "qwen27_bf16_pp8",
+                            "messages": [{"role": "user", "content": "hello"}],
+                            "max_tokens": 8,
+                            "stream": True,
+                        },
+                    )
+                )
+        finally:
+            if old is None:
+                os.environ.pop("DS4_API_RENDER_CHAT_WITH_TOKENIZER", None)
+            else:
+                os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = old
+        self.assertGreaterEqual(len(events), 2)
+        self.assertEqual(events[0]["object"], "chat.completion.chunk")
+        self.assertIn("fake response", events[0]["choices"][0]["delta"]["content"])
+        self.assertEqual(events[-1]["choices"][0]["finish_reason"], "stop")
 
     def test_openai_api_preserves_thinking_budget_tokens(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

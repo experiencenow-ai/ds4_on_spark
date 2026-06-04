@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -14,7 +14,9 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 import uuid
 
-from .api_stream import openai_completion_requests, openai_completion_stream_events, write_sse
+from .api_chat_render import anthropic_messages_input_payload, openai_chat_input_payload
+from .api_stream import openai_chat_stream_events, openai_completion_requests, openai_completion_stream_events, write_sse
+from .env_utils import env_bool as _env_bool
 from .profiles import ModelProfile, ProfileRegistry
 from .kv_cache import KV_CACHE_DIRECTIVE_FORMAT, KV_CACHE_PLAN_FORMAT, normalize_kv_cache_directive
 from .runners import FakeRunner, PipelineOpenAIRunner, Runner
@@ -28,12 +30,36 @@ from .worker import BatchWorker
 class DispatcherRuntime:
     worker: BatchWorker
     executor: ThreadPoolExecutor
-    pending: dict[Any, list[QueueClaim]]
+    pending: dict[Any, Any]
     entry_node_id: str
     node_profile_ids: tuple[str, ...]
     batch_limits_by_service: dict[str, int]
     kv_shard_layouts_by_profile: dict[str, Any]
     next_heartbeat_at: float
+
+
+@dataclass
+class PendingDispatcherCohort:
+    claims: list[QueueClaim]
+    unfinished_request_ids: set[str]
+    lock: Any = field(default_factory=threading.Lock)
+
+    @classmethod
+    def from_claims(cls, claims: list[QueueClaim]) -> "PendingDispatcherCohort":
+        return cls(claims=list(claims), unfinished_request_ids={claim.request_id for claim in claims})
+
+    def mark_finished(self, request_id: str) -> None:
+        with self.lock:
+            self.unfinished_request_ids.discard(str(request_id))
+
+    def active_count(self) -> int:
+        with self.lock:
+            return len(self.unfinished_request_ids)
+
+    def active_claims(self) -> list[QueueClaim]:
+        with self.lock:
+            active = set(self.unfinished_request_ids)
+        return [claim for claim in self.claims if claim.request_id in active]
 
 
 API_TERMINAL_STATES = {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled", "failed"}
@@ -57,10 +83,11 @@ class CoordinatorApi:
         self.sync_timeout_s = float(sync_timeout_s)
         self.poll_interval_s = max(0.001, float(poll_interval_s))
         self.dispatcher_enabled = _env_bool("DS4_API_BACKGROUND_DISPATCH", True)
-        self.dispatcher_window = max(1, _env_int("DS4_API_DISPATCH_WINDOW", 64))
-        self.dispatcher_refill_batch = max(1, _env_int("DS4_API_DISPATCH_REFILL_BATCH", min(16, self.dispatcher_window)))
+        topology_default_window = _topology_dispatch_window(self.topology_path)
+        self.dispatcher_window = max(1, _env_int("DS4_API_DISPATCH_WINDOW", topology_default_window))
+        self.dispatcher_refill_batch = max(1, _env_int("DS4_API_DISPATCH_REFILL_BATCH", self.dispatcher_window))
         self.dispatcher_idle_sleep_s = max(0.001, _env_float("DS4_API_DISPATCH_IDLE_SLEEP_S", 0.005))
-        self.dispatcher_batch_linger_s = max(0.0, _env_float("DS4_API_DISPATCH_BATCH_LINGER_S", 0.01))
+        self.dispatcher_batch_linger_s = max(0.0, _env_float("DS4_API_DISPATCH_BATCH_LINGER_S", 0.03))
         self.dispatcher_lease_ttl_s = max(1, _env_int("DS4_API_DISPATCH_LEASE_TTL_S", 900))
         self.dispatcher_heartbeat_s = max(0.25, _env_float("DS4_API_DISPATCH_HEARTBEAT_S", 2.0))
         self.dispatcher_transport_timeout_s = max(1, _env_int("DS4_API_TRANSPORT_TIMEOUT_S", 3600))
@@ -171,25 +198,25 @@ class CoordinatorApi:
         return 404, {"error": f"unknown endpoint: {path}"}
 
     def _handle_openai_chat(self, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
-        if body.get("stream"):
-            return 400, {"error": "stream=true is not implemented in the spark0 coordinator yet"}
         registry = self._registry()
         topology = self._topology()
         profile = _resolve_profile(registry, topology, _optional_str(body.get("model")))
         request_id = str(body.get("request_id") or f"chatcmpl-{uuid.uuid4().hex}")
         batch_id = str(body.get("batch_id") or request_id)
         metadata = dict(body.get("metadata") or {})
+        thinking_budget = _thinking_budget_tokens(body, metadata)
+        input_payload = openai_chat_input_payload(body, profile=profile, metadata=metadata, thinking_budget_tokens=thinking_budget)
         raw_request = _make_inference_request_json(
             request_id=request_id,
             profile=profile,
             chat=True,
-            input_payload=_input_with_api_kv({"messages": list(body.get("messages") or []), "metadata": metadata}, body, profile, topology),
+            input_payload=_input_with_api_kv(input_payload, body, profile, topology),
             output_contract=_openai_output_contract(body),
             max_tokens=int(body.get("max_completion_tokens") or body.get("max_tokens") or 1024),
             temperature=float(body.get("temperature") or 0.0),
             job_class=str(body.get("ds4_job_class") or metadata.get("job_class") or "analysis"),
             capability=_optional_str(body.get("ds4_capability") or metadata.get("capability")),
-            thinking_budget_tokens=_thinking_budget_tokens(body, metadata),
+            thinking_budget_tokens=thinking_budget,
         )
         submitted = self.queue.submit_requests(requests=[InferenceRequest.from_json(raw_request)], registry=registry, topology=topology, batch_id=batch_id, priority=_optional_int(body.get("priority")))
         if _is_async_request(body):
@@ -233,18 +260,19 @@ class CoordinatorApi:
         request_id = str(body.get("request_id") or f"msg_{uuid.uuid4().hex}")
         batch_id = str(body.get("batch_id") or request_id)
         metadata = dict(body.get("metadata") or {})
-        input_payload = _input_with_api_kv({"system": body.get("system"), "messages": list(body.get("messages") or []), "tools": body.get("tools"), "metadata": metadata}, body, profile, topology)
+        thinking_budget = _thinking_budget_tokens(body, metadata)
+        input_payload = anthropic_messages_input_payload(body, profile=profile, metadata=metadata, thinking_budget_tokens=thinking_budget)
         raw_request = _make_inference_request_json(
             request_id=request_id,
             profile=profile,
             chat=True,
-            input_payload=input_payload,
+            input_payload=_input_with_api_kv(input_payload, body, profile, topology),
             output_contract={"format": "text"},
             max_tokens=int(body.get("max_tokens") or 1024),
             temperature=float(body.get("temperature") or 0.0),
             job_class=str(body.get("ds4_job_class") or metadata.get("job_class") or "analysis"),
             capability=_optional_str(body.get("ds4_capability") or metadata.get("capability")),
-            thinking_budget_tokens=_thinking_budget_tokens(body, metadata),
+            thinking_budget_tokens=thinking_budget,
         )
         submitted = self.queue.submit_requests(requests=[InferenceRequest.from_json(raw_request)], registry=registry, topology=topology, batch_id=batch_id, priority=_optional_int(body.get("priority")))
         if _is_async_request(body):
@@ -325,20 +353,22 @@ class CoordinatorApi:
         topology = self._topology()
         runner = self._runner(topology, timeout_s=int(body.get("timeout_s") or self.sync_timeout_s))
         entry_node_id = str(body.get("node_id") or topology.routing_policy.get("queue_entry_node_id") or "spark0")
+        limit = int(body.get("limit") or self.dispatcher_refill_batch or self.dispatcher_window)
+        concurrency = int(body.get("concurrency") or body.get("limit") or limit)
         return self.queue.work(
             registry=registry,
             runner=runner,
             node_id=entry_node_id,
             batch_id=_optional_str(body.get("batch_id")),
-            limit=int(body.get("limit") or 48),
-            concurrency=int(body.get("concurrency") or body.get("limit") or 48),
+            limit=limit,
+            concurrency=concurrency,
             worker_id=str(body.get("worker_id") or "spark0-api-pipeline-worker"),
             lease_ttl_s=int(body.get("lease_ttl_s") or 900),
             heartbeat_interval_s=float(body.get("heartbeat_interval_s") or 5.0),
             node_profile_ids=_node_profile_ids(topology, entry_node_id),
             max_node_depth=int(body.get("max_node_depth") or 0),
-            batch_linger_s=_body_float(body, "batch_linger_s", 0.05),
-            kv_capacity_bytes=int(body.get("kv_capacity_bytes") or 0),
+            batch_linger_s=_body_float(body, "batch_linger_s", self.dispatcher_batch_linger_s),
+            kv_capacity_bytes=int(body.get("kv_capacity_bytes") or self.dispatcher_kv_capacity_bytes),
             transport_max_attempts=int(body.get("transport_max_attempts") or self.dispatcher_transport_max_attempts),
             kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
             batch_limits_by_service=_batch_limits_by_service(topology),
@@ -518,7 +548,7 @@ class CoordinatorApi:
         *,
         worker: BatchWorker,
         executor: ThreadPoolExecutor,
-        pending: dict[Any, list[QueueClaim]],
+        pending: dict[Any, Any],
         entry_node_id: str,
         node_profile_ids: tuple[str, ...],
         batch_limits_by_service: dict[str, int],
@@ -552,13 +582,14 @@ class CoordinatorApi:
         )
         if not claims:
             return 0
-        future = executor.submit(_dispatcher_run_claims, worker, claims, len(claims))
-        pending[future] = list(claims)
+        cohort = PendingDispatcherCohort.from_claims(list(claims))
+        future = executor.submit(_dispatcher_run_claims, worker, claims, len(claims), cohort.mark_finished)
+        pending[future] = cohort
         largest = max(int(self.dispatcher_state.get("largest_claimed_cohort_size") or 0), len(claims))
         self._dispatcher_note(last_claimed_cohort_size=len(claims), largest_claimed_cohort_size=largest)
         return len(claims)
 
-    def _dispatcher_finish_done(self, worker: BatchWorker, pending: dict[Any, list[QueueClaim]], *, block: bool) -> tuple[int, int, int]:
+    def _dispatcher_finish_done(self, worker: BatchWorker, pending: dict[Any, Any], *, block: bool) -> tuple[int, int, int]:
         if not pending:
             return (0, 0, 0)
         if block:
@@ -567,11 +598,12 @@ class CoordinatorApi:
             done = {future for future in pending if future.done()}
         completed = failed = retried = 0
         for future in list(done):
-            claims = pending.pop(future)
+            cohort = _pending_cohort(pending.pop(future))
+            claims = cohort.claims
             try:
                 pairs = future.result()
             except Exception as exc:
-                pairs = [(claim, _dispatcher_transport_failure(claim, str(exc))) for claim in claims]
+                pairs = [(claim, _dispatcher_transport_failure(claim, str(exc))) for claim in cohort.active_claims()]
             if len(pairs) == 1 and pairs[0][0] is _DISPATCHER_BATCH_FINISHED:
                 summary = pairs[0][1]
                 completed += int(summary.get("completed") or 0)
@@ -615,6 +647,9 @@ def serve(*, host: str, port: int, queue_dir: str | Path, profiles_dir: str | Pa
                 if parsed.path == "/v1/completions" and body.get("stream"):
                     write_sse(self, openai_completion_stream_events(api, body))
                     return
+                if parsed.path == "/v1/chat/completions" and body.get("stream"):
+                    write_sse(self, openai_chat_stream_events(api, body))
+                    return
                 code, payload = api.handle_post(parsed.path, body)
             except Exception as exc:
                 code, payload = 400, {"error": str(exc)}
@@ -644,6 +679,21 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     serve(host=args.host, port=args.port, queue_dir=args.queue_dir, profiles_dir=args.profiles_dir, topology_path=args.topology, runner_kind=args.runner_kind, sync_timeout_s=args.sync_timeout_s)
     return 0
+
+
+def _topology_dispatch_window(topology_path: Path) -> int:
+    try:
+        topology = SparkTopology.load(topology_path)
+    except Exception:
+        return 64
+    values: list[int] = []
+    for service in topology.pipeline_services.values():
+        try:
+            values.append(int(service.scheduler.get("queue_concurrency") or service.scheduler.get("queue_limit") or service.max_batch_size or 0))
+        except Exception:
+            continue
+    cap = max(1, _env_int("DS4_API_DISPATCH_DEFAULT_CAP", 128))
+    return min(max([64] + values), cap)
 
 
 def _default_sync_timeout_s() -> float:
@@ -689,6 +739,11 @@ def _input_with_api_kv(input_payload: dict[str, Any], body: dict[str, Any], prof
     openai.update({key: extra_body[key] for key in OPENAI_REQUEST_FIELDS if key in extra_body and extra_body[key] is not None})
     if openai:
         out["openai"] = {**dict(out.get("openai") or {}), **openai}
+    if extra_body:
+        excluded_extra_keys = {"ds4_async", *OPENAI_REQUEST_FIELDS}
+        preserved_extra = {key: value for key, value in extra_body.items() if key not in excluded_extra_keys}
+        if preserved_extra:
+            out["openai_extra_body"] = {**dict(out.get("openai_extra_body") or {}), **preserved_extra}
     has_kv_cache = body.get("kv_cache") is not None
     has_external_kv = body.get("external_kv") is not None
     if has_kv_cache and has_external_kv and body.get("kv_cache") != body.get("external_kv"):
@@ -1188,31 +1243,40 @@ def _body_float(body: dict[str, Any], key: str, default: float) -> float:
     return float(body[key])
 
 
-def _pending_claims(pending: dict[Any, list[QueueClaim]]) -> list[QueueClaim]:
+def _pending_claims(pending: dict[Any, Any]) -> list[QueueClaim]:
     claims: list[QueueClaim] = []
     for cohort in pending.values():
-        claims.extend(cohort)
+        claims.extend(_pending_cohort(cohort).active_claims())
     return claims
 
 
-def _pending_claim_count(pending: dict[Any, list[QueueClaim]], *, queue: Any | None = None) -> int:
+def _pending_claim_count(pending: dict[Any, Any], *, queue: Any | None = None) -> int:
+    cohorts = [_pending_cohort(cohort) for cohort in pending.values()]
+    if all(isinstance(cohort, PendingDispatcherCohort) for cohort in pending.values()):
+        return sum(cohort.active_count() for cohort in cohorts)
     if queue is None or not hasattr(queue, "unfinished_request_count"):
-        return sum(len(cohort) for cohort in pending.values())
-    request_ids = [claim.request_id for cohort in pending.values() for claim in cohort]
+        return sum(len(cohort.claims) for cohort in cohorts)
+    request_ids = [claim.request_id for cohort in cohorts for claim in cohort.claims]
     return int(queue.unfinished_request_count(request_ids))
+
+
+def _pending_cohort(value: Any) -> PendingDispatcherCohort:
+    if isinstance(value, PendingDispatcherCohort):
+        return value
+    return PendingDispatcherCohort.from_claims(list(value))
 
 
 _DISPATCHER_BATCH_FINISHED: Any = object()
 
 
-def _dispatcher_run_claims(worker: BatchWorker, claims: list[QueueClaim], concurrency: int) -> list[tuple[Any, dict[str, Any]]]:
+def _dispatcher_run_claims(worker: BatchWorker, claims: list[QueueClaim], concurrency: int, mark_finished: Callable[[str], None] | None = None) -> list[tuple[Any, dict[str, Any]]]:
     if not claims:
         return []
     if claims[0].request_kind == "cpu":
         return worker._run_cpu_claims(claims, max(1, concurrency))
     if _dispatcher_can_batch_models(worker, claims):
         if hasattr(worker.runner, "run_many_on_node_incremental"):
-            completed, failed, retried = worker._run_model_batch_incremental(claims, max(1, concurrency), None)
+            completed, failed, retried = worker._run_model_batch_incremental(claims, max(1, concurrency), None, on_item_finished=mark_finished)
             return [(_DISPATCHER_BATCH_FINISHED, {"completed": completed, "failed": failed, "retried": retried})]
         return worker._run_model_batch(claims, max(1, concurrency))
     out: list[tuple[QueueClaim, dict[str, Any]]] = []
@@ -1248,13 +1312,6 @@ def _dispatcher_transport_failure(claim: QueueClaim, error: str) -> dict[str, An
         "status": "transport_failed",
         "error": error,
     }
-
-
-def _env_bool(name: str, default: bool) -> bool:
-    value = os.environ.get(name)
-    if value is None or value == "":
-        return bool(default)
-    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _env_int(name: str, default: int) -> int:

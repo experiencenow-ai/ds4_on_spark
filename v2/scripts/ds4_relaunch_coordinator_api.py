@@ -12,7 +12,7 @@ from urllib import request
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident64.json"
+DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
 
 
 def main() -> int:
@@ -62,7 +62,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-pull", action="store_true")
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--skip-tests", action="store_true")
-    parser.add_argument("--profile", choices=("throughput", "production", "resident64", "resident128"), default="resident64")
+    parser.add_argument("--profile", choices=("throughput", "production", "resident128"), default="resident128")
     parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8700") or "8700"))
     parser.add_argument("--queue-dir", default=os.environ.get("QUEUE_DIR", str(Path.home() / "ds4_queue")))
@@ -121,10 +121,10 @@ def _profile_defaults(profile: str) -> dict[str, str]:
     common = {
         "DS4_API_BACKGROUND_DISPATCH": "1",
         "DS4_PIPELINE_COHORT_COMPLETIONS": "1",
-        "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "65536",
+        "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "32768",
         "DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE": "1",
-        "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "16",
-        "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "4",
+        "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "128",
+        "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "1",
         "DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS": "1",
         "DS4_PIPELINE_COMPLETION_TOKEN_ESTIMATE_MODE": "conservative",
         "DS4_COMPUTE_LEASE_QUANTUM_S": "180",
@@ -132,7 +132,7 @@ def _profile_defaults(profile: str) -> dict[str, str]:
         "DS4_API_TRANSPORT_MAX_ATTEMPTS": "1",
         "DS4_API_DISPATCH_KV_CAPACITY_BYTES": str(dsv4["coordinator"]["dispatch_kv_capacity_bytes"]),
     }
-    if profile in {"throughput", "production", "resident64", "resident128"}:
+    if profile in {"throughput", "production", "resident128"}:
         coordinator = dsv4["coordinator"]
         service_id = str(dsv4["service_id"])
         max_num_seqs = int(dsv4["max_num_seqs"])

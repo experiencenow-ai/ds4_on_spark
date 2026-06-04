@@ -11,7 +11,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 STOP_SCRIPT = ROOT / "scripts" / "ds4_stop_coordinator_api.py"
 RELAUNCH_SCRIPT = ROOT / "scripts" / "ds4_relaunch_coordinator_api.py"
-DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident64.json"
+DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 
 
@@ -56,7 +56,7 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         for profile_name in ("throughput", "production", "resident128"):
             self.assertEqual(relaunch._profile_defaults(profile_name), resident)
 
-    def test_relaunch_resident64_profile_sets_medium_safe_defaults(self) -> None:
+    def test_relaunch_resident128_profile_sets_bounded_feed_defaults(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
 
         defaults = relaunch._profile_defaults(DSV4_PRODUCTION["coordinator_profile"])
@@ -72,7 +72,7 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS"], "1")
         self.assertEqual(json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])[DSV4_PRODUCTION["service_id"]], DSV4_PRODUCTION["max_num_seqs"])
 
-    def test_relaunch_arg_parser_accepts_resident64_profile(self) -> None:
+    def test_relaunch_arg_parser_accepts_resident128_profile(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
         old_argv = list(sys.argv)
         sys.argv = [str(RELAUNCH_SCRIPT), "--profile", DSV4_PRODUCTION["coordinator_profile"]]
@@ -83,7 +83,7 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
 
         self.assertEqual(args.profile, DSV4_PRODUCTION["coordinator_profile"])
 
-    def test_relaunch_arg_parser_defaults_to_source_owned_resident64_profile(self) -> None:
+    def test_relaunch_arg_parser_defaults_to_source_owned_resident128_profile(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
         old_argv = list(sys.argv)
         sys.argv = [str(RELAUNCH_SCRIPT)]
