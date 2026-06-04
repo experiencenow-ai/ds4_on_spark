@@ -2,6 +2,7 @@ import unittest
 import os
 import sqlite3
 import tempfile
+from unittest import mock
 
 from scripts import spark_node_telemetry_monitor as node_mon
 from scripts import spark_telemetry_collect as collect
@@ -51,6 +52,29 @@ class SparkTelemetryTest(unittest.TestCase):
         rates = node_mon.net_rates((1000,2000),(2250,2600),0.5)
         self.assertEqual(rates["net_rx_mbps"],0.02)
         self.assertEqual(rates["net_tx_mbps"],0.0096)
+
+    def test_collect_accepts_launchd_fast_fetch_args(self):
+        with mock.patch("sys.argv", ["spark_telemetry_collect.py","--ssh-control-dir","/tmp/ds4mux","--ssh-control-persist","600","--fetch-workers","8"]):
+            args = collect.parse_args()
+        self.assertEqual(args.ssh_control_dir,"/tmp/ds4mux")
+        self.assertEqual(args.ssh_control_persist,600)
+        self.assertEqual(args.fetch_workers,8)
+
+    def test_fetch_node_uses_control_master_options(self):
+        calls = []
+        class Result:
+            returncode = 0
+            stdout = "unix_ts,iso_ts\n"
+            stderr = ""
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            return(Result())
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(collect.subprocess,"run",fake_run):
+                collect.fetch_node("spark0","/tmp/ds4_telemetry",8,720,"spark0-10g",tmp,600)
+        self.assertIn("ControlMaster=auto", calls[0])
+        self.assertIn("ControlPersist=600s", calls[0])
+        self.assertIn("ControlPath=%s" % os.path.join(tmp,"t-%C"), calls[0])
 
     def test_collect_summary_counts_hot_gpu_samples(self):
         text = "\n".join([
