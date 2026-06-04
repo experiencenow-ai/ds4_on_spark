@@ -34,11 +34,16 @@ def _check_dsv4(service: dict[str, Any], errors: list[str], checks: list[str]) -
     for name, args in (("runtime contract", contract["launch"]["args"]), ("KV deployment", deployment["extra_args"])):
         _require_arg(args, "--max-num-seqs", str(scheduler.get("vllm_max_num_seqs")), f"DSV4 {name} max seqs", errors, checks)
         _require_arg(args, "--max-num-batched-tokens", str(scheduler.get("vllm_max_num_batched_tokens")), f"DSV4 {name} token budget", errors, checks)
-        _require_arg(args, "--kv-cache-memory-bytes", "51539607552", f"DSV4 {name} explicit KV bytes", errors, checks)
+        _require_arg(args, "--kv-cache-memory-bytes", "4294967296", f"DSV4 {name} explicit resident KV bytes", errors, checks)
         _require_arg(args, "--linear-backend", "auto", f"DSV4 {name} native linear backend auto", errors, checks)
         _require_arg(args, "--moe-backend", "auto", f"DSV4 {name} native MoE backend auto", errors, checks)
-    expected_partition = [8, 8, 8, 8, 8, 1, 1, 1]
-    _require_equal(service.get("layer_partition"), expected_partition, "DSV4 topology front-loaded partition", errors, checks)
+        _require_arg(args, "--compilation-config", "{\"cudagraph_mode\":\"NONE\",\"custom_ops\":[\"all\"]}", f"DSV4 {name} disables CUDA graphs for resident production", errors, checks)
+        if "--speculative-config" in [str(item) for item in args]:
+            errors.append(f"DSV4 {name}: resident production must not enable MTP/speculative decode")
+        else:
+            checks.append(f"DSV4 {name} keeps MTP/speculative decode off")
+    expected_partition = [6, 6, 6, 5, 5, 5, 5, 5]
+    _require_equal(service.get("layer_partition"), expected_partition, "DSV4 topology balanced PP8 partition", errors, checks)
     _require_equal(contract["pipeline"].get("layer_partition"), expected_partition, "DSV4 runtime partition", errors, checks)
     _require_equal(deployment.get("layer_partition"), expected_partition, "DSV4 KV deployment partition", errors, checks)
     env = deployment.get("extra_env") if isinstance(deployment.get("extra_env"), dict) else {}
@@ -83,6 +88,18 @@ def _check_relaunch_defaults(errors: list[str], checks: list[str]) -> None:
         errors.append("coordinator throughput relaunch must use bounded 131072 token cohorts")
     else:
         checks.append("coordinator throughput relaunch uses bounded token cohorts")
+    if '"DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "4096"' not in text:
+        errors.append("coordinator production relaunch must use resident token cohorts")
+    else:
+        checks.append("coordinator production relaunch uses resident token cohorts")
+    if '"DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "8"' not in text:
+        errors.append("coordinator production relaunch must cap PP-safe cohorts to resident DSV4 max seqs")
+    else:
+        checks.append("coordinator production relaunch caps PP-safe cohorts")
+    if '"DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "1"' not in text:
+        errors.append("coordinator production relaunch must serialize resident chunks per active service")
+    else:
+        checks.append("coordinator production relaunch serializes resident chunks")
     if '"DS4_COMPUTE_LEASE_QUANTUM_S": "180"' not in text:
         errors.append("coordinator relaunch must set compute lease quantum")
     else:

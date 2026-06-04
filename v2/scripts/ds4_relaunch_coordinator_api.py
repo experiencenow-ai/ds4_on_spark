@@ -102,8 +102,10 @@ _SAFETY_PROFILE_DEFAULTS = {
     "DS4_API_DISPATCH_KV_CAPACITY_BYTES",
     "DS4_API_TRANSPORT_MAX_ATTEMPTS",
     "DS4_COMPUTE_LEASE_QUANTUM_S",
+    "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY",
     "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET",
     "DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE",
+    "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX",
 }
 
 
@@ -111,12 +113,14 @@ def _profile_defaults(profile: str) -> dict[str, str]:
     common = {
         "DS4_API_BACKGROUND_DISPATCH": "1",
         "DS4_PIPELINE_COHORT_COMPLETIONS": "1",
-        "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "65536",
+        "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "4096",
         "DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE": "1",
+        "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "1",
+        "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "8",
         "DS4_COMPUTE_LEASE_QUANTUM_S": "180",
         "DS4_API_TRANSPORT_TIMEOUT_S": "3600",
         "DS4_API_TRANSPORT_MAX_ATTEMPTS": "1",
-        "DS4_API_DISPATCH_KV_CAPACITY_BYTES": "51539607552",
+        "DS4_API_DISPATCH_KV_CAPACITY_BYTES": "4294967296",
     }
     if profile == "production":
         common.update(
@@ -124,7 +128,8 @@ def _profile_defaults(profile: str) -> dict[str, str]:
                 "DS4_API_DISPATCH_WINDOW": "64",
                 "DS4_API_DISPATCH_REFILL_BATCH": "16",
                 "DS4_API_DISPATCH_BATCH_LINGER_S": "0.02",
-                "DS4_PIPELINE_COMPLETION_COHORT_MAX": "128",
+                "DS4_PIPELINE_COMPLETION_COHORT_MAX": "8",
+                "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": 12, "qwen27_nvfp4_pp8": 12, "dsv4_flash_pp8": 8}, separators=(",", ":")),
             }
         )
     else:
@@ -135,6 +140,8 @@ def _profile_defaults(profile: str) -> dict[str, str]:
                 "DS4_API_DISPATCH_BATCH_LINGER_S": "0.25",
                 "DS4_PIPELINE_COMPLETION_COHORT_MAX": "512",
                 "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "131072",
+                "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "512",
+                "DS4_API_DISPATCH_KV_CAPACITY_BYTES": "51539607552",
                 "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": 512, "qwen27_nvfp4_pp8": 512, "dsv4_flash_pp8": 512}, separators=(",", ":")),
             }
         )
