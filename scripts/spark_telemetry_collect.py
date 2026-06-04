@@ -10,6 +10,7 @@ import os
 import shlex
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Tuple
 
 try:
@@ -29,18 +30,42 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--stale-ok-seconds", type=float, default=300.0)
     p.add_argument("--queue-db", default=os.environ.get("DS4_QUEUE_DB",""))
     p.add_argument("--queue-db-glob", default=telemetry.QUEUE_DB_GLOB)
+    p.add_argument("--ssh-control-dir", default="")
+    p.add_argument("--ssh-control-persist", type=int, default=0)
+    p.add_argument("--fetch-workers", type=int, default=1)
     return(p.parse_args())
 
 
-def fetch_node(node: str, remote_dir: str, timeout: float, lines: int, target: str | None = None) -> Tuple[str,str,str]:
-    target = target or node
-    remote_path = shlex.quote(telemetry.node_csv_path(remote_dir))
-    cmd = [
-        "ssh",
+def ssh_options(timeout: float, control_dir: str = "", control_persist: int = 0) -> List[str]:
+    opts = [
         "-o",
         "BatchMode=yes",
         "-o",
         "ConnectTimeout=%d" % max(1,int(timeout)),
+    ]
+    if control_dir:
+        os.makedirs(control_dir,exist_ok=True)
+        opts.extend([
+            "-o",
+            "ServerAliveInterval=2",
+            "-o",
+            "ServerAliveCountMax=1",
+            "-o",
+            "ControlMaster=auto",
+            "-o",
+            "ControlPersist=%ds" % max(1,int(control_persist or 1)),
+            "-o",
+            "ControlPath=%s" % os.path.join(control_dir,"t-%C"),
+        ])
+    return(opts)
+
+
+def fetch_node(node: str, remote_dir: str, timeout: float, lines: int, target: str | None = None, control_dir: str = "", control_persist: int = 0) -> Tuple[str,str,str]:
+    target = target or node
+    remote_path = shlex.quote(telemetry.node_csv_path(remote_dir))
+    cmd = [
+        "ssh",
+        *ssh_options(timeout,control_dir,control_persist),
         target,
         "if [ -r %s ]; then head -n 1 %s; tail -n %d %s; else exit 1; fi" % (remote_path,remote_path,lines,remote_path),
     ]
@@ -345,8 +370,18 @@ def collect_once(args: argparse.Namespace) -> Dict[str,object]:
     errors: Dict[str,str] = {}
     fetch_errors: Dict[str,str] = {}
     stale_nodes: set[str] = set()
-    for node,target in telemetry.parse_node_targets(args.nodes):
-        name,text,error = fetch_node(node,args.remote_dir,args.ssh_timeout,args.tail_lines,target)
+    targets = telemetry.parse_node_targets(args.nodes)
+    workers = max(1,min(len(targets),int(args.fetch_workers)))
+    fetched: List[Tuple[str,str,str]] = []
+    if workers <= 1:
+        for node,target in targets:
+            fetched.append(fetch_node(node,args.remote_dir,args.ssh_timeout,args.tail_lines,target,args.ssh_control_dir,args.ssh_control_persist))
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(fetch_node,node,args.remote_dir,args.ssh_timeout,args.tail_lines,target,args.ssh_control_dir,args.ssh_control_persist) for node,target in targets]
+            for future in as_completed(futures):
+                fetched.append(future.result())
+    for name,text,error in fetched:
         if error:
             cached = read_cached_rows(os.path.join(raw_dir,name + ".csv"),args.stale_ok_seconds)
             if cached:
