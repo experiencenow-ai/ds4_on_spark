@@ -5,12 +5,13 @@ import os
 from pathlib import Path
 import shlex
 import subprocess
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Iterator, Protocol
 from urllib import error, request as urlrequest
 
-from .builders import model_batch_payload, request_messages, request_prompt
+from .builders import apply_thinking_fields, model_batch_payload, request_messages, request_prompt
 from .cohort_safety import coalesced_completion_token_budget, coalesced_failure_should_bisect, mark_coalesced_split, prompt_token_estimate
 from .kv_cache import kv_cache_extra_body, kv_cache_vllm_request_fields
 from .profiles import ModelProfile
@@ -30,6 +31,38 @@ class NodeRunner(Protocol):
 class BatchNodeRunner(Protocol):
     def run_many_on_node(self, requests: list[InferenceRequest], profile: ModelProfile, node_id: str | None, *, concurrency: int = 1) -> dict[str, dict]:
         ...
+
+
+_COALESCING_TELEMETRY_LOCK = threading.Lock()
+_COALESCING_TELEMETRY: dict[str, Any] = {
+    "coalesce_reject_chat_rendering_disabled": 0,
+    "coalesce_reject_chat_no_rendered_prompt": 0,
+    "coalesce_reject_empty_prompt": 0,
+    "coalesce_reject_payload_mismatch": 0,
+    "coalesce_reject_too_small": 0,
+    "per_request_fallback_count": 0,
+    "vllm_prompt_array_post_count": 0,
+    "coalesced_batch_size_histogram": {},
+}
+
+
+def coalescing_telemetry_snapshot() -> dict[str, Any]:
+    with _COALESCING_TELEMETRY_LOCK:
+        out = dict(_COALESCING_TELEMETRY)
+        out["coalesced_batch_size_histogram"] = dict(_COALESCING_TELEMETRY["coalesced_batch_size_histogram"])
+        return out
+
+
+def _coalescing_count(key: str, delta: int = 1) -> None:
+    with _COALESCING_TELEMETRY_LOCK:
+        _COALESCING_TELEMETRY[key] = int(_COALESCING_TELEMETRY.get(key) or 0) + int(delta)
+
+
+def _coalescing_histogram(batch_size: int) -> None:
+    key = str(max(1, int(batch_size)))
+    with _COALESCING_TELEMETRY_LOCK:
+        histogram = _COALESCING_TELEMETRY.setdefault("coalesced_batch_size_histogram", {})
+        histogram[key] = int(histogram.get(key) or 0) + 1
 
 
 class FakeRunner:
@@ -299,6 +332,7 @@ class OpenAICompatibleRunner:
         request_list = list(requests)
         minimum = max(2, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MIN", "2") or "2"))
         if len(request_list) < minimum:
+            _coalescing_count("coalesce_reject_too_small")
             return None
         max_cohort = max(1, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MAX", "512") or "512"))
         token_budget = coalesced_completion_token_budget()
@@ -314,6 +348,8 @@ class OpenAICompatibleRunner:
         started = time.time()
         try:
             prefetch_info = _maybe_prestage_common_kv_prefix(self, payload, chunk)
+            _coalescing_count("vllm_prompt_array_post_count")
+            _coalescing_histogram(len(chunk))
             data = self._post_json(self.completion_endpoint, payload)
             out = _coalesced_completion_results(chunk, profile, data, base_url=self.base_url, endpoint=self.completion_endpoint, started=started, prefetch_info=prefetch_info)
             if original_batch_size != len(chunk):
@@ -348,6 +384,7 @@ class OpenAICompatibleRunner:
         request_list = list(requests)
         minimum = max(2, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MIN", "2") or "2"))
         if len(request_list) < minimum:
+            _coalescing_count("coalesce_reject_too_small")
             return None
         max_cohort = max(1, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MAX", "512") or "512"))
         token_budget = coalesced_completion_token_budget()
@@ -372,6 +409,8 @@ class OpenAICompatibleRunner:
         out: dict[str, dict] = {}
         try:
             prefetch_info = _maybe_prestage_common_kv_prefix(self, payload, chunk)
+            _coalescing_count("vllm_prompt_array_post_count")
+            _coalescing_histogram(len(chunk))
             for event in self._post_sse_json(self.completion_endpoint, payload):
                 choices = event.get("choices")
                 if not isinstance(choices, list):
@@ -502,6 +541,7 @@ class PipelineOpenAIRunner:
             coalesced = runner.run_many_completion(request_list, profile)
             if coalesced is not None:
                 return coalesced
+            _coalescing_count("per_request_fallback_count", len(request_list))
         out: dict[str, dict] = {}
         with ThreadPoolExecutor(max_workers=worker_count) as pool:
             futures = {pool.submit(runner.run_one, item, profile): item for item in request_list}
@@ -531,15 +571,16 @@ class PipelineOpenAIRunner:
         worker_count = max(1, min(int(concurrency), len(request_list)))
         runner = self._runner_for(profile, node_id)
         if _env_bool("DS4_PIPELINE_COHORT_COMPLETIONS", True):
-            if _requests_need_client_stream(request_list):
-                coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result, on_delta=on_delta)
-                if coalesced is not None:
-                    return coalesced
+            client_stream = _requests_need_client_stream(request_list)
+            coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result, on_delta=on_delta if client_stream else None)
+            if coalesced is not None:
+                return coalesced
             coalesced = runner.run_many_completion(request_list, profile)
             if coalesced is not None:
                 for request_id, result in coalesced.items():
                     on_result(request_id, result)
                 return coalesced
+            _coalescing_count("per_request_fallback_count", len(request_list))
         out: dict[str, dict] = {}
         with ThreadPoolExecutor(max_workers=worker_count) as pool:
             futures = {pool.submit(runner.run_one, item, profile): item for item in request_list}
@@ -696,24 +737,33 @@ def extract_openai_completion_text(data: dict[str, Any]) -> str:
 def _coalesced_completion_payload(requests: list[InferenceRequest], profile: ModelProfile, default_extra_body: dict[str, Any]) -> dict[str, Any] | None:
     prompts: list[str] = []
     shared: dict[str, Any] | None = None
+
+    def reject(reason: str) -> None:
+        _coalescing_count(reason)
+
     for item in requests:
         if item.chat and not _env_bool("DS4_PIPELINE_COHORT_RENDERED_CHAT_COMPLETIONS", True):
+            reject("coalesce_reject_chat_rendering_disabled")
             return None
         payload = _openai_payload(item, profile, render_chat_as_completion=item.chat)
         if item.chat and not isinstance(payload.get("prompt"), str):
+            reject("coalesce_reject_chat_no_rendered_prompt")
             return None
         _merge_extra_body(payload, default_extra_body)
         prompt = payload.get("prompt")
         if not isinstance(prompt, str) or (item.chat and not prompt):
+            reject("coalesce_reject_chat_no_rendered_prompt" if item.chat else "coalesce_reject_empty_prompt")
             return None
         comparable = dict(payload)
         comparable.pop("prompt", None)
         if shared is None:
             shared = comparable
         elif comparable != shared:
+            reject("coalesce_reject_payload_mismatch")
             return None
         prompts.append(prompt)
     if shared is None:
+        reject("coalesce_reject_empty_prompt")
         return None
     payload = dict(shared)
     payload["prompt"] = prompts
@@ -990,12 +1040,13 @@ def make_runner(kind: str, *, timeout_s: int, pipeline_base_urls: dict[str, str]
 
 def _openai_payload(request: InferenceRequest, profile: ModelProfile, *, render_chat_as_completion: bool = False) -> dict[str, Any]:
     model = _served_model_id(profile)
+    max_tokens = int(request.max_output_tokens) + int(request.thinking_budget_tokens)
     if request.chat and not render_chat_as_completion:
         payload: dict[str, Any] = {
             "model": model,
             "messages": request_messages(request),
             "temperature": request.temperature,
-            "max_tokens": request.max_output_tokens,
+            "max_tokens": max_tokens,
         }
     else:
         prompt = request_prompt(request)
@@ -1008,19 +1059,30 @@ def _openai_payload(request: InferenceRequest, profile: ModelProfile, *, render_
             "model": model,
             "prompt": prompt,
             "temperature": request.temperature,
-            "max_tokens": request.max_output_tokens,
+            "max_tokens": max_tokens,
         }
     _merge_openai_request_fields(payload, request)
     sampling = openai_sampling_controls(request.input)
     if sampling:
         payload.update(sampling)
-    if request.thinking_budget_tokens > 0:
-        payload["extra_body"] = {"thinking_budget_tokens": request.thinking_budget_tokens}
+    thinking_extra = _openai_thinking_extra_body(request, profile)
+    if thinking_extra:
+        payload["extra_body"] = {**dict(payload.get("extra_body") or {}), **thinking_extra}
     extra_body = kv_cache_extra_body(request.input)
     if extra_body:
         payload.update(kv_cache_vllm_request_fields(request.input))
         payload["extra_body"] = {**dict(payload.get("extra_body") or {}), **extra_body}
     return payload
+
+
+def _openai_thinking_extra_body(request: InferenceRequest, profile: ModelProfile) -> dict[str, Any]:
+    item: dict[str, Any] = {}
+    apply_thinking_fields(item, profile, chat=request.chat, thinking_budget_tokens=request.thinking_budget_tokens)
+    out: dict[str, Any] = {}
+    for key in ("thinking", "thinking_budget_tokens", "thinking_token_budget", "chat_template_kwargs"):
+        if key in item:
+            out[key] = item[key]
+    return out
 
 
 def openai_sampling_controls(input_payload: dict[str, Any]) -> dict[str, Any]:

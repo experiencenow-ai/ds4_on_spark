@@ -177,7 +177,8 @@ class PipelineApiTests(unittest.TestCase):
             stage = status["queue"]["stages"][0]
             self.assertEqual(stage["service_id"], "dsv4_flash_pp8")
             self.assertEqual(stage["node_id"], "spark4")
-            self.assertEqual((stage["layer_start"], stage["layer_end"], stage["layer_count"]), (32, 40, 8))
+            expected = SparkTopology.load(TOPOLOGY).pipeline_service_by_id("dsv4_flash_pp8").stage_for_node("spark4")
+            self.assertEqual((stage["layer_start"], stage["layer_end"], stage["layer_count"]), (expected.layer_start, expected.layer_end, expected.layer_count))
 
     def test_pipeline_worker_refills_under_existing_compute_lease(self) -> None:
         class Runner:
@@ -295,6 +296,52 @@ class PipelineApiTests(unittest.TestCase):
                 row = conn.execute("select request_json from requests where batch_id=?", ("thinking-chat",)).fetchone()
             request_json = json.loads(str(row["request_json"]))
         self.assertEqual(request_json["thinking_budget_tokens"], 123)
+
+    def test_openai_chat_api_preserves_rendered_prompt_for_coalescing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            api.handle_post(
+                "/v1/chat/completions",
+                {
+                    "model": "dsv4_vllm_mtp_pp8_smartest_v1",
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "rendered_prompt": "<|user|>hello<|assistant|>",
+                    "max_tokens": 8,
+                    "ds4_async": True,
+                    "batch_id": "rendered-chat",
+                },
+            )
+            with api.queue._connect() as conn:
+                row = conn.execute("select request_json from requests where batch_id=?", ("rendered-chat",)).fetchone()
+            request_json = json.loads(str(row["request_json"]))
+        self.assertEqual(request_json["input"]["rendered_prompt"], "<|user|>hello<|assistant|>")
+        self.assertEqual(request_json["input"]["prompt"], "<|user|>hello<|assistant|>")
+
+    def test_openai_runner_uses_builder_thinking_contract(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
+        request = InferenceRequest.from_json(
+            {
+                "format": "ds4-inference-request-v1",
+                "request_id": "thinking-runner",
+                "capability": "smartest",
+                "chat": True,
+                "immediate": False,
+                "job_class": "analysis",
+                "max_output_tokens": 64,
+                "thinking_budget_tokens": 100,
+                "temperature": 0,
+                "input": {"messages": [{"role": "user", "content": "hello"}]},
+                "output_contract": {"format": "text"},
+            }
+        )
+        payload = _openai_payload(request, profile)
+        extra_body = payload["extra_body"]
+        self.assertEqual(payload["max_tokens"], 164)
+        self.assertEqual(extra_body["thinking"], {"type": "enabled", "budget_tokens": 100})
+        self.assertEqual(extra_body["thinking_budget_tokens"], 100)
+        self.assertEqual(extra_body["thinking_token_budget"], 100)
+        self.assertEqual(extra_body["chat_template_kwargs"], {"thinking": True})
 
     def test_pipeline_runner_prestages_common_strict_kv_prefix(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

@@ -170,14 +170,14 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["profile_id"], "dsv4_vllm_mtp_pp8_smartest_v1")
         self.assertEqual(plan["pipeline_parallel_size"], 8)
         self.assertEqual(plan["cache_sharding"], "pipeline_layers")
-        self.assertEqual(plan["layer_partition"], [8, 8, 8, 8, 8, 1, 1, 1])
+        self.assertEqual(plan["layer_partition"], [6, 6, 6, 5, 5, 5, 5, 5])
         self.assertEqual(plan["vllm_nodes"][-1]["layer_end"], 43)
         self.assertIn("SimpleCPUOffloadConnector", plan["vllm_nodes"][0]["command"])
         self.assertIn("--kv-cache-dtype", plan["vllm_nodes"][0]["argv"])
         self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--kv-cache-dtype") + 1], "fp8")
-        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--max-num-seqs") + 1], "512")
-        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--max-num-batched-tokens") + 1], "262144")
-        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--kv-cache-memory-bytes") + 1], "51539607552")
+        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--max-num-seqs") + 1], "64")
+        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--max-num-batched-tokens") + 1], "32768")
+        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--kv-cache-memory-bytes") + 1], "8589934592")
         self.assertIn("--headless", plan["vllm_nodes"][-1]["argv"])
 
     def test_write_pipeline_launch_scripts(self) -> None:

@@ -34,7 +34,7 @@ def _check_dsv4(service: dict[str, Any], errors: list[str], checks: list[str]) -
     for name, args in (("runtime contract", contract["launch"]["args"]), ("KV deployment", deployment["extra_args"])):
         _require_arg(args, "--max-num-seqs", str(scheduler.get("vllm_max_num_seqs")), f"DSV4 {name} max seqs", errors, checks)
         _require_arg(args, "--max-num-batched-tokens", str(scheduler.get("vllm_max_num_batched_tokens")), f"DSV4 {name} token budget", errors, checks)
-        _require_arg(args, "--kv-cache-memory-bytes", "4294967296", f"DSV4 {name} explicit resident KV bytes", errors, checks)
+        _require_arg(args, "--kv-cache-memory-bytes", "8589934592", f"DSV4 {name} bounded resident KV bytes", errors, checks)
         _require_arg(args, "--linear-backend", "auto", f"DSV4 {name} native linear backend auto", errors, checks)
         _require_arg(args, "--moe-backend", "auto", f"DSV4 {name} native MoE backend auto", errors, checks)
         _require_arg(args, "--compilation-config", "{\"cudagraph_mode\":\"NONE\",\"custom_ops\":[\"all\"]}", f"DSV4 {name} disables CUDA graphs for resident production", errors, checks)
@@ -84,18 +84,18 @@ def _check_qwen(errors: list[str], checks: list[str]) -> None:
 
 def _check_relaunch_defaults(errors: list[str], checks: list[str]) -> None:
     text = (ROOT / "scripts" / "ds4_relaunch_coordinator_api.py").read_text(encoding="utf-8")
-    if '"DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "131072"' not in text:
-        errors.append("coordinator throughput relaunch must use bounded 131072 token cohorts")
+    if '"DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "262144"' not in text:
+        errors.append("coordinator throughput relaunch must use bounded 262144 token cohorts")
     else:
         checks.append("coordinator throughput relaunch uses bounded token cohorts")
-    if '"DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "4096"' not in text:
-        errors.append("coordinator production relaunch must use resident token cohorts")
+    if '"DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "262144"' not in text:
+        errors.append("coordinator production relaunch must use high-feed DSV4 token cohorts")
     else:
-        checks.append("coordinator production relaunch uses resident token cohorts")
-    if '"DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "8"' not in text:
-        errors.append("coordinator production relaunch must cap PP-safe cohorts to resident DSV4 max seqs")
+        checks.append("coordinator production relaunch uses high-feed DSV4 token cohorts")
+    if '"DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "512"' not in text:
+        errors.append("coordinator production relaunch must allow PP-safe DSV4 prompt-array cohorts")
     else:
-        checks.append("coordinator production relaunch caps PP-safe cohorts")
+        checks.append("coordinator production relaunch allows PP-safe DSV4 prompt-array cohorts")
     if '"DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "1"' not in text:
         errors.append("coordinator production relaunch must serialize resident chunks per active service")
     else:

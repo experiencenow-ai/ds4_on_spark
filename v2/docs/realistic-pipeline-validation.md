@@ -35,17 +35,29 @@ python3 scripts/ds4_relaunch_coordinator_api.py --profile throughput
 The throughput profile intentionally uses:
 
 ```text
-DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET=131072
+DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET=262144
 DS4_API_BATCH_LIMITS_JSON includes dsv4_flash_pp8=512
 DS4_COMPUTE_LEASE_QUANTUM_S=180
 DS4_API_DISPATCH_KV_CAPACITY_BYTES=51539607552
 ```
 
-The token budget is below the raw DSV4 vLLM launch budget so realistic long
-prompts split before vLLM sees an oversized prompt array.
+The token budget is an API-side cohort guard so realistic long prompts split
+before vLLM sees an oversized prompt array.
 The KV capacity is a per-node/per-shard admission guard. Set it explicitly for
 realistic profiles; `0` is accepted only for deliberate debug runs and is
 reported as `kv_admission_warning=unlimited_kv_admission` in dispatcher status.
+
+The current DSV4 PP8 production launch profile is bounded, not max-KV:
+
+```text
+--max-num-seqs 64
+--max-num-batched-tokens 32768
+--kv-cache-memory-bytes 8589934592
+--gpu-memory-utilization 0.35
+```
+
+Use this as the default smoke/performance envelope before considering larger
+DSV4-only runs.
 
 ## Telemetry Bridge
 

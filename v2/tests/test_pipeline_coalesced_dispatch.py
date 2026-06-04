@@ -6,7 +6,7 @@ import os
 import tempfile
 import unittest
 
-from ds4_infer.api import CoordinatorApi
+from ds4_infer.api import CoordinatorApi, DispatcherPendingCohort, _pending_claim_count
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.runners import OpenAICompatibleRunner
 from ds4_infer.schemas import InferenceRequest, make_result
@@ -126,7 +126,7 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
         runner = RecordingOpenAIRunner()
-        prompt = " ".join("benchmark" for _ in range(512))
+        prompt = " ".join("benchmark" for _ in range(2048))
         requests = [completion_request(f"r{index}", prompt) for index in range(256)]
         old = os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET")
         os.environ.pop("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET", None)
@@ -188,6 +188,37 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
             self.assertEqual((completed, failed, retried), (8, 0, 0))
             self.assertEqual(runner.batch_sizes, [8])
+
+    def test_dispatcher_pending_accounting_tracks_unfinished_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            registry = ProfileRegistry.load(PROFILES)
+            topology = SparkTopology.load(TOPOLOGY)
+            requests = [completion_request(f"q{index}", f"prompt-{index}") for index in range(4)]
+            api.queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id="cohort", priority=10)
+            api.queue.prepare_ready(
+                node_id="spark0",
+                eligible_profile_ids=tuple(topology.pipeline_profiles),
+                batch_id=None,
+                limit=4,
+                leased_by="test-dispatcher",
+                lease_ttl_s=30,
+                max_node_depth=0,
+                kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+            )
+            claims = api.queue.claim_ready_batch(
+                node_id="spark0",
+                batch_id=None,
+                limit=4,
+                leased_by="test-dispatcher",
+                lease_ttl_s=30,
+                kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                batch_limits_by_service={"qwen27_bf16_pp8": 64, "dsv4_flash_pp8": 64},
+            )
+            cohort = DispatcherPendingCohort.from_claims(claims)
+            pending = {object(): cohort}
+            cohort.mark_finished("q0")
+        self.assertEqual(_pending_claim_count(pending), 3)
 
     def test_dispatcher_status_reports_kv_admission_bound(self) -> None:
         old = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")

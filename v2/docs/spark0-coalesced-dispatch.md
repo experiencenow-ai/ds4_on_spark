@@ -23,13 +23,13 @@ topology.
 
 ```bash
 export DS4_API_BACKGROUND_DISPATCH=1
-export DS4_API_DISPATCH_WINDOW=256
-export DS4_API_DISPATCH_REFILL_BATCH=256
-export DS4_API_DISPATCH_BATCH_LINGER_S=0.25
-export DS4_API_BATCH_LIMITS_JSON='{"qwen27_bf16_pp8":256,"dsv4_flash_pp8":256}'
+export DS4_API_DISPATCH_WINDOW=512
+export DS4_API_DISPATCH_REFILL_BATCH=512
+export DS4_API_DISPATCH_BATCH_LINGER_S=0.10
+export DS4_API_BATCH_LIMITS_JSON='{"dsv4_flash_pp8":512}'
 export DS4_PIPELINE_COHORT_COMPLETIONS=1
 export DS4_PIPELINE_COMPLETION_COHORT_MAX=512
-export DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET=131072
+export DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET=262144
 ```
 
 `DS4_API_DISPATCH_BATCH_LINGER_S` is deliberately larger for benchmarks than for
@@ -82,9 +82,9 @@ For production, the same path stays enabled, but the window and linger can be
 smaller:
 
 ```bash
-export DS4_API_DISPATCH_WINDOW=64
-export DS4_API_DISPATCH_REFILL_BATCH=16
-export DS4_API_DISPATCH_BATCH_LINGER_S=0.02
+export DS4_API_DISPATCH_WINDOW=512
+export DS4_API_DISPATCH_REFILL_BATCH=512
+export DS4_API_DISPATCH_BATCH_LINGER_S=0.03
 ```
 
 The benchmark knobs are for measuring saturated PP throughput, not for every

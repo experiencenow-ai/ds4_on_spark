@@ -7,7 +7,7 @@ from typing import Any
 def coalesced_completion_token_budget() -> int:
     raw = os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET")
     if raw is None or raw == "":
-        raw = os.environ.get("DS4_PIPELINE_COHORT_TOKEN_BUDGET", "65536")
+        raw = os.environ.get("DS4_PIPELINE_COHORT_TOKEN_BUDGET", "262144")
     return max(0, int(raw or "0"))
 
 

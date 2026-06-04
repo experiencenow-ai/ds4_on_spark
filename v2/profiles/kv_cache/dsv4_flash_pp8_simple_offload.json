@@ -21,13 +21,13 @@
     "--max-model-len",
     "65536",
     "--max-num-seqs",
-    "8",
+    "64",
     "--max-num-batched-tokens",
-    "4096",
+    "32768",
     "--kv-cache-memory-bytes",
-    "4294967296",
+    "8589934592",
     "--gpu-memory-utilization",
-    "0.20",
+    "0.35",
     "--block-size",
     "256",
     "--kv-cache-dtype",
@@ -122,5 +122,5 @@
   ],
   "working_directory": "/home/spark0/ds4_on_spark/v2",
   "performance_mode": "native_blackwell_strict_fastpath",
-  "notes": "No Marlin/emulation fallback. Co-resident PP service uses DeepGEMM with CUDA graphs and conservative GPU reservation; raise DSV4_GPU_MEMORY_UTILIZATION only for DSV4-only runs."
+  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 64-sequence admission and 8GiB resident KV per rank; raise DSV4_GPU_MEMORY_UTILIZATION only for DSV4-only runs."
 }
