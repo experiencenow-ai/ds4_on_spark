@@ -142,12 +142,15 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["ds_last_service"],"dsv4_flash_pp8")
         self.assertEqual(snap["ds_kv_shards"],8.0)
 
-    def test_snapshot_uses_current_ds4_stage_payload_for_node_telemetry(self):
+    def test_snapshot_ignores_ds4_stage_payload_for_node_telemetry(self):
         payload = {
             "updated_iso": "2026-05-26T00:00:00+00:00",
             "updated_unix": 1,
             "queue": {
                 "local_queue_source": "ds4-api:http://10.20.0.10:8700",
+                "local_queue_depth": 0,
+                "local_queue_running": 0,
+                "local_queue_queued": 0,
                 "local_queue_stage_service_by_node": "spark0:dsv4_flash_pp8",
                 "local_queue_stage_sample_count_by_node": "spark0:8",
                 "local_queue_stage_gpu_util_by_node": "spark0:96",
@@ -162,27 +165,31 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
                 "local_queue_stage_prompt_tok_s_by_node": "spark0:12",
                 "local_queue_stage_generation_tok_s_by_node": "spark0:7",
             },
-            "nodes": {"spark0": {"sample_count": 0, "error": "ssh timed out"}},
+            "nodes": {"spark0": {"sample_count": 1, "last_gpu_util_pct": 0, "last_gpu_temp_c": 41, "last_gpu_power_known": 0, "last_cpu_util_pct": 3, "last_mem_used_pct": 31, "last_vllm_metrics_up": 1, "last_vllm_requests_running": 0, "last_vllm_requests_waiting": 0, "last_vllm_prompt_tokens_per_s": 0, "last_vllm_generation_tokens_per_s": 0}},
         }
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "summary.json"
             path.write_text(json.dumps(payload), encoding="utf-8")
             snap = dashboard.build_snapshot(str(path))
         node = snap["nodes"][0]
-        self.assertEqual(node["state"],"warn")
-        self.assertEqual(node["state_label"],"stale")
-        self.assertEqual(node["sample_count"],8)
-        self.assertEqual(node["gpu_pct"],96)
-        self.assertEqual(node["gpu_temp_c"],47)
-        self.assertEqual(node["gpu_power_w"],17.5)
-        self.assertTrue(node["gpu_power_known"])
-        self.assertEqual(node["gpu_power_raw_w"],17.5)
-        self.assertEqual(node["cpu_pct"],80)
-        self.assertEqual(node["mem_pct"],85)
-        self.assertEqual(node["input_tok_s"],12)
-        self.assertEqual(node["output_tok_s"],7)
-        self.assertEqual(node["tok_s"],19)
+        self.assertEqual(node["state"],"idle")
+        self.assertEqual(node["state_label"],"idle")
+        self.assertEqual(node["sample_count"],1)
+        self.assertEqual(node["gpu_pct"],0)
+        self.assertEqual(node["gpu_temp_c"],41)
+        self.assertEqual(node["gpu_power_w"],0)
+        self.assertFalse(node["gpu_power_known"])
+        self.assertEqual(node["cpu_pct"],60)
+        self.assertEqual(node["mem_pct"],31)
+        self.assertEqual(node["input_tok_s"],0)
+        self.assertEqual(node["output_tok_s"],0)
+        self.assertEqual(node["tok_s"],0)
         self.assertEqual(node["ds_service_id"],"dsv4_flash_pp8")
+        self.assertEqual(snap["active_nodes"],0)
+        self.assertEqual(snap["busy_gpu_nodes"],0)
+        self.assertEqual(snap["avg_gpu_pct"],0)
+        self.assertEqual(snap["vllm_running"],0)
+        self.assertEqual(snap["vllm_waiting"],0)
 
     def test_history_reads_last_csv_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
