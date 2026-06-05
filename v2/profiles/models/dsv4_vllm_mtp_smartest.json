@@ -16,6 +16,7 @@
     "default_for": ["smartest"],
     "rank": 50,
     "chat_template_thinking_key": "thinking",
+    "chat_template_renderer": "deepseek_v4",
     "tokenizer_path": "/home/spark0/models/hf/deepseek-ai/DeepSeek-V4-Flash",
     "optional_kv_cache_deployments": ["profiles/kv_cache/dsv4_spark45_hma_cpu_offload.json"]
   }

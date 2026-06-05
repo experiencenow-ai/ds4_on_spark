@@ -13,6 +13,7 @@ from urllib import request
 
 ROOT = Path(__file__).resolve().parents[1]
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
+DEFAULT_COORDINATOR_PYTHON = Path("/home/spark0/ds4-vllm-local/bin/python")
 
 
 def main() -> int:
@@ -28,8 +29,9 @@ def main() -> int:
     log_path = _log_path(args.log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     env = _coordinator_env(args, v2_dir)
+    coordinator_python = _coordinator_python(args)
     argv = [
-        sys.executable,
+        coordinator_python,
         "-m",
         "ds4_infer.api",
         "--host",
@@ -70,12 +72,22 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--profiles-dir", default=os.environ.get("PROFILES_DIR", "profiles/models"))
     parser.add_argument("--topology", default=os.environ.get("TOPOLOGY", "profiles/topology/static_sparks.json"))
     parser.add_argument("--runner-kind", default=os.environ.get("RUNNER_KIND", "pipeline"))
+    parser.add_argument("--coordinator-python", default=os.environ.get("DS4_COORDINATOR_PYTHON", ""), help="Python executable for the long-running coordinator process.")
     parser.add_argument("--log-path", default=os.environ.get("DS4_COORDINATOR_LOG", ""))
     parser.add_argument("--pid-file", default=os.environ.get("DS4_COORDINATOR_PID_FILE", ""))
     parser.add_argument("--stop-timeout-s", type=float, default=8.0)
     parser.add_argument("--health-timeout-s", type=float, default=30.0)
     parser.add_argument("--health-poll-s", type=float, default=0.5)
     return parser.parse_args()
+
+
+def _coordinator_python(args: argparse.Namespace, *, default_path: Path = DEFAULT_COORDINATOR_PYTHON) -> str:
+    requested = str(getattr(args, "coordinator_python", "") or "").strip()
+    if requested:
+        return requested
+    if default_path.exists():
+        return str(default_path)
+    return sys.executable
 
 
 def _build(repo_dir: Path, v2_dir: Path, *, skip_tests: bool) -> None:

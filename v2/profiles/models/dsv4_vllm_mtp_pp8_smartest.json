@@ -19,6 +19,7 @@
   },
   "routing": {
     "chat_template_thinking_key": "thinking",
+    "chat_template_renderer": "deepseek_v4",
     "tokenizer_path": "/home/spark0/models/hf/deepseek-ai/DeepSeek-V4-Flash",
     "default_for": [
       "smart",
