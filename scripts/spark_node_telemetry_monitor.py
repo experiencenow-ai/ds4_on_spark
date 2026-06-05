@@ -35,11 +35,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--out-dir", default=telemetry.TELEMETRY_DIR)
     p.add_argument("--summary-samples", type=int, default=720)
     p.add_argument("--nvidia-smi-timeout", type=float, default=3.0)
-    p.add_argument("--gateway-url", default="http://127.0.0.1:8700,http://127.0.0.1:8000")
-    p.add_argument("--metrics-urls", default="http://127.0.0.1:8000/metrics,http://127.0.0.1:18000/metrics,http://127.0.0.1:18100/metrics,http://127.0.0.1:18101/metrics")
+    p.add_argument("--gateway-url", default="http://127.0.0.1:8700")
+    p.add_argument("--metrics-urls", default="http://127.0.0.1:8102/metrics,http://127.0.0.1:8101/metrics")
     p.add_argument("--http-timeout", type=float, default=1.5)
-    p.add_argument("--queue-db", default=os.environ.get("DS4_QUEUE_DB",""))
-    p.add_argument("--queue-db-glob", default=telemetry.QUEUE_DB_GLOB)
     return(p.parse_args())
 
 
@@ -314,38 +312,20 @@ def queue_counts(data: Dict[str,object]) -> Tuple[int,int,int,int]:
     return(pending,active,completed,failed)
 
 
-def read_legacy_gateway(base_url: str, timeout: float) -> Dict[str,object]:
-    out = empty_gateway()
-    data,error = read_json_url(base_url.rstrip("/") + "/ds4/status",timeout)
-    if error != "" or data.get("detail") == "Not Found":
-        return(out)
-    out["ds4_gateway_up"] = 1
-    out["ds4_gateway_active"] = 1 if bool(data.get("active")) else 0
-    out["ds4_gateway_idle_s"] = telemetry.num(data.get("idle_seconds",0.0))
-    out["ds4_gateway_current_model"] = str(data.get("current_model") or "")
-    cpu = data.get("cpu_services",{})
-    queue = cpu.get("queue",{}) if isinstance(cpu,dict) else {}
-    if isinstance(queue,dict):
-        out["ds4_gateway_cpu_pending"] = int(telemetry.num(queue.get("pending",0)))
-        out["ds4_gateway_cpu_active"] = int(telemetry.num(queue.get("active",0)))
-        out["ds4_gateway_cpu_completed"] = int(telemetry.num(queue.get("completed",0)))
-        out["ds4_gateway_cpu_failed"] = int(telemetry.num(queue.get("failed",0)))
-    return(out)
-
-
 def read_coordinator_gateway(base_url: str, timeout: float) -> Dict[str,object]:
     out = empty_gateway()
     base = base_url.rstrip("/")
     health,error = read_json_url(base + "/health",timeout)
     dispatcher,dispatcher_error = read_json_url(base + "/ds4/dispatcher/status",timeout)
     queue,queue_error = read_json_url(base + "/ds4/queue/status",timeout)
-    if error != "" and dispatcher_error != "" and queue_error != "":
+    if error != "" or dispatcher_error != "" or queue_error != "":
         return(out)
-    if not bool(health.get("ok",False)) and str(queue.get("format","")) != "ds4-inference-queue-v1" and not bool(dispatcher.get("running",False)):
+    if not bool(health.get("ok",False)) or str(queue.get("format","")) != "ds4-inference-queue-v1":
         return(out)
     pending,active,completed,failed = queue_counts(queue)
     out["ds4_gateway_up"] = 1
     out["ds4_gateway_active"] = 1 if bool(dispatcher.get("running",False)) or active > 0 else 0
+    out["ds4_gateway_current_model"] = str(dispatcher.get("last_claimed_service_id") or "")
     out["ds4_gateway_cpu_pending"] = pending
     out["ds4_gateway_cpu_active"] = active
     out["ds4_gateway_cpu_completed"] = completed
@@ -357,14 +337,8 @@ def read_coordinator_gateway(base_url: str, timeout: float) -> Dict[str,object]:
 
 
 def read_gateway(raw_urls: str, timeout: float) -> Dict[str,object]:
-    for base_url in [item.strip() for item in str(raw_urls or "").split(",") if item.strip()]:
-        legacy = read_legacy_gateway(base_url,timeout)
-        if int(legacy.get("ds4_gateway_up",0)) != 0:
-            return(legacy)
-        coordinator = read_coordinator_gateway(base_url,timeout)
-        if int(coordinator.get("ds4_gateway_up",0)) != 0:
-            return(coordinator)
-    return(empty_gateway())
+    base_url = str(raw_urls or "").strip()
+    return(read_coordinator_gateway(base_url,timeout) if base_url else empty_gateway())
 
 
 def prometheus_value(line: str) -> float:
@@ -597,8 +571,6 @@ def write_summary(path: str, rows: Deque[Dict[str,object]], total_samples: int) 
             "vllm_prompt_cache_hit_pct": telemetry.stats(float(r.get("vllm_prompt_cache_hit_pct",0.0)) for r in system_rows),
             "vllm_prefix_cache_hit_pct": telemetry.stats(float(r.get("vllm_prefix_cache_hit_pct",0.0)) for r in system_rows),
             "vllm_external_prefix_cache_hit_pct": telemetry.stats(float(r.get("vllm_external_prefix_cache_hit_pct",0.0)) for r in system_rows),
-            "local_queue_depth": telemetry.stats(float(r.get("local_queue_depth",0.0)) for r in system_rows),
-            "local_queue_running": telemetry.stats(float(r.get("local_queue_running",0.0)) for r in system_rows),
             "gpu_util_pct": telemetry.stats(gpu_vals),
             "gpu_temp_c": telemetry.stats(gpu_temps),
             "gpu_samples_ge_90": len(hot),
@@ -636,7 +608,6 @@ def build_rows(args: argparse.Namespace, prev_cpu: Optional[Tuple[int,int]], pre
             "vllm_external_prefix_cache_queries_total": float(vllm.get("vllm_external_prefix_cache_queries_total",0.0)),
             "vllm_external_prefix_cache_hits_total": float(vllm.get("vllm_external_prefix_cache_hits_total",0.0)),
         }
-    queue = telemetry.read_local_queue(args.queue_db,args.queue_db_glob)
     gpus,error = poll_gpus(args.nvidia_smi_timeout)
     base: Dict[str,object] = {
         "unix_ts": int(now),
@@ -651,7 +622,6 @@ def build_rows(args: argparse.Namespace, prev_cpu: Optional[Tuple[int,int]], pre
         **system,
         **gateway,
         **vllm,
-        **queue,
     }
     if len(gpus) == 0:
         row = dict(base)

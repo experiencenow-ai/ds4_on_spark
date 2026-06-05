@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Stop Spark node telemetry monitor processes by exact PID.
 
-This intentionally avoids shell pattern kill helpers. The old fallback path
-matched process command lines broadly, which can match the remote shell command
-itself. Here we inspect the process table, exclude ourselves and our shell
-parent, match only the telemetry monitor command shape, and signal the
-resulting PIDs directly.
+This intentionally avoids shell pattern kill helpers. We inspect the process
+table, exclude ourselves and our shell parent, match only the telemetry monitor
+command shape, and signal the resulting PIDs directly.
 """
 
 from __future__ import annotations

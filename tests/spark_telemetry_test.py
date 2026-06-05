@@ -1,6 +1,5 @@
 import unittest
 import os
-import sqlite3
 import tempfile
 from unittest import mock
 
@@ -35,15 +34,12 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(collect.telemetry.DEFAULT_NODES, ",".join(expected))
         self.assertEqual(node_mon.CSV_FIELDS, telemetry.CSV_FIELDS)
         self.assertIn("vllm_requests_running", telemetry.CSV_FIELDS)
-        self.assertIn("local_queue_depth", telemetry.CSV_FIELDS)
         self.assertIn("vllm_requests_per_s", telemetry.CSV_FIELDS)
         self.assertIn("vllm_tokens_per_s", telemetry.CSV_FIELDS)
         self.assertIn("vllm_prompt_tokens_per_s", telemetry.CSV_FIELDS)
         self.assertIn("vllm_prompt_cache_hit_pct", telemetry.CSV_FIELDS)
         self.assertIn("vllm_external_prefix_cache_hit_pct", telemetry.CSV_FIELDS)
-        self.assertIn("local_queue_prompt_tok_s", telemetry.CSV_FIELDS)
-        self.assertIn("local_queue_completion_req_s", telemetry.CSV_FIELDS)
-        self.assertIn("local_queue_completion_tok_s", telemetry.CSV_FIELDS)
+        self.assertNotIn("local_queue_source", telemetry.CSV_FIELDS)
 
     def test_cpu_pct_uses_idle_delta(self):
         self.assertEqual(node_mon.cpu_pct((100,40),(200,70)),70.0)
@@ -216,12 +212,10 @@ class SparkTelemetryTest(unittest.TestCase):
 
     def test_gateway_reads_current_coordinator_api(self):
         def fake_read_json(url,timeout):
-            if url.endswith("/ds4/status"):
-                return({},"not found")
             if url.endswith("/health"):
                 return({"ok": True},"")
             if url.endswith("/ds4/dispatcher/status"):
-                return({"running": True, "last_work_at": 90.0},"")
+                return({"running": True, "last_work_at": 90.0, "last_claimed_service_id": "dsv4_flash_pp8"},"")
             if url.endswith("/ds4/queue/status"):
                 return({"format": "ds4-inference-queue-v1", "state_counts": {"queued": 2, "running": 1, "completed": 5, "failed": 1}},"")
             return({},"bad url")
@@ -236,89 +230,70 @@ class SparkTelemetryTest(unittest.TestCase):
             node_mon.time.time = old_time
         self.assertEqual(gateway["ds4_gateway_up"],1)
         self.assertEqual(gateway["ds4_gateway_active"],1)
+        self.assertEqual(gateway["ds4_gateway_current_model"],"dsv4_flash_pp8")
         self.assertEqual(gateway["ds4_gateway_idle_s"],10.0)
         self.assertEqual(gateway["ds4_gateway_cpu_pending"],2)
         self.assertEqual(gateway["ds4_gateway_cpu_active"],1)
         self.assertEqual(gateway["ds4_gateway_cpu_completed"],5)
         self.assertEqual(gateway["ds4_gateway_cpu_failed"],1)
 
-    def test_local_queue_depth_reads_sqlite_counts(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            db = os.path.join(tmp,"queue.sqlite3")
-            with sqlite3.connect(db) as conn:
-                conn.execute("create table requests (state text, request_kind text, selected_node_id text)")
-                conn.executemany("insert into requests values (?,?,?)", [
-                    ("queued","model","spark0"),
-                    ("running","model","spark0"),
-                    ("running","cpu","spark1"),
-                    ("completed","model","spark0"),
-                    ("failed","model","spark2"),
-                ])
-            q = telemetry.read_local_queue(db,"")
-        self.assertEqual(q["local_queue_depth"],3)
-        self.assertEqual(q["local_queue_model_depth"],2)
-        self.assertEqual(q["local_queue_cpu_depth"],1)
-        self.assertEqual(q["local_queue_completed"],1)
-        self.assertIn("spark0:2", q["local_queue_by_node"])
-        self.assertIn("spark0:1", q["local_queue_running_by_node"])
-
-    def test_local_queue_prefers_active_db_and_reports_recent_tok_s(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            empty = os.path.join(tmp,"empty.sqlite3")
-            active = os.path.join(tmp,"active.sqlite3")
-            with sqlite3.connect(empty) as conn:
-                conn.execute("create table requests (state text, request_kind text, selected_node_id text)")
-                conn.execute("insert into requests values (?,?,?)", ("completed","model","spark0"))
-            with sqlite3.connect(active) as conn:
-                conn.execute("create table requests (state text, request_kind text, selected_node_id text, completed_at real, result_json text)")
-                conn.execute("insert into requests values (?,?,?,?,?)", ("queued","model","spark0",None,None))
-                conn.execute("insert into requests values (?,?,?,?,?)", ("running","model","spark1",None,None))
-                conn.execute("insert into requests values (?,?,?,?,?)", ("completed","model","spark1",100.0,'{"usage":{"prompt_tokens":300,"completion_tokens":120}}'))
-            os.utime(empty,(200.0,200.0))
-            os.utime(active,(100.0,100.0))
-            old = telemetry.time.time
-            try:
-                telemetry.time.time = lambda: 150.0
-                q = telemetry.read_local_queue("", "%s,%s" % (empty,active), rate_window_s=60.0)
-            finally:
-                telemetry.time.time = old
-        self.assertEqual(q["local_queue_db"],active)
-        self.assertEqual(q["local_queue_depth"],2)
-        self.assertEqual(q["local_queue_prompt_tokens_recent"],300)
-        self.assertEqual(q["local_queue_prompt_tok_s"],5.0)
-        self.assertIn("spark1:5", q["local_queue_prompt_tok_s_by_node"])
-        self.assertEqual(q["local_queue_completion_requests_recent"],1)
-        self.assertEqual(q["local_queue_completion_req_s"],0.017)
-        self.assertIn("spark1:0.017", q["local_queue_completion_req_s_by_node"])
-        self.assertEqual(q["local_queue_completion_tokens_recent"],120)
-        self.assertEqual(q["local_queue_completion_tok_s"],2.0)
-        self.assertIn("spark1:2", q["local_queue_completion_tok_s_by_node"])
-
     def test_ds4_api_queue_reads_coordinator_status(self):
         old = telemetry.read_json_url
+        def fake_read_json(url,timeout):
+            if url.endswith("/ds4/queue/status"):
+                return({
+                    "format": "ds4-inference-queue-v1",
+                    "state_counts": {"queued": 3, "running": 2, "completed": 7, "failed": 1},
+                    "pipeline_status": {"kv_shards": [
+                        {"node_id": "spark0", "service_id": "dsv4_flash_pp8", "entries": 2, "bytes": 64},
+                        {"node_id": "spark1", "service_id": "dsv4_flash_pp8", "entries": 3, "bytes": 96},
+                    ], "stages": [
+                        {"node_id": "spark0", "service_id": "dsv4_flash_pp8", "reported_at": 100.0, "payload": {"sample_count": 2, "last_gpu_util_pct": 91, "last_gpu_power_w": 25, "last_gpu_temp_c": 48, "last_cpu_util_pct": 40, "last_mem_used_pct": 50}},
+                        {"node_id": "spark1", "service_id": "dsv4_flash_pp8", "reported_at": 101.0, "payload": {"sample_count": 3, "last_gpu_util_pct": 92, "last_gpu_power_w": 26, "last_gpu_temp_c": 49, "last_cpu_util_pct": 41, "last_mem_used_pct": 51}},
+                    ]},
+                },"")
+            if url.endswith("/ds4/dispatcher/status"):
+                return({
+                    "running": True,
+                    "last_claimed_service_id": "dsv4_flash_pp8",
+                    "pending_by_service": {"dsv4_flash_pp8": 3},
+                    "resident_multimodel": True,
+                    "resident_service_targets": {"dsv4_flash_pp8": 128, "qwen27_bf16_pp8": 12},
+                },"")
+            if url.endswith("/v1/models"):
+                return({"data": [
+                    {"id": "deepseek-ai/DeepSeek-V4-Flash", "ds4_service_id": "dsv4_flash_pp8"},
+                    {"id": "Qwen/Qwen3.6-27B", "ds4_service_id": "qwen27_bf16_pp8"},
+                    {"id": "profile-only"},
+                ]},"")
+            return({},"bad url")
         try:
-            telemetry.read_json_url = lambda url,timeout: ({"format": "ds4-inference-queue-v1", "state_counts": {"queued": 3, "running": 2, "completed": 7, "failed": 1}},"")
-            q = telemetry.read_ds4_api_queue("http://spark0:8700",1.0)
+            telemetry.read_json_url = fake_read_json
+            q = telemetry.read_ds4_api_queue("http://10.20.0.10:8700",1.0)
         finally:
             telemetry.read_json_url = old
-        self.assertEqual(q["local_queue_db"],"ds4-api:http://spark0:8700")
+        self.assertEqual(q["local_queue_source"],"ds4-api:http://10.20.0.10:8700")
         self.assertEqual(q["local_queue_api_up"],1)
         self.assertEqual(q["local_queue_depth"],5)
         self.assertEqual(q["local_queue_queued"],3)
         self.assertEqual(q["local_queue_running"],2)
         self.assertEqual(q["local_queue_completed"],7)
         self.assertEqual(q["local_queue_failed"],1)
-
-    def test_ds4_api_queue_merges_sqlite_rates(self):
-        api = telemetry.ds4_api_queue_from_status({"state_counts": {"queued": 1, "running": 0}}, "ds4-api:http://spark0:8700")
-        local = telemetry.empty_queue_summary()
-        local.update({"local_queue_db": "/tmp/queue.sqlite3", "local_queue_prompt_tok_s": 4.0, "local_queue_completion_tok_s": 2.0, "local_queue_completion_tok_s_by_node": "spark0:2"})
-        merged = telemetry.merge_queue_summaries(api,local)
-        self.assertEqual(merged["local_queue_depth"],1)
-        self.assertEqual(merged["local_queue_prompt_tok_s"],4.0)
-        self.assertEqual(merged["local_queue_completion_tok_s"],2.0)
-        self.assertIn("spark0:2", merged["local_queue_completion_tok_s_by_node"])
-
+        self.assertEqual(q["local_queue_ds_service_count"],2)
+        self.assertEqual(q["local_queue_ds_model_count"],3)
+        self.assertEqual(q["local_queue_last_service"],"dsv4_flash_pp8")
+        self.assertEqual(q["local_queue_resident_multimodel"],1)
+        self.assertIn("dsv4_flash_pp8", q["local_queue_ds_services"])
+        self.assertIn("qwen27_bf16_pp8", q["local_queue_ds_services"])
+        self.assertIn("dsv4_flash_pp8:3", q["local_queue_pending_by_service"])
+        self.assertIn("qwen27_bf16_pp8:12", q["local_queue_resident_service_targets"])
+        self.assertEqual(q["local_queue_kv_shards"],2)
+        self.assertEqual(q["local_queue_kv_entries"],5)
+        self.assertEqual(q["local_queue_kv_bytes"],160)
+        self.assertEqual(q["local_queue_kv_by_node"],"spark0:dsv4_flash_pp8;spark1:dsv4_flash_pp8")
+        self.assertEqual(q["local_queue_stage_service_by_node"],"spark0:dsv4_flash_pp8;spark1:dsv4_flash_pp8")
+        self.assertIn("spark0:91", q["local_queue_stage_gpu_util_by_node"])
+        self.assertIn("spark1:26", q["local_queue_stage_gpu_power_by_node"])
 
 if __name__ == "__main__":
     unittest.main()

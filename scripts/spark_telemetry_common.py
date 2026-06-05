@@ -4,10 +4,8 @@
 from __future__ import annotations
 
 import datetime as dt
-import glob
 import json
 import os
-import sqlite3
 import time
 import urllib.error
 import urllib.request
@@ -21,9 +19,8 @@ TELEMETRY_DIR = "/tmp/ds4_telemetry"
 MAC_TELEMETRY_DIR = os.path.join(TELEMETRY_DIR,"mac")
 NODE_TELEMETRY_CSV = "node_telemetry.csv"
 NODE_TELEMETRY_SUMMARY = "node_telemetry.summary.json"
-QUEUE_DB_GLOB = "/tmp/ds4_v2_queue/queue.sqlite3,/tmp/ds4_queue/queue.sqlite3,/tmp/ds4_queue_saturation_*/queue/queue.sqlite3,/private/tmp/ds4_queue*/queue.sqlite3,/private/tmp/*/ds4_queue*/queue.sqlite3,/private/tmp/*/queue/queue.sqlite3"
 QUEUE_RATE_WINDOW_S = float(os.environ.get("DS4_QUEUE_RATE_WINDOW_S","300"))
-DEFAULT_DS4_API_URL = "http://10.20.0.10:8700,http://spark0:8700"
+DEFAULT_DS4_API_URL = "http://10.20.0.10:8700"
 
 BASE_GPU_FIELDS = [
     "index",
@@ -111,27 +108,6 @@ CSV_FIELDS = [
     "vllm_prefix_cache_hit_pct",
     "vllm_external_prefix_cache_hit_pct",
     "vllm_metrics_sources",
-    "local_queue_db",
-    "local_queue_total",
-    "local_queue_depth",
-    "local_queue_queued",
-    "local_queue_running",
-    "local_queue_completed",
-    "local_queue_failed",
-    "local_queue_model_depth",
-    "local_queue_cpu_depth",
-    "local_queue_by_node",
-    "local_queue_queued_by_node",
-    "local_queue_running_by_node",
-    "local_queue_prompt_tokens_recent",
-    "local_queue_prompt_tok_s",
-    "local_queue_prompt_tok_s_by_node",
-    "local_queue_completion_requests_recent",
-    "local_queue_completion_req_s",
-    "local_queue_completion_req_s_by_node",
-    "local_queue_completion_tokens_recent",
-    "local_queue_completion_tok_s",
-    "local_queue_completion_tok_s_by_node",
     "gpu_index",
     "gpu_name",
     "gpu_util_pct",
@@ -234,21 +210,6 @@ def summary_base() -> Dict[str,object]:
     return({"updated_unix":int(time.time()),"updated_iso":utc_iso()})
 
 
-def queue_db_candidates(raw_path: str, raw_globs: str) -> List[str]:
-    paths: List[str] = []
-    if raw_path.strip():
-        paths.append(raw_path.strip())
-    for pattern in [item.strip() for item in raw_globs.split(",") if item.strip()]:
-        paths.extend(glob.glob(pattern))
-    uniq: Dict[str,float] = {}
-    for path in paths:
-        try:
-            uniq[path] = os.path.getmtime(path)
-        except Exception:
-            pass
-    return([item[0] for item in sorted(uniq.items(),key=lambda kv: kv[1],reverse=True)])
-
-
 def node_metric_map(raw: object) -> Dict[str,float]:
     out: Dict[str,float] = {}
     for item in str(raw or "").split(";"):
@@ -270,54 +231,52 @@ def format_node_map(values: Dict[str,float]) -> str:
     return(";".join(parts)[:240])
 
 
-def result_usage_tokens(raw: object, key: str) -> int:
-    try:
-        data = json.loads(str(raw or "{}"))
-    except Exception:
-        return(0)
-    usage = data.get("usage") if isinstance(data,dict) else None
-    if not isinstance(usage,dict):
-        response = data.get("response") if isinstance(data,dict) else None
-        usage = response.get("usage") if isinstance(response,dict) else None
-    if not isinstance(usage,dict):
-        result = data.get("result") if isinstance(data,dict) else None
-        usage = result.get("usage") if isinstance(result,dict) else None
-    if not isinstance(usage,dict):
-        return(0)
-    return(int(num(usage.get(key,0))))
-
-
-def result_prompt_tokens(raw: object) -> int:
-    return(result_usage_tokens(raw,"prompt_tokens"))
-
-
-def result_completion_tokens(raw: object) -> int:
-    return(result_usage_tokens(raw,"completion_tokens"))
+def format_text_map(values: Dict[str,str]) -> str:
+    parts: List[str] = []
+    for key in sorted(values):
+        value = str(values[key]).replace(";",",").strip()
+        if key and value:
+            parts.append("%s:%s" % (key,value[:80]))
+    return(";".join(parts)[:240])
 
 
 def empty_queue_summary() -> Dict[str,object]:
     return({
-        "local_queue_db": "",
+        "local_queue_source": "",
         "local_queue_total": 0,
         "local_queue_depth": 0,
         "local_queue_queued": 0,
         "local_queue_running": 0,
         "local_queue_completed": 0,
         "local_queue_failed": 0,
-        "local_queue_model_depth": 0,
-        "local_queue_cpu_depth": 0,
-        "local_queue_by_node": "",
-        "local_queue_queued_by_node": "",
-        "local_queue_running_by_node": "",
-        "local_queue_prompt_tokens_recent": 0,
-        "local_queue_prompt_tok_s": 0.0,
-        "local_queue_prompt_tok_s_by_node": "",
-        "local_queue_completion_requests_recent": 0,
-        "local_queue_completion_req_s": 0.0,
-        "local_queue_completion_req_s_by_node": "",
-        "local_queue_completion_tokens_recent": 0,
-        "local_queue_completion_tok_s": 0.0,
-        "local_queue_completion_tok_s_by_node": "",
+        "local_queue_pending_by_service": "",
+        "local_queue_resident_service_targets": "",
+        "local_queue_ds_services": "",
+        "local_queue_ds_service_count": 0,
+        "local_queue_ds_model_count": 0,
+        "local_queue_last_service": "",
+        "local_queue_resident_multimodel": 0,
+        "local_queue_kv_shards": 0,
+        "local_queue_kv_entries": 0,
+        "local_queue_kv_bytes": 0,
+        "local_queue_kv_services": "",
+        "local_queue_kv_by_node": "",
+        "local_queue_stage_service_by_node": "",
+        "local_queue_stage_iso_by_node": "",
+        "local_queue_stage_reported_at_by_node": "",
+        "local_queue_stage_sample_count_by_node": "",
+        "local_queue_stage_gpu_util_by_node": "",
+        "local_queue_stage_gpu_temp_by_node": "",
+        "local_queue_stage_gpu_power_by_node": "",
+        "local_queue_stage_cpu_pct_by_node": "",
+        "local_queue_stage_mem_pct_by_node": "",
+        "local_queue_stage_vllm_running_by_node": "",
+        "local_queue_stage_vllm_waiting_by_node": "",
+        "local_queue_stage_vllm_tok_s_by_node": "",
+        "local_queue_stage_prompt_tok_s_by_node": "",
+        "local_queue_stage_generation_tok_s_by_node": "",
+        "local_queue_stage_kv_pct_by_node": "",
+        "local_queue_stage_vllm_metrics_up_by_node": "",
     })
 
 
@@ -336,18 +295,105 @@ def read_json_url(url: str, timeout: float) -> Tuple[Dict[str,object],str]:
     return(data if isinstance(data,dict) else {}, "")
 
 
-def ds4_api_queue_from_status(data: Dict[str,object], source: str) -> Dict[str,object]:
+def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: Dict[str,object] | None = None, models: Dict[str,object] | None = None) -> Dict[str,object]:
     out = empty_queue_summary()
     counts_raw = data.get("state_counts",{})
     if not isinstance(counts_raw,dict):
         return(out)
+    dispatcher = dispatcher or {}
+    models = models or {}
     counts = {str(k):int(num(v)) for k,v in counts_raw.items()}
     queued = int(counts.get("queued",0) + counts.get("prefilling",0) + counts.get("ready",0))
     running = int(counts.get("running",0))
     completed = int(counts.get("completed",0) + counts.get("completed_with_failures",0) + counts.get("completed_with_cancelled",0))
     failed = int(counts.get("failed",0))
+    pending_by_service_raw = dispatcher.get("pending_by_service",{})
+    pending_by_service = {str(k):num(v) for k,v in pending_by_service_raw.items()} if isinstance(pending_by_service_raw,dict) else {}
+    resident_targets_raw = dispatcher.get("resident_service_targets",{})
+    resident_targets = {str(k):num(v) for k,v in resident_targets_raw.items()} if isinstance(resident_targets_raw,dict) else {}
+    service_ids: Dict[str,object] = {}
+    model_count = 0
+    for item in models.get("data",[]) if isinstance(models.get("data",[]),list) else []:
+        if not isinstance(item,dict):
+            continue
+        model_count += 1
+        service_id = str(item.get("ds4_service_id") or "")
+        if service_id:
+            service_ids[service_id] = True
+    for service_id in list(pending_by_service) + list(resident_targets):
+        if service_id:
+            service_ids[service_id] = True
+    last_service = str(dispatcher.get("last_claimed_service_id") or "")
+    if last_service:
+        service_ids[last_service] = True
+    pipeline = data.get("pipeline_status",{})
+    kv_shards = pipeline.get("kv_shards",[]) if isinstance(pipeline,dict) else []
+    stages = pipeline.get("stages",[]) if isinstance(pipeline,dict) else []
+    kv_services: Dict[str,object] = {}
+    kv_by_node: Dict[str,str] = {}
+    stage_services: Dict[str,str] = {}
+    stage_iso: Dict[str,str] = {}
+    stage_reported_at: Dict[str,float] = {}
+    stage_sample_count: Dict[str,float] = {}
+    stage_gpu_util: Dict[str,float] = {}
+    stage_gpu_temp: Dict[str,float] = {}
+    stage_gpu_power: Dict[str,float] = {}
+    stage_cpu_pct: Dict[str,float] = {}
+    stage_mem_pct: Dict[str,float] = {}
+    stage_vllm_running: Dict[str,float] = {}
+    stage_vllm_waiting: Dict[str,float] = {}
+    stage_vllm_tok_s: Dict[str,float] = {}
+    stage_prompt_tok_s: Dict[str,float] = {}
+    stage_generation_tok_s: Dict[str,float] = {}
+    stage_kv_pct: Dict[str,float] = {}
+    stage_vllm_metrics_up: Dict[str,float] = {}
+    kv_entries = 0
+    kv_bytes = 0
+    if isinstance(kv_shards,list):
+        for shard in kv_shards:
+            if not isinstance(shard,dict):
+                continue
+            service_id = str(shard.get("service_id") or "")
+            node_id = str(shard.get("node_id") or "")
+            if service_id:
+                kv_services[service_id] = True
+                service_ids[service_id] = True
+            if node_id and service_id:
+                kv_by_node[node_id] = service_id
+            kv_entries += int(num(shard.get("entries",0)))
+            kv_bytes += int(num(shard.get("bytes",0)))
+    if isinstance(stages,list):
+        for stage in stages:
+            if not isinstance(stage,dict):
+                continue
+            node_id = str(stage.get("node_id") or "")
+            service_id = str(stage.get("service_id") or "")
+            payload = stage.get("payload",{})
+            if not node_id:
+                continue
+            if service_id:
+                stage_services[node_id] = service_id
+                service_ids[service_id] = True
+                if node_id not in kv_by_node:
+                    kv_by_node[node_id] = service_id
+            if isinstance(payload,dict):
+                stage_iso[node_id] = str(payload.get("last_iso_ts") or "")
+                stage_sample_count[node_id] = num(payload.get("sample_count",0))
+                stage_gpu_util[node_id] = num(payload.get("last_gpu_util_pct",0))
+                stage_gpu_temp[node_id] = num(payload.get("last_gpu_temp_c",0))
+                stage_gpu_power[node_id] = num(payload.get("last_gpu_power_w",0))
+                stage_cpu_pct[node_id] = num(payload.get("last_cpu_util_pct",0))
+                stage_mem_pct[node_id] = num(payload.get("last_mem_used_pct",0))
+                stage_vllm_running[node_id] = num(payload.get("last_vllm_requests_running",0))
+                stage_vllm_waiting[node_id] = num(payload.get("last_vllm_requests_waiting",0))
+                stage_vllm_tok_s[node_id] = num(payload.get("last_vllm_tokens_per_s",0))
+                stage_prompt_tok_s[node_id] = num(payload.get("last_vllm_prompt_tokens_per_s",0))
+                stage_generation_tok_s[node_id] = num(payload.get("last_vllm_generation_tokens_per_s",0))
+                stage_kv_pct[node_id] = num(payload.get("last_vllm_kv_cache_pct",0))
+                stage_vllm_metrics_up[node_id] = num(payload.get("last_vllm_metrics_up",0))
+            stage_reported_at[node_id] = num(stage.get("reported_at",0))
     out.update({
-        "local_queue_db": source,
+        "local_queue_source": source,
         "local_queue_api_up": 1,
         "local_queue_total": sum(counts.values()),
         "local_queue_depth": queued + running,
@@ -355,124 +401,48 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str) -> Dict[str,o
         "local_queue_running": running,
         "local_queue_completed": completed,
         "local_queue_failed": failed,
+        "local_queue_pending_by_service": format_node_map(pending_by_service),
+        "local_queue_resident_service_targets": format_node_map(resident_targets),
+        "local_queue_ds_services": ",".join(sorted(service_ids)),
+        "local_queue_ds_service_count": len(service_ids),
+        "local_queue_ds_model_count": model_count,
+        "local_queue_last_service": last_service,
+        "local_queue_resident_multimodel": 1 if bool(dispatcher.get("resident_multimodel",False)) else 0,
+        "local_queue_kv_shards": len(kv_shards) if isinstance(kv_shards,list) else 0,
+        "local_queue_kv_entries": kv_entries,
+        "local_queue_kv_bytes": kv_bytes,
+        "local_queue_kv_services": ",".join(sorted(kv_services)),
+        "local_queue_kv_by_node": format_text_map(kv_by_node),
+        "local_queue_stage_service_by_node": format_text_map(stage_services),
+        "local_queue_stage_iso_by_node": format_text_map(stage_iso),
+        "local_queue_stage_reported_at_by_node": format_node_map(stage_reported_at),
+        "local_queue_stage_sample_count_by_node": format_node_map(stage_sample_count),
+        "local_queue_stage_gpu_util_by_node": format_node_map(stage_gpu_util),
+        "local_queue_stage_gpu_temp_by_node": format_node_map(stage_gpu_temp),
+        "local_queue_stage_gpu_power_by_node": format_node_map(stage_gpu_power),
+        "local_queue_stage_cpu_pct_by_node": format_node_map(stage_cpu_pct),
+        "local_queue_stage_mem_pct_by_node": format_node_map(stage_mem_pct),
+        "local_queue_stage_vllm_running_by_node": format_node_map(stage_vllm_running),
+        "local_queue_stage_vllm_waiting_by_node": format_node_map(stage_vllm_waiting),
+        "local_queue_stage_vllm_tok_s_by_node": format_node_map(stage_vllm_tok_s),
+        "local_queue_stage_prompt_tok_s_by_node": format_node_map(stage_prompt_tok_s),
+        "local_queue_stage_generation_tok_s_by_node": format_node_map(stage_generation_tok_s),
+        "local_queue_stage_kv_pct_by_node": format_node_map(stage_kv_pct),
+        "local_queue_stage_vllm_metrics_up_by_node": format_node_map(stage_vllm_metrics_up),
     })
     return(out)
 
 
 def read_ds4_api_queue(raw_url: str, timeout: float, rate_window_s: float = QUEUE_RATE_WINDOW_S) -> Dict[str,object]:
     del rate_window_s
-    for base in [item.strip().rstrip("/") for item in str(raw_url or "").split(",") if item.strip()]:
-        data,error = read_json_url(base + "/ds4/queue/status",timeout)
-        if error == "" and str(data.get("format","")) == "ds4-inference-queue-v1":
-            return(ds4_api_queue_from_status(data,"ds4-api:%s" % base))
-    return(empty_queue_summary())
-
-
-def merge_queue_summaries(primary: Dict[str,object], fallback: Dict[str,object]) -> Dict[str,object]:
-    if str(primary.get("local_queue_db","")) == "":
-        return(fallback)
-    if str(fallback.get("local_queue_db","")) == "":
-        return(primary)
-    out = dict(fallback)
-    out.update(primary)
-    preserve_keys = (
-        "local_queue_by_node",
-        "local_queue_queued_by_node",
-        "local_queue_running_by_node",
-        "local_queue_prompt_tok_s_by_node",
-        "local_queue_completion_req_s_by_node",
-        "local_queue_completion_tok_s_by_node",
-    )
-    for key in preserve_keys:
-        if str(primary.get(key,"")) == "" and str(fallback.get(key,"")) != "":
-            out[key] = fallback[key]
-    rate_keys = (
-        "local_queue_prompt_tokens_recent",
-        "local_queue_prompt_tok_s",
-        "local_queue_completion_requests_recent",
-        "local_queue_completion_req_s",
-        "local_queue_completion_tokens_recent",
-        "local_queue_completion_tok_s",
-    )
-    for key in rate_keys:
-        if num(primary.get(key,0)) <= 0.0 and num(fallback.get(key,0)) > 0.0:
-            out[key] = fallback[key]
-    out["local_queue_db"] = "%s;%s" % (primary.get("local_queue_db",""),fallback.get("local_queue_db",""))
-    return(out)
-
-
-def read_local_queue(raw_path: str, raw_globs: str, rate_window_s: float = QUEUE_RATE_WINDOW_S) -> Dict[str,object]:
-    out = empty_queue_summary()
-    best: Tuple[int,float,int,int] | None = None
-    best_out: Dict[str,object] | None = None
-    for path in queue_db_candidates(raw_path,raw_globs):
-        try:
-            conn = sqlite3.connect(path,timeout=0.25)
-            try:
-                cols = {str(row[1]) for row in conn.execute("pragma table_info(requests)").fetchall()}
-                states = {str(k):int(v) for k,v in conn.execute("select state,count(*) from requests group by state").fetchall()}
-                kinds = {str(k):int(v) for k,v in conn.execute("select request_kind,count(*) from requests where state in ('queued','running') group by request_kind").fetchall()}
-                nodes = conn.execute("select selected_node_id,count(*) from requests where state in ('queued','running') and selected_node_id is not null group by selected_node_id").fetchall()
-                queued_nodes = conn.execute("select selected_node_id,count(*) from requests where state = 'queued' and selected_node_id is not null group by selected_node_id").fetchall()
-                running_nodes = conn.execute("select selected_node_id,count(*) from requests where state = 'running' and selected_node_id is not null group by selected_node_id").fetchall()
-                active_updated_at = 0.0
-                if "updated_at" in cols:
-                    active_updated_at = num(conn.execute("select max(updated_at) from requests where state in ('queued','running')").fetchone()[0])
-                recent_prompt_tokens = 0
-                recent_requests = 0
-                recent_tokens = 0
-                recent_prompt_by_node: Dict[str,float] = {}
-                recent_requests_by_node: Dict[str,float] = {}
-                recent_by_node: Dict[str,float] = {}
-                if "completed_at" in cols and "result_json" in cols:
-                    cutoff = time.time() - max(1.0,rate_window_s)
-                    for node,raw_result in conn.execute("select selected_node_id,result_json from requests where state = 'completed' and completed_at is not null and completed_at >= ?", (cutoff,)).fetchall():
-                        prompt_tokens = result_prompt_tokens(raw_result)
-                        tokens = result_completion_tokens(raw_result)
-                        recent_prompt_tokens += prompt_tokens
-                        recent_requests += 1
-                        recent_tokens += tokens
-                        if node is not None:
-                            recent_prompt_by_node[str(node)] = recent_prompt_by_node.get(str(node),0.0) + float(prompt_tokens)
-                            recent_requests_by_node[str(node)] = recent_requests_by_node.get(str(node),0.0) + 1.0
-                            recent_by_node[str(node)] = recent_by_node.get(str(node),0.0) + float(tokens)
-            finally:
-                conn.close()
-        except Exception:
-            continue
-        queued = int(states.get("queued",0))
-        running = int(states.get("running",0))
-        window = max(1.0,rate_window_s)
-        candidate = dict(out)
-        candidate.update({
-            "local_queue_db": path,
-            "local_queue_total": sum(states.values()),
-            "local_queue_depth": queued + running,
-            "local_queue_queued": queued,
-            "local_queue_running": running,
-            "local_queue_completed": int(states.get("completed",0)),
-            "local_queue_failed": int(states.get("failed",0)),
-            "local_queue_model_depth": int(kinds.get("model",0)),
-            "local_queue_cpu_depth": int(kinds.get("cpu",0)),
-            "local_queue_by_node": format_node_map({str(node):float(count) for node,count in nodes}),
-            "local_queue_queued_by_node": format_node_map({str(node):float(count) for node,count in queued_nodes}),
-            "local_queue_running_by_node": format_node_map({str(node):float(count) for node,count in running_nodes}),
-            "local_queue_prompt_tokens_recent": recent_prompt_tokens,
-            "local_queue_prompt_tok_s": round(float(recent_prompt_tokens) / window,3),
-            "local_queue_prompt_tok_s_by_node": format_node_map({node:tokens / window for node,tokens in recent_prompt_by_node.items()}),
-            "local_queue_completion_requests_recent": recent_requests,
-            "local_queue_completion_req_s": round(float(recent_requests) / window,3),
-            "local_queue_completion_req_s_by_node": format_node_map({node:requests / window for node,requests in recent_requests_by_node.items()}),
-            "local_queue_completion_tokens_recent": recent_tokens,
-            "local_queue_completion_tok_s": round(float(recent_tokens) / window,3),
-            "local_queue_completion_tok_s_by_node": format_node_map({node:tokens / window for node,tokens in recent_by_node.items()}),
-        })
-        try:
-            mtime = os.path.getmtime(path)
-        except Exception:
-            mtime = 0.0
-        score = (1 if queued + running > 0 else 0, max(active_updated_at,mtime), queued + running, int(recent_tokens))
-        if best is None or score > best:
-            best = score
-            best_out = candidate
-    return(best_out if best_out is not None else out)
+    base = str(raw_url or "").strip().rstrip("/")
+    if base == "":
+        return(empty_queue_summary())
+    data,error = read_json_url(base + "/ds4/queue/status",timeout)
+    dispatcher,dispatcher_error = read_json_url(base + "/ds4/dispatcher/status",timeout)
+    models,models_error = read_json_url(base + "/v1/models",timeout)
+    if error != "" or dispatcher_error != "" or models_error != "":
+        return(empty_queue_summary())
+    if str(data.get("format","")) != "ds4-inference-queue-v1":
+        return(empty_queue_summary())
+    return(ds4_api_queue_from_status(data,"ds4-api:%s" % base,dispatcher,models))
