@@ -198,9 +198,9 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertNotIn("--kv-transfer-config", plan["vllm_nodes"][0]["argv"])
         self.assertEqual(plan["vllm_nodes"][0]["argv"][2], "/home/spark0/models/hf/google/gemma-4-31B-it")
         self.assertEqual(plan["vllm_nodes"][-1]["argv"][2], "/home/spark7/models/hf/google/gemma-4-31B-it")
-        self.assertEqual(plan["vllm_nodes"][0]["working_directory"], "/home/spark0/ds4_on_spark/v2")
-        self.assertEqual(plan["vllm_nodes"][-1]["working_directory"], "/home/spark7/ds4_on_spark/v2")
-        self.assertEqual(plan["vllm_nodes"][-1]["env"]["PYTHONPATH"], "/home/spark7/ds4_on_spark/v2/src")
+        self.assertEqual(plan["vllm_nodes"][0]["working_directory"], "/home/spark0/src/ds4_on_spark/v2")
+        self.assertEqual(plan["vllm_nodes"][-1]["working_directory"], "/home/spark7/src/ds4_on_spark/v2")
+        self.assertEqual(plan["vllm_nodes"][-1]["env"]["PYTHONPATH"], "/home/spark7/src/ds4_on_spark/v2/src")
         self.assertIn("/home/spark7/standard-runtimes/vllm-main-gdn-nixl/vllm/examples/tool_chat_template_gemma4.jinja", plan["vllm_nodes"][-1]["argv"])
         self.assertIn("--headless", plan["vllm_nodes"][-1]["argv"])
 

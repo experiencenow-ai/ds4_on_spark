@@ -54,7 +54,7 @@ first.
 From a Spark checkout:
 
 ```bash
-cd ~/ds4_on_spark/v2
+cd ~/src/ds4_on_spark/v2
 PYTHONPATH=src python3 -m ds4_kvcache.cli plan \
   --deployment profiles/kv_cache/gemma4_12b_it_pp8_plain.json
 PYTHONPATH=src python3 -m ds4_kvcache.cli write-scripts \
@@ -65,7 +65,7 @@ PYTHONPATH=src python3 -m ds4_kvcache.cli write-scripts \
 Use the matching `profiles/kv_cache/gemma4_*_plain.json` file for the other
 family members. The generated per-rank scripts expand `{node}` into the actual
 Spark node, so rank 7 serves from `/home/spark7/...` and uses
-`/home/spark7/ds4_on_spark/v2/src` as `PYTHONPATH`.
+`/home/spark7/src/ds4_on_spark/v2/src` as `PYTHONPATH`.
 
 ## Request surface
 
