@@ -331,11 +331,9 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(q["local_queue_kv_bytes"],160)
         self.assertEqual(q["local_queue_kv_by_node"],"spark0:dsv4_flash_pp8;spark1:dsv4_flash_pp8")
         self.assertEqual(q["local_queue_stage_service_by_node"],"spark0:dsv4_flash_pp8;spark1:dsv4_flash_pp8")
-        self.assertIn("spark0:91", q["local_queue_stage_gpu_util_by_node"])
-        self.assertIn("spark1:26", q["local_queue_stage_gpu_power_by_node"])
-        self.assertIn("spark1:26", q["local_queue_stage_gpu_power_raw_by_node"])
-        self.assertIn("spark1:1", q["local_queue_stage_gpu_power_known_by_node"])
-        self.assertIn("spark1:nvml.power.draw", q["local_queue_stage_gpu_power_source_by_node"])
+        self.assertNotIn("local_queue_stage_gpu_util_by_node",q)
+        self.assertNotIn("local_queue_stage_gpu_power_by_node",q)
+        self.assertNotIn("local_queue_stage_vllm_running_by_node",q)
 
 if __name__ == "__main__":
     unittest.main()

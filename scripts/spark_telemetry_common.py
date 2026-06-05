@@ -279,26 +279,6 @@ def empty_queue_summary() -> Dict[str,object]:
         "local_queue_kv_services": "",
         "local_queue_kv_by_node": "",
         "local_queue_stage_service_by_node": "",
-        "local_queue_stage_iso_by_node": "",
-        "local_queue_stage_reported_at_by_node": "",
-        "local_queue_stage_sample_count_by_node": "",
-        "local_queue_stage_gpu_util_by_node": "",
-        "local_queue_stage_gpu_temp_by_node": "",
-        "local_queue_stage_gpu_power_by_node": "",
-        "local_queue_stage_gpu_power_raw_by_node": "",
-        "local_queue_stage_gpu_power_limit_by_node": "",
-        "local_queue_stage_gpu_power_known_by_node": "",
-        "local_queue_stage_gpu_power_source_by_node": "",
-        "local_queue_stage_gpu_power_reason_by_node": "",
-        "local_queue_stage_cpu_pct_by_node": "",
-        "local_queue_stage_mem_pct_by_node": "",
-        "local_queue_stage_vllm_running_by_node": "",
-        "local_queue_stage_vllm_waiting_by_node": "",
-        "local_queue_stage_vllm_tok_s_by_node": "",
-        "local_queue_stage_prompt_tok_s_by_node": "",
-        "local_queue_stage_generation_tok_s_by_node": "",
-        "local_queue_stage_kv_pct_by_node": "",
-        "local_queue_stage_vllm_metrics_up_by_node": "",
     })
 
 
@@ -354,26 +334,6 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
     kv_services: Dict[str,object] = {}
     kv_by_node: Dict[str,str] = {}
     stage_services: Dict[str,str] = {}
-    stage_iso: Dict[str,str] = {}
-    stage_reported_at: Dict[str,float] = {}
-    stage_sample_count: Dict[str,float] = {}
-    stage_gpu_util: Dict[str,float] = {}
-    stage_gpu_temp: Dict[str,float] = {}
-    stage_gpu_power: Dict[str,float] = {}
-    stage_gpu_power_raw: Dict[str,float] = {}
-    stage_gpu_power_limit: Dict[str,float] = {}
-    stage_gpu_power_known: Dict[str,float] = {}
-    stage_gpu_power_source: Dict[str,str] = {}
-    stage_gpu_power_reason: Dict[str,str] = {}
-    stage_cpu_pct: Dict[str,float] = {}
-    stage_mem_pct: Dict[str,float] = {}
-    stage_vllm_running: Dict[str,float] = {}
-    stage_vllm_waiting: Dict[str,float] = {}
-    stage_vllm_tok_s: Dict[str,float] = {}
-    stage_prompt_tok_s: Dict[str,float] = {}
-    stage_generation_tok_s: Dict[str,float] = {}
-    stage_kv_pct: Dict[str,float] = {}
-    stage_vllm_metrics_up: Dict[str,float] = {}
     kv_entries = 0
     kv_bytes = 0
     if isinstance(kv_shards,list):
@@ -395,7 +355,6 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
                 continue
             node_id = str(stage.get("node_id") or "")
             service_id = str(stage.get("service_id") or "")
-            payload = stage.get("payload",{})
             if not node_id:
                 continue
             if service_id:
@@ -403,27 +362,6 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
                 service_ids[service_id] = True
                 if node_id not in kv_by_node:
                     kv_by_node[node_id] = service_id
-            if isinstance(payload,dict):
-                stage_iso[node_id] = str(payload.get("last_iso_ts") or "")
-                stage_sample_count[node_id] = num(payload.get("sample_count",0))
-                stage_gpu_util[node_id] = num(payload.get("last_gpu_util_pct",0))
-                stage_gpu_temp[node_id] = num(payload.get("last_gpu_temp_c",0))
-                stage_gpu_power[node_id] = num(payload.get("last_gpu_power_w",0))
-                stage_gpu_power_raw[node_id] = num(payload.get("last_gpu_power_raw_w",0))
-                stage_gpu_power_limit[node_id] = num(payload.get("last_gpu_power_limit_w",0))
-                stage_gpu_power_known[node_id] = num(payload.get("last_gpu_power_known",0))
-                stage_gpu_power_source[node_id] = str(payload.get("last_gpu_power_source") or "")
-                stage_gpu_power_reason[node_id] = str(payload.get("last_gpu_power_reason") or "")
-                stage_cpu_pct[node_id] = num(payload.get("last_cpu_util_pct",0))
-                stage_mem_pct[node_id] = num(payload.get("last_mem_used_pct",0))
-                stage_vllm_running[node_id] = num(payload.get("last_vllm_requests_running",0))
-                stage_vllm_waiting[node_id] = num(payload.get("last_vllm_requests_waiting",0))
-                stage_vllm_tok_s[node_id] = num(payload.get("last_vllm_tokens_per_s",0))
-                stage_prompt_tok_s[node_id] = num(payload.get("last_vllm_prompt_tokens_per_s",0))
-                stage_generation_tok_s[node_id] = num(payload.get("last_vllm_generation_tokens_per_s",0))
-                stage_kv_pct[node_id] = num(payload.get("last_vllm_kv_cache_pct",0))
-                stage_vllm_metrics_up[node_id] = num(payload.get("last_vllm_metrics_up",0))
-            stage_reported_at[node_id] = num(stage.get("reported_at",0))
     out.update({
         "local_queue_source": source,
         "local_queue_api_up": 1,
@@ -446,26 +384,6 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
         "local_queue_kv_services": ",".join(sorted(kv_services)),
         "local_queue_kv_by_node": format_text_map(kv_by_node),
         "local_queue_stage_service_by_node": format_text_map(stage_services),
-        "local_queue_stage_iso_by_node": format_text_map(stage_iso),
-        "local_queue_stage_reported_at_by_node": format_node_map(stage_reported_at),
-        "local_queue_stage_sample_count_by_node": format_node_map(stage_sample_count),
-        "local_queue_stage_gpu_util_by_node": format_node_map(stage_gpu_util),
-        "local_queue_stage_gpu_temp_by_node": format_node_map(stage_gpu_temp),
-        "local_queue_stage_gpu_power_by_node": format_node_map(stage_gpu_power),
-        "local_queue_stage_gpu_power_raw_by_node": format_node_map(stage_gpu_power_raw),
-        "local_queue_stage_gpu_power_limit_by_node": format_node_map(stage_gpu_power_limit),
-        "local_queue_stage_gpu_power_known_by_node": format_node_map(stage_gpu_power_known),
-        "local_queue_stage_gpu_power_source_by_node": format_text_map(stage_gpu_power_source),
-        "local_queue_stage_gpu_power_reason_by_node": format_text_map(stage_gpu_power_reason),
-        "local_queue_stage_cpu_pct_by_node": format_node_map(stage_cpu_pct),
-        "local_queue_stage_mem_pct_by_node": format_node_map(stage_mem_pct),
-        "local_queue_stage_vllm_running_by_node": format_node_map(stage_vllm_running),
-        "local_queue_stage_vllm_waiting_by_node": format_node_map(stage_vllm_waiting),
-        "local_queue_stage_vllm_tok_s_by_node": format_node_map(stage_vllm_tok_s),
-        "local_queue_stage_prompt_tok_s_by_node": format_node_map(stage_prompt_tok_s),
-        "local_queue_stage_generation_tok_s_by_node": format_node_map(stage_generation_tok_s),
-        "local_queue_stage_kv_pct_by_node": format_node_map(stage_kv_pct),
-        "local_queue_stage_vllm_metrics_up_by_node": format_node_map(stage_vllm_metrics_up),
     })
     return(out)
 

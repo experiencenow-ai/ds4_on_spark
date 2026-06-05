@@ -247,75 +247,16 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
     queue = raw.get("queue",{}) if isinstance(raw.get("queue"),dict) else {}
     queue_kv_by_node = node_text_map(queue.get("local_queue_kv_by_node",""))
     stage_service_by_node = node_text_map(queue.get("local_queue_stage_service_by_node",""))
-    stage_iso_by_node = node_text_map(queue.get("local_queue_stage_iso_by_node",""))
-    stage_sample_count_by_node = node_metric_map(queue.get("local_queue_stage_sample_count_by_node",""))
-    stage_gpu_util_by_node = node_metric_map(queue.get("local_queue_stage_gpu_util_by_node",""))
-    stage_gpu_temp_by_node = node_metric_map(queue.get("local_queue_stage_gpu_temp_by_node",""))
-    stage_gpu_power_by_node = node_metric_map(queue.get("local_queue_stage_gpu_power_by_node",""))
-    stage_gpu_power_raw_by_node = node_metric_map(queue.get("local_queue_stage_gpu_power_raw_by_node",""))
-    stage_gpu_power_limit_by_node = node_metric_map(queue.get("local_queue_stage_gpu_power_limit_by_node",""))
-    stage_gpu_power_known_by_node = node_metric_map(queue.get("local_queue_stage_gpu_power_known_by_node",""))
-    stage_gpu_power_source_by_node = node_text_map(queue.get("local_queue_stage_gpu_power_source_by_node",""))
-    stage_gpu_power_reason_by_node = node_text_map(queue.get("local_queue_stage_gpu_power_reason_by_node",""))
-    stage_cpu_pct_by_node = node_metric_map(queue.get("local_queue_stage_cpu_pct_by_node",""))
-    stage_mem_pct_by_node = node_metric_map(queue.get("local_queue_stage_mem_pct_by_node",""))
-    stage_vllm_running_by_node = node_metric_map(queue.get("local_queue_stage_vllm_running_by_node",""))
-    stage_vllm_waiting_by_node = node_metric_map(queue.get("local_queue_stage_vllm_waiting_by_node",""))
-    stage_vllm_tok_s_by_node = node_metric_map(queue.get("local_queue_stage_vllm_tok_s_by_node",""))
-    stage_prompt_tok_s_by_node = node_metric_map(queue.get("local_queue_stage_prompt_tok_s_by_node",""))
-    stage_generation_tok_s_by_node = node_metric_map(queue.get("local_queue_stage_generation_tok_s_by_node",""))
-    stage_kv_pct_by_node = node_metric_map(queue.get("local_queue_stage_kv_pct_by_node",""))
-    stage_vllm_metrics_up_by_node = node_metric_map(queue.get("local_queue_stage_vllm_metrics_up_by_node",""))
     global_queue_known = str(queue.get("local_queue_source","")) != ""
     summary_id = raw.get("updated_unix") or raw.get("updated_iso","")
     raw_nodes = raw.get("nodes",{}) if isinstance(raw.get("nodes",{}),dict) else {}
     node_names = set(str(node) for node,row in raw_nodes.items() if isinstance(row,dict))
-    node_names.update(stage_sample_count_by_node)
     node_names.update(stage_service_by_node)
     node_names.update(queue_kv_by_node)
     rows: dict[str,dict[str,Any]] = {}
     for name in sorted(node_names):
         base = raw_nodes.get(name,{})
         row = dict(base) if isinstance(base,dict) else {}
-        stage_sample_count = stage_sample_count_by_node.get(name,0.0)
-        seeded_from_stage = stage_sample_count > 0.0 and fnum(row.get("sample_count")) <= 0.0
-        if seeded_from_stage:
-            previous_error = str(row.get("error",""))
-            if previous_error and str(row.get("fetch_error","")) == "":
-                row["fetch_error"] = previous_error
-            row["error"] = ""
-            row["sample_count"] = stage_sample_count
-        if name in stage_iso_by_node and (seeded_from_stage or str(row.get("last_iso_ts","")) == ""):
-            row["last_iso_ts"] = stage_iso_by_node[name]
-        numeric_stage_fields = (
-            ("last_gpu_util_pct",stage_gpu_util_by_node),
-            ("last_gpu_temp_c",stage_gpu_temp_by_node),
-            ("last_gpu_power_w",stage_gpu_power_by_node),
-            ("last_gpu_power_raw_w",stage_gpu_power_raw_by_node),
-            ("last_gpu_power_limit_w",stage_gpu_power_limit_by_node),
-            ("last_gpu_power_known",stage_gpu_power_known_by_node),
-            ("last_cpu_util_pct",stage_cpu_pct_by_node),
-            ("last_mem_used_pct",stage_mem_pct_by_node),
-            ("last_vllm_requests_running",stage_vllm_running_by_node),
-            ("last_vllm_requests_waiting",stage_vllm_waiting_by_node),
-            ("last_vllm_tokens_per_s",stage_vllm_tok_s_by_node),
-            ("last_vllm_prompt_tokens_per_s",stage_prompt_tok_s_by_node),
-            ("last_vllm_generation_tokens_per_s",stage_generation_tok_s_by_node),
-            ("last_vllm_kv_cache_pct",stage_kv_pct_by_node),
-            ("last_vllm_metrics_up",stage_vllm_metrics_up_by_node),
-        )
-        for target,mapping in numeric_stage_fields:
-            if name not in mapping:
-                continue
-            value = mapping[name]
-            if seeded_from_stage or (value > 0.0 and fnum(row.get(target)) <= 0.0):
-                row[target] = value
-        for target,mapping in (
-            ("last_gpu_power_source",stage_gpu_power_source_by_node),
-            ("last_gpu_power_reason",stage_gpu_power_reason_by_node),
-        ):
-            if name in mapping and (seeded_from_stage or str(row.get(target,"")) == ""):
-                row[target] = mapping[name]
         rows[name] = row
     nodes = [normalize_node(node,row,node_error_streak(node,row,summary_id)) for node,row in sorted(rows.items())]
     for node in nodes:
