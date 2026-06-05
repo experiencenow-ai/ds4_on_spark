@@ -205,6 +205,8 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["vllm_nodes"][-1]["fabric_ip"], "10.10.100.17")
         self.assertEqual(plan["vllm_nodes"][0]["env"]["GLOO_SOCKET_IFNAME"], "ds4ring0")
         self.assertEqual(plan["vllm_nodes"][0]["env"]["TP_SOCKET_IFNAME"], "ds4ring0")
+        self.assertEqual(plan["vllm_nodes"][0]["env"]["DS4_PP_TRANSPORT"], "tcp-staged")
+        self.assertEqual(plan["vllm_nodes"][0]["env"]["VLLM_DS4_PP_EDGE_RAIL"], "enp")
         self.assertEqual(plan["vllm_nodes"][0]["env"]["VLLM_HOST_IP"], "10.10.100.10")
         self.assertEqual(plan["vllm_nodes"][-1]["env"]["VLLM_HOST_IP"], "10.10.100.17")
         self.assertEqual(plan["vllm_nodes"][0]["working_directory"], "/home/spark0/src/ds4_on_spark/v2")
@@ -234,6 +236,8 @@ class KvCachePlanningTests(unittest.TestCase):
             rank7 = Path(manifest["scripts"]["start_vllm_nodes"]["spark7"]).read_text()
             self.assertIn("GLOO_SOCKET_IFNAME=ds4ring0", rank0)
             self.assertIn("TP_SOCKET_IFNAME=ds4ring0", rank0)
+            self.assertIn("DS4_PP_TRANSPORT=tcp-staged", rank0)
+            self.assertIn("VLLM_DS4_PP_EDGE_RAIL=enp", rank0)
             self.assertIn("VLLM_HOST_IP=10.10.100.10", rank0)
             self.assertIn("VLLM_HOST_IP=10.10.100.17", rank7)
 

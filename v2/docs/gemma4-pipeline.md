@@ -47,7 +47,11 @@ runtime mismatch, not a Gemma model problem.
 
 The initial recipes use plain vLLM pipeline serving with no LMCache, HMA, or
 CPU offload connector; the goal is to prove pipeline execution and DS4 routing
-first.
+first. The recipes still use the DS4 all-Spark pipeline transport convention
+from the current DSV4 PP8 deployment: `DS4_PP_TRANSPORT=tcp-staged` and
+`VLLM_DS4_PP_EDGE_RAIL=enp`. Gemma also pins Gloo and vLLM host identity to the
+200G fabric because the first live PP8 bring-up otherwise advertised loopback
+addresses during process-group formation.
 
 ## Plan or write launch scripts
 
