@@ -201,6 +201,10 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["vllm_nodes"][-1]["argv"][:4], ["/home/spark7/standard-runtimes/vllm-main-gdn-nixl/venv/bin/python", "-m", "vllm.entrypoints.cli.main", "serve"])
         self.assertEqual(plan["vllm_nodes"][-1]["argv"][4], "/home/spark7/models/hf/google/gemma-4-31B-it")
         self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--master-addr") + 1], "10.10.100.10")
+        self.assertEqual(plan["vllm_nodes"][0]["fabric_ip"], "10.10.100.10")
+        self.assertEqual(plan["vllm_nodes"][-1]["fabric_ip"], "10.10.100.17")
+        self.assertEqual(plan["vllm_nodes"][0]["env"]["VLLM_HOST_IP"], "10.10.100.10")
+        self.assertEqual(plan["vllm_nodes"][-1]["env"]["VLLM_HOST_IP"], "10.10.100.17")
         self.assertEqual(plan["vllm_nodes"][0]["working_directory"], "/home/spark0/src/ds4_on_spark/v2")
         self.assertEqual(plan["vllm_nodes"][-1]["working_directory"], "/home/spark7/src/ds4_on_spark/v2")
         self.assertEqual(plan["vllm_nodes"][-1]["env"]["PYTHONPATH"], "/home/spark7/src/ds4_on_spark/v2/src")
@@ -219,6 +223,15 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertIn("--node-rank 0", rank0)
             self.assertIn("--node-rank 7", rank7)
             self.assertIn("--headless", rank7)
+
+    def test_gemma_pipeline_launch_scripts_use_200g_fabric_host_ips(self) -> None:
+        deployment = KvCacheDeployment.load(GEMMA31_PP_DEPLOYMENT)
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = write_launch_scripts(deployment, tmp)
+            rank0 = Path(manifest["scripts"]["start_vllm_nodes"]["spark0"]).read_text()
+            rank7 = Path(manifest["scripts"]["start_vllm_nodes"]["spark7"]).read_text()
+            self.assertIn("VLLM_HOST_IP=10.10.100.10", rank0)
+            self.assertIn("VLLM_HOST_IP=10.10.100.17", rank7)
 
     def test_kv_cache_is_optional_on_existing_profiles(self) -> None:
         registry = ProfileRegistry.load(ROOT / "profiles" / "models")

@@ -38,6 +38,7 @@
       "{\"enable_thinking\":false}",
       "--language-model-only"
     ],
+    "fabric_topology": "profiles/transfer/spark_200g.json",
     "host": "0.0.0.0",
     "master_addr": "10.10.100.10",
     "master_port": 29614,
