@@ -161,31 +161,53 @@ def parse_eval_cases(path: Path) -> list[dict]:
     return cases
 
 
-def build_question_prompt(case: dict) -> str:
+def build_question_prompt(case: dict, *, response_style: str = "official") -> str:
     parts = [case["question"] + "\n"]
     choices = case.get("choices") or []
     if choices:
         parts.append("\nChoices:\n")
         for idx, choice in enumerate(choices):
             parts.append(f"{chr(ord('A') + idx)}. {choice}\n")
-        parts.append(
-            "\nSolve the question. At the end, write exactly one final line in this "
-            "format and do not write anything after it:\n"
-            "Answer: <letter>"
-        )
+        parts.append(_answer_instruction(response_style, "letter"))
     elif case.get("source") == "COMPSEC":
-        parts.append(
-            "\nAt the end, write exactly one final line in this format and do not "
-            "write anything after it:\n"
-            "Answer: <line number or comma-separated line numbers>"
-        )
+        parts.append(_answer_instruction(response_style, "line number or comma-separated line numbers"))
     else:
-        parts.append(
+        parts.append(_answer_instruction(response_style, "integer"))
+    return "".join(parts)
+
+
+def _answer_instruction(response_style: str, answer_type: str) -> str:
+    if response_style == "official":
+        if answer_type == "letter":
+            return (
+                "\nSolve the question. At the end, write exactly one final line in this "
+                "format and do not write anything after it:\n"
+                "Answer: <letter>"
+            )
+        return (
             "\nSolve the problem. At the end, write exactly one final line in this "
             "format and do not write anything after it:\n"
-            "Answer: <integer>"
+            f"Answer: <{answer_type}>"
         )
-    return "".join(parts)
+    if response_style == "answer_first":
+        return (
+            "\nSolve the problem silently. Put the final answer on the first line in "
+            "exactly this format:\n"
+            f"Answer: <{answer_type}>\n"
+            "After that line you may add a brief explanation."
+        )
+    if response_style == "concise":
+        return (
+            "\nSolve the problem. Keep visible reasoning to at most three short "
+            "sentences. End with exactly one final line and nothing after it:\n"
+            f"Answer: <{answer_type}>"
+        )
+    if response_style == "answer_only":
+        return (
+            "\nSolve the problem silently. Output exactly one line and nothing else:\n"
+            f"Answer: <{answer_type}>"
+        )
+    raise ValueError(f"unsupported response style: {response_style}")
 
 
 def render_prompt(vllm_url: str, model: str, question_prompt: str, max_tokens: int, *, enable_thinking: bool, thinking_key: str) -> str:
@@ -225,7 +247,7 @@ def write_requests(args: argparse.Namespace) -> None:
 
 
 def _eval_request_payload(args: argparse.Namespace, idx: int, case: dict) -> dict:
-    question_prompt = build_question_prompt(case)
+    question_prompt = build_question_prompt(case, response_style=str(args.response_style))
     rendered = render_prompt(
         args.vllm_url,
         args.served_model,
@@ -288,6 +310,7 @@ def _write_request_manifest(args: argparse.Namespace, out: Path, request_count: 
         "enable_thinking": bool(args.enable_thinking),
         "thinking_budget_tokens": int(args.thinking_budget_tokens),
         "temperature": float(args.temperature),
+        "response_style": str(args.response_style),
         "written_at": time.time(),
     }
     out.with_suffix(".manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -300,13 +323,26 @@ def _answer_region(text: str) -> str:
 
 
 def _last_answer_marker(text: str) -> int:
-    last = -1
-    for match in re.finditer(r"(?i)\banswer\b\s*:", text):
-        last = match.start()
+    last = _last_answer_colon_marker(text)
     if last >= 0:
         return last
     match = re.search(r"(?i)\banswer\b", text)
     return match.start() if match else -1
+
+
+def _last_answer_colon_marker(text: str) -> int:
+    last = -1
+    for match in re.finditer(r"(?i)\banswer\b\s*:", text):
+        last = match.start()
+    return last
+
+
+def _marker_value_span(text: str, start: int, limit: int) -> str:
+    colon = text.find(":", start)
+    if colon < 0:
+        return ""
+    span = text[colon + 1 : colon + 1 + limit]
+    return span.splitlines()[0] if span else ""
 
 
 def _letter_matches(text: str, nchoices: int) -> list[str]:
@@ -319,13 +355,36 @@ def _letter_matches(text: str, nchoices: int) -> list[str]:
     return letters
 
 
+def _phrase_letter_answer(text: str, nchoices: int) -> str:
+    max_letter = chr(ord("A") + nchoices - 1)
+    patterns = [
+        r"(?i)\b(?:final\s+)?answer\s+(?:is|=)\s*(?:option\s+|choice\s+)?([A-Z])\b",
+        r"(?i)\b(?:correct|best|right)\s+(?:answer|option|choice)\s*(?:is|:)?\s*(?:option\s+|choice\s+)?([A-Z])\b",
+        r"(?i)\b(?:select|choose|pick)\s+(?:the\s+)?(?:correct\s+)?(?:option|choice)\s*(?:is|:)?\s*(?:option\s+|choice\s+)?([A-Z])\b",
+        r"(?i)\b(?:option|choice)\s+([A-Z])\s+(?:is|seems|appears)\s+(?:the\s+)?(?:correct|best|right|plausible)\b",
+        r"(?i)\b(?:option|choice)\s+([A-Z])\s*[-:]\s*.*?\b(?:correct|best|right|plausible)\b",
+        r"(?i)\b([A-Z])\.\s+.*?\b(?:correct|best|right|plausible)\b",
+        r"(?i)\b(?:option|choice)\s+([A-Z])\s+corresponds\b",
+    ]
+    matches: list[str] = []
+    for pattern in patterns:
+        for match in re.finditer(pattern, text):
+            letter = match.group(1).upper()
+            if "A" <= letter <= max_letter:
+                matches.append(letter)
+    return matches[-1] if matches else "?"
+
+
 def _letter_answer(text: str, nchoices: int) -> str:
     visible = _answer_region(text)
-    start = _last_answer_marker(visible)
+    start = _last_answer_colon_marker(visible)
     if start >= 0:
-        letters = _letter_matches(visible[start : start + 96], nchoices)
+        letters = _letter_matches(_marker_value_span(visible, start, 96), nchoices)
         if letters:
             return letters[0]
+    got = _phrase_letter_answer(visible, nchoices)
+    if got != "?":
+        return got
     letters = _letter_matches(visible, nchoices)
     return letters[-1] if letters else "?"
 
@@ -347,23 +406,37 @@ def _last_integer(text: str) -> str:
     return _normalize_integer(matches[-1]) if matches else "?"
 
 
+def _phrase_integer_answer(text: str) -> str:
+    patterns = [
+        r"(?i)\b(?:final\s+)?answer\s+(?:is|=)\s*([0-9]+)\b",
+        r"(?i)\b(?:result|value|sum|number)\s+(?:is|=)\s*([0-9]+)\b",
+    ]
+    matches: list[str] = []
+    for pattern in patterns:
+        for match in re.finditer(pattern, text):
+            matches.append(_normalize_integer(match.group(1)))
+    return matches[-1] if matches else "?"
+
+
 def _integer_answer(text: str) -> str:
     visible = _answer_region(text)
-    start = _last_answer_marker(visible)
+    start = _last_answer_colon_marker(visible)
     if start >= 0:
-        got = _first_integer(visible[start : start + 160])
+        got = _first_integer(_marker_value_span(visible, start, 160))
         if got != "?":
             return got
+    got = _phrase_integer_answer(visible)
+    if got != "?":
+        return got
     return _last_integer(visible)
 
 
 def _line_spec(text: str) -> str:
     visible = _answer_region(text)
-    start = _last_answer_marker(visible)
+    start = _last_answer_colon_marker(visible)
     if start < 0:
         return _integer_answer(text)
-    span = visible[start : start + 160]
-    span = span.splitlines()[0] if span else span
+    span = _marker_value_span(visible, start, 160)
     pieces = re.findall(r"\d+(?:\s*-\s*\d+)?", span)
     return ",".join(piece.replace(" ", "") for piece in pieces) if pieces else _integer_answer(text)
 
@@ -493,6 +566,7 @@ def _write_args_for_run(args: argparse.Namespace, source_requests: Path) -> argp
         served_model=args.served_model,
         model=args.model,
         max_output_tokens=args.max_output_tokens,
+        response_style=args.response_style,
         enable_thinking=args.enable_thinking,
         chat_template_thinking_key=args.chat_template_thinking_key,
         thinking_budget_tokens=args.thinking_budget_tokens,
@@ -802,6 +876,7 @@ def _build_parser() -> argparse.ArgumentParser:
     w.add_argument("--served-model", default="deepseek-v4-flash-pp8")
     w.add_argument("--model", default="dsv4_vllm_mtp_pp8_smartest_v1")
     w.add_argument("--max-output-tokens", type=int, default=512)
+    w.add_argument("--response-style", choices=("official", "concise", "answer_only", "answer_first"), default="official")
     w.add_argument("--enable-thinking", action="store_true")
     w.add_argument("--chat-template-thinking-key", default="thinking")
     w.add_argument("--thinking-budget-tokens", type=int, default=0)
@@ -822,6 +897,7 @@ def _build_parser() -> argparse.ArgumentParser:
     r.add_argument("--served-model", default="deepseek-v4-flash-pp8")
     r.add_argument("--model", default="dsv4_vllm_mtp_pp8_smartest_v1")
     r.add_argument("--max-output-tokens", type=int, default=512)
+    r.add_argument("--response-style", choices=("official", "concise", "answer_only", "answer_first"), default="official")
     r.add_argument("--enable-thinking", action="store_true")
     r.add_argument("--chat-template-thinking-key", default="thinking")
     r.add_argument("--thinking-budget-tokens", type=int, default=0)
