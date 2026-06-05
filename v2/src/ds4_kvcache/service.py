@@ -557,6 +557,11 @@ def _default_python_bin(vllm_bin: str) -> str:
     return vllm_bin.rsplit("/", 1)[0] + "/python"
 
 
+def _starts_with_env_assignment(command: str) -> bool:
+    first = command.split(" ", 1)[0]
+    return "=" in first and not first.startswith("/") and not first.startswith("./")
+
+
 def _start_script(vllm_plan: dict[str, Any], deployment: KvCacheDeployment) -> str:
     lines = [
         "#!/usr/bin/env bash",
@@ -564,7 +569,10 @@ def _start_script(vllm_plan: dict[str, Any], deployment: KvCacheDeployment) -> s
     ]
     if deployment.working_directory:
         lines.append("cd " + shlex.quote(deployment.working_directory))
-    lines.append("exec " + vllm_plan["command"])
+    if vllm_plan.get("env") or _starts_with_env_assignment(vllm_plan["command"]):
+        lines.append("exec env " + vllm_plan["command"])
+    else:
+        lines.append("exec " + vllm_plan["command"])
     return "\n".join(lines) + "\n"
 
 

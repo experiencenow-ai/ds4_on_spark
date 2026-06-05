@@ -138,7 +138,11 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertIn("pip install --no-deps", install)
             self.assertIn('\"${wheel}\"', install)
             self.assertIn("mkdir -p /home/spark7/ds4_nvme/ds4_lmcache/qwen27_fp8kv/l2", install)
+            self.assertIn("cd /home/spark7/src/ds4_on_spark/v2", cache_server)
+            self.assertIn("exec env CPATH=", cache_server)
             self.assertIn("lmcache server", cache_server)
+            self.assertIn("cd /home/spark7/src/ds4_on_spark/v2", vllm)
+            self.assertIn("exec env CPATH=", vllm)
             self.assertIn("LMCacheMPConnector", vllm)
 
     def test_qwen_bf16_pp8_lmcache_hma_plan_is_pipeline_sharded(self) -> None:

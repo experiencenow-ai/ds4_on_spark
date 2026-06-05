@@ -14,8 +14,8 @@
   "tensor_parallel_size": 1,
   "vllm_bin": "/home/spark7/ds4-vllm-local/bin/vllm",
   "python_bin": "/home/spark7/ds4-vllm-local/bin/python",
-  "working_directory": "/home/spark7/ds4_on_spark/v2",
-  "pythonpath": "/home/spark7/ds4_on_spark/v2/src",
+  "working_directory": "/home/spark7/src/ds4_on_spark/v2",
+  "pythonpath": "/home/spark7/src/ds4_on_spark/v2/src",
   "connector": {
     "connector_id": "lmcache_mp",
     "kv_role": "kv_both",
