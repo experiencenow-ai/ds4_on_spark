@@ -10,6 +10,7 @@ import unittest
 
 from ds4_infer.api import CoordinatorApi, DispatcherPendingCohort, _pending_claim_count
 from ds4_infer.profiles import ProfileRegistry
+from ds4_infer.queue_policy import SchedulerPolicy
 from ds4_infer.runners import OpenAICompatibleRunner
 from ds4_infer.schemas import InferenceRequest, make_result
 from ds4_infer.topology import SparkTopology
@@ -240,7 +241,9 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                     pending=pending,
                     entry_node_id="spark0",
                     node_profile_ids=tuple(topology.pipeline_profiles),
+                    batch_linger_by_service={},
                     batch_limits_by_service={"qwen27_bf16_pp8": 64, "dsv4_flash_pp8": 64},
+                    compute_lease_quantum_s_by_service={},
                     kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
                 )
                 self.assertEqual(submitted, 8)
@@ -265,6 +268,7 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 lease_ttl_s=30,
                 max_node_depth=0,
                 kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                compute_lease_quantum_s_by_service={},
             )
             claims = api.queue.claim_ready_batch(
                 node_id="spark0",
@@ -273,7 +277,9 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 leased_by="test-dispatcher",
                 lease_ttl_s=30,
                 kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                batch_linger_by_service={},
                 batch_limits_by_service={"qwen27_bf16_pp8": 64, "dsv4_flash_pp8": 64},
+                compute_lease_quantum_s_by_service={},
             )
             cohort = DispatcherPendingCohort.from_claims(claims)
             pending = {object(): cohort}
@@ -315,20 +321,10 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
         self.assertEqual([choice["index"] for choice in payload["choices"]], [0, 1, 2])
         self.assertEqual(payload["ds4"]["result_count"], 3)
 
-    def test_dispatcher_batch_limit_can_be_overridden_without_editing_topology(self) -> None:
-        from ds4_infer.api import _batch_limits_by_service
-
-        old = os.environ.get("DS4_API_BATCH_LIMITS_JSON")
-        os.environ["DS4_API_BATCH_LIMITS_JSON"] = '{"qwen27_bf16_pp8": 256}'
-        try:
-            topology = SparkTopology.load(TOPOLOGY)
-            limits = _batch_limits_by_service(topology)
-        finally:
-            if old is None:
-                os.environ.pop("DS4_API_BATCH_LIMITS_JSON", None)
-            else:
-                os.environ["DS4_API_BATCH_LIMITS_JSON"] = old
-        self.assertEqual(limits["qwen27_bf16_pp8"], 256)
+    def test_dispatcher_batch_limit_comes_from_topology(self) -> None:
+        policy = SchedulerPolicy.from_topology(SparkTopology.load(TOPOLOGY))
+        self.assertEqual(policy.batch_limits_by_service["qwen27_bf16_pp8"], 12)
+        self.assertEqual(policy.batch_limits_by_service["dsv4_flash_pp8"], 512)
 
 
 if __name__ == "__main__":

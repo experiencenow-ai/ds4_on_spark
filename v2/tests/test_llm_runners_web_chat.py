@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from ds4_chat.cli import QueueChatModel
 from ds4_infer.profiles import ModelProfile, ProfileRegistry
-from ds4_infer.runners import AntirezRunner, OpenAICompatibleRunner, PipelineOpenAIRunner, SparkHttpRunner, extract_openai_completion_text, request_messages, request_prompt
+from ds4_infer.runners import AntirezRunner, OpenAICompatibleRunner, PipelineOpenAIRunner, SparkHttpRunner, extract_openai_chat_text, extract_openai_completion_text, request_messages, request_prompt
 from ds4_infer.schemas import InferenceRequest
 from ds4_tools.builtin import spark7_run_command, web_fetch
 from ds4_tools.registry import ToolRegistry
@@ -379,8 +379,8 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertIn("ControlMaster=auto", calls[0]["command"])
         payload = json.loads(calls[0]["input"])
         self.assertEqual(payload["batch_payload"]["model"], "deepseek-ai/DeepSeek-V4-Flash")
-        self.assertEqual(payload["batch_payload"]["items"][0]["thinking"], {"type": "disabled"})
-        self.assertEqual(payload["batch_payload"]["items"][0]["chat_template_kwargs"], {"thinking": False})
+        self.assertEqual(payload["batch_payload"]["items"][0]["thinking"], {"type": "enabled"})
+        self.assertEqual(payload["batch_payload"]["items"][0]["chat_template_kwargs"], {"thinking": True})
         self.assertNotIn("openai_endpoint", payload)
 
     def test_spark_http_runner_batches_multiple_requests_in_one_gateway_call(self) -> None:
@@ -415,6 +415,7 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         cases = [
             ("qwen3_6_27b_fp8_efficient_v1", {"capability": "efficient", "job_class": "summary"}, "spark0", {"type": "disabled"}, {"enable_thinking": False}, None),
             ("qwen3_6_27b_fp8_efficient_v1", {"capability": "efficient", "job_class": "summary", "max_output_tokens": 64, "thinking_budget_tokens": 100}, "spark0", {"type": "enabled", "budget_tokens": 100}, {"enable_thinking": True}, 164),
+            ("dsv4_vllm_mtp_smartest_v1", {"max_output_tokens": 64}, "spark4+spark5", {"type": "enabled"}, {"thinking": True}, None),
             ("dsv4_vllm_mtp_smartest_v1", {"max_output_tokens": 64, "thinking_budget_tokens": 100}, "spark4+spark5", {"type": "enabled", "budget_tokens": 100}, {"thinking": True}, 164),
         ]
         for profile_id, updates, node, thinking, template_kwargs, max_tokens in cases:
@@ -475,6 +476,10 @@ class LlmRunnersWebChatTests(unittest.TestCase):
     def test_completion_extractor_accepts_chat_shaped_response(self) -> None:
         data = {"choices": [{"message": {"content": "dsv4 antirez ok", "reasoning_content": "hidden"}}]}
         self.assertEqual(extract_openai_completion_text(data), "dsv4 antirez ok")
+
+    def test_chat_extractor_strips_visible_thinking(self) -> None:
+        data = {"choices": [{"message": {"content": "scratch</think>final answer"}}]}
+        self.assertEqual(extract_openai_chat_text(data), "final answer")
 
 
 def _local_html_server(body: str):

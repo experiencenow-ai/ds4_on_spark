@@ -734,9 +734,12 @@ def extract_openai_chat_text(data: dict[str, Any]) -> str:
     if isinstance(choices, list) and choices:
         message = choices[0].get("message", {}) if isinstance(choices[0], dict) else {}
         if isinstance(message, dict):
-            for key in ("content", "reasoning_content", "reasoning"):
+            content = message.get("content")
+            if content is not None:
+                return strip_visible_thinking(str(content))
+            for key in ("reasoning_content", "reasoning"):
                 if message.get(key) is not None:
-                    return str(message.get(key))
+                    return strip_visible_thinking(str(message.get(key)))
             if message.get("tool_calls"):
                 return json.dumps(message, sort_keys=True)
     return json.dumps(data, sort_keys=True)
@@ -1085,7 +1088,9 @@ def _openai_payload(request: InferenceRequest, profile: ModelProfile, *, render_
     sampling = openai_sampling_controls(request.input)
     if sampling:
         payload.update(sampling)
-    thinking_extra = _openai_thinking_extra_body(request, profile)
+    thinking_top_level, thinking_extra = _openai_thinking_payload_fields(request, profile)
+    if thinking_top_level:
+        payload.update(thinking_top_level)
     if thinking_extra:
         payload["extra_body"] = {**dict(payload.get("extra_body") or {}), **thinking_extra}
     extra_body = kv_cache_extra_body(request.input)
@@ -1095,14 +1100,20 @@ def _openai_payload(request: InferenceRequest, profile: ModelProfile, *, render_
     return payload
 
 
-def _openai_thinking_extra_body(request: InferenceRequest, profile: ModelProfile) -> dict[str, Any]:
+def _openai_thinking_payload_fields(request: InferenceRequest, profile: ModelProfile) -> tuple[dict[str, Any], dict[str, Any]]:
     item: dict[str, Any] = {}
     apply_thinking_fields(item, profile, chat=request.chat, thinking_budget_tokens=request.thinking_budget_tokens)
-    out: dict[str, Any] = {}
+    top_level: dict[str, Any] = {}
+    extra_body: dict[str, Any] = {}
+    template_kwargs = item.get("chat_template_kwargs")
+    if request.chat and isinstance(template_kwargs, dict):
+        top_level["chat_template_kwargs"] = dict(template_kwargs)
     for key in ("thinking", "thinking_budget_tokens", "thinking_token_budget", "chat_template_kwargs"):
         if key in item:
-            out[key] = item[key]
-    return out
+            if key == "thinking" and request.thinking_budget_tokens <= 0:
+                continue
+            extra_body[key] = item[key]
+    return top_level, extra_body
 
 
 def openai_sampling_controls(input_payload: dict[str, Any]) -> dict[str, Any]:

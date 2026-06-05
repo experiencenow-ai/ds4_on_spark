@@ -46,9 +46,25 @@ class RouteSpec:
             argv.insert(0, "sudo")
         return " ".join(shlex.quote(item) for item in argv)
 
+    @property
+    def expected_next_rank(self) -> int:
+        if self.target_rank > self.source_rank:
+            return (self.source_rank + 1)
+        return (self.source_rank - 1)
+
 
 def fabric_ip(rank: int) -> str:
     return f"10.10.100.{rank + 10}"
+
+
+def line_edge_subnets(left_rank: int) -> tuple[int, int]:
+    return (((left_rank * 2) + 1), ((left_rank * 2) + 2))
+
+
+def line_neighbor_vias(source_rank: int, next_rank: int) -> set[str]:
+    left_rank = min(source_rank, next_rank)
+    left_host = ".1" if source_rank > next_rank else ".2"
+    return {f"10.10.{subnet}{left_host}" for subnet in line_edge_subnets(left_rank)}
 
 
 def line_next_hop(source_rank: int, target_rank: int) -> tuple[str, str]:
@@ -96,7 +112,7 @@ def run_ssh(host: str, command: str, timeout_s: int) -> subprocess.CompletedProc
     )
 
 
-def route_get(spec: RouteSpec, timeout_s: int, *, strict_next_hop: bool) -> tuple[bool, str]:
+def route_get(spec: RouteSpec, timeout_s: int, *, allow_any_rail_route: bool) -> tuple[bool, str]:
     completed = run_ssh(
         f"spark{spec.source_rank}",
         "ip route get " + shlex.quote(spec.target_ip),
@@ -112,11 +128,12 @@ def route_get(spec: RouteSpec, timeout_s: int, *, strict_next_hop: bool) -> tupl
     dev_up = _dev_is_up(spec.source_rank, dev, timeout_s) if has_dev and dev is not None else False
     has_via = via is not None
     has_src = f" src {spec.source_ip} " in f" {first} "
-    has_expected_next_hop = (dev == spec.dev and via == spec.via)
+    expected_vias = line_neighbor_vias(spec.source_rank, spec.expected_next_rank)
+    has_expected_next_hop = via in expected_vias
     bad_wifi = " dev wl" in first or " via 192.168." in first
     bad_linkdown = "linkdown" in first
     ok = has_dev and dev_up and has_via and has_src and not bad_wifi and not bad_linkdown
-    if strict_next_hop:
+    if not allow_any_rail_route:
         ok = ok and has_expected_next_hop
     return (ok, first)
 
@@ -166,10 +183,25 @@ def _dev_is_up(source_rank: int, dev: str | None, timeout_s: int) -> bool:
     return completed.returncode == 0 and completed.stdout.strip() == "up"
 
 
-def check_specs(specs: list[RouteSpec], sudo: bool, timeout_s: int, *, strict_next_hop: bool) -> int:
+def ping_specs(specs: list[RouteSpec], timeout_s: int) -> int:
+    failures = 0
+    for spec in specs:
+        completed = run_ssh(
+            f"spark{spec.source_rank}",
+            "ping -c 1 -W 1 " + shlex.quote(spec.target_ip) + " >/dev/null",
+            timeout_s,
+        )
+        status = "PASS" if completed.returncode == 0 else "FAIL"
+        print(f"{status} {spec.label:<15} {spec.target_ip:<13} :: ping")
+        if completed.returncode != 0:
+            failures += 1
+    return failures
+
+
+def check_specs(specs: list[RouteSpec], sudo: bool, timeout_s: int, *, allow_any_rail_route: bool) -> int:
     failures: list[RouteSpec] = []
     for spec in specs:
-        ok, route = route_get(spec, timeout_s, strict_next_hop=strict_next_hop)
+        ok, route = route_get(spec, timeout_s, allow_any_rail_route=allow_any_rail_route)
         status = "PASS" if ok else "FAIL"
         print(f"{status} {spec.label:<15} {spec.target_ip:<13} :: {route}")
         if not ok:
@@ -188,9 +220,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--nodes", type=int, default=8)
     parser.add_argument("--adjacent-only", action="store_true")
     parser.add_argument("--head-only", action="store_true")
+    parser.add_argument("--ping", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--no-sudo", action="store_true")
-    parser.add_argument("--strict-next-hop", action="store_true")
+    parser.add_argument("--allow-any-rail-route", action="store_true")
     parser.add_argument("--timeout-s", type=int, default=8)
     return parser.parse_args(argv)
 
@@ -207,11 +240,18 @@ def main(argv: list[str]) -> int:
     sudo = not bool(args.no_sudo)
     if args.apply:
         return apply_specs(specs, sudo=sudo, timeout_s=args.timeout_s)
+    if args.ping:
+        failures = ping_specs(specs, timeout_s=args.timeout_s)
+        if failures:
+            print(f"fabric ping check failed: {failures} failed probes")
+            return 1
+        print("fabric ping check passed")
+        return 0
     failures = check_specs(
         specs,
         sudo=sudo,
         timeout_s=args.timeout_s,
-        strict_next_hop=bool(args.strict_next_hop),
+        allow_any_rail_route=bool(args.allow_any_rail_route),
     )
     if failures:
         print(f"fabric route check failed: {failures} failed probes")

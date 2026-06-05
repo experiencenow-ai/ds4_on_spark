@@ -8,6 +8,7 @@ import time
 from .profiles import ProfileRegistry
 from .control import trim_spark_memory
 from .queue import InferenceQueue
+from .queue_policy import SchedulerPolicy
 from .runners import AntirezRunner, AutoRunner, CommandRunner, FakeRunner, HmaPersistentRunner, PipelineOpenAIRunner, SparkHttpRunner, VllmOpenAIRunner
 from .service import load_requests_jsonl
 from .topology import SparkTopology
@@ -263,6 +264,7 @@ def _cmd_queue_work(args: argparse.Namespace) -> int:
 
 
 def _queue_work_once(queue: InferenceQueue, registry: ProfileRegistry, runner: object, args: argparse.Namespace) -> dict:
+    policy = _scheduler_policy(args.topology)
     return queue.work(
         registry=registry,
         runner=runner,
@@ -279,8 +281,11 @@ def _queue_work_once(queue: InferenceQueue, registry: ProfileRegistry, runner: o
         kv_capacity_bytes=args.kv_capacity_bytes,
         transport_max_attempts=args.transport_max_attempts,
         kv_shard_layouts_by_profile=_pipeline_layouts(args.topology),
-        batch_limits_by_service=_pipeline_batch_limits(args.topology),
-        refill_low_watermarks_by_service=_pipeline_refill_low_watermarks(args.topology),
+        batch_linger_by_service=policy.batch_linger_by_service,
+        batch_limits_by_service=policy.batch_limits_by_service,
+        compute_lease_quantum_s_by_service=policy.compute_lease_quantum_s_by_service,
+        dispatch_quanta_by_service=policy.dispatch_quanta_by_service,
+        refill_low_watermarks_by_service=policy.refill_low_watermarks_by_service,
     )
 
 
@@ -305,18 +310,10 @@ def _pipeline_layouts(topology_path: str | None) -> dict:
     return dict(topology.profile_pipeline_services)
 
 
-def _pipeline_batch_limits(topology_path: str | None) -> dict[str, int]:
+def _scheduler_policy(topology_path: str | None) -> SchedulerPolicy:
     if not topology_path:
-        return {}
-    topology = SparkTopology.load(topology_path)
-    return {service.service_id: int(service.scheduler.get("queue_limit") or service.max_batch_size) for service in topology.pipeline_services.values()}
-
-
-def _pipeline_refill_low_watermarks(topology_path: str | None) -> dict[str, int]:
-    if not topology_path:
-        return {}
-    topology = SparkTopology.load(topology_path)
-    return {service.service_id: int(service.scheduler.get("refill_low_watermark") or 0) for service in topology.pipeline_services.values()}
+        raise ValueError("queue-worker requires --topology so scheduler policy is explicit")
+    return SchedulerPolicy.from_topology(SparkTopology.load(topology_path))
 
 
 def _pipeline_base_urls(topology_path: str | None) -> dict[str, str]:
@@ -422,7 +419,7 @@ def _add_queue_worker_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--runner-timeout-s", type=int, default=300)
     parser.add_argument("--command", nargs="*")
     parser.add_argument("--node-id")
-    parser.add_argument("--topology")
+    parser.add_argument("--topology", required=True)
     parser.add_argument("--batch-id")
     parser.add_argument("--limit", type=int, default=1)
     parser.add_argument("--concurrency", type=int, default=1)

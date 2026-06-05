@@ -16,7 +16,6 @@ THROUGHPUT_COHORT_LIMIT = 256
 PRODUCTION_KV_ADMISSION_BYTES = 8589934592
 THROUGHPUT_KV_ADMISSION_BYTES = 8589934592
 COHORT_TOKEN_BUDGET = 262144
-COMPUTE_LEASE_QUANTUM_S = 180
 
 
 def main() -> int:
@@ -109,7 +108,6 @@ def _coordinator_env(args: argparse.Namespace, v2_dir: Path) -> dict[str, str]:
 _SAFETY_PROFILE_DEFAULTS = {
     "DS4_API_DISPATCH_KV_CAPACITY_BYTES",
     "DS4_API_TRANSPORT_MAX_ATTEMPTS",
-    "DS4_COMPUTE_LEASE_QUANTUM_S",
     "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY",
     "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET",
     "DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE",
@@ -125,7 +123,6 @@ def _profile_defaults(profile: str) -> dict[str, str]:
         "DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE": "1",
         "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "2",
         "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": str(PRODUCTION_COHORT_LIMIT),
-        "DS4_COMPUTE_LEASE_QUANTUM_S": str(COMPUTE_LEASE_QUANTUM_S),
         "DS4_API_TRANSPORT_TIMEOUT_S": "3600",
         "DS4_API_TRANSPORT_MAX_ATTEMPTS": "1",
         "DS4_API_DISPATCH_KV_CAPACITY_BYTES": str(PRODUCTION_KV_ADMISSION_BYTES),
@@ -137,7 +134,6 @@ def _profile_defaults(profile: str) -> dict[str, str]:
                 "DS4_API_DISPATCH_REFILL_BATCH": str(PRODUCTION_COHORT_LIMIT),
                 "DS4_API_DISPATCH_BATCH_LINGER_S": "0.03",
                 "DS4_PIPELINE_COMPLETION_COHORT_MAX": str(PRODUCTION_COHORT_LIMIT),
-                "DS4_API_BATCH_LIMITS_JSON": json.dumps({"dsv4_flash_pp8": PRODUCTION_COHORT_LIMIT}, separators=(",", ":")),
             }
         )
     else:
@@ -151,7 +147,6 @@ def _profile_defaults(profile: str) -> dict[str, str]:
                 "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "4",
                 "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": str(THROUGHPUT_COHORT_LIMIT),
                 "DS4_API_DISPATCH_KV_CAPACITY_BYTES": str(THROUGHPUT_KV_ADMISSION_BYTES),
-                "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": THROUGHPUT_COHORT_LIMIT, "qwen27_nvfp4_pp8": THROUGHPUT_COHORT_LIMIT, "dsv4_flash_pp8": THROUGHPUT_COHORT_LIMIT}, separators=(",", ":")),
             }
         )
     return common

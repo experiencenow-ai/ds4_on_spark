@@ -105,10 +105,18 @@ def _check_relaunch_defaults(errors: list[str], checks: list[str]) -> None:
         errors.append("coordinator relaunch must overlap split resident chunks without changing vLLM KV caps")
     else:
         checks.append("coordinator relaunch overlaps split resident chunks")
-    if production.get("DS4_COMPUTE_LEASE_QUANTUM_S") != "180" or throughput.get("DS4_COMPUTE_LEASE_QUANTUM_S") != "180":
-        errors.append("coordinator relaunch must set compute lease quantum")
+    scheduler_errors = []
+    topology = _load(ROOT / "profiles" / "topology" / "static_sparks.json")
+    services = topology.get("routing_policy", {}).get("pipeline_services", {})
+    for service_id, service in services.items():
+        scheduler = service.get("scheduler", {}) if isinstance(service, dict) else {}
+        for key in ("compute_lease_quantum_s", "dispatch_quantum"):
+            if key not in scheduler:
+                scheduler_errors.append(f"{service_id} missing scheduler.{key}")
+    if scheduler_errors:
+        errors.extend(scheduler_errors)
     else:
-        checks.append("coordinator relaunch sets compute lease quantum")
+        checks.append("topology defines resident scheduler quanta")
     if production.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES") != "8589934592" or throughput.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES") != "8589934592":
         errors.append("coordinator relaunch must bound dispatcher KV admission")
     else:

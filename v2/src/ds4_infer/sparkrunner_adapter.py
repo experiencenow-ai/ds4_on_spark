@@ -10,6 +10,7 @@ from typing import Any
 from .builders import new_id, sparkrunner_request
 from .profiles import ProfileRegistry
 from .queue import InferenceQueue
+from .queue_policy import SchedulerPolicy
 from .runners import make_runner
 from .topology import SparkTopology
 
@@ -31,6 +32,7 @@ def main(argv: list[str] | None = None) -> int:
     batch_id = args.batch_id or new_id("sparkrunner")
     queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id=batch_id, priority=args.priority)
     runner = make_runner(args.runner, timeout_s=args.timeout_s)
+    policy = SchedulerPolicy.from_topology(topology)
     while True:
         queue.work(
             registry=registry,
@@ -39,8 +41,11 @@ def main(argv: list[str] | None = None) -> int:
             limit=max(1, args.work_limit),
             concurrency=max(1, args.concurrency),
             kv_shard_layouts_by_profile=dict(topology.profile_pipeline_services),
-            batch_limits_by_service={service.service_id: int(service.scheduler.get("queue_limit") or service.max_batch_size) for service in topology.pipeline_services.values()},
-            refill_low_watermarks_by_service={service.service_id: int(service.scheduler.get("refill_low_watermark") or 0) for service in topology.pipeline_services.values()},
+            batch_linger_by_service=policy.batch_linger_by_service,
+            batch_limits_by_service=policy.batch_limits_by_service,
+            compute_lease_quantum_s_by_service=policy.compute_lease_quantum_s_by_service,
+            dispatch_quanta_by_service=policy.dispatch_quanta_by_service,
+            refill_low_watermarks_by_service=policy.refill_low_watermarks_by_service,
             on_result=lambda claim, result: _append_response(response_path, record_by_request_id, args.model, args.response_format, claim.request_id, result),
         )
         status = queue.status(batch_id=batch_id)

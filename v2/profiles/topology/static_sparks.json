@@ -164,6 +164,8 @@
         "scheduler": {
           "admission_mode": "single_active_batch_per_compute_domain",
           "batch_linger_s": 0.0,
+          "compute_lease_quantum_s": 180.0,
+          "dispatch_quantum": 512,
           "max_running_batches_per_compute_domain": 1,
                     "queue_concurrency": 256,
                     "queue_limit": 512,
@@ -217,12 +219,16 @@
         "scheduler": {
           "admission_mode": "single_active_batch_per_compute_domain",
           "batch_linger_s": 0.05,
+          "compute_lease_quantum_s": 180.0,
+          "dispatch_quantum": 12,
           "max_running_batches_per_compute_domain": 1,
           "queue_concurrency": 12,
           "queue_limit": 12,
+          "refill_low_watermark": 0,
           "vllm_max_num_batched_tokens": 65536,
           "vllm_max_num_seqs": 12
         },
+        "served_model_name": "qwen27-bf16-pp8",
         "service_id": "qwen27_bf16_pp8",
         "telemetry": {
           "expected_stage_count": 8,

@@ -15,10 +15,12 @@ from urllib.parse import parse_qs, urlparse
 import uuid
 
 from .api_stream import openai_chat_stream_events, openai_completion_requests, openai_completion_stream_events, write_sse
+from .builders import chat_template_thinking_enabled
 from .profiles import ModelProfile, ProfileRegistry
 from .kv_cache import KV_CACHE_DIRECTIVE_FORMAT, KV_CACHE_PLAN_FORMAT, normalize_kv_cache_directive
 from .runners import FakeRunner, PipelineOpenAIRunner, Runner, coalescing_telemetry_snapshot
 from .queue import InferenceQueue, QueueClaim
+from .queue_policy import SchedulerPolicy
 from .schemas import InferenceRequest, REQUEST_FORMAT
 from .topology import SparkTopology
 from .worker import BatchWorker
@@ -31,7 +33,9 @@ class DispatcherRuntime:
     pending: dict[Any, "DispatcherPendingCohort"]
     entry_node_id: str
     node_profile_ids: tuple[str, ...]
+    batch_linger_by_service: dict[str, float]
     batch_limits_by_service: dict[str, int]
+    compute_lease_quantum_s_by_service: dict[str, float]
     kv_shard_layouts_by_profile: dict[str, Any]
     next_heartbeat_at: float
 
@@ -353,6 +357,7 @@ class CoordinatorApi:
     def _work_once(self, body: dict[str, Any]) -> dict[str, Any]:
         registry = self._registry()
         topology = self._topology()
+        policy = SchedulerPolicy.from_topology(topology)
         runner = self._runner(topology, timeout_s=int(body.get("timeout_s") or self.sync_timeout_s))
         entry_node_id = str(body.get("node_id") or topology.routing_policy.get("queue_entry_node_id") or "spark0")
         return self.queue.work(
@@ -371,8 +376,11 @@ class CoordinatorApi:
             kv_capacity_bytes=int(body.get("kv_capacity_bytes") or 0),
             transport_max_attempts=int(body.get("transport_max_attempts") or self.dispatcher_transport_max_attempts),
             kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
-            batch_limits_by_service=_batch_limits_by_service(topology),
-            refill_low_watermarks_by_service=_refill_low_watermarks_by_service(topology),
+            batch_linger_by_service=policy.batch_linger_by_service,
+            batch_limits_by_service=policy.batch_limits_by_service,
+            compute_lease_quantum_s_by_service=policy.compute_lease_quantum_s_by_service,
+            dispatch_quanta_by_service=policy.dispatch_quanta_by_service,
+            refill_low_watermarks_by_service=policy.refill_low_watermarks_by_service,
         )
 
     def _run_until_collected(self, *, batch_id: str, request_id: str, timeout_s: float) -> dict[str, Any]:
@@ -490,6 +498,7 @@ class CoordinatorApi:
 
     def _dispatcher_runtime(self) -> DispatcherRuntime:
         topology = self._topology()
+        policy = SchedulerPolicy.from_topology(topology)
         registry = self._registry()
         runner = self._runner(topology, timeout_s=self.dispatcher_transport_timeout_s)
         worker = BatchWorker(
@@ -508,7 +517,9 @@ class CoordinatorApi:
             pending={},
             entry_node_id=entry_node_id,
             node_profile_ids=_node_profile_ids(topology, entry_node_id),
-            batch_limits_by_service=_batch_limits_by_service(topology),
+            batch_linger_by_service=policy.batch_linger_by_service,
+            batch_limits_by_service=policy.batch_limits_by_service,
+            compute_lease_quantum_s_by_service=policy.compute_lease_quantum_s_by_service,
             kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
             next_heartbeat_at=time.time() + self.dispatcher_heartbeat_s,
         )
@@ -527,7 +538,9 @@ class CoordinatorApi:
             pending=runtime.pending,
             entry_node_id=runtime.entry_node_id,
             node_profile_ids=runtime.node_profile_ids,
+            batch_linger_by_service=runtime.batch_linger_by_service,
             batch_limits_by_service=runtime.batch_limits_by_service,
+            compute_lease_quantum_s_by_service=runtime.compute_lease_quantum_s_by_service,
             kv_shard_layouts_by_profile=runtime.kv_shard_layouts_by_profile,
         )
         if submitted:
@@ -553,7 +566,9 @@ class CoordinatorApi:
         pending: dict[Any, DispatcherPendingCohort],
         entry_node_id: str,
         node_profile_ids: tuple[str, ...],
+        batch_linger_by_service: dict[str, float],
         batch_limits_by_service: dict[str, int],
+        compute_lease_quantum_s_by_service: dict[str, float],
         kv_shard_layouts_by_profile: dict[str, Any],
     ) -> int:
         available = self.dispatcher_window - _pending_claim_count(pending)
@@ -571,6 +586,7 @@ class CoordinatorApi:
             max_node_depth=0,
             kv_capacity_bytes=self.dispatcher_kv_capacity_bytes,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
+            compute_lease_quantum_s_by_service=compute_lease_quantum_s_by_service,
         )
         claims = self.queue.claim_ready_batch(
             node_id=entry_node_id,
@@ -580,7 +596,9 @@ class CoordinatorApi:
             lease_ttl_s=worker.lease_ttl_s,
             batch_linger_s=self.dispatcher_batch_linger_s,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
+            batch_linger_by_service=batch_linger_by_service,
             batch_limits_by_service=batch_limits_by_service,
+            compute_lease_quantum_s_by_service=compute_lease_quantum_s_by_service,
         )
         if not claims:
             return 0
@@ -852,9 +870,7 @@ def _render_chat_prompt(profile: ModelProfile, messages: list[dict[str, Any]], *
     rendered = _render_chat_prompt_with_tokenizer(profile, messages, body=body, metadata=metadata)
     if rendered:
         return rendered
-    if _env_bool("DS4_API_REQUIRE_TOKENIZER_CHAT_RENDER", False):
-        raise ValueError(f"tokenizer chat-template rendering failed for {profile.profile_id}; refuse fallback prompt")
-    return _fallback_render_chat_prompt(profile, messages, body=body, metadata=metadata)
+    raise ValueError(f"tokenizer chat-template rendering failed for {profile.profile_id}; refuse fallback prompt")
 
 
 def _render_chat_prompt_with_tokenizer(profile: ModelProfile, messages: list[dict[str, Any]], *, body: dict[str, Any], metadata: dict[str, Any]) -> str:
@@ -899,25 +915,17 @@ def _chat_template_kwargs_for_body(profile: ModelProfile, body: dict[str, Any], 
             merged.update(container)
     key = profile.routing.get("chat_template_thinking_key")
     if isinstance(key, str) and key and key not in merged and profile.supports_thinking:
-        merged[key] = _thinking_budget_tokens(body, metadata) > 0
+        default_kwargs = profile.routing.get("default_chat_template_kwargs")
+        default_enabled = None
+        if isinstance(default_kwargs, dict) and key in default_kwargs:
+            default_enabled = bool(default_kwargs[key])
+        merged[key] = chat_template_thinking_enabled(
+            model_id=profile.model_id,
+            thinking_budget_tokens=_thinking_budget_tokens(body, metadata),
+            chat_template_thinking_key=key,
+            default_thinking_enabled=default_enabled,
+        )
     return merged
-
-
-def _fallback_render_chat_prompt(profile: ModelProfile, messages: list[dict[str, Any]], *, body: dict[str, Any], metadata: dict[str, Any]) -> str:
-    lowered = profile.model_id.lower()
-    if "qwen" in lowered:
-        parts = []
-        for message in messages:
-            parts.append(f"<|im_start|>{message.get('role', 'user')}\n{message.get('content', '')}<|im_end|>")
-        parts.append("<|im_start|>assistant\n")
-        return "\n".join(parts)
-    parts = []
-    for message in messages:
-        role = str(message.get("role") or "user")
-        content = str(message.get("content") or "")
-        parts.append(f"{role}: {content}")
-    parts.append("assistant:")
-    return "\n".join(parts)
 
 
 def _rough_prompt_tokens(prompt: str) -> int:
@@ -1308,27 +1316,11 @@ def _pipeline_base_urls(topology: SparkTopology) -> dict[str, str]:
 
 
 def _batch_limits_by_service(topology: SparkTopology) -> dict[str, int]:
-    limits = {service.service_id: int(service.scheduler.get("queue_limit") or service.max_batch_size) for service in topology.pipeline_services.values()}
-    overrides = {}
-    raw_overrides = os.environ.get("DS4_API_BATCH_LIMITS_JSON")
-    if raw_overrides:
-        try:
-            parsed = json.loads(raw_overrides)
-        except json.JSONDecodeError:
-            parsed = {}
-        overrides = parsed if isinstance(parsed, dict) else {}
-    if not overrides:
-        return limits
-    for service in topology.pipeline_services.values():
-        for key in (service.service_id, service.profile_id, service.model_id):
-            if key in overrides:
-                limits[service.service_id] = max(1, int(overrides[key]))
-                break
-    return limits
+    return SchedulerPolicy.from_topology(topology).batch_limits_by_service
 
 
 def _refill_low_watermarks_by_service(topology: SparkTopology) -> dict[str, int]:
-    return {service.service_id: int(service.scheduler.get("refill_low_watermark") or 0) for service in topology.pipeline_services.values()}
+    return SchedulerPolicy.from_topology(topology).refill_low_watermarks_by_service
 
 
 def _node_profile_ids(topology: SparkTopology, node_id: str) -> tuple[str, ...]:

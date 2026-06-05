@@ -57,6 +57,7 @@ class CoordinatorApiKvCacheTests(unittest.TestCase):
                 {
                     "model": "qwen27_bf16_pp8",
                     "messages": [{"role": "user", "content": "hello"}],
+                    "rendered_prompt": "<|im_start|>user\nhello<|im_end|>\n<|im_start|>assistant\n",
                     "max_tokens": 16,
                 },
             )
@@ -76,6 +77,7 @@ class CoordinatorApiKvCacheTests(unittest.TestCase):
                 {
                     "model": "deepseek-ai/DeepSeek-V4-Flash",
                     "messages": [{"role": "user", "content": "hello"}],
+                    "rendered_prompt": "user: hello\nassistant:",
                     "max_tokens": 16,
                     "metadata": {"job_class": "tool_chat"},
                 },

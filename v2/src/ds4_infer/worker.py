@@ -37,7 +37,10 @@ class BatchWorker:
         batch_linger_s: float = 0.0,
         kv_capacity_bytes: int = 0,
         kv_shard_layouts_by_profile: Mapping[str, PipelineProfile] | None = None,
+        batch_linger_by_service: Mapping[str, float] | None = None,
         batch_limits_by_service: Mapping[str, int] | None = None,
+        compute_lease_quantum_s_by_service: Mapping[str, float] | None = None,
+        dispatch_quanta_by_service: Mapping[str, int] | None = None,
         refill_low_watermarks_by_service: Mapping[str, int] | None = None,
         on_result: FinishHook | None = None,
     ) -> dict[str, Any]:
@@ -54,6 +57,7 @@ class BatchWorker:
             max_node_depth=max_node_depth,
             kv_capacity_bytes=kv_capacity_bytes,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile or {},
+            compute_lease_quantum_s_by_service=compute_lease_quantum_s_by_service or {},
         )
         claims = self.queue.claim_ready_batch(
             node_id=node_id,
@@ -63,7 +67,9 @@ class BatchWorker:
             lease_ttl_s=self.lease_ttl_s,
             batch_linger_s=batch_linger_s,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile or {},
+            batch_linger_by_service=batch_linger_by_service or {},
             batch_limits_by_service=batch_limits_by_service or {},
+            compute_lease_quantum_s_by_service=compute_lease_quantum_s_by_service or {},
         )
         if not claims:
             return _summary(0, 0, 0, reap, prefilled_count=prefilled, batch_dispatch_count=0)
@@ -88,6 +94,8 @@ class BatchWorker:
                 kv_capacity_bytes=kv_capacity_bytes,
                 kv_shard_layouts_by_profile=kv_shard_layouts_by_profile or {},
                 batch_limits_by_service=batch_limits_by_service or {},
+                compute_lease_quantum_s_by_service=compute_lease_quantum_s_by_service or {},
+                dispatch_quantum=_service_int(claims[0].selected_service_id, dispatch_quanta_by_service or {}, len(claims)),
                 refill_low_watermark=_service_refill_low_watermark(claims[0].selected_service_id, refill_low_watermarks_by_service or {}),
             )
             return _summary(claimed, completed, failed, reap, prefilled_count=prefilled + refill_prefilled, retried_count=retried, batch_dispatch_count=claimed, batch_dispatch_mode="rolling_refill")
@@ -207,11 +215,14 @@ class BatchWorker:
         kv_capacity_bytes: int,
         kv_shard_layouts_by_profile: Mapping[str, PipelineProfile],
         batch_limits_by_service: Mapping[str, int],
+        compute_lease_quantum_s_by_service: Mapping[str, float],
+        dispatch_quantum: int,
         refill_low_watermark: int,
     ) -> tuple[int, int, int, int, int]:
         service_id = claims[0].selected_service_id
         compute_lease_id = claims[0].compute_lease_id
         low_watermark = max(1, min(int(refill_low_watermark), int(concurrency)))
+        max_claimed = max(len(claims), int(dispatch_quantum))
         claimed = len(claims)
         prefilled = 0
         completed = failed = retried = 0
@@ -225,8 +236,8 @@ class BatchWorker:
                     completed += item_completed
                     failed += item_failed
                     retried += item_retried
-                if len(pending) < low_watermark:
-                    fill = max(0, int(concurrency) - len(pending))
+                if len(pending) < low_watermark and claimed < max_claimed:
+                    fill = min(max(0, int(concurrency) - len(pending)), max_claimed - claimed)
                     if fill > 0:
                         more_prefilled, more_claims = self._claim_refill(
                             fill,
@@ -237,6 +248,7 @@ class BatchWorker:
                             kv_capacity_bytes=kv_capacity_bytes,
                             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
                             batch_limits_by_service=batch_limits_by_service,
+                            compute_lease_quantum_s_by_service=compute_lease_quantum_s_by_service,
                             compute_lease_id=compute_lease_id,
                             selected_service_id=service_id,
                             allow_new_compute_lease=not pending,
@@ -264,6 +276,7 @@ class BatchWorker:
         kv_capacity_bytes: int,
         kv_shard_layouts_by_profile: Mapping[str, PipelineProfile],
         batch_limits_by_service: Mapping[str, int],
+        compute_lease_quantum_s_by_service: Mapping[str, float],
         compute_lease_id: str | None,
         selected_service_id: str | None,
         allow_new_compute_lease: bool,
@@ -278,6 +291,7 @@ class BatchWorker:
             max_node_depth=max_node_depth,
             kv_capacity_bytes=kv_capacity_bytes,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
+            compute_lease_quantum_s_by_service=compute_lease_quantum_s_by_service,
         )
         claims = self.queue.claim_ready_batch(
             node_id=node_id,
@@ -288,6 +302,7 @@ class BatchWorker:
             batch_linger_s=0.0,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
             batch_limits_by_service=batch_limits_by_service,
+            compute_lease_quantum_s_by_service=compute_lease_quantum_s_by_service,
             compute_lease_id=compute_lease_id,
             selected_service_id=selected_service_id,
         )
@@ -301,6 +316,7 @@ class BatchWorker:
                 batch_linger_s=0.0,
                 kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
                 batch_limits_by_service=batch_limits_by_service,
+                compute_lease_quantum_s_by_service=compute_lease_quantum_s_by_service,
                 selected_service_id=selected_service_id,
             )
         return prefilled, claims
@@ -374,6 +390,14 @@ def _service_refill_low_watermark(service_id: str | None, values: Mapping[str, i
     if service_id is None:
         return int(values.get("", 0) or values.get("*", 0) or 0)
     return int(values.get(str(service_id), 0) or values.get("*", 0) or 0)
+
+
+def _service_int(service_id: str | None, values: Mapping[str, int], default: int) -> int:
+    if service_id is not None and str(service_id) in values:
+        return max(1, int(values[str(service_id)]))
+    if "*" in values:
+        return max(1, int(values["*"]))
+    return max(1, int(default))
 
 
 def _result_for_claim(claim: QueueClaim, result: dict[str, Any] | None) -> dict[str, Any]:

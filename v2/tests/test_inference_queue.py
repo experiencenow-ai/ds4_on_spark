@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -129,30 +128,23 @@ class InferenceQueueTests(unittest.TestCase):
 
     def test_compute_lease_quantum_drains_when_another_service_waits(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            old = os.environ.get("DS4_COMPUTE_LEASE_QUANTUM_S")
-            os.environ["DS4_COMPUTE_LEASE_QUANTUM_S"] = "0.01"
-            try:
-                queue = InferenceQueue(tmp)
-                registry = ProfileRegistry.load(PROFILES)
-                queue.submit_requests(requests=[req("a")], registry=registry, batch_id="a")
-                queue.submit_requests(requests=[req("b")], registry=registry, batch_id="b")
-                with queue._connect() as conn:
-                    conn.execute("update requests set selected_service_id='svc-a', selected_compute_domain='fleet', selected_node_id='spark0' where request_id='a'")
-                    conn.execute("update requests set selected_service_id='svc-b', selected_compute_domain='fleet', selected_node_id='spark0' where request_id='b'")
-                queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=2, leased_by="worker", lease_ttl_s=30)
-                first = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=1, leased_by="worker", lease_ttl_s=30)
-                self.assertEqual([claim.request_id for claim in first], ["a"])
-                time.sleep(0.02)
-                second = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=1, leased_by="worker", lease_ttl_s=30)
-                self.assertEqual(second, [])
-                queue.finish_request(request_id="a", lease_id=first[0].lease_id, state="completed", result=make_result(request=first[0].request, profile_id=QWEN, model_id="test", backend="fake", text="a"))
-                third = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=1, leased_by="worker", lease_ttl_s=30)
-                self.assertEqual([claim.request_id for claim in third], ["b"])
-            finally:
-                if old is None:
-                    os.environ.pop("DS4_COMPUTE_LEASE_QUANTUM_S", None)
-                else:
-                    os.environ["DS4_COMPUTE_LEASE_QUANTUM_S"] = old
+            quantum = {"svc-a": 0.01, "svc-b": 0.01}
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(requests=[req("a")], registry=registry, batch_id="a")
+            queue.submit_requests(requests=[req("b")], registry=registry, batch_id="b")
+            with queue._connect() as conn:
+                conn.execute("update requests set selected_service_id='svc-a', selected_compute_domain='fleet', selected_node_id='spark0' where request_id='a'")
+                conn.execute("update requests set selected_service_id='svc-b', selected_compute_domain='fleet', selected_node_id='spark0' where request_id='b'")
+            queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=2, leased_by="worker", lease_ttl_s=30, compute_lease_quantum_s_by_service=quantum)
+            first = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=1, leased_by="worker", lease_ttl_s=30, compute_lease_quantum_s_by_service=quantum)
+            self.assertEqual([claim.request_id for claim in first], ["a"])
+            time.sleep(0.02)
+            second = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=1, leased_by="worker", lease_ttl_s=30, compute_lease_quantum_s_by_service=quantum)
+            self.assertEqual(second, [])
+            queue.finish_request(request_id="a", lease_id=first[0].lease_id, state="completed", result=make_result(request=first[0].request, profile_id=QWEN, model_id="test", backend="fake", text="a"))
+            third = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=1, leased_by="worker", lease_ttl_s=30, compute_lease_quantum_s_by_service=quantum)
+            self.assertEqual([claim.request_id for claim in third], ["b"])
 
     def test_partial_batch_waits_for_linger_then_dispatches(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -167,6 +159,34 @@ class InferenceQueueTests(unittest.TestCase):
             second = queue.work(registry=registry, runner=runner, node_id="spark0", node_profile_ids=(QWEN,), limit=12, concurrency=12, batch_linger_s=0.2)
             self.assertEqual(second["claimed_count"], 3)
             self.assertEqual(runner.calls, [("spark0", ["a", "b", "c"], 12)])
+
+    def test_immature_priority_cohort_does_not_block_mature_background_cohort(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(requests=[req(f"exp-{idx}", priority=1) for idx in range(3)], registry=registry, batch_id="exp")
+            queue.submit_requests(requests=[req(f"bg-{idx:02d}", priority=10) for idx in range(12)], registry=registry, batch_id="bg")
+            with queue._connect() as conn:
+                conn.execute("update requests set selected_service_id='svc-exp', selected_compute_domain='fleet', selected_node_id='spark0' where batch_id='exp'")
+                conn.execute("update requests set selected_service_id='svc-bg', selected_compute_domain='fleet', selected_node_id='spark0' where batch_id='bg'")
+            queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=15, leased_by="worker", lease_ttl_s=30)
+            claims = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=12, leased_by="worker", lease_ttl_s=30, batch_linger_s=10.0, batch_limits_by_service={"svc-exp": 12, "svc-bg": 12})
+            self.assertEqual([claim.request_id for claim in claims], [f"bg-{idx:02d}" for idx in range(12)])
+
+    def test_high_priority_cohort_does_not_carry_lower_priority_filler(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(requests=[req("svc-a-exp", priority=1)], registry=registry, batch_id="svc-a-exp")
+            queue.submit_requests(requests=[req(f"svc-a-bg-{idx:02d}", priority=10) for idx in range(11)], registry=registry, batch_id="svc-a-bg")
+            queue.submit_requests(requests=[req(f"svc-b-exp-{idx:02d}", priority=1) for idx in range(12)], registry=registry, batch_id="svc-b-exp")
+            with queue._connect() as conn:
+                conn.execute("update requests set selected_service_id='svc-a', selected_compute_domain='fleet-a', selected_node_id='spark0' where request_id='svc-a-exp'")
+                conn.execute("update requests set selected_service_id='svc-a', selected_compute_domain='fleet-a', selected_node_id='spark0' where batch_id='svc-a-bg'")
+                conn.execute("update requests set selected_service_id='svc-b', selected_compute_domain='fleet-b', selected_node_id='spark0' where batch_id='svc-b-exp'")
+            queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=24, leased_by="worker", lease_ttl_s=30)
+            claims = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=12, leased_by="worker", lease_ttl_s=30, batch_limits_by_service={"svc-a": 12, "svc-b": 12})
+            self.assertEqual([claim.request_id for claim in claims], ["svc-a-exp"])
 
     def test_heartbeat_allows_claims_that_finished_during_incremental_batch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

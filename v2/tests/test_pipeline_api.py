@@ -48,6 +48,26 @@ class PipelineApiTests(unittest.TestCase):
         )
         self.assertEqual(_openai_payload(request, profile)["model"], "deepseek-v4-flash-pp8")
 
+    def test_qwen_pipeline_openai_payload_uses_live_served_model_name(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
+        request = InferenceRequest.from_json(
+            {
+                "format": "ds4-inference-request-v1",
+                "request_id": "qwen-served-name",
+                "capability": "efficient",
+                "chat": False,
+                "immediate": False,
+                "job_class": "analysis",
+                "max_output_tokens": 8,
+                "thinking_budget_tokens": 0,
+                "temperature": 0,
+                "input": {"text": "ping"},
+                "output_contract": {"format": "text"},
+            }
+        )
+        self.assertEqual(_openai_payload(request, profile)["model"], "qwen27-bf16-pp8")
+
     def test_pipeline_served_model_override_can_key_by_service_id(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
@@ -222,6 +242,7 @@ class PipelineApiTests(unittest.TestCase):
                 node_profile_ids=tuple(topology.pipeline_profiles),
                 kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
                 batch_limits_by_service={"qwen27_bf16_pp8": 2},
+                dispatch_quanta_by_service={"qwen27_bf16_pp8": 5},
                 refill_low_watermarks_by_service={"qwen27_bf16_pp8": 1},
             )
             self.assertEqual(worked["batch_dispatch_mode"], "rolling_refill")
@@ -286,6 +307,7 @@ class PipelineApiTests(unittest.TestCase):
                 {
                     "model": "qwen27_bf16_pp8",
                     "messages": [{"role": "user", "content": "hello"}],
+                    "rendered_prompt": "<|im_start|>user\nhello<|im_end|>\n<|im_start|>assistant\n",
                     "max_tokens": 8,
                     "thinking_budget_tokens": 123,
                     "ds4_async": True,
@@ -317,32 +339,28 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(request_json["input"]["rendered_prompt"], "<|user|>hello<|assistant|>")
         self.assertEqual(request_json["input"]["prompt"], "<|user|>hello<|assistant|>")
 
-    def test_openai_chat_input_payload_renders_prompt_for_coalescing(self) -> None:
+    def test_openai_chat_input_payload_requires_tokenizer_rendering(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         topology = SparkTopology.load(TOPOLOGY)
         profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
         old = os.environ.get("DS4_API_RENDER_CHAT_WITH_TOKENIZER")
         os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = "0"
         try:
-            payload = api_module._openai_chat_input_payload(
-                {
-                    "messages": [{"role": "user", "content": "What is 2+2?"}],
-                    "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
-                },
-                profile=profile,
-                topology=topology,
-                metadata={},
-            )
+            with self.assertRaisesRegex(ValueError, "refuse fallback prompt"):
+                api_module._openai_chat_input_payload(
+                    {
+                        "messages": [{"role": "user", "content": "What is 2+2?"}],
+                        "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+                    },
+                    profile=profile,
+                    topology=topology,
+                    metadata={},
+                )
         finally:
             if old is None:
                 os.environ.pop("DS4_API_RENDER_CHAT_WITH_TOKENIZER", None)
             else:
                 os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = old
-
-        self.assertIn("rendered_prompt", payload)
-        self.assertEqual(payload["prompt"], payload["rendered_prompt"])
-        self.assertIn("<|im_start|>user", payload["rendered_prompt"])
-        self.assertEqual(payload["openai_extra_body"]["chat_template_kwargs"], {"enable_thinking": False})
 
     def test_openai_runner_uses_builder_thinking_contract(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
@@ -363,12 +381,59 @@ class PipelineApiTests(unittest.TestCase):
             }
         )
         payload = _openai_payload(request, profile)
+        self.assertEqual(payload["chat_template_kwargs"], {"thinking": True})
         extra_body = payload["extra_body"]
         self.assertEqual(payload["max_tokens"], 164)
         self.assertEqual(extra_body["thinking"], {"type": "enabled", "budget_tokens": 100})
         self.assertEqual(extra_body["thinking_budget_tokens"], 100)
         self.assertEqual(extra_body["thinking_token_budget"], 100)
         self.assertEqual(extra_body["chat_template_kwargs"], {"thinking": True})
+
+    def test_dsv4_openai_runner_defaults_chat_template_thinking_on(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
+        request = InferenceRequest.from_json(
+            {
+                "format": "ds4-inference-request-v1",
+                "request_id": "dsv4-thinking-default",
+                "capability": "smartest",
+                "chat": True,
+                "immediate": False,
+                "job_class": "analysis",
+                "max_output_tokens": 64,
+                "thinking_budget_tokens": 0,
+                "temperature": 0,
+                "input": {"messages": [{"role": "user", "content": "What is 2+2?"}]},
+                "output_contract": {"format": "text"},
+            }
+        )
+        payload = _openai_payload(request, profile)
+        self.assertEqual(payload["chat_template_kwargs"], {"thinking": True})
+        self.assertEqual(payload["extra_body"]["chat_template_kwargs"], {"thinking": True})
+        self.assertNotIn("thinking", payload["extra_body"])
+
+    def test_qwen_openai_runner_keeps_chat_template_thinking_off_by_default(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("qwen3_6_27b_fp8_efficient_v1")
+        request = InferenceRequest.from_json(
+            {
+                "format": "ds4-inference-request-v1",
+                "request_id": "qwen-thinking-default",
+                "capability": "efficient",
+                "chat": True,
+                "immediate": False,
+                "job_class": "summary",
+                "max_output_tokens": 64,
+                "thinking_budget_tokens": 0,
+                "temperature": 0,
+                "input": {"messages": [{"role": "user", "content": "What is 2+2?"}]},
+                "output_contract": {"format": "text"},
+            }
+        )
+        payload = _openai_payload(request, profile)
+        self.assertEqual(payload["chat_template_kwargs"], {"enable_thinking": False})
+        self.assertEqual(payload["extra_body"]["chat_template_kwargs"], {"enable_thinking": False})
+        self.assertNotIn("thinking", payload["extra_body"])
 
     def test_pipeline_runner_prestages_common_strict_kv_prefix(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

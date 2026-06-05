@@ -170,6 +170,10 @@ def apply_thinking_fields(
     thinking_budget_tokens: int,
 ) -> None:
     key = profile.routing.get("chat_template_thinking_key")
+    default_kwargs = profile.routing.get("default_chat_template_kwargs")
+    default_enabled = None
+    if isinstance(default_kwargs, dict) and isinstance(key, str) and key in default_kwargs:
+        default_enabled = bool(default_kwargs[key])
     apply_thinking_fields_for_model(
         item,
         model_id=profile.model_id,
@@ -177,6 +181,7 @@ def apply_thinking_fields(
         chat=chat,
         thinking_budget_tokens=thinking_budget_tokens,
         chat_template_thinking_key=str(key) if key else None,
+        default_thinking_enabled=default_enabled,
     )
 
 
@@ -188,20 +193,46 @@ def apply_thinking_fields_for_model(
     chat: bool,
     thinking_budget_tokens: int,
     chat_template_thinking_key: str | None = None,
+    default_thinking_enabled: bool | None = None,
 ) -> None:
     if not supports_thinking:
         return
-    thinking_enabled = thinking_budget_tokens > 0
+    thinking_enabled = chat_template_thinking_enabled(
+        model_id=model_id,
+        thinking_budget_tokens=thinking_budget_tokens,
+        chat_template_thinking_key=chat_template_thinking_key,
+        default_thinking_enabled=default_thinking_enabled,
+    )
     if thinking_budget_tokens > 0:
         item["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget_tokens}
         item["thinking_budget_tokens"] = thinking_budget_tokens
         item["thinking_token_budget"] = thinking_budget_tokens
+    elif thinking_enabled:
+        item["thinking"] = {"type": "enabled"}
     else:
         item["thinking"] = {"type": "disabled"}
     if chat:
         key = chat_template_thinking_key or default_chat_template_thinking_key(model_id)
         if key:
             item["chat_template_kwargs"] = {key: thinking_enabled}
+
+
+def chat_template_thinking_enabled(
+    *,
+    model_id: str,
+    thinking_budget_tokens: int,
+    chat_template_thinking_key: str | None = None,
+    default_thinking_enabled: bool | None = None,
+) -> bool:
+    if thinking_budget_tokens > 0:
+        return True
+    if default_thinking_enabled is not None:
+        return bool(default_thinking_enabled)
+    key = chat_template_thinking_key or default_chat_template_thinking_key(model_id)
+    lowered = model_id.lower()
+    if key == "thinking" and "deepseek" in lowered:
+        return True
+    return False
 
 
 def default_chat_template_thinking_key(model_id: str) -> str | None:
