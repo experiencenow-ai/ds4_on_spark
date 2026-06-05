@@ -28,8 +28,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--loop-interval", type=float, default=0.0)
     p.add_argument("--ssh-timeout", type=float, default=8.0)
     p.add_argument("--stale-ok-seconds", type=float, default=300.0)
-    p.add_argument("--queue-db", default=os.environ.get("DS4_QUEUE_DB",""))
-    p.add_argument("--queue-db-glob", default=telemetry.QUEUE_DB_GLOB)
     p.add_argument("--ds4-api-url", default=os.environ.get("DS4_API_URL",telemetry.DEFAULT_DS4_API_URL))
     p.add_argument("--ds4-api-timeout", type=float, default=1.5)
     p.add_argument("--ssh-control-dir", default="")
@@ -188,27 +186,6 @@ def summarize_node(rows: List[Dict[str,str]], error: str, fetch_error: str = "",
         "last_vllm_prefix_cache_hit_pct": telemetry.fnum(latest,"vllm_prefix_cache_hit_pct"),
         "last_vllm_external_prefix_cache_hit_pct": telemetry.fnum(latest,"vllm_external_prefix_cache_hit_pct"),
         "last_vllm_metrics_sources": latest.get("vllm_metrics_sources",""),
-        "last_local_queue_db": latest.get("local_queue_db",""),
-        "last_local_queue_total": telemetry.fnum(latest,"local_queue_total"),
-        "last_local_queue_depth": telemetry.fnum(latest,"local_queue_depth"),
-        "last_local_queue_queued": telemetry.fnum(latest,"local_queue_queued"),
-        "last_local_queue_running": telemetry.fnum(latest,"local_queue_running"),
-        "last_local_queue_completed": telemetry.fnum(latest,"local_queue_completed"),
-        "last_local_queue_failed": telemetry.fnum(latest,"local_queue_failed"),
-        "last_local_queue_model_depth": telemetry.fnum(latest,"local_queue_model_depth"),
-        "last_local_queue_cpu_depth": telemetry.fnum(latest,"local_queue_cpu_depth"),
-        "last_local_queue_by_node": latest.get("local_queue_by_node",""),
-        "last_local_queue_queued_by_node": latest.get("local_queue_queued_by_node",""),
-        "last_local_queue_running_by_node": latest.get("local_queue_running_by_node",""),
-        "last_local_queue_prompt_tokens_recent": telemetry.fnum(latest,"local_queue_prompt_tokens_recent"),
-        "last_local_queue_prompt_tok_s": telemetry.fnum(latest,"local_queue_prompt_tok_s"),
-        "last_local_queue_prompt_tok_s_by_node": latest.get("local_queue_prompt_tok_s_by_node",""),
-        "last_local_queue_completion_requests_recent": telemetry.fnum(latest,"local_queue_completion_requests_recent"),
-        "last_local_queue_completion_req_s": telemetry.fnum(latest,"local_queue_completion_req_s"),
-        "last_local_queue_completion_req_s_by_node": latest.get("local_queue_completion_req_s_by_node",""),
-        "last_local_queue_completion_tokens_recent": telemetry.fnum(latest,"local_queue_completion_tokens_recent"),
-        "last_local_queue_completion_tok_s": telemetry.fnum(latest,"local_queue_completion_tok_s"),
-        "last_local_queue_completion_tok_s_by_node": latest.get("local_queue_completion_tok_s_by_node",""),
         "last_gpu_util_pct": telemetry.fnum(latest_gpu,"gpu_util_pct"),
         "last_gpu_temp_c": telemetry.fnum(latest_gpu,"gpu_temp_c"),
         "last_gpu_fan_pct": telemetry.fnum(latest_gpu,"gpu_fan_pct"),
@@ -235,11 +212,6 @@ def summarize_node(rows: List[Dict[str,str]], error: str, fetch_error: str = "",
         "vllm_prompt_cache_hit_pct": telemetry.stats(telemetry.fnum(r,"vllm_prompt_cache_hit_pct") for r in rows),
         "vllm_prefix_cache_hit_pct": telemetry.stats(telemetry.fnum(r,"vllm_prefix_cache_hit_pct") for r in rows),
         "vllm_external_prefix_cache_hit_pct": telemetry.stats(telemetry.fnum(r,"vllm_external_prefix_cache_hit_pct") for r in rows),
-        "local_queue_depth": telemetry.stats(telemetry.fnum(r,"local_queue_depth") for r in rows),
-        "local_queue_running": telemetry.stats(telemetry.fnum(r,"local_queue_running") for r in rows),
-        "local_queue_prompt_tok_s": telemetry.stats(telemetry.fnum(r,"local_queue_prompt_tok_s") for r in rows),
-        "local_queue_completion_req_s": telemetry.stats(telemetry.fnum(r,"local_queue_completion_req_s") for r in rows),
-        "local_queue_completion_tok_s": telemetry.stats(telemetry.fnum(r,"local_queue_completion_tok_s") for r in rows),
         "gpu_util_pct": telemetry.stats(gpu_vals),
         "gpu_temp_c": telemetry.stats(gpu_temps),
         "gpu_samples_ge_90": len(hot),
@@ -279,47 +251,35 @@ def write_combined(out_dir: str, all_rows: Dict[str,List[Dict[str,str]]], errors
         summary["nodes"][node] = summarize_node(all_rows.get(node,[]),errors.get(node,""),fetch_errors.get(node,""),node in stale_nodes)
     telemetry.write_json_atomic(summary_path,summary)
     lines = ["# Spark telemetry summary",""]
-    if str(queue.get("local_queue_db","")):
-        lines.append("Queue: depth=%s queued=%s running=%s model=%s cpu=%s req/s=%.1f in tok/s=%s out tok/s=%s db=%s" % (
+    if str(queue.get("local_queue_source","")):
+        lines.append("DS API queue: depth=%s queued=%s running=%s services=%s kv_shards=%s source=%s" % (
             queue.get("local_queue_depth",0),
             queue.get("local_queue_queued",0),
             queue.get("local_queue_running",0),
-            queue.get("local_queue_model_depth",0),
-            queue.get("local_queue_cpu_depth",0),
-            float(queue.get("local_queue_completion_req_s",0)),
-            queue.get("local_queue_prompt_tok_s",0),
-            queue.get("local_queue_completion_tok_s",0),
-            queue.get("local_queue_db",""),
+            queue.get("local_queue_ds_services",""),
+            queue.get("local_queue_kv_shards",0),
+            queue.get("local_queue_source",""),
         ))
-        by_node = str(queue.get("local_queue_by_node",""))
-        if by_node:
-            lines.append("Queue by node: %s" % by_node)
         lines.append("")
-    queue_depth_by_node = telemetry.node_metric_map(queue.get("local_queue_by_node",""))
-    queue_queued_by_node = telemetry.node_metric_map(queue.get("local_queue_queued_by_node",""))
-    queue_running_by_node = telemetry.node_metric_map(queue.get("local_queue_running_by_node",""))
-    queue_prompt_tok_s_by_node = telemetry.node_metric_map(queue.get("local_queue_prompt_tok_s_by_node",""))
-    queue_req_s_by_node = telemetry.node_metric_map(queue.get("local_queue_completion_req_s_by_node",""))
-    queue_tok_s_by_node = telemetry.node_metric_map(queue.get("local_queue_completion_tok_s_by_node",""))
-    global_queue_known = str(queue.get("local_queue_db","")) != ""
-    lines.append("| node | samples | gpu % | gpu C | gpu W | vLLM run/wait | KV % | local q | gateway cpu q | disk % | rx Mbps | tx Mbps | cpu % | mem % | model | error | req/s | in tok/s | out tok/s | cache hit % | ext hit % |")
+    global_queue_known = str(queue.get("local_queue_source","")) != ""
+    lines.append("| node | samples | gpu % | gpu C | gpu W | vLLM run/wait | KV % | api q | gateway cpu q | disk % | rx Mbps | tx Mbps | cpu % | mem % | model | error | req/s | in tok/s | out tok/s | cache hit % | ext hit % |")
     lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|")
     for node,row in summary["nodes"].items():
         sample_known = int(float(row.get("sample_count",0))) > 0
         vllm_known = float(row.get("last_vllm_metrics_up",0.0)) > 0.0
-        queue_known = global_queue_known or str(row.get("last_local_queue_db","")) != "" or node in queue_depth_by_node or node in queue_queued_by_node or node in queue_running_by_node or node in queue_prompt_tok_s_by_node or node in queue_req_s_by_node or node in queue_tok_s_by_node
+        queue_known = global_queue_known
         work_known = vllm_known or queue_known
         gateway_known = float(row.get("last_ds4_gateway_up",0.0)) > 0.0
         vllm_running = float(row.get("last_vllm_requests_running",0.0))
         vllm_waiting = float(row.get("last_vllm_requests_waiting",0.0))
-        local_q = max(float(row.get("last_local_queue_depth",0.0)),float(queue_depth_by_node.get(node,0.0)))
-        if not vllm_known:
-            vllm_running = max(vllm_running,float(queue_running_by_node.get(node,0.0)))
-            vllm_waiting = max(vllm_waiting,float(queue_queued_by_node.get(node,0.0)))
+        local_q = float(queue.get("local_queue_depth",0.0)) if queue_known else 0.0
+        if not vllm_known and queue_known:
+            vllm_running = max(vllm_running,float(queue.get("local_queue_running",0.0)))
+            vllm_waiting = max(vllm_waiting,float(queue.get("local_queue_queued",0.0)))
         kv_text = "%.2f" % float(row.get("last_vllm_kv_cache_pct",0.0)) if vllm_known else "n/a"
-        req_s = max(float(row.get("last_vllm_requests_per_s",0.0)),float(queue_req_s_by_node.get(node,0.0)))
-        in_tok_s = max(float(row.get("last_vllm_prompt_tokens_per_s",0.0)),float(queue_prompt_tok_s_by_node.get(node,0.0)))
-        out_tok_s = max(float(row.get("last_vllm_generation_tokens_per_s",0.0)),float(queue_tok_s_by_node.get(node,0.0)))
+        req_s = float(row.get("last_vllm_requests_per_s",0.0))
+        in_tok_s = float(row.get("last_vllm_prompt_tokens_per_s",0.0))
+        out_tok_s = float(row.get("last_vllm_generation_tokens_per_s",0.0))
         cache_hit_pct = float(row.get("last_vllm_prompt_cache_hit_pct",0.0))
         ext_hit_pct = float(row.get("last_vllm_external_prefix_cache_hit_pct",0.0))
         gpu_util_text = "%.2f" % float(row.get("last_gpu_util_pct",0.0)) if sample_known else "n/a"
@@ -396,9 +356,7 @@ def collect_once(args: argparse.Namespace) -> Dict[str,object]:
             continue
         telemetry.write_text_atomic(os.path.join(raw_dir,name + ".csv"),text)
         all_rows[name] = read_rows(text)
-    local_queue = telemetry.read_local_queue(args.queue_db,args.queue_db_glob)
-    api_queue = telemetry.read_ds4_api_queue(args.ds4_api_url,args.ds4_api_timeout)
-    queue = telemetry.merge_queue_summaries(api_queue,local_queue)
+    queue = telemetry.read_ds4_api_queue(args.ds4_api_url,args.ds4_api_timeout)
     return(write_combined(args.out_dir,all_rows,errors,queue,fetch_errors,stale_nodes))
 
 
