@@ -319,7 +319,7 @@ def _vllm_argv(deployment: KvCacheDeployment, connector: KvCacheConnector, *, no
     spark_node = spark_node or deployment.spark_node
     vllm_bin = _expand_rank_template(deployment.vllm_bin, spark_node=spark_node, node_rank=node_rank)
     model_id = _expand_rank_template(deployment.model_id, spark_node=spark_node, node_rank=node_rank)
-    argv = [vllm_bin, "serve", model_id]
+    argv = _vllm_serve_prefix(vllm_bin) + [model_id]
     if not deployment.is_pipeline or node_rank == 0:
         argv.extend(["--host", deployment.host, "--port", str(deployment.http_port)])
     argv.extend([
@@ -351,6 +351,13 @@ def _vllm_argv(deployment: KvCacheDeployment, connector: KvCacheConnector, *, no
     if deployment.is_pipeline and node_rank != 0 and "--headless" not in argv:
         argv.append("--headless")
     return argv
+
+
+def _vllm_serve_prefix(vllm_bin: str) -> list[str]:
+    name = Path(vllm_bin).name
+    if name.startswith("python"):
+        return [vllm_bin, "-m", "vllm.entrypoints.cli.main", "serve"]
+    return [vllm_bin, "serve"]
 
 
 def _connector_with_server(connector: KvCacheConnector, server: LmcacheServer | None) -> KvCacheConnector:
