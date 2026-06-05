@@ -96,6 +96,29 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(payload["chat_template_kwargs"], {"enable_thinking": True})
         self.assertNotIn("extra_body", payload)
 
+    def test_dsv4_openai_payload_defaults_chat_template_thinking_on(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
+        request = InferenceRequest.from_json(
+            {
+                "format": "ds4-inference-request-v1",
+                "request_id": "dsv4-thinking-default",
+                "capability": "smartest",
+                "chat": True,
+                "immediate": False,
+                "job_class": "analysis",
+                "max_output_tokens": 64,
+                "thinking_budget_tokens": 0,
+                "temperature": 0,
+                "input": {"messages": [{"role": "user", "content": "What is 2+2?"}]},
+                "output_contract": {"format": "text"},
+            }
+        )
+        payload = _openai_payload(request, profile)
+        self.assertEqual(payload["chat_template_kwargs"], {"thinking": True})
+        self.assertNotIn("thinking", payload)
+        self.assertNotIn("extra_body", payload)
+
     def test_pipeline_rendered_chat_completion_keeps_template_fields_out_of_completion_body(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
@@ -356,11 +379,35 @@ class PipelineApiTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+                with self.assertRaisesRegex(ValueError, "refuse fallback prompt"):
+                    api.handle_post(
+                        "/v1/chat/completions",
+                        {
+                            "model": "qwen27_bf16_pp8",
+                            "messages": [{"role": "user", "content": "hello"}],
+                            "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+                            "ds4_async": True,
+                            "batch_id": "rendered-chat",
+                        },
+                    )
+        finally:
+            if old is None:
+                os.environ.pop("DS4_API_RENDER_CHAT_WITH_TOKENIZER", None)
+            else:
+                os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = old
+
+    def test_openai_chat_request_preserves_explicit_rendered_prompt_for_coalescing(self) -> None:
+        old = os.environ.get("DS4_API_RENDER_CHAT_WITH_TOKENIZER")
+        os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = "0"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
                 api.handle_post(
                     "/v1/chat/completions",
                     {
                         "model": "qwen27_bf16_pp8",
                         "messages": [{"role": "user", "content": "hello"}],
+                        "rendered_prompt": "<|im_start|>user\nhello<|im_end|>\n<|im_start|>assistant\n",
                         "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
                         "ds4_async": True,
                         "batch_id": "rendered-chat",
@@ -390,6 +437,7 @@ class PipelineApiTests(unittest.TestCase):
                         {
                             "model": "qwen27_bf16_pp8",
                             "messages": [{"role": "user", "content": "hello"}],
+                            "rendered_prompt": "<|im_start|>user\nhello<|im_end|>\n<|im_start|>assistant\n",
                             "max_tokens": 8,
                             "stream": True,
                         },
@@ -413,6 +461,7 @@ class PipelineApiTests(unittest.TestCase):
                 {
                     "model": "qwen27_bf16_pp8",
                     "messages": [{"role": "user", "content": "hello"}],
+                    "rendered_prompt": "<|im_start|>user\nhello<|im_end|>\n<|im_start|>assistant\n",
                     "max_tokens": 8,
                     "thinking_budget_tokens": 123,
                     "ds4_async": True,
