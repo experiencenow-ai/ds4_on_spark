@@ -24,6 +24,8 @@ def merge_request_extra_body(payload: dict[str, Any], request: InferenceRequest,
     if isinstance(raw_extra, dict):
         extra_body.update(raw_extra)
     apply_thinking_fields(extra_body, profile, chat=request.chat, thinking_budget_tokens=request.thinking_budget_tokens)
+    if request.thinking_budget_tokens <= 0 and not (isinstance(raw_extra, dict) and "thinking" in raw_extra):
+        extra_body.pop("thinking", None)
     if extra_body:
         merge_payload_extra_body(payload, extra_body)
 

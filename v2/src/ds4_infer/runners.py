@@ -704,9 +704,12 @@ def extract_openai_chat_text(data: dict[str, Any]) -> str:
     if isinstance(choices, list) and choices:
         message = choices[0].get("message", {}) if isinstance(choices[0], dict) else {}
         if isinstance(message, dict):
-            for key in ("content", "reasoning_content", "reasoning"):
+            content = message.get("content")
+            if content is not None:
+                return strip_visible_thinking(str(content))
+            for key in ("reasoning_content", "reasoning"):
                 if message.get(key) is not None:
-                    return str(message.get(key))
+                    return strip_visible_thinking(str(message.get(key)))
             if message.get("tool_calls"):
                 return json.dumps(message, sort_keys=True)
     return json.dumps(data, sort_keys=True)

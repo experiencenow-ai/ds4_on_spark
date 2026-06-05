@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+from .builders import chat_template_thinking_enabled
 from .env_utils import env_bool as _env_bool
 from .profiles import ModelProfile
 
@@ -94,9 +95,7 @@ def _render_chat_prompt(profile: ModelProfile, messages: list[dict[str, Any]], *
     rendered = _render_chat_prompt_with_tokenizer(profile, messages, body=body, metadata=metadata, thinking_budget_tokens=thinking_budget_tokens)
     if rendered:
         return rendered
-    if _env_bool("DS4_API_REQUIRE_TOKENIZER_CHAT_RENDER", False):
-        raise ValueError(f"tokenizer chat-template rendering failed for {profile.profile_id}; refuse fallback prompt")
-    return _fallback_render_chat_prompt(profile, messages)
+    raise ValueError(f"tokenizer chat-template rendering failed for {profile.profile_id}; refuse fallback prompt")
 
 
 def _render_chat_prompt_with_tokenizer(profile: ModelProfile, messages: list[dict[str, Any]], *, body: dict[str, Any], metadata: dict[str, Any], thinking_budget_tokens: int) -> str:
@@ -136,7 +135,16 @@ def _chat_template_kwargs_for_body(profile: ModelProfile, body: dict[str, Any], 
     merged = _merged_chat_template_kwargs(body, metadata)
     key = profile.routing.get("chat_template_thinking_key")
     if isinstance(key, str) and key and key not in merged and profile.supports_thinking:
-        merged[key] = thinking_budget_tokens > 0
+        default_kwargs = profile.routing.get("default_chat_template_kwargs")
+        default_enabled = None
+        if isinstance(default_kwargs, dict) and key in default_kwargs:
+            default_enabled = bool(default_kwargs[key])
+        merged[key] = chat_template_thinking_enabled(
+            model_id=profile.model_id,
+            thinking_budget_tokens=thinking_budget_tokens,
+            chat_template_thinking_key=key,
+            default_thinking_enabled=default_enabled,
+        )
     return merged
 
 
