@@ -119,6 +119,30 @@ class PipelineApiTests(unittest.TestCase):
         self.assertNotIn("thinking", payload)
         self.assertNotIn("extra_body", payload)
 
+    def test_dsv4_chat_request_uses_source_owned_template_renderer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            api.handle_post(
+                "/v1/chat/completions",
+                {
+                    "model": "deepseek-ai/DeepSeek-V4-Flash",
+                    "messages": [
+                        {"role": "system", "content": "SYS"},
+                        {"role": "user", "content": "USER"},
+                    ],
+                    "max_tokens": 8,
+                    "ds4_async": True,
+                    "batch_id": "dsv4-render-chat",
+                },
+            )
+            with api.queue._connect() as conn:
+                row = conn.execute("select request_json from requests where batch_id=?", ("dsv4-render-chat",)).fetchone()
+            request_json = json.loads(str(row["request_json"]))
+        self.assertEqual(
+            request_json["input"]["rendered_prompt"],
+            "<｜begin▁of▁sentence｜>SYS<｜User｜>USER<｜Assistant｜><think>",
+        )
+
     def test_pipeline_rendered_chat_completion_keeps_template_fields_out_of_completion_body(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")

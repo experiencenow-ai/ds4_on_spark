@@ -92,10 +92,46 @@ def _prompt_from_container(container: dict[str, Any]) -> str:
 def _render_chat_prompt(profile: ModelProfile, messages: list[dict[str, Any]], *, body: dict[str, Any], metadata: dict[str, Any], thinking_budget_tokens: int) -> str:
     if not messages:
         return ""
+    rendered = _render_chat_prompt_with_builtin(profile, messages, body=body, metadata=metadata, thinking_budget_tokens=thinking_budget_tokens)
+    if rendered:
+        return rendered
     rendered = _render_chat_prompt_with_tokenizer(profile, messages, body=body, metadata=metadata, thinking_budget_tokens=thinking_budget_tokens)
     if rendered:
         return rendered
     raise ValueError(f"tokenizer chat-template rendering failed for {profile.profile_id}; refuse fallback prompt")
+
+
+def _render_chat_prompt_with_builtin(profile: ModelProfile, messages: list[dict[str, Any]], *, body: dict[str, Any], metadata: dict[str, Any], thinking_budget_tokens: int) -> str:
+    renderer = str(profile.routing.get("chat_template_renderer") or "")
+    if renderer == "deepseek_v4":
+        return _deepseek_v4_chat_prompt(profile, messages, body=body, metadata=metadata, thinking_budget_tokens=thinking_budget_tokens)
+    return ""
+
+
+def _deepseek_v4_chat_prompt(profile: ModelProfile, messages: list[dict[str, Any]], *, body: dict[str, Any], metadata: dict[str, Any], thinking_budget_tokens: int) -> str:
+    if body.get("tools") is not None or body.get("tool_choice") is not None:
+        raise ValueError("DeepSeek V4 DS API chat renderer does not support tool template rendering yet")
+    parts: list[str] = ["<｜begin▁of▁sentence｜>"]
+    index = 0
+    if messages and messages[0].get("role") == "system":
+        parts.append(str(messages[0].get("content") or ""))
+        index = 1
+    for message in messages[index:]:
+        role = str(message.get("role") or "user")
+        content = str(message.get("content") or "")
+        if role == "user":
+            parts.append("<｜User｜>")
+            parts.append(content)
+        elif role == "assistant":
+            parts.append("<｜Assistant｜>")
+            parts.append(content)
+            parts.append("<｜end▁of▁sentence｜>")
+        else:
+            raise ValueError(f"DeepSeek V4 DS API chat renderer does not support role={role!r}")
+    thinking = _chat_template_kwargs_for_body(profile, body, metadata, thinking_budget_tokens).get("thinking")
+    parts.append("<｜Assistant｜>")
+    parts.append("<think>" if bool(thinking) else "</think>")
+    return "".join(parts)
 
 
 def _render_chat_prompt_with_tokenizer(profile: ModelProfile, messages: list[dict[str, Any]], *, body: dict[str, Any], metadata: dict[str, Any], thinking_budget_tokens: int) -> str:

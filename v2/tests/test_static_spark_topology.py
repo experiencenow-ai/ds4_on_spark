@@ -77,6 +77,18 @@ class StaticSparkTopologyTests(unittest.TestCase):
         ]
         self.assertEqual(missing, [])
 
+    def test_dsv4_chat_profiles_use_source_owned_template_renderer(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        missing = [
+            profile.profile_id
+            for profile in registry.all_profiles()
+            if profile.production_eligible
+            and profile.supports_chat
+            and profile.model_id == "deepseek-ai/DeepSeek-V4-Flash"
+            and profile.routing.get("chat_template_renderer") != "deepseek_v4"
+        ]
+        self.assertEqual(missing, [])
+
     def test_pipeline_node_override_supports_six_sparks(self) -> None:
         with patch.dict("os.environ", {"DS4_PIPELINE_NODES": "spark0,spark1,spark2,spark3,spark4,spark5"}):
             topology = SparkTopology.load(TOPOLOGY)

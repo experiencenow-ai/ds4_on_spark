@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
 
@@ -113,6 +114,27 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
             sys.argv = old_argv
 
         self.assertEqual(args.profile, "resident256")
+
+    def test_relaunch_coordinator_python_prefers_explicit_override(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+        args = type("Args", (), {"coordinator_python": "/opt/ds4/python"})()
+
+        self.assertEqual(relaunch._coordinator_python(args), "/opt/ds4/python")
+
+    def test_relaunch_coordinator_python_prefers_vllm_runtime_when_present(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "python"
+            path.write_text("#!/bin/sh\n", encoding="utf-8")
+            args = type("Args", (), {"coordinator_python": ""})()
+
+            self.assertEqual(relaunch._coordinator_python(args, default_path=path), str(path))
+
+    def test_relaunch_coordinator_python_falls_back_locally(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+        args = type("Args", (), {"coordinator_python": ""})()
+
+        self.assertEqual(relaunch._coordinator_python(args, default_path=Path("/definitely/missing/ds4-python")), sys.executable)
 
     def test_relaunch_arg_parser_defaults_to_source_owned_resident128_profile(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
