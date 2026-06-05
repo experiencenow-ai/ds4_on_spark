@@ -30,6 +30,7 @@ BASE_GPU_FIELDS = [
     "memory.used",
     "memory.total",
     "power.draw",
+    "power.limit",
     "pstate",
 ]
 
@@ -115,6 +116,11 @@ CSV_FIELDS = [
     "gpu_mem_used_mib",
     "gpu_mem_total_mib",
     "gpu_power_w",
+    "gpu_power_raw_w",
+    "gpu_power_limit_w",
+    "gpu_power_known",
+    "gpu_power_source",
+    "gpu_power_reason",
     "gpu_temp_c",
     "gpu_fan_pct",
     "gpu_clock_sm_mhz",
@@ -206,6 +212,17 @@ def nvidia_smi_query(fields: List[str]) -> str:
     return("nvidia-smi --query-gpu=%s --format=csv,noheader,nounits" % ",".join(fields))
 
 
+def gpu_power_status(raw_power_w: float, power_limit_w: float, gpu_util_pct: float) -> Dict[str,object]:
+    source = "nvml.power.draw"
+    if raw_power_w <= 0.0:
+        return({"gpu_power_w":0.0,"gpu_power_raw_w":round(raw_power_w,2),"gpu_power_limit_w":round(power_limit_w,2),"gpu_power_known":0,"gpu_power_source":source,"gpu_power_reason":"nvml-power-missing"})
+    if power_limit_w <= 0.0:
+        return({"gpu_power_w":0.0,"gpu_power_raw_w":round(raw_power_w,2),"gpu_power_limit_w":0.0,"gpu_power_known":0,"gpu_power_source":source,"gpu_power_reason":"nvml-power-limit-unavailable"})
+    if gpu_util_pct >= 90.0 and raw_power_w < 25.0:
+        return({"gpu_power_w":0.0,"gpu_power_raw_w":round(raw_power_w,2),"gpu_power_limit_w":round(power_limit_w,2),"gpu_power_known":0,"gpu_power_source":source,"gpu_power_reason":"nvml-power-sanity-failed"})
+    return({"gpu_power_w":round(raw_power_w,2),"gpu_power_raw_w":round(raw_power_w,2),"gpu_power_limit_w":round(power_limit_w,2),"gpu_power_known":1,"gpu_power_source":source,"gpu_power_reason":""})
+
+
 def summary_base() -> Dict[str,object]:
     return({"updated_unix":int(time.time()),"updated_iso":utc_iso()})
 
@@ -268,6 +285,11 @@ def empty_queue_summary() -> Dict[str,object]:
         "local_queue_stage_gpu_util_by_node": "",
         "local_queue_stage_gpu_temp_by_node": "",
         "local_queue_stage_gpu_power_by_node": "",
+        "local_queue_stage_gpu_power_raw_by_node": "",
+        "local_queue_stage_gpu_power_limit_by_node": "",
+        "local_queue_stage_gpu_power_known_by_node": "",
+        "local_queue_stage_gpu_power_source_by_node": "",
+        "local_queue_stage_gpu_power_reason_by_node": "",
         "local_queue_stage_cpu_pct_by_node": "",
         "local_queue_stage_mem_pct_by_node": "",
         "local_queue_stage_vllm_running_by_node": "",
@@ -338,6 +360,11 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
     stage_gpu_util: Dict[str,float] = {}
     stage_gpu_temp: Dict[str,float] = {}
     stage_gpu_power: Dict[str,float] = {}
+    stage_gpu_power_raw: Dict[str,float] = {}
+    stage_gpu_power_limit: Dict[str,float] = {}
+    stage_gpu_power_known: Dict[str,float] = {}
+    stage_gpu_power_source: Dict[str,str] = {}
+    stage_gpu_power_reason: Dict[str,str] = {}
     stage_cpu_pct: Dict[str,float] = {}
     stage_mem_pct: Dict[str,float] = {}
     stage_vllm_running: Dict[str,float] = {}
@@ -382,6 +409,11 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
                 stage_gpu_util[node_id] = num(payload.get("last_gpu_util_pct",0))
                 stage_gpu_temp[node_id] = num(payload.get("last_gpu_temp_c",0))
                 stage_gpu_power[node_id] = num(payload.get("last_gpu_power_w",0))
+                stage_gpu_power_raw[node_id] = num(payload.get("last_gpu_power_raw_w",0))
+                stage_gpu_power_limit[node_id] = num(payload.get("last_gpu_power_limit_w",0))
+                stage_gpu_power_known[node_id] = num(payload.get("last_gpu_power_known",0))
+                stage_gpu_power_source[node_id] = str(payload.get("last_gpu_power_source") or "")
+                stage_gpu_power_reason[node_id] = str(payload.get("last_gpu_power_reason") or "")
                 stage_cpu_pct[node_id] = num(payload.get("last_cpu_util_pct",0))
                 stage_mem_pct[node_id] = num(payload.get("last_mem_used_pct",0))
                 stage_vllm_running[node_id] = num(payload.get("last_vllm_requests_running",0))
@@ -420,6 +452,11 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
         "local_queue_stage_gpu_util_by_node": format_node_map(stage_gpu_util),
         "local_queue_stage_gpu_temp_by_node": format_node_map(stage_gpu_temp),
         "local_queue_stage_gpu_power_by_node": format_node_map(stage_gpu_power),
+        "local_queue_stage_gpu_power_raw_by_node": format_node_map(stage_gpu_power_raw),
+        "local_queue_stage_gpu_power_limit_by_node": format_node_map(stage_gpu_power_limit),
+        "local_queue_stage_gpu_power_known_by_node": format_node_map(stage_gpu_power_known),
+        "local_queue_stage_gpu_power_source_by_node": format_text_map(stage_gpu_power_source),
+        "local_queue_stage_gpu_power_reason_by_node": format_text_map(stage_gpu_power_reason),
         "local_queue_stage_cpu_pct_by_node": format_node_map(stage_cpu_pct),
         "local_queue_stage_mem_pct_by_node": format_node_map(stage_mem_pct),
         "local_queue_stage_vllm_running_by_node": format_node_map(stage_vllm_running),

@@ -625,19 +625,21 @@ def build_rows(args: argparse.Namespace, prev_cpu: Optional[Tuple[int,int]], pre
     }
     if len(gpus) == 0:
         row = dict(base)
-        row.update({"gpu_index":-1,"gpu_name":"","gpu_util_pct":0.0,"gpu_mem_util_pct":0.0,"gpu_mem_used_mib":0.0,"gpu_mem_total_mib":0.0,"gpu_power_w":0.0,"gpu_temp_c":0.0,"gpu_fan_pct":0.0,"gpu_clock_sm_mhz":0.0,"gpu_clock_mem_mhz":0.0,"gpu_pstate":"","error":error})
+        row.update({"gpu_index":-1,"gpu_name":"","gpu_util_pct":0.0,"gpu_mem_util_pct":0.0,"gpu_mem_used_mib":0.0,"gpu_mem_total_mib":0.0,"gpu_power_w":0.0,"gpu_power_raw_w":0.0,"gpu_power_limit_w":0.0,"gpu_power_known":0,"gpu_power_source":"","gpu_power_reason":"nvidia-smi-unavailable","gpu_temp_c":0.0,"gpu_fan_pct":0.0,"gpu_clock_sm_mhz":0.0,"gpu_clock_mem_mhz":0.0,"gpu_pstate":"","error":error})
         return([row],cur_cpu,cur_net,now,next_vllm)
     rows: List[Dict[str,object]] = []
     for gpu in gpus:
+        gpu_util_pct = telemetry.num(gpu.get("utilization.gpu","0"))
+        power = telemetry.gpu_power_status(telemetry.num(gpu.get("power.draw","0")),telemetry.num(gpu.get("power.limit","0")),gpu_util_pct)
         row = dict(base)
         row.update({
             "gpu_index": int(telemetry.num(gpu.get("index","-1"))),
             "gpu_name": gpu.get("name",""),
-            "gpu_util_pct": telemetry.num(gpu.get("utilization.gpu","0")),
+            "gpu_util_pct": gpu_util_pct,
             "gpu_mem_util_pct": telemetry.num(gpu.get("utilization.memory","0")),
             "gpu_mem_used_mib": telemetry.num(gpu.get("memory.used","0")),
             "gpu_mem_total_mib": telemetry.num(gpu.get("memory.total","0")),
-            "gpu_power_w": telemetry.num(gpu.get("power.draw","0")),
+            **power,
             "gpu_temp_c": telemetry.num(gpu.get("temperature.gpu","0")),
             "gpu_fan_pct": telemetry.num(gpu.get("fan.speed","0")),
             "gpu_clock_sm_mhz": telemetry.num(gpu.get("clocks.gr","0")),

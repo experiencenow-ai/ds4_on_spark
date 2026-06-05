@@ -192,6 +192,11 @@ def summarize_node(rows: List[Dict[str,str]], error: str, fetch_error: str = "",
         "last_gpu_clock_sm_mhz": telemetry.fnum(latest_gpu,"gpu_clock_sm_mhz"),
         "last_gpu_clock_mem_mhz": telemetry.fnum(latest_gpu,"gpu_clock_mem_mhz"),
         "last_gpu_power_w": telemetry.fnum(latest_gpu,"gpu_power_w"),
+        "last_gpu_power_raw_w": telemetry.fnum(latest_gpu,"gpu_power_raw_w"),
+        "last_gpu_power_limit_w": telemetry.fnum(latest_gpu,"gpu_power_limit_w"),
+        "last_gpu_power_known": telemetry.fnum(latest_gpu,"gpu_power_known"),
+        "last_gpu_power_source": latest_gpu.get("gpu_power_source",""),
+        "last_gpu_power_reason": latest_gpu.get("gpu_power_reason",""),
         "last_gpu_pstate": latest_gpu.get("gpu_pstate",""),
         "cpu_util_pct": telemetry.stats(telemetry.fnum(r,"cpu_util_pct") for r in rows),
         "mem_used_pct": telemetry.stats(telemetry.fnum(r,"mem_used_pct") for r in rows),
@@ -284,7 +289,8 @@ def write_combined(out_dir: str, all_rows: Dict[str,List[Dict[str,str]]], errors
         ext_hit_pct = float(row.get("last_vllm_external_prefix_cache_hit_pct",0.0))
         gpu_util_text = "%.2f" % float(row.get("last_gpu_util_pct",0.0)) if sample_known else "n/a"
         gpu_temp_text = "%.2f" % float(row.get("last_gpu_temp_c",0.0)) if sample_known else "n/a"
-        gpu_power_text = "%.2f" % float(row.get("last_gpu_power_w",0.0)) if sample_known else "n/a"
+        power_known = float(row.get("last_gpu_power_known",0.0)) > 0.0
+        gpu_power_text = "%.2f" % float(row.get("last_gpu_power_w",0.0)) if sample_known and power_known else "n/a"
         work_text = "%.0f/%.0f" % (vllm_running,vllm_waiting) if work_known else "n/a"
         local_q_text = "%.0f" % local_q if queue_known else "n/a"
         gateway_text = "%.0f/%.0f" % (float(row.get("last_ds4_gateway_cpu_pending",0.0)),float(row.get("last_ds4_gateway_cpu_active",0.0))) if gateway_known else "n/a"

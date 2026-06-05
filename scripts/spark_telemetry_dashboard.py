@@ -82,18 +82,18 @@ function bar(label,value,cls,known=true,text=""){let width=known?Math.max(0,Math
 function workKnown(n){return n.vllm_metrics_up||n.local_queue_known||Number(n.local_q_depth)>0||Number(n.input_tok_s)>0||Number(n.output_tok_s)>0}
 function workVal(n,key,unit=""){return workKnown(n)?val(n[key],unit):"n/a"}
 function workRun(n){return workKnown(n)?`${fmt(n.vllm_running)}/${fmt(n.vllm_waiting)}`:"n/a"}
-function card(n){let err=n.error||n.fetch_error||"";return `<article class="card ${n.state} ${n.node===selectedNode?"selected":""}" data-node="${n.node}"><header><div class="node">${n.node}</div><div class="pill">${n.state_label}</div></header><div class="bars">${bar("GPU",n.gpu_pct,"gpu")}${bar("KV",n.kv_pct,"kv",n.kv_known,n.kv_label)}${bar("MEM",n.mem_pct,"mem")}</div><div class="details"><span>In <b>${workVal(n,"input_tok_s")}</b></span><span>Out <b>${workVal(n,"output_tok_s")}</b></span><span>Cache <b>${n.vllm_metrics_up?pct(n.cache_hit_pct):"n/a"}</b></span><span>Ext <b>${n.vllm_metrics_up?pct(n.external_hit_pct):"n/a"}</b></span><span>Run <b>${workRun(n)}</b></span><span>Queue <b>${fmt(n.local_q_depth)}</b></span><span>CPU <b>${pct(n.cpu_pct)}</b></span><span>Pwr <b>${val(n.gpu_power_w,"W")}</b></span><span>Svc <b>${n.ds_service_id||"n/a"}</b></span><span>Temp <b>${fmt(n.gpu_temp_c)}C</b></span></div>${err?`<div class="error">${err}</div>`:""}</article>`}
+function card(n){let err=n.error||n.fetch_error||"";let pwr=n.gpu_power_known?val(n.gpu_power_w,"W"):"n/a";return `<article class="card ${n.state} ${n.node===selectedNode?"selected":""}" data-node="${n.node}"><header><div class="node">${n.node}</div><div class="pill">${n.state_label}</div></header><div class="bars">${bar("GPU",n.gpu_pct,"gpu")}${bar("KV",n.kv_pct,"kv",n.kv_known,n.kv_label)}${bar("MEM",n.mem_pct,"mem")}</div><div class="details"><span>In <b>${workVal(n,"input_tok_s")}</b></span><span>Out <b>${workVal(n,"output_tok_s")}</b></span><span>Cache <b>${n.vllm_metrics_up?pct(n.cache_hit_pct):"n/a"}</b></span><span>Ext <b>${n.vllm_metrics_up?pct(n.external_hit_pct):"n/a"}</b></span><span>Run <b>${workRun(n)}</b></span><span>Queue <b>${fmt(n.local_q_depth)}</b></span><span>CPU <b>${pct(n.cpu_pct)}</b></span><span>Pwr <b>${pwr}</b></span><span>Svc <b>${n.ds_service_id||"n/a"}</b></span><span>Temp <b>${fmt(n.gpu_temp_c)}C</b></span></div>${err?`<div class="error">${err}</div>`:""}</article>`}
 function wireCards(){document.querySelectorAll(".card[data-node]").forEach(el=>el.onclick=()=>{selectedNode=el.dataset.node;document.querySelectorAll(".card").forEach(c=>c.classList.toggle("selected",c.dataset.node===selectedNode));startTelemetryStream()})}
 function modeButtons(){return `<div class="modes">${Object.keys(metricModes).map(k=>`<button class="${k===selectedMode?"active":""}" data-mode="${k}">${modeLabels[k]}</button>`).join("")}</div>`}
 function wireModes(){document.querySelectorAll(".modes button").forEach(el=>el.onclick=()=>{selectedMode=el.dataset.mode;drawHistory(lastHistory)})}
-function activeMetrics(data){let allowed=new Set(metricModes[selectedMode]||metricModes.queue);return data.metrics.filter(m=>allowed.has(m.key))}
+function activeMetrics(data){let allowed=new Set(metricModes[selectedMode]||metricModes.queue);return data.metrics.filter(m=>allowed.has(m.key)&&(m.key!=="power_w"||data.power_known))}
 function metricLast(metric,points){let p=points[points.length-1]||{};let v=Number(p[metric.key]);return Number.isFinite(v)?v:null}
 function metricScale(metric,points){if(["tok_s","input_tok_s","output_tok_s","cache_tok_s"].includes(metric.key))return Math.max(50,...points.map(p=>Number(p[metric.key])||0))*1.2;let fixed={gpu_pct:100,kv_pct:100,cpu_pct:CPU_PCT_MAX,mem_pct:100,temp_c:100,power_w:100,vllm_running:64,vllm_waiting:64,queue_depth:128,cache_hit_pct:100,external_hit_pct:100};return fixed[metric.key]||100}
 function emaValues(points,key){let out=[],acc=null,alpha=0.34;points.forEach(p=>{let v=Number(p[key]);v=Number.isFinite(v)?v:0;acc=acc===null?v:((alpha*v)+((1-alpha)*acc));out.push(acc)});return out}
 function drawHistory(data){lastHistory=data;let el=document.getElementById("history");if(!data||!data.ok||!data.points.length){el.innerHTML=`<div class="history-head"><div class="history-title">${selectedNode||"spark"}</div>${modeButtons()}</div><div class="empty">no history</div>`;wireModes();return}let metrics=activeMetrics(data);let colors=modeColors[selectedMode]||modeColors.queue;let legend=metrics.map((m,i)=>{let v=metricLast(m,data.points);return `<span><i class="swatch" style="background:${colors[i%colors.length]}"></i>${m.label} <b>${v===null?"n/a":val(v,m.unit)}</b></span>`}).join("");el.innerHTML=`<div class="history-head"><div><div class="history-title">${data.node}</div><div class="label">last hour · ${data.points.length} samples · EMA</div></div>${modeButtons()}</div><div class="legend">${legend}</div><div class="chart-wrap"><canvas id="chart"></canvas></div>`;wireModes();paintChart(data,metrics,colors)}
 function paintChart(data,metrics,colors){let canvas=document.getElementById("chart");if(!canvas)return;metrics=metrics||activeMetrics(data);colors=colors||modeColors[selectedMode]||modeColors.queue;let rect=canvas.getBoundingClientRect();let dpr=window.devicePixelRatio||1;canvas.width=Math.max(1,Math.floor(rect.width*dpr));canvas.height=Math.max(1,Math.floor(rect.height*dpr));let ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);let w=rect.width,h=rect.height,pad=28;ctx.clearRect(0,0,w,h);ctx.strokeStyle="#313943";ctx.lineWidth=1;for(let i=0;i<=4;i++){let y=pad+((h-(pad*2))*i/4);ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(w-pad,y);ctx.stroke()}let points=data.points;metrics.forEach((m,i)=>{let scale=metricScale(m,points);let vals=emaValues(points,m.key);ctx.strokeStyle=colors[i%colors.length];ctx.lineWidth=2.2;ctx.beginPath();vals.forEach((v,idx)=>{let x=pad+((w-(pad*2))*idx/Math.max(1,points.length-1));let y=h-pad-((h-(pad*2))*Math.max(0,Math.min(scale,v))/scale);if(idx===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});ctx.stroke()});ctx.fillStyle="#a8b1bb";ctx.font="12px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif";ctx.fillText("now",w-pad-24,h-8);ctx.fillText("then",pad,h-8)}
 async function refreshHistory(){if(!selectedNode)return;try{let r=await fetch(`/api/history?node=${encodeURIComponent(selectedNode)}`,{cache:"no-store"});drawHistory(await r.json())}catch(e){document.getElementById("history").innerHTML=`<div class="empty">history read failed</div>`}}
-function renderSummary(d){if(!selectedNode&&d.nodes&&d.nodes.length)selectedNode=d.selected_node||d.nodes[0].node;document.getElementById("updated").textContent="updated "+(d.updated_iso||"unknown");document.getElementById("source").textContent=d.summary_path||"";document.getElementById("summary").innerHTML=[metric("Active",`${fmt(d.active_nodes)}/${d.reachable_nodes}`),metric("GPU Avg",d.gpu_known?pct(d.avg_gpu_pct):"n/a"),metric("Run/Wait",`${fmt(d.vllm_running)}/${fmt(d.vllm_waiting)}`),metric("Tok/s In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`),metric("Total Power",val(d.total_gpu_power_w,"W")),metric("DS Models",d.ds_services_known?`${fmt(d.ds_service_count)} svc`:"n/a"),metric("Queue Depth",fmt(d.queue_depth))].join("");document.getElementById("nodes").innerHTML=d.nodes.map(card).join("");wireCards()}
+function renderSummary(d){if(!selectedNode&&d.nodes&&d.nodes.length)selectedNode=d.selected_node||d.nodes[0].node;document.getElementById("updated").textContent="updated "+(d.updated_iso||"unknown");document.getElementById("source").textContent=d.summary_path||"";document.getElementById("summary").innerHTML=[metric("Active",`${fmt(d.active_nodes)}/${d.reachable_nodes}`),metric("GPU Avg",d.gpu_known?pct(d.avg_gpu_pct):"n/a"),metric("Run/Wait",`${fmt(d.vllm_running)}/${fmt(d.vllm_waiting)}`),metric("Tok/s In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`),metric("Total Power",d.power_known?val(d.total_gpu_power_w,"W"):"n/a"),metric("DS Models",d.ds_services_known?`${fmt(d.ds_service_count)} svc`:"n/a"),metric("Queue Depth",fmt(d.queue_depth))].join("");document.getElementById("nodes").innerHTML=d.nodes.map(card).join("");wireCards()}
 async function refreshOnce(){try{let r=await fetch("/api/summary",{cache:"no-store"});let d=await r.json();renderSummary(d);await refreshHistory()}catch(e){document.getElementById("updated").textContent="dashboard read failed: "+e}}
 function startTelemetryStream(){if(telemetryStream)telemetryStream.close();if(!window.EventSource){refreshOnce();return}let node=encodeURIComponent(selectedNode||"");telemetryStream=new EventSource(`/api/stream?node=${node}`);telemetryStream.addEventListener("telemetry",event=>{try{let payload=JSON.parse(event.data);if(payload.summary){renderSummary(payload.summary)}if(payload.history){drawHistory(payload.history)}}catch(e){document.getElementById("updated").textContent="stream parse failed: "+e}});telemetryStream.onerror=()=>{document.getElementById("updated").textContent="stream reconnecting"}}
 window.addEventListener("resize",()=>{if(lastHistory)paintChart(lastHistory)});
@@ -169,6 +169,7 @@ def node_state(row: dict[str,Any], error_streak: int = NODE_DOWN_ERROR_THRESHOLD
 
 def normalize_node(node: str, row: dict[str,Any], error_streak: int = NODE_DOWN_ERROR_THRESHOLD) -> dict[str,Any]:
     state,label = node_state(row,error_streak)
+    gpu_power_known = fnum(row.get("last_gpu_power_known")) > 0.0
     return({
         "node": node,
         "state": state,
@@ -180,7 +181,12 @@ def normalize_node(node: str, row: dict[str,Any], error_streak: int = NODE_DOWN_
         "last_sample_age_s": fnum(row.get("last_sample_age_s")),
         "gpu_pct": fnum(row.get("last_gpu_util_pct")),
         "gpu_temp_c": fnum(row.get("last_gpu_temp_c")),
-        "gpu_power_w": fnum(row.get("last_gpu_power_w")),
+        "gpu_power_w": fnum(row.get("last_gpu_power_w")) if gpu_power_known else 0.0,
+        "gpu_power_raw_w": fnum(row.get("last_gpu_power_raw_w")),
+        "gpu_power_limit_w": fnum(row.get("last_gpu_power_limit_w")),
+        "gpu_power_known": gpu_power_known,
+        "gpu_power_source": str(row.get("last_gpu_power_source","")),
+        "gpu_power_reason": str(row.get("last_gpu_power_reason","")),
         "thermal_max_c": fnum(row.get("last_thermal_max_c")),
         "cpu_pct": display_cpu_pct(row.get("last_cpu_util_pct")),
         "mem_pct": fnum(row.get("last_mem_used_pct")),
@@ -247,6 +253,11 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
     stage_gpu_util_by_node = node_metric_map(queue.get("local_queue_stage_gpu_util_by_node",""))
     stage_gpu_temp_by_node = node_metric_map(queue.get("local_queue_stage_gpu_temp_by_node",""))
     stage_gpu_power_by_node = node_metric_map(queue.get("local_queue_stage_gpu_power_by_node",""))
+    stage_gpu_power_raw_by_node = node_metric_map(queue.get("local_queue_stage_gpu_power_raw_by_node",""))
+    stage_gpu_power_limit_by_node = node_metric_map(queue.get("local_queue_stage_gpu_power_limit_by_node",""))
+    stage_gpu_power_known_by_node = node_metric_map(queue.get("local_queue_stage_gpu_power_known_by_node",""))
+    stage_gpu_power_source_by_node = node_text_map(queue.get("local_queue_stage_gpu_power_source_by_node",""))
+    stage_gpu_power_reason_by_node = node_text_map(queue.get("local_queue_stage_gpu_power_reason_by_node",""))
     stage_cpu_pct_by_node = node_metric_map(queue.get("local_queue_stage_cpu_pct_by_node",""))
     stage_mem_pct_by_node = node_metric_map(queue.get("local_queue_stage_mem_pct_by_node",""))
     stage_vllm_running_by_node = node_metric_map(queue.get("local_queue_stage_vllm_running_by_node",""))
@@ -281,6 +292,9 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
             ("last_gpu_util_pct",stage_gpu_util_by_node),
             ("last_gpu_temp_c",stage_gpu_temp_by_node),
             ("last_gpu_power_w",stage_gpu_power_by_node),
+            ("last_gpu_power_raw_w",stage_gpu_power_raw_by_node),
+            ("last_gpu_power_limit_w",stage_gpu_power_limit_by_node),
+            ("last_gpu_power_known",stage_gpu_power_known_by_node),
             ("last_cpu_util_pct",stage_cpu_pct_by_node),
             ("last_mem_used_pct",stage_mem_pct_by_node),
             ("last_vllm_requests_running",stage_vllm_running_by_node),
@@ -297,6 +311,12 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
             value = mapping[name]
             if seeded_from_stage or (value > 0.0 and fnum(row.get(target)) <= 0.0):
                 row[target] = value
+        for target,mapping in (
+            ("last_gpu_power_source",stage_gpu_power_source_by_node),
+            ("last_gpu_power_reason",stage_gpu_power_reason_by_node),
+        ):
+            if name in mapping and (seeded_from_stage or str(row.get(target,"")) == ""):
+                row[target] = mapping[name]
         rows[name] = row
     nodes = [normalize_node(node,row,node_error_streak(node,row,summary_id)) for node,row in sorted(rows.items())]
     for node in nodes:
@@ -321,7 +341,8 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
     tok_s = max(sum(fnum(node.get("tok_s")) for node in reachable),input_tok_s + output_tok_s)
     running = max(sum(node["vllm_running"] for node in reachable),fnum(queue.get("local_queue_running",0.0)))
     waiting = max(sum(node["vllm_waiting"] for node in reachable),fnum(queue.get("local_queue_queued",0.0)))
-    total_gpu_power_w = round(sum(fnum(node.get("gpu_power_w")) for node in reachable),2)
+    power_nodes = [node for node in reachable if node.get("gpu_power_known")]
+    total_gpu_power_w = round(sum(fnum(node.get("gpu_power_w")) for node in power_nodes),2)
     avg_gpu_pct = round(sum(fnum(node.get("gpu_pct")) for node in gpu_nodes) / max(1,len(gpu_nodes)),2)
     ds_services = str(queue.get("local_queue_ds_services",""))
     return({
@@ -350,6 +371,9 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
         "ds_last_service": str(queue.get("local_queue_last_service","")),
         "ds_kv_shards": fnum(queue.get("local_queue_kv_shards",0.0)),
         "queue_depth": fnum(queue.get("local_queue_depth",0.0)),
+        "power_known": len(power_nodes) > 0,
+        "power_known_node_count": len(power_nodes),
+        "power_node_count": len(gpu_nodes),
         "total_gpu_power_w": total_gpu_power_w,
         "tok_s": tok_s,
         "input_tok_s": input_tok_s,
@@ -378,15 +402,20 @@ def build_history(nodes_dir: str, node: str, limit: int = 360) -> dict[str,Any]:
     except Exception as exc:
         return({"ok":False,"node":node,"history_path":str(path),"error":str(exc),"metrics":HISTORY_METRICS,"points":[]})
     points = []
+    power_known = False
     for row in rows:
         point: dict[str,Any] = {"iso_ts": row.get("iso_ts",""), "unix_ts": fnum(row.get("unix_ts"))}
         for metric in HISTORY_METRICS:
             value = fnum(row.get(metric["field"]))
             if metric["key"] == "cpu_pct":
                 value = display_cpu_pct(value)
+            if metric["key"] == "power_w" and fnum(row.get("gpu_power_known")) <= 0.0:
+                value = "n/a"
             point[metric["key"]] = value
+        if fnum(row.get("gpu_power_known")) > 0.0:
+            power_known = True
         points.append(point)
-    return({"ok":True,"node":node,"history_path":str(path),"metrics":HISTORY_METRICS,"points":points})
+    return({"ok":True,"node":node,"history_path":str(path),"metrics":HISTORY_METRICS,"power_known":power_known,"points":points})
 
 
 def stream_payload(summary_path: str, nodes_dir: str, node: str, limit: int) -> dict[str,Any]:

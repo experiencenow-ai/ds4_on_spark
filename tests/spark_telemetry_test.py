@@ -39,7 +39,31 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertIn("vllm_prompt_tokens_per_s", telemetry.CSV_FIELDS)
         self.assertIn("vllm_prompt_cache_hit_pct", telemetry.CSV_FIELDS)
         self.assertIn("vllm_external_prefix_cache_hit_pct", telemetry.CSV_FIELDS)
+        self.assertIn("power.limit", telemetry.BASE_GPU_FIELDS)
+        self.assertIn("gpu_power_known", telemetry.CSV_FIELDS)
+        self.assertIn("gpu_power_raw_w", telemetry.CSV_FIELDS)
         self.assertNotIn("local_queue_source", telemetry.CSV_FIELDS)
+
+    def test_gpu_power_status_rejects_unsupported_nvml_power(self):
+        status = telemetry.gpu_power_status(11.0,0.0,96.0)
+        self.assertEqual(status["gpu_power_w"],0.0)
+        self.assertEqual(status["gpu_power_raw_w"],11.0)
+        self.assertEqual(status["gpu_power_known"],0)
+        self.assertEqual(status["gpu_power_reason"],"nvml-power-limit-unavailable")
+
+    def test_gpu_power_status_rejects_low_power_at_high_util(self):
+        status = telemetry.gpu_power_status(11.0,120.0,96.0)
+        self.assertEqual(status["gpu_power_w"],0.0)
+        self.assertEqual(status["gpu_power_raw_w"],11.0)
+        self.assertEqual(status["gpu_power_known"],0)
+        self.assertEqual(status["gpu_power_reason"],"nvml-power-sanity-failed")
+
+    def test_gpu_power_status_accepts_supported_power(self):
+        status = telemetry.gpu_power_status(81.5,120.0,96.0)
+        self.assertEqual(status["gpu_power_w"],81.5)
+        self.assertEqual(status["gpu_power_raw_w"],81.5)
+        self.assertEqual(status["gpu_power_known"],1)
+        self.assertEqual(status["gpu_power_reason"],"")
 
     def test_cpu_pct_uses_idle_delta(self):
         self.assertEqual(node_mon.cpu_pct((100,40),(200,70)),70.0)
@@ -75,9 +99,9 @@ class SparkTelemetryTest(unittest.TestCase):
     def test_collect_summary_counts_hot_gpu_samples(self):
         text = "\n".join([
             ",".join(node_mon.CSV_FIELDS),
-            telemetry_row(unix_ts=1,cpu_util_pct=10,mem_used_pct=50,gpu_util_pct=96,gpu_power_w=40,gpu_temp_c=81,thermal_max_c=67,root_disk_used_pct=71,net_rx_mbps=1.5,net_tx_mbps=2.5),
+            telemetry_row(unix_ts=1,cpu_util_pct=10,mem_used_pct=50,gpu_util_pct=96,gpu_power_w=40,gpu_power_raw_w=40,gpu_power_limit_w=120,gpu_power_known=1,gpu_temp_c=81,thermal_max_c=67,root_disk_used_pct=71,net_rx_mbps=1.5,net_tx_mbps=2.5),
             ",".join(node_mon.CSV_FIELDS),
-            telemetry_row(unix_ts=2,iso_ts="2026-05-24T00:00:02+00:00",cpu_util_pct=30,mem_used_pct=60,gpu_util_pct=10,gpu_power_w=12,gpu_temp_c=63,thermal_max_c=65,root_disk_used_pct=72,net_rx_mbps=3.0,net_tx_mbps=4.0),
+            telemetry_row(unix_ts=2,iso_ts="2026-05-24T00:00:02+00:00",cpu_util_pct=30,mem_used_pct=60,gpu_util_pct=10,gpu_power_w=12,gpu_power_raw_w=12,gpu_power_limit_w=120,gpu_power_known=1,gpu_temp_c=63,thermal_max_c=65,root_disk_used_pct=72,net_rx_mbps=3.0,net_tx_mbps=4.0),
         ])
         rows = collect.read_rows(text)
         summary = collect.summarize_node(rows,"")
@@ -88,6 +112,9 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(summary["gpu_temp_samples_ge_80"],1)
         self.assertEqual(summary["last_gpu_temp_c"],63.0)
         self.assertEqual(summary["last_gpu_power_w"],12.0)
+        self.assertEqual(summary["last_gpu_power_raw_w"],12.0)
+        self.assertEqual(summary["last_gpu_power_limit_w"],120.0)
+        self.assertEqual(summary["last_gpu_power_known"],1.0)
         self.assertEqual(summary["last_thermal_max_c"],65.0)
         self.assertEqual(summary["last_root_disk_used_pct"],72.0)
         self.assertEqual(summary["net_tx_mbps"]["max"],4.0)
@@ -96,7 +123,7 @@ class SparkTelemetryTest(unittest.TestCase):
     def test_collect_markdown_summary_includes_gpu_watts(self):
         text = "\n".join([
             ",".join(node_mon.CSV_FIELDS),
-            telemetry_row(unix_ts=1,gpu_util_pct=10,gpu_power_w=12,gpu_temp_c=63),
+            telemetry_row(unix_ts=1,gpu_util_pct=10,gpu_power_w=12,gpu_power_raw_w=12,gpu_power_limit_w=120,gpu_power_known=1,gpu_temp_c=63),
         ])
         with tempfile.TemporaryDirectory() as tmp:
             rows = collect.read_rows(text)
@@ -105,6 +132,18 @@ class SparkTelemetryTest(unittest.TestCase):
                 md = fp.read()
         self.assertIn("| node | samples | gpu % | gpu C | gpu W |", md)
         self.assertIn("| spark0 | 1 | 10.00 | 63.00 | 12.00 |", md)
+
+    def test_collect_markdown_summary_marks_untrusted_gpu_watts_na(self):
+        text = "\n".join([
+            ",".join(node_mon.CSV_FIELDS),
+            telemetry_row(unix_ts=1,gpu_util_pct=96,gpu_power_w=0,gpu_power_raw_w=11,gpu_power_limit_w=0,gpu_power_known=0,gpu_power_reason="nvml-power-limit-unavailable",gpu_temp_c=63),
+        ])
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = collect.read_rows(text)
+            collect.write_combined(tmp,{"spark0":rows},{},{})
+            with open(os.path.join(tmp,"cluster_summary.md"),encoding="utf-8") as fp:
+                md = fp.read()
+        self.assertIn("| spark0 | 1 | 96.00 | 63.00 | n/a |", md)
 
     def test_collect_markdown_summary_marks_missing_sources_na(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -128,7 +167,7 @@ class SparkTelemetryTest(unittest.TestCase):
     def test_collect_summary_uses_latest_good_gpu_sample_after_timeout(self):
         text = "\n".join([
             ",".join(node_mon.CSV_FIELDS),
-            telemetry_row(unix_ts=1,cpu_util_pct=10,mem_used_pct=50,gpu_util_pct=20,gpu_power_w=12,gpu_temp_c=63),
+            telemetry_row(unix_ts=1,cpu_util_pct=10,mem_used_pct=50,gpu_util_pct=20,gpu_power_w=12,gpu_power_raw_w=12,gpu_power_limit_w=120,gpu_power_known=1,gpu_temp_c=63),
             telemetry_row(unix_ts=2,iso_ts="2026-05-24T00:00:02+00:00",cpu_util_pct=30,mem_used_pct=60,gpu_index=-1,gpu_util_pct=0,gpu_power_w=0,gpu_temp_c=0,error="nvidia-smi timeout"),
         ])
         rows = collect.read_rows(text)
@@ -248,8 +287,8 @@ class SparkTelemetryTest(unittest.TestCase):
                         {"node_id": "spark0", "service_id": "dsv4_flash_pp8", "entries": 2, "bytes": 64},
                         {"node_id": "spark1", "service_id": "dsv4_flash_pp8", "entries": 3, "bytes": 96},
                     ], "stages": [
-                        {"node_id": "spark0", "service_id": "dsv4_flash_pp8", "reported_at": 100.0, "payload": {"sample_count": 2, "last_gpu_util_pct": 91, "last_gpu_power_w": 25, "last_gpu_temp_c": 48, "last_cpu_util_pct": 40, "last_mem_used_pct": 50}},
-                        {"node_id": "spark1", "service_id": "dsv4_flash_pp8", "reported_at": 101.0, "payload": {"sample_count": 3, "last_gpu_util_pct": 92, "last_gpu_power_w": 26, "last_gpu_temp_c": 49, "last_cpu_util_pct": 41, "last_mem_used_pct": 51}},
+                        {"node_id": "spark0", "service_id": "dsv4_flash_pp8", "reported_at": 100.0, "payload": {"sample_count": 2, "last_gpu_util_pct": 91, "last_gpu_power_w": 25, "last_gpu_power_raw_w": 25, "last_gpu_power_limit_w": 120, "last_gpu_power_known": 1, "last_gpu_power_source": "nvml.power.draw", "last_gpu_temp_c": 48, "last_cpu_util_pct": 40, "last_mem_used_pct": 50}},
+                        {"node_id": "spark1", "service_id": "dsv4_flash_pp8", "reported_at": 101.0, "payload": {"sample_count": 3, "last_gpu_util_pct": 92, "last_gpu_power_w": 26, "last_gpu_power_raw_w": 26, "last_gpu_power_limit_w": 120, "last_gpu_power_known": 1, "last_gpu_power_source": "nvml.power.draw", "last_gpu_temp_c": 49, "last_cpu_util_pct": 41, "last_mem_used_pct": 51}},
                     ]},
                 },"")
             if url.endswith("/ds4/dispatcher/status"):
@@ -294,6 +333,9 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(q["local_queue_stage_service_by_node"],"spark0:dsv4_flash_pp8;spark1:dsv4_flash_pp8")
         self.assertIn("spark0:91", q["local_queue_stage_gpu_util_by_node"])
         self.assertIn("spark1:26", q["local_queue_stage_gpu_power_by_node"])
+        self.assertIn("spark1:26", q["local_queue_stage_gpu_power_raw_by_node"])
+        self.assertIn("spark1:1", q["local_queue_stage_gpu_power_known_by_node"])
+        self.assertIn("spark1:nvml.power.draw", q["local_queue_stage_gpu_power_source_by_node"])
 
 if __name__ == "__main__":
     unittest.main()
