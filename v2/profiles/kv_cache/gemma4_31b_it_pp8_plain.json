@@ -34,6 +34,8 @@
   ],
   "extra_env": {
     "PYTHONHASHSEED": "0",
+    "GLOO_SOCKET_IFNAME": "ds4ring0",
+    "TP_SOCKET_IFNAME": "ds4ring0",
     "VLLM_HOST_IP": "{fabric_ip}",
     "VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1",
     "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR": "0",

@@ -42,7 +42,8 @@
     "host": "0.0.0.0",
     "master_addr": "10.10.100.10",
     "master_port": 29620,
-    "port": 8120
+    "port": 8120,
+    "socket_ifname": "ds4ring0"
   },
   "model": {
     "model_id": "google/gemma-4-31B-it",
