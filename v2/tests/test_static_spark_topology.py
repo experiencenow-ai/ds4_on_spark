@@ -26,22 +26,23 @@ DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_res
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 
 
-def make_request(request_id: str, *, capability: str, job_class: str, chat: bool = False, immediate: bool = False) -> InferenceRequest:
-    return InferenceRequest.from_json(
-        {
-            "format": "ds4-inference-request-v1",
-            "request_id": request_id,
-            "capability": capability,
-            "chat": chat,
-            "immediate": immediate,
-            "job_class": job_class,
-            "max_output_tokens": 128,
-            "thinking_budget_tokens": 0,
-            "temperature": 0,
-            "input": {"target_atom_id": f"atom:{request_id}", "source_atom_hash": "h"},
-            "output_contract": {"format": "centaur-atom-edit-v1", "strict_json": True},
-        }
-    )
+def make_request(request_id: str, *, capability: str, job_class: str, chat: bool = False, immediate: bool = False, model_pin: dict[str, str] | None = None) -> InferenceRequest:
+    payload = {
+        "format": "ds4-inference-request-v1",
+        "request_id": request_id,
+        "capability": capability,
+        "chat": chat,
+        "immediate": immediate,
+        "job_class": job_class,
+        "max_output_tokens": 128,
+        "thinking_budget_tokens": 0,
+        "temperature": 0,
+        "input": {"target_atom_id": f"atom:{request_id}", "source_atom_hash": "h"},
+        "output_contract": {"format": "centaur-atom-edit-v1", "strict_json": True},
+    }
+    if model_pin is not None:
+        payload["model_pin"] = model_pin
+    return InferenceRequest.from_json(payload)
 
 
 class StaticSparkTopologyTests(unittest.TestCase):
@@ -145,12 +146,16 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(assignment.service_id, "qwen27_bf16_pp8")
         self.assertEqual(assignment.reason, "pipeline_service")
 
-    def test_smart_chat_binds_to_dsv4_pipeline(self) -> None:
+    def test_dsv4_pp8_requires_profile_pin_but_still_binds_to_pipeline(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         topology = SparkTopology.load(TOPOLOGY)
-        profile = registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
+        with self.assertRaisesRegex(ValueError, "no production profile"):
+            registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
+        profile = registry.resolve(capability=None, chat=True, job_class="tool_chat", model_pin={"profile_id": DSV4_PP})
         assignment = topology.assign_profile(profile, immediate=False, current_load={})
         self.assertEqual(profile.profile_id, DSV4_PP)
+        self.assertFalse(profile.production_eligible)
+        self.assertTrue(profile.routing["requires_profile_pin"])
         self.assertEqual(profile.model_id, "deepseek-ai/DeepSeek-V4-Flash")
         self.assertEqual(assignment.node_id, "spark0")
         self.assertEqual(assignment.node_ids, ALL_SPARKS)
@@ -160,7 +165,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
     def test_run_manifest_records_pipeline_assignments(self) -> None:
         requests = [
             make_request("r0", capability="efficient", job_class="atom_edit"),
-            make_request("r1", capability="smartest", job_class="tool_chat", chat=True),
+            make_request("r1", capability="smartest", job_class="tool_chat", chat=True, model_pin={"profile_id": DSV4_PP}),
         ]
         with tempfile.TemporaryDirectory() as tmp:
             manifest = run_requests(
@@ -212,12 +217,12 @@ class StaticSparkTopologyTests(unittest.TestCase):
         spark0 = startup_plan(topology=topology, registry=registry, node_id="spark0")
         spark4 = startup_plan(topology=topology, registry=registry, node_id="spark4")
         spark7 = startup_plan(topology=topology, registry=registry, node_id="spark7")
-        self.assertEqual([item["action"] for item in spark0["items"]], ["pipeline_ingress_warm", "pipeline_ingress_warm"])
-        self.assertEqual([item["service_id"] for item in spark0["items"]], ["dsv4_flash_pp8", "qwen27_bf16_pp8"])
-        self.assertEqual([item["action"] for item in spark4["items"]], ["pipeline_stage", "pipeline_stage"])
+        self.assertEqual([item["action"] for item in spark0["items"]], ["pipeline_ingress_warm"])
+        self.assertEqual([item["service_id"] for item in spark0["items"]], ["qwen27_bf16_pp8"])
+        self.assertEqual([item["action"] for item in spark4["items"]], ["pipeline_stage"])
         self.assertEqual(spark4["items"][0]["stage_index"], 4)
-        self.assertEqual(spark4["items"][1]["layer_start"], 35)
-        self.assertEqual([item["action"] for item in spark7["items"]], ["pipeline_stage", "pipeline_stage"])
+        self.assertEqual(spark4["items"][0]["layer_start"], 35)
+        self.assertEqual([item["action"] for item in spark7["items"]], ["pipeline_stage"])
 
     def test_startup_warm_posts_only_ingress_items(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
@@ -231,11 +236,10 @@ class StaticSparkTopologyTests(unittest.TestCase):
 
         result = warm_startup_models(plan=plan, base_url="http://spark.local:8000", timeout_s=3, poster=poster)
         self.assertEqual(result["status"], "completed")
-        self.assertEqual(result["warm_count"], 2)
+        self.assertEqual(result["warm_count"], 1)
         self.assertEqual(
             calls,
             [
-                ("http://127.0.0.1:8102/v1/chat/completions", "deepseek-ai/DeepSeek-V4-Flash"),
                 ("http://127.0.0.1:8101/v1/chat/completions", "Qwen/Qwen3.6-27B"),
             ],
         )

@@ -425,6 +425,7 @@ class CoordinatorApiKvCacheTests(unittest.TestCase):
                         "temperature": 0,
                         "input": {"messages": [{"role": "user", "content": "x"}]},
                         "output_contract": {"format": "text"},
+                        "model_pin": {"profile_id": "dsv4_vllm_mtp_pp8_smartest_v1"},
                     }
                 )
                 for index in range(12)

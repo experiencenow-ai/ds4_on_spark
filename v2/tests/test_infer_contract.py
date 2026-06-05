@@ -27,13 +27,13 @@ class InferenceContractTests(unittest.TestCase):
         profile = ProfileRegistry.load(PROFILES).resolve(capability="fastest", chat=False, job_class="triage")
         self.assertEqual(profile.profile_id, "qwen3_6_35b_a3b_fp8_fastest_v1")
 
-    def test_smart_completion_routes_to_dsv4_vllm(self) -> None:
-        profile = ProfileRegistry.load(PROFILES).resolve(capability="smart", chat=False, job_class="atom_edit")
-        self.assertEqual(profile.profile_id, "dsv4_vllm_mtp_pp8_smartest_v1")
+    def test_smart_completion_has_no_implicit_dsv4_route_while_unqualified(self) -> None:
+        with self.assertRaisesRegex(ValueError, "no production profile"):
+            ProfileRegistry.load(PROFILES).resolve(capability="smart", chat=False, job_class="atom_edit")
 
-    def test_smartest_chat_routes_to_vllm_mtp(self) -> None:
-        profile = ProfileRegistry.load(PROFILES).resolve(capability="smartest", chat=True, job_class="tool_chat")
-        self.assertEqual(profile.profile_id, "dsv4_vllm_mtp_pp8_smartest_v1")
+    def test_smartest_chat_has_no_implicit_dsv4_route_while_unqualified(self) -> None:
+        with self.assertRaisesRegex(ValueError, "no production profile"):
+            ProfileRegistry.load(PROFILES).resolve(capability="smartest", chat=True, job_class="tool_chat")
 
     def test_pin_overrides_capability(self) -> None:
         profile = ProfileRegistry.load(PROFILES).resolve(

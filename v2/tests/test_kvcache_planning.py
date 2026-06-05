@@ -254,7 +254,10 @@ class KvCachePlanningTests(unittest.TestCase):
         pp_qwen = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
         self.assertEqual(pp_dsv4.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/dsv4_flash_pp8_simple_offload.json"])
         self.assertEqual(pp_qwen.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json"])
-        self.assertEqual(registry.resolve(capability="smartest", chat=True, job_class="tool_chat").profile_id, pp_dsv4.profile_id)
+        with self.assertRaisesRegex(ValueError, "no production profile"):
+            registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
+        pinned = registry.resolve(capability=None, chat=True, job_class="tool_chat", model_pin={"profile_id": pp_dsv4.profile_id})
+        self.assertEqual(pinned.profile_id, pp_dsv4.profile_id)
         self.assertEqual(registry.resolve(capability="efficient", chat=False, job_class="atom_edit").profile_id, pp_qwen.profile_id)
 
     def test_tool_registry_has_kvcache_plan_tool(self) -> None:
