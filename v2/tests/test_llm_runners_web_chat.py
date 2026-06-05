@@ -445,6 +445,7 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         cases = [
             ("qwen3_6_27b_fp8_efficient_v1", {"capability": "efficient", "job_class": "summary"}, "spark0", {"type": "disabled"}, {"enable_thinking": False}, None),
             ("qwen3_6_27b_fp8_efficient_v1", {"capability": "efficient", "job_class": "summary", "max_output_tokens": 64, "thinking_budget_tokens": 100}, "spark0", {"type": "enabled", "budget_tokens": 100}, {"enable_thinking": True}, 164),
+            ("gemma4_12b_it_pp8_peer_v1", {"capability": "smart", "job_class": "analysis"}, "spark0", {"type": "disabled"}, {"enable_thinking": False}, None),
             ("dsv4_vllm_mtp_smartest_v1", {"max_output_tokens": 64, "thinking_budget_tokens": 100}, "spark4+spark5", {"type": "enabled", "budget_tokens": 100}, {"thinking": True}, 164),
         ]
         for profile_id, updates, node, thinking, template_kwargs, max_tokens in cases:

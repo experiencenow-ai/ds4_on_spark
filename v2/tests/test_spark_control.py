@@ -19,6 +19,7 @@ TOOLS = ROOT / "tools" / "registry.jsonl"
 VLLM_COMMIT = "c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34"
 QWEN_PP = "qwen3_6_27b_bf16_pp8_efficient_v1"
 DSV4_PP = "dsv4_vllm_mtp_pp8_smartest_v1"
+GEMMA31_PP = "gemma4_31b_it_pp8_peer_v1"
 
 
 class _Done:
@@ -67,6 +68,13 @@ class SparkControlTests(unittest.TestCase):
         self.assertEqual(explicit["runtime_contract_id"], "dsv4_flash_pp8_mtp_v1")
         self.assertEqual(explicit["ingress_node_id"], "spark0")
         self.assertEqual(explicit["endpoint"]["base_url"], "http://127.0.0.1:8102")
+
+    def test_gemma_trim_plan_uses_profile_pinned_pipeline_entry(self) -> None:
+        explicit = trim_spark_memory(node_id="spark7", profile_id=GEMMA31_PP, topology_path=TOPOLOGY, profiles_dir=PROFILES, contracts_dir=CONTRACTS)
+        self.assertEqual(explicit["profile_id"], GEMMA31_PP)
+        self.assertEqual(explicit["runtime_contract_id"], "gemma4_31b_it_pp8_v1")
+        self.assertEqual(explicit["ingress_node_id"], "spark0")
+        self.assertEqual(explicit["endpoint"]["base_url"], "http://127.0.0.1:8120")
 
     def test_every_spark_trims_through_single_entry_with_override_preserved(self) -> None:
         plan = trim_spark_memory(node_id="spark7", topology_path=TOPOLOGY, profiles_dir=PROFILES, contracts_dir=CONTRACTS)

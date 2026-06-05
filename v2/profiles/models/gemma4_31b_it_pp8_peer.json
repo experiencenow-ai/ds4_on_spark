@@ -1,0 +1,56 @@
+{
+  "backend": "vllm_pipeline",
+  "capability_classes": [
+    "gemma4",
+    "peer",
+    "smart"
+  ],
+  "format": "ds4-model-profile-v1",
+  "model_id": "google/gemma-4-31B-it",
+  "performance": {
+    "latency_rank": 1.0,
+    "target": "8-stage Gemma4 experimental layer pipeline; largest peer candidate for Qwen/DSV4 confidence checks"
+  },
+  "production_eligible": false,
+  "profile_id": "gemma4_31b_it_pp8_peer_v1",
+  "quality": {
+    "aime": "9/25 direct single-Spark fair run",
+    "baseline": "63/92 direct single-Spark DS4-eval on 2026-06-05; PP8 DS4-eval pending",
+    "compsec": "16/17 direct single-Spark fair run",
+    "mc": "38/50 direct single-Spark fair run"
+  },
+  "routing": {
+    "chat_template_thinking_key": "enable_thinking",
+    "default_chat_template_kwargs": {
+      "enable_thinking": false
+    },
+    "optional_kv_cache_deployments": [
+      "profiles/kv_cache/gemma4_31b_it_pp8_plain.json"
+    ],
+    "pipeline": {
+      "api_base_url": "http://127.0.0.1:8120",
+      "compute_domain": "spark-fleet-0",
+      "entry_node_id": "spark0",
+      "served_model_name": "gemma-4-31b-it-pp8",
+      "service_id": "gemma4_31b_pp8"
+    },
+    "pipeline_service_id": "gemma4_31b_pp8",
+    "rank": 740,
+    "requires_profile_pin": true,
+    "served_model_name": "gemma-4-31b-it-pp8",
+    "tokenizer_path": "/home/spark0/models/hf/google/gemma-4-31B-it"
+  },
+  "runtime_contract_id": "gemma4_31b_it_pp8_v1",
+  "supported_job_classes": [
+    "analysis",
+    "atom_edit",
+    "debug",
+    "json_repair",
+    "summary",
+    "tool_chat",
+    "triage"
+  ],
+  "supports_chat": true,
+  "supports_completion": true,
+  "supports_thinking": true
+}

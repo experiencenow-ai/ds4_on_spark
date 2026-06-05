@@ -177,6 +177,8 @@ class KvCacheDeployment:
 
 
 def kv_transfer_config(connector: KvCacheConnector) -> dict[str, Any]:
+    if connector.connector_id == "none" or not connector.kv_connector:
+        return {}
     config: dict[str, Any] = {
         "kv_connector": connector.kv_connector,
         "kv_role": connector.kv_role,
@@ -282,12 +284,13 @@ def _vllm_node_plan(deployment: KvCacheDeployment, connector: KvCacheConnector, 
     if node_rank < 0 or node_rank >= deployment.pipeline_parallel_size:
         raise ValueError("node_rank is outside the pipeline stage range")
     spark_node = deployment.worker_nodes[node_rank] if deployment.is_pipeline else deployment.spark_node
-    argv = _vllm_argv(deployment, connector, node_rank=node_rank)
-    command = _format_env_command(_env_for_rank(env, deployment, node_rank=node_rank, spark_node=spark_node), argv)
+    rank_env = _env_for_rank(env, deployment, node_rank=node_rank, spark_node=spark_node)
+    argv = _vllm_argv(deployment, connector, node_rank=node_rank, spark_node=spark_node)
+    command = _format_env_command(rank_env, argv)
     return dict(
         _stage_plan(deployment, node_rank=node_rank, spark_node=spark_node),
-        working_directory=deployment.working_directory,
-        env=_env_for_rank(env, deployment, node_rank=node_rank, spark_node=spark_node),
+        working_directory=_expand_rank_template(deployment.working_directory, spark_node=spark_node, node_rank=node_rank) if deployment.working_directory else None,
+        env=rank_env,
         argv=argv,
         command=command,
     )
@@ -303,7 +306,7 @@ def _stage_plan(deployment: KvCacheDeployment, *, node_rank: int, spark_node: st
 
 
 def _env_for_rank(env: dict[str, str], deployment: KvCacheDeployment, *, node_rank: int, spark_node: str) -> dict[str, str]:
-    out = dict(env)
+    out = {key: _expand_rank_template(value, spark_node=spark_node, node_rank=node_rank) for key, value in env.items()}
     if deployment.is_pipeline:
         out.setdefault("NODE_RANK", str(node_rank))
         out.setdefault("DS4_NODE_ID", spark_node)
@@ -312,8 +315,11 @@ def _env_for_rank(env: dict[str, str], deployment: KvCacheDeployment, *, node_ra
     return out
 
 
-def _vllm_argv(deployment: KvCacheDeployment, connector: KvCacheConnector, *, node_rank: int = 0) -> list[str]:
-    argv = [deployment.vllm_bin, "serve", deployment.model_id]
+def _vllm_argv(deployment: KvCacheDeployment, connector: KvCacheConnector, *, node_rank: int = 0, spark_node: str | None = None) -> list[str]:
+    spark_node = spark_node or deployment.spark_node
+    vllm_bin = _expand_rank_template(deployment.vllm_bin, spark_node=spark_node, node_rank=node_rank)
+    model_id = _expand_rank_template(deployment.model_id, spark_node=spark_node, node_rank=node_rank)
+    argv = [vllm_bin, "serve", model_id]
     if not deployment.is_pipeline or node_rank == 0:
         argv.extend(["--host", deployment.host, "--port", str(deployment.http_port)])
     argv.extend([
@@ -333,12 +339,15 @@ def _vllm_argv(deployment: KvCacheDeployment, connector: KvCacheConnector, *, no
             "--master-port",
             str(deployment.master_port or 29500),
         ])
-    argv.extend(["--kv-transfer-config", json.dumps(kv_transfer_config(connector), sort_keys=True)])
+    transfer = kv_transfer_config(connector)
+    if transfer:
+        argv.extend(["--kv-transfer-config", json.dumps(transfer, sort_keys=True)])
     if deployment.served_model_name:
-        argv.extend(["--served-model-name", deployment.served_model_name])
+        argv.extend(["--served-model-name", _expand_rank_template(deployment.served_model_name, spark_node=spark_node, node_rank=node_rank)])
     if deployment.text_only:
         argv.append("--language-model-only")
-    argv.extend(_dedupe_args(deployment.extra_args, present=set(item for item in argv if item.startswith("--"))))
+    extra_args = tuple(_expand_rank_template(item, spark_node=spark_node, node_rank=node_rank) for item in deployment.extra_args)
+    argv.extend(_dedupe_args(extra_args, present=set(item for item in argv if item.startswith("--"))))
     if deployment.is_pipeline and node_rank != 0 and "--headless" not in argv:
         argv.append("--headless")
     return argv
@@ -469,6 +478,8 @@ def _validate_deployment(deployment: KvCacheDeployment) -> None:
 
 
 def _default_connector_name(connector_id: str) -> str:
+    if connector_id == "none":
+        return ""
     if connector_id == "lmcache_mp":
         return "LMCacheMPConnector"
     if connector_id == "lmcache_dynamic":
@@ -514,12 +525,22 @@ def _format_env_command(env: dict[str, str], argv: list[str]) -> str:
     return " ".join(pieces)
 
 
+def _expand_rank_template(value: str, *, spark_node: str, node_rank: int) -> str:
+    return (
+        value.replace("{node}", spark_node)
+        .replace("{spark_node}", spark_node)
+        .replace("{node_rank}", str(node_rank))
+        .replace("{rank}", str(node_rank))
+    )
+
+
 def _install_script(deployment: KvCacheDeployment) -> str:
     packages = " ".join(shlex.quote(item) for item in deployment.connector.install_packages)
+    workdir = _expand_rank_template(deployment.working_directory or ".", spark_node=deployment.spark_node, node_rank=0)
     lines = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
-        "cd " + shlex.quote(deployment.working_directory or "."),
+        "cd " + shlex.quote(workdir),
     ]
     if deployment.connector.connector_id == "lmcache_mp" and packages:
         wheel_dir = deployment.connector.wheel_dir or "/tmp/ds4_lmcache_wheels"
@@ -527,20 +548,20 @@ def _install_script(deployment: KvCacheDeployment) -> str:
         wheel_argv = [deployment.python_bin, "-m", "pip", "wheel", "--no-build-isolation", "--no-deps", "--wheel-dir", wheel_dir]
         wheel_argv.extend(deployment.connector.install_packages)
         lines.append("mkdir -p " + shlex.quote(wheel_dir))
-        lines.append(_format_env_command(deployment.extra_env, wheel_argv))
+        lines.append(_format_env_command(_env_for_rank(deployment.extra_env, deployment, node_rank=0, spark_node=deployment.spark_node), wheel_argv))
         lines.append("wheel=$(find " + shlex.quote(wheel_dir) + " -maxdepth 1 -name " + shlex.quote(wheel_glob) + " -print -quit)")
         lines.append('if [ -z "${wheel}" ]; then echo "[ds4-kvcache] LMCache wheel not found" >&2; exit 2; fi')
         install_argv = [deployment.python_bin, "-m", "pip", "install", "--no-deps"]
-        lines.append(_format_env_command(deployment.extra_env, install_argv) + ' "${wheel}"')
+        lines.append(_format_env_command(_env_for_rank(deployment.extra_env, deployment, node_rank=0, spark_node=deployment.spark_node), install_argv) + ' "${wheel}"')
     elif packages:
         argv = [deployment.python_bin, "-m", "pip", "install", "--upgrade"]
         argv.extend(deployment.connector.install_args)
         argv.extend(deployment.connector.install_packages)
-        lines.append(_format_env_command(deployment.extra_env, argv))
+        lines.append(_format_env_command(_env_for_rank(deployment.extra_env, deployment, node_rank=0, spark_node=deployment.spark_node), argv))
     else:
         lines.append("echo '[ds4-kvcache] no connector packages requested'")
     for path in deployment.cache_directories:
-        lines.append("mkdir -p " + shlex.quote(path))
+        lines.append("mkdir -p " + shlex.quote(_expand_rank_template(path, spark_node=deployment.spark_node, node_rank=0)))
     return "\n".join(lines) + "\n"
 
 
@@ -567,8 +588,9 @@ def _start_script(vllm_plan: dict[str, Any], deployment: KvCacheDeployment) -> s
         "#!/usr/bin/env bash",
         "set -euo pipefail",
     ]
-    if deployment.working_directory:
-        lines.append("cd " + shlex.quote(deployment.working_directory))
+    workdir = vllm_plan.get("working_directory") or deployment.working_directory
+    if workdir:
+        lines.append("cd " + shlex.quote(str(workdir)))
     if vllm_plan.get("env") or _starts_with_env_assignment(vllm_plan["command"]):
         lines.append("exec env " + vllm_plan["command"])
     else:
