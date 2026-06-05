@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -16,6 +16,14 @@ import uuid
 
 from .api_chat_render import anthropic_messages_input_payload, openai_chat_input_payload
 from .api_stream import openai_chat_stream_events, openai_completion_requests, openai_completion_stream_events, write_sse
+from .dispatcher_resident import PendingDispatcherCohort, ResidentServicePlan
+from .dispatcher_resident import pending_claim_count as _pending_claim_count
+from .dispatcher_resident import pending_claim_count_by_service as _pending_claim_count_by_service
+from .dispatcher_resident import pending_claims as _pending_claims
+from .dispatcher_resident import pending_cohort as _pending_cohort
+from .dispatcher_resident import resident_service_order as _resident_service_order
+from .dispatcher_resident import resident_service_plans as _resident_service_plans
+from .dispatcher_resident import service_target_active as _service_target_active
 from .env_utils import env_bool as _env_bool
 from .profiles import ModelProfile, ProfileRegistry
 from .kv_cache import KV_CACHE_DIRECTIVE_FORMAT, KV_CACHE_PLAN_FORMAT, normalize_kv_cache_directive
@@ -35,31 +43,9 @@ class DispatcherRuntime:
     node_profile_ids: tuple[str, ...]
     batch_limits_by_service: dict[str, int]
     kv_shard_layouts_by_profile: dict[str, Any]
+    service_plans: dict[str, Any]
     next_heartbeat_at: float
-
-
-@dataclass
-class PendingDispatcherCohort:
-    claims: list[QueueClaim]
-    unfinished_request_ids: set[str]
-    lock: Any = field(default_factory=threading.Lock)
-
-    @classmethod
-    def from_claims(cls, claims: list[QueueClaim]) -> "PendingDispatcherCohort":
-        return cls(claims=list(claims), unfinished_request_ids={claim.request_id for claim in claims})
-
-    def mark_finished(self, request_id: str) -> None:
-        with self.lock:
-            self.unfinished_request_ids.discard(str(request_id))
-
-    def active_count(self) -> int:
-        with self.lock:
-            return len(self.unfinished_request_ids)
-
-    def active_claims(self) -> list[QueueClaim]:
-        with self.lock:
-            active = set(self.unfinished_request_ids)
-        return [claim for claim in self.claims if claim.request_id in active]
+    last_credit_at: float
 
 
 API_TERMINAL_STATES = {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled", "failed"}
@@ -83,9 +69,11 @@ class CoordinatorApi:
         self.sync_timeout_s = float(sync_timeout_s)
         self.poll_interval_s = max(0.001, float(poll_interval_s))
         self.dispatcher_enabled = _env_bool("DS4_API_BACKGROUND_DISPATCH", True)
+        self.dispatcher_resident_multimodel = _env_bool("DS4_API_RESIDENT_MULTIMODEL", True)
         topology_default_window = _topology_dispatch_window(self.topology_path)
         self.dispatcher_window = max(1, _env_int("DS4_API_DISPATCH_WINDOW", topology_default_window))
         self.dispatcher_refill_batch = max(1, _env_int("DS4_API_DISPATCH_REFILL_BATCH", self.dispatcher_window))
+        self.dispatcher_cohort_workers = max(1, _env_int("DS4_API_DISPATCH_COHORT_WORKERS", _topology_dispatch_cohort_workers(self.topology_path)))
         self.dispatcher_idle_sleep_s = max(0.001, _env_float("DS4_API_DISPATCH_IDLE_SLEEP_S", 0.005))
         self.dispatcher_batch_linger_s = max(0.0, _env_float("DS4_API_DISPATCH_BATCH_LINGER_S", 0.03))
         self.dispatcher_lease_ttl_s = max(1, _env_int("DS4_API_DISPATCH_LEASE_TTL_S", 900))
@@ -433,8 +421,11 @@ class CoordinatorApi:
             "running": False,
             "window": self.dispatcher_window,
             "refill_batch": self.dispatcher_refill_batch,
+            "cohort_workers": self.dispatcher_cohort_workers,
+            "resident_multimodel": self.dispatcher_resident_multimodel,
             "pending": 0,
             "pending_cohorts": 0,
+            "pending_by_service": {},
             "started_at": None,
             "last_work_at": None,
             "last_error": None,
@@ -454,6 +445,8 @@ class CoordinatorApi:
             "last_summary": None,
             "last_claimed_cohort_size": 0,
             "largest_claimed_cohort_size": 0,
+            "last_claimed_service_id": None,
+            "last_claimed_cohort_by_service": {},
         }
 
     def _dispatcher_note(self, **updates: Any) -> None:
@@ -502,13 +495,15 @@ class CoordinatorApi:
         entry_node_id = str(topology.routing_policy.get("queue_entry_node_id") or "spark0")
         return DispatcherRuntime(
             worker=worker,
-            executor=ThreadPoolExecutor(max_workers=self.dispatcher_window, thread_name_prefix="ds4-vllm-cohort"),
+            executor=ThreadPoolExecutor(max_workers=self.dispatcher_cohort_workers, thread_name_prefix="ds4-vllm-cohort"),
             pending={},
             entry_node_id=entry_node_id,
             node_profile_ids=_node_profile_ids(topology, entry_node_id),
             batch_limits_by_service=_batch_limits_by_service(topology),
             kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+            service_plans=_resident_service_plans(topology, entry_node_id=entry_node_id, default_batch_linger_s=self.dispatcher_batch_linger_s),
             next_heartbeat_at=time.time() + self.dispatcher_heartbeat_s,
+            last_credit_at=time.time(),
         )
 
     def _dispatcher_tick(self, runtime: DispatcherRuntime) -> bool:
@@ -516,6 +511,10 @@ class CoordinatorApi:
         if completed or failed or retried:
             self._dispatcher_count(completed_count=completed, failed_count=failed, retried_count=retried, requeued_count=retried)
         now = time.time()
+        elapsed = max(0.0, now - runtime.last_credit_at)
+        for plan in runtime.service_plans.values():
+            plan.credit(elapsed)
+        runtime.last_credit_at = now
         if runtime.pending and now >= runtime.next_heartbeat_at:
             runtime.worker._heartbeat(_pending_claims(runtime.pending))
             runtime.next_heartbeat_at = now + self.dispatcher_heartbeat_s
@@ -527,12 +526,13 @@ class CoordinatorApi:
             node_profile_ids=runtime.node_profile_ids,
             batch_limits_by_service=runtime.batch_limits_by_service,
             kv_shard_layouts_by_profile=runtime.kv_shard_layouts_by_profile,
+            service_plans=runtime.service_plans,
         )
         if submitted:
             self._dispatcher_count(worked_count=1, claimed_count=submitted, submitted_count=submitted)
-            self._dispatcher_note(last_work_at=time.time(), pending=_pending_claim_count(runtime.pending, queue=self.queue), pending_cohorts=len(runtime.pending), last_error=None)
+            self._dispatcher_note(last_work_at=time.time(), pending=_pending_claim_count(runtime.pending), pending_cohorts=len(runtime.pending), last_error=None)
             return True
-        self._dispatcher_note(pending=_pending_claim_count(runtime.pending, queue=self.queue), pending_cohorts=len(runtime.pending), last_error=None)
+        self._dispatcher_note(pending=_pending_claim_count(runtime.pending), pending_cohorts=len(runtime.pending), last_error=None)
         return bool(completed or failed or retried)
 
     def _dispatcher_shutdown(self, runtime: DispatcherRuntime) -> None:
@@ -553,8 +553,42 @@ class CoordinatorApi:
         node_profile_ids: tuple[str, ...],
         batch_limits_by_service: dict[str, int],
         kv_shard_layouts_by_profile: dict[str, Any],
+        service_plans: dict[str, ResidentServicePlan] | None = None,
     ) -> int:
-        available = self.dispatcher_window - _pending_claim_count(pending, queue=self.queue)
+        service_plans = service_plans or {}
+        if self.dispatcher_resident_multimodel and service_plans:
+            return self._dispatcher_refill_resident_multimodel(
+                worker=worker,
+                executor=executor,
+                pending=pending,
+                entry_node_id=entry_node_id,
+                node_profile_ids=node_profile_ids,
+                batch_limits_by_service=batch_limits_by_service,
+                kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
+                service_plans=service_plans,
+            )
+        return self._dispatcher_refill_exclusive(
+            worker=worker,
+            executor=executor,
+            pending=pending,
+            entry_node_id=entry_node_id,
+            node_profile_ids=node_profile_ids,
+            batch_limits_by_service=batch_limits_by_service,
+            kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
+        )
+
+    def _dispatcher_refill_exclusive(
+        self,
+        *,
+        worker: BatchWorker,
+        executor: ThreadPoolExecutor,
+        pending: dict[Any, Any],
+        entry_node_id: str,
+        node_profile_ids: tuple[str, ...],
+        batch_limits_by_service: dict[str, int],
+        kv_shard_layouts_by_profile: dict[str, Any],
+    ) -> int:
+        available = self.dispatcher_window - _pending_claim_count(pending)
         if available <= 0:
             return 0
         limit = min(available, self.dispatcher_refill_batch)
@@ -582,12 +616,121 @@ class CoordinatorApi:
         )
         if not claims:
             return 0
+        self._dispatcher_submit_cohort(executor=executor, worker=worker, pending=pending, claims=claims)
+        return len(claims)
+
+    def _dispatcher_refill_resident_multimodel(
+        self,
+        *,
+        worker: BatchWorker,
+        executor: ThreadPoolExecutor,
+        pending: dict[Any, Any],
+        entry_node_id: str,
+        node_profile_ids: tuple[str, ...],
+        batch_limits_by_service: dict[str, int],
+        kv_shard_layouts_by_profile: dict[str, Any],
+        service_plans: dict[str, ResidentServicePlan],
+    ) -> int:
+        global_available = self.dispatcher_window - _pending_claim_count(pending)
+        if global_available <= 0:
+            return 0
+        self.queue.requeue_expired_leases()
+        active_by_service = _pending_claim_count_by_service(pending)
+        submitted = 0
+        made_ready = 0
+        attempted = 0
+        for plan in _resident_service_order(service_plans, active_by_service):
+            if global_available <= 0 or submitted >= self.dispatcher_refill_batch:
+                break
+            limit = self._resident_refill_limit(plan, active_by_service, submitted, global_available)
+            if limit <= 0:
+                continue
+            attempted += 1
+            made_ready += self._resident_prepare_ready(worker, plan, entry_node_id, node_profile_ids, limit, kv_shard_layouts_by_profile)
+            claims = self._resident_claim_ready(worker, plan, entry_node_id, limit, kv_shard_layouts_by_profile, batch_limits_by_service)
+            if not claims:
+                continue
+            claimed = len(claims)
+            self._dispatcher_submit_cohort(executor=executor, worker=worker, pending=pending, claims=claims)
+            plan.charge(claimed)
+            submitted += claimed
+            global_available -= claimed
+            active_by_service[plan.service_id] = int(active_by_service.get(plan.service_id, 0)) + claimed
+        self._dispatcher_note_resident(pending, service_plans, attempted=attempted, made_ready=made_ready)
+        return submitted
+
+    def _resident_refill_limit(self, plan: ResidentServicePlan, active_by_service: dict[str, int], submitted: int, global_available: int) -> int:
+        active = int(active_by_service.get(plan.service_id, 0))
+        service_available = max(0, int(plan.target_active) - active)
+        if service_available <= 0:
+            return 0
+        return min(
+            service_available,
+            max(1, int(plan.max_cohort_size)),
+            max(1, int(self.dispatcher_refill_batch) - submitted),
+            global_available,
+        )
+
+    def _resident_prepare_ready(self, worker: BatchWorker, plan: ResidentServicePlan, entry_node_id: str, node_profile_ids: tuple[str, ...], limit: int, kv_shard_layouts_by_profile: dict[str, Any]) -> int:
+        return self.queue.prepare_ready(
+            node_id=entry_node_id,
+            eligible_profile_ids=node_profile_ids,
+            batch_id=None,
+            limit=limit,
+            leased_by=worker.worker_id,
+            lease_ttl_s=worker.lease_ttl_s,
+            max_node_depth=0,
+            kv_capacity_bytes=self.dispatcher_kv_capacity_bytes,
+            kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
+            selected_service_id=plan.service_id,
+            share_compute_domain=True,
+        )
+
+    def _resident_claim_ready(self, worker: BatchWorker, plan: ResidentServicePlan, entry_node_id: str, limit: int, kv_shard_layouts_by_profile: dict[str, Any], batch_limits_by_service: dict[str, int]) -> list[QueueClaim]:
+        return self.queue.claim_ready_batch(
+            node_id=entry_node_id,
+            batch_id=None,
+            limit=limit,
+            leased_by=worker.worker_id,
+            lease_ttl_s=worker.lease_ttl_s,
+            batch_linger_s=plan.batch_linger_s,
+            kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
+            batch_limits_by_service=batch_limits_by_service,
+            selected_service_id=plan.service_id,
+            share_compute_domain=True,
+        )
+
+    def _dispatcher_note_resident(self, pending: dict[Any, Any], service_plans: dict[str, ResidentServicePlan], *, attempted: int, made_ready: int) -> None:
+        self._dispatcher_note(
+            pending_by_service=_pending_claim_count_by_service(pending),
+            resident_service_targets={sid: plan.target_active for sid, plan in service_plans.items()},
+            resident_service_low_watermarks={sid: plan.low_watermark for sid, plan in service_plans.items()},
+            resident_service_deficits={sid: round(plan.deficit, 3) for sid, plan in service_plans.items()},
+            resident_refill_attempted_services=attempted,
+            resident_prefilled_count=made_ready,
+        )
+
+    def _dispatcher_submit_cohort(
+        self,
+        *,
+        executor: ThreadPoolExecutor,
+        worker: BatchWorker,
+        pending: dict[Any, Any],
+        claims: list[QueueClaim],
+    ) -> None:
         cohort = PendingDispatcherCohort.from_claims(list(claims))
         future = executor.submit(_dispatcher_run_claims, worker, claims, len(claims), cohort.mark_finished)
         pending[future] = cohort
         largest = max(int(self.dispatcher_state.get("largest_claimed_cohort_size") or 0), len(claims))
-        self._dispatcher_note(last_claimed_cohort_size=len(claims), largest_claimed_cohort_size=largest)
-        return len(claims)
+        last_by_service = dict(self.dispatcher_state.get("last_claimed_cohort_by_service") or {})
+        if cohort.service_id:
+            last_by_service[str(cohort.service_id)] = len(claims)
+        self._dispatcher_note(
+            last_claimed_cohort_size=len(claims),
+            largest_claimed_cohort_size=largest,
+            last_claimed_service_id=cohort.service_id,
+            last_claimed_cohort_by_service=last_by_service,
+        )
 
     def _dispatcher_finish_done(self, worker: BatchWorker, pending: dict[Any, Any], *, block: bool) -> tuple[int, int, int]:
         if not pending:
@@ -689,11 +832,18 @@ def _topology_dispatch_window(topology_path: Path) -> int:
     values: list[int] = []
     for service in topology.pipeline_services.values():
         try:
-            values.append(int(service.scheduler.get("queue_concurrency") or service.scheduler.get("queue_limit") or service.max_batch_size or 0))
+            values.append(_service_target_active(service))
         except Exception:
             continue
-    cap = max(1, _env_int("DS4_API_DISPATCH_DEFAULT_CAP", 128))
-    return min(max([64] + values), cap)
+    return max(64, sum(values) if values else 0)
+
+
+def _topology_dispatch_cohort_workers(topology_path: Path) -> int:
+    try:
+        topology = SparkTopology.load(topology_path)
+    except Exception:
+        return 4
+    return max(4, min(32, len(topology.pipeline_services) * 4))
 
 
 def _default_sync_timeout_s() -> float:
@@ -1241,29 +1391,6 @@ def _body_float(body: dict[str, Any], key: str, default: float) -> float:
     if key not in body or body.get(key) is None:
         return float(default)
     return float(body[key])
-
-
-def _pending_claims(pending: dict[Any, Any]) -> list[QueueClaim]:
-    claims: list[QueueClaim] = []
-    for cohort in pending.values():
-        claims.extend(_pending_cohort(cohort).active_claims())
-    return claims
-
-
-def _pending_claim_count(pending: dict[Any, Any], *, queue: Any | None = None) -> int:
-    cohorts = [_pending_cohort(cohort) for cohort in pending.values()]
-    if all(isinstance(cohort, PendingDispatcherCohort) for cohort in pending.values()):
-        return sum(cohort.active_count() for cohort in cohorts)
-    if queue is None or not hasattr(queue, "unfinished_request_count"):
-        return sum(len(cohort.claims) for cohort in cohorts)
-    request_ids = [claim.request_id for cohort in cohorts for claim in cohort.claims]
-    return int(queue.unfinished_request_count(request_ids))
-
-
-def _pending_cohort(value: Any) -> PendingDispatcherCohort:
-    if isinstance(value, PendingDispatcherCohort):
-        return value
-    return PendingDispatcherCohort.from_claims(list(value))
 
 
 _DISPATCHER_BATCH_FINISHED: Any = object()

@@ -276,7 +276,7 @@ class InferenceQueue:
         from .worker import BatchWorker
         return BatchWorker(queue=self, registry=registry, runner=runner, worker_id=worker_id, lease_ttl_s=lease_ttl_s, heartbeat_interval_s=heartbeat_interval_s, transport_max_attempts=transport_max_attempts).run_once(node_id=node_id, batch_id=batch_id, limit=limit, concurrency=concurrency, node_profile_ids=tuple(node_profile_ids or ()), max_node_depth=max_node_depth, batch_linger_s=batch_linger_s, kv_capacity_bytes=kv_capacity_bytes, kv_shard_layouts_by_profile=kv_shard_layouts_by_profile or {}, batch_limits_by_service=batch_limits_by_service or {}, refill_low_watermarks_by_service=refill_low_watermarks_by_service or {}, on_result=on_result)
 
-    def prepare_ready(self, *, node_id: str | None, eligible_profile_ids: Iterable[str], batch_id: str | None, limit: int, leased_by: str, lease_ttl_s: int, max_node_depth: int = 0, kv_capacity_bytes: int = 0, kv_shard_layouts_by_profile: Mapping[str, Any] | None = None) -> int:
+    def prepare_ready(self, *, node_id: str | None, eligible_profile_ids: Iterable[str], batch_id: str | None, limit: int, leased_by: str, lease_ttl_s: int, max_node_depth: int = 0, kv_capacity_bytes: int = 0, kv_shard_layouts_by_profile: Mapping[str, Any] | None = None, selected_service_id: str | None = None, share_compute_domain: bool = False) -> int:
         eligible = tuple(str(x) for x in eligible_profile_ids if str(x))
         now = time.time()
         made_ready = 0
@@ -288,7 +288,7 @@ class InferenceQueue:
                 remaining = min(remaining, max(0, int(max_node_depth) - _node_depth(conn, node_id)))
             if remaining <= 0:
                 return 0
-            rows = _queued_rows(conn, node_id=node_id, eligible=eligible, batch_id=batch_id, limit=remaining)
+            rows = _queued_rows(conn, node_id=node_id, eligible=eligible, batch_id=batch_id, limit=remaining, selected_service_id=selected_service_id, ignore_compute_lease=share_compute_domain)
             for row in rows:
                 bind_node_id = str(row["selected_node_id"] or node_id) if (row["selected_node_id"] or node_id) else None
                 pipeline_layout = kv_shard_layouts_by_profile.get(str(row["selected_profile_id"]))
@@ -326,10 +326,10 @@ class InferenceQueue:
                 self._refresh_batch(conn, touched_batch_id)
         return made_ready
 
-    def claim_ready_batch(self, *, node_id: str | None, batch_id: str | None, limit: int, leased_by: str, lease_ttl_s: int, batch_linger_s: float = 0.0, kv_shard_layouts_by_profile: Mapping[str, Any] | None = None, batch_limits_by_service: Mapping[str, int] | None = None, compute_lease_id: str | None = None, selected_service_id: str | None = None) -> list[QueueClaim]:
+    def claim_ready_batch(self, *, node_id: str | None, batch_id: str | None, limit: int, leased_by: str, lease_ttl_s: int, batch_linger_s: float = 0.0, kv_shard_layouts_by_profile: Mapping[str, Any] | None = None, batch_limits_by_service: Mapping[str, int] | None = None, compute_lease_id: str | None = None, selected_service_id: str | None = None, share_compute_domain: bool = False) -> list[QueueClaim]:
         now = time.time()
         with closing(self._connect()) as conn, conn:
-            rows = _ready_rows(conn, node_id=node_id, batch_id=batch_id, limit=limit, batch_limits_by_service=batch_limits_by_service or {}, selected_service_id=selected_service_id)
+            rows = _ready_rows(conn, node_id=node_id, batch_id=batch_id, limit=limit, batch_limits_by_service=batch_limits_by_service or {}, selected_service_id=selected_service_id, ignore_compute_lease=share_compute_domain)
             if not rows:
                 return []
             linger_limit = _service_batch_limit(rows[0]["selected_service_id"], batch_limits_by_service or {}, limit)
@@ -337,8 +337,11 @@ class InferenceQueue:
                 newest_ready = max(float(row["ready_at"] or row["updated_at"] or now) for row in rows)
                 if (now - newest_ready) < batch_linger_s:
                     return []
-            acquired_compute_lease_id = self._extend_compute_lease(conn, rows=rows, compute_lease_id=compute_lease_id, leased_by=leased_by, lease_ttl_s=lease_ttl_s, now=now) if compute_lease_id else self._acquire_compute_lease(conn, rows=rows, leased_by=leased_by, lease_ttl_s=lease_ttl_s, now=now)
-            new_compute_lease = compute_lease_id is None and isinstance(acquired_compute_lease_id, str)
+            if share_compute_domain:
+                acquired_compute_lease_id = None
+            else:
+                acquired_compute_lease_id = self._extend_compute_lease(conn, rows=rows, compute_lease_id=compute_lease_id, leased_by=leased_by, lease_ttl_s=lease_ttl_s, now=now) if compute_lease_id else self._acquire_compute_lease(conn, rows=rows, leased_by=leased_by, lease_ttl_s=lease_ttl_s, now=now)
+            new_compute_lease = (not share_compute_domain) and compute_lease_id is None and isinstance(acquired_compute_lease_id, str)
             if acquired_compute_lease_id is False:
                 return []
             claims: list[QueueClaim] = []
@@ -1209,7 +1212,7 @@ def _compute_lease_should_drain(conn: sqlite3.Connection, lease: sqlite3.Row, *,
     return row is not None
 
 
-def _queued_rows(conn: sqlite3.Connection, *, node_id: str | None, eligible: tuple[str, ...], batch_id: str | None, limit: int) -> list[sqlite3.Row]:
+def _queued_rows(conn: sqlite3.Connection, *, node_id: str | None, eligible: tuple[str, ...], batch_id: str | None, limit: int, selected_service_id: str | None = None, ignore_compute_lease: bool = False) -> list[sqlite3.Row]:
     clauses = ["state='queued'"]
     params: list[Any] = []
     if node_id is not None:
@@ -1221,7 +1224,10 @@ def _queued_rows(conn: sqlite3.Connection, *, node_id: str | None, eligible: tup
     if batch_id:
         clauses.append("batch_id=?")
         params.append(batch_id)
-    else:
+    if selected_service_id is not None:
+        clauses.append("selected_service_id=?")
+        params.append(selected_service_id)
+    elif not batch_id and not ignore_compute_lease:
         now = time.time()
         existing_lease = conn.execute("select * from compute_leases where lease_expires_at > ? order by created_at limit 1", (now,)).fetchone()
         if existing_lease is not None and _compute_lease_should_prefer(conn, existing_lease, now=now):
@@ -1366,7 +1372,7 @@ def _next_queued(conn: sqlite3.Connection, *, node_id: str | None, eligible: tup
     return conn.execute(f"select * from requests where {' and '.join(clauses)} order by priority, created_at, request_id limit 1", tuple(params)).fetchone()
 
 
-def _ready_rows(conn: sqlite3.Connection, *, node_id: str | None, batch_id: str | None, limit: int, batch_limits_by_service: Mapping[str, int] | None = None, selected_service_id: str | None = None) -> list[sqlite3.Row]:
+def _ready_rows(conn: sqlite3.Connection, *, node_id: str | None, batch_id: str | None, limit: int, batch_limits_by_service: Mapping[str, int] | None = None, selected_service_id: str | None = None, ignore_compute_lease: bool = False) -> list[sqlite3.Row]:
     clauses = ["state='ready'"]
     params: list[Any] = []
     if node_id is not None:
@@ -1378,7 +1384,7 @@ def _ready_rows(conn: sqlite3.Connection, *, node_id: str | None, batch_id: str 
     if selected_service_id is not None:
         clauses.append("selected_service_id=?")
         params.append(selected_service_id)
-    elif not batch_id:
+    elif not batch_id and not ignore_compute_lease:
         now = time.time()
         existing_lease = conn.execute("select * from compute_leases where lease_expires_at > ? order by created_at limit 1", (now,)).fetchone()
         if existing_lease is not None and _compute_lease_should_prefer(conn, existing_lease, now=now):

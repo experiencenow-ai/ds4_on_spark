@@ -14,7 +14,7 @@ from .builders import model_batch_payload, request_messages, request_prompt
 from .cohort_safety import coalesced_completion_token_budget, coalesced_failure_should_bisect, mark_coalesced_split, prompt_token_estimate
 from .kv_cache import kv_cache_extra_body, kv_cache_vllm_request_fields
 from .profiles import ModelProfile
-from .runner_payloads import merge_request_extra_body, requests_need_client_stream
+from .runner_payloads import merge_payload_extra_body, merge_request_extra_body, requests_need_client_stream
 from .schemas import InferenceRequest, make_result
 
 
@@ -1256,12 +1256,7 @@ def _completed_error(completed: Any, host: str) -> str:
 
 
 def _merge_extra_body(payload: dict[str, Any], extra_body: dict[str, Any]) -> None:
-    if not extra_body:
-        return
-    existing = payload.get("extra_body")
-    merged = dict(existing) if isinstance(existing, dict) else {}
-    merged.update(extra_body)
-    payload["extra_body"] = merged
+    merge_payload_extra_body(payload, extra_body)
 
 
 OPENAI_REQUEST_FIELDS = {

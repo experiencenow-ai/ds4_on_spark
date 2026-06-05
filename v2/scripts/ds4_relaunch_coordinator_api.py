@@ -106,9 +106,14 @@ def _coordinator_env(args: argparse.Namespace, v2_dir: Path) -> dict[str, str]:
 
 
 _SAFETY_PROFILE_DEFAULTS = {
+    "DS4_API_DISPATCH_COHORT_WORKERS",
     "DS4_API_DISPATCH_KV_CAPACITY_BYTES",
+    "DS4_API_RENDER_CHAT_WITH_TOKENIZER",
+    "DS4_API_REQUIRE_TOKENIZER_CHAT_RENDER",
+    "DS4_API_RESIDENT_MULTIMODEL",
     "DS4_API_TRANSPORT_MAX_ATTEMPTS",
     "DS4_COMPUTE_LEASE_QUANTUM_S",
+    "DS4_PIPELINE_INTERNAL_STREAM_ALL_COHORTS",
     "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET",
     "DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE",
     "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX",
@@ -121,9 +126,21 @@ _SAFETY_PROFILE_DEFAULTS = {
 
 def _profile_defaults(profile: str) -> dict[str, str]:
     dsv4 = _load_dsv4_production_profile()
-    common = {
+    common = _common_profile_defaults(dsv4)
+    if profile in {"throughput", "production", "resident128", "resident256"}:
+        common.update(_dsv4_profile_defaults(dsv4, profile))
+    return common
+
+
+def _common_profile_defaults(dsv4: dict[str, object]) -> dict[str, str]:
+    return {
         "DS4_API_BACKGROUND_DISPATCH": "1",
+        "DS4_API_DISPATCH_COHORT_WORKERS": "16",
+        "DS4_API_RENDER_CHAT_WITH_TOKENIZER": "1",
+        "DS4_API_REQUIRE_TOKENIZER_CHAT_RENDER": "1",
+        "DS4_API_RESIDENT_MULTIMODEL": "1",
         "DS4_PIPELINE_COHORT_COMPLETIONS": "1",
+        "DS4_PIPELINE_INTERNAL_STREAM_ALL_COHORTS": "1",
         "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "32768",
         "DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE": "1",
         "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "128",
@@ -135,37 +152,34 @@ def _profile_defaults(profile: str) -> dict[str, str]:
         "DS4_API_TRANSPORT_MAX_ATTEMPTS": "1",
         "DS4_API_DISPATCH_KV_CAPACITY_BYTES": str(dsv4["coordinator"]["dispatch_kv_capacity_bytes"]),
     }
-    if profile in {"throughput", "production", "resident128", "resident256"}:
-        coordinator = dsv4["coordinator"]
-        service_id = str(dsv4["service_id"])
-        max_num_seqs = int(dsv4["max_num_seqs"])
-        if profile == "resident256":
-            coordinator = dict(coordinator)
-            coordinator.update(
-                {
-                    "dispatch_window": 256,
-                    "dispatch_refill_batch": 256,
-                    "completion_cohort_max": 256,
-                    "completion_token_budget": 98304,
-                    "completion_pp_safe_cohort_max": 256,
-                    "completion_chunk_concurrency": 4,
-                }
-            )
-            max_num_seqs = 256
-        common.update(
+
+
+def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str) -> dict[str, str]:
+    coordinator = dict(dsv4["coordinator"])
+    max_num_seqs = int(dsv4["max_num_seqs"])
+    if profile == "resident256":
+        coordinator.update(
             {
-                "DS4_API_DISPATCH_WINDOW": str(coordinator["dispatch_window"]),
-                "DS4_API_DISPATCH_REFILL_BATCH": str(coordinator["dispatch_refill_batch"]),
-                "DS4_API_DISPATCH_BATCH_LINGER_S": "0.05",
-                "DS4_PIPELINE_COMPLETION_COHORT_MAX": str(coordinator["completion_cohort_max"]),
-                "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": str(coordinator["completion_token_budget"]),
-                "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": str(coordinator["completion_pp_safe_cohort_max"]),
-                "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": str(coordinator["completion_chunk_concurrency"]),
-                "DS4_API_DISPATCH_KV_CAPACITY_BYTES": str(coordinator["dispatch_kv_capacity_bytes"]),
-                "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": 12, "qwen27_nvfp4_pp8": 12, service_id: max_num_seqs}, separators=(",", ":")),
+                "dispatch_window": 256,
+                "dispatch_refill_batch": 256,
+                "completion_cohort_max": 256,
+                "completion_token_budget": 98304,
+                "completion_pp_safe_cohort_max": 256,
+                "completion_chunk_concurrency": 4,
             }
         )
-    return common
+        max_num_seqs = 256
+    return {
+        "DS4_API_DISPATCH_WINDOW": str(coordinator["dispatch_window"]),
+        "DS4_API_DISPATCH_REFILL_BATCH": str(coordinator["dispatch_refill_batch"]),
+        "DS4_API_DISPATCH_BATCH_LINGER_S": "0.05",
+        "DS4_PIPELINE_COMPLETION_COHORT_MAX": str(coordinator["completion_cohort_max"]),
+        "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": str(coordinator["completion_token_budget"]),
+        "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": str(coordinator["completion_pp_safe_cohort_max"]),
+        "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": str(coordinator["completion_chunk_concurrency"]),
+        "DS4_API_DISPATCH_KV_CAPACITY_BYTES": str(coordinator["dispatch_kv_capacity_bytes"]),
+        "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": 12, "qwen27_nvfp4_pp8": 12, str(dsv4["service_id"]): max_num_seqs}, separators=(",", ":")),
+    }
 
 
 def _load_dsv4_production_profile() -> dict[str, object]:

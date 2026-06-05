@@ -90,9 +90,34 @@ class PipelineApiTests(unittest.TestCase):
         )
         payload = _openai_payload(request, profile)
         self.assertEqual(payload["max_tokens"], 164)
-        self.assertEqual(payload["extra_body"]["thinking_budget_tokens"], 100)
-        self.assertEqual(payload["extra_body"]["thinking_token_budget"], 100)
-        self.assertEqual(payload["extra_body"]["chat_template_kwargs"], {"enable_thinking": True})
+        self.assertEqual(payload["thinking"]["budget_tokens"], 100)
+        self.assertEqual(payload["thinking_budget_tokens"], 100)
+        self.assertEqual(payload["thinking_token_budget"], 100)
+        self.assertEqual(payload["chat_template_kwargs"], {"enable_thinking": True})
+        self.assertNotIn("extra_body", payload)
+
+    def test_pipeline_rendered_chat_completion_keeps_template_fields_out_of_completion_body(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
+        request = InferenceRequest.from_json(
+            {
+                "format": "ds4-inference-request-v1",
+                "request_id": "rendered-chat-payload",
+                "capability": "efficient",
+                "chat": True,
+                "immediate": False,
+                "job_class": "analysis",
+                "max_output_tokens": 64,
+                "thinking_budget_tokens": 0,
+                "temperature": 0,
+                "input": {"messages": [{"role": "user", "content": "solve"}], "rendered_prompt": "<chat>solve</chat>"},
+                "output_contract": {"format": "text"},
+            }
+        )
+        payload = _openai_payload(request, profile, render_chat_as_completion=True)
+        self.assertEqual(payload["prompt"], "<chat>solve</chat>")
+        self.assertNotIn("chat_template_kwargs", payload)
+        self.assertEqual(payload["extra_body"]["chat_template_kwargs"], {"enable_thinking": False})
 
     def test_pipeline_served_model_override_can_key_by_service_id(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
@@ -442,7 +467,8 @@ class PipelineApiTests(unittest.TestCase):
                 kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
                 batch_limits_by_service=api_module._batch_limits_by_service(topology),
             )
-            self.assertEqual(api_module._pending_claim_count({object(): claims}, queue=api.queue), 2)
+            cohort = api_module.PendingDispatcherCohort.from_claims(claims)
+            self.assertEqual(api_module._pending_claim_count({object(): cohort}), 2)
             first = claims[0]
             api.queue.finish_request(
                 request_id=first.request_id,
@@ -456,7 +482,8 @@ class PipelineApiTests(unittest.TestCase):
                     text="done",
                 ),
             )
-            self.assertEqual(api_module._pending_claim_count({object(): claims}, queue=api.queue), 1)
+            cohort.mark_finished(first.request_id)
+            self.assertEqual(api_module._pending_claim_count({object(): cohort}), 1)
 
     def test_pipeline_runner_prestages_common_strict_kv_prefix(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

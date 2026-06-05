@@ -69,6 +69,11 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], str(coordinator["completion_pp_safe_cohort_max"]))
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], str(coordinator["completion_chunk_concurrency"]))
         self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(coordinator["dispatch_kv_capacity_bytes"]))
+        self.assertEqual(defaults["DS4_API_DISPATCH_COHORT_WORKERS"], "16")
+        self.assertEqual(defaults["DS4_API_RENDER_CHAT_WITH_TOKENIZER"], "1")
+        self.assertEqual(defaults["DS4_API_REQUIRE_TOKENIZER_CHAT_RENDER"], "1")
+        self.assertEqual(defaults["DS4_API_RESIDENT_MULTIMODEL"], "1")
+        self.assertEqual(defaults["DS4_PIPELINE_INTERNAL_STREAM_ALL_COHORTS"], "1")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS"], "1")
         self.assertEqual(json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])[DSV4_PRODUCTION["service_id"]], DSV4_PRODUCTION["max_num_seqs"])
 
@@ -131,17 +136,24 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
 
     def test_relaunch_safety_defaults_override_inherited_env(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
-        old = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")
+        old_kv = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")
+        old_resident = os.environ.get("DS4_API_RESIDENT_MULTIMODEL")
         os.environ["DS4_API_DISPATCH_KV_CAPACITY_BYTES"] = "0"
+        os.environ["DS4_API_RESIDENT_MULTIMODEL"] = "0"
         try:
             args = type("Args", (), {"profile": DSV4_PRODUCTION["coordinator_profile"]})()
             env = relaunch._coordinator_env(args, ROOT)
         finally:
-            if old is None:
+            if old_kv is None:
                 os.environ.pop("DS4_API_DISPATCH_KV_CAPACITY_BYTES", None)
             else:
-                os.environ["DS4_API_DISPATCH_KV_CAPACITY_BYTES"] = old
+                os.environ["DS4_API_DISPATCH_KV_CAPACITY_BYTES"] = old_kv
+            if old_resident is None:
+                os.environ.pop("DS4_API_RESIDENT_MULTIMODEL", None)
+            else:
+                os.environ["DS4_API_RESIDENT_MULTIMODEL"] = old_resident
         self.assertEqual(env["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(DSV4_PRODUCTION["coordinator"]["dispatch_kv_capacity_bytes"]))
+        self.assertEqual(env["DS4_API_RESIDENT_MULTIMODEL"], "1")
 
 
 if __name__ == "__main__":
