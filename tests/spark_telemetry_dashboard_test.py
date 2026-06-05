@@ -263,9 +263,9 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertIn("const CPU_PCT_MAX=2000", dashboard.DASHBOARD_HTML)
         self.assertIn("cpu_pct:CPU_PCT_MAX", dashboard.DASHBOARD_HTML)
 
-    def test_dashboard_card_shows_watts_and_marks_missing_vllm_na(self):
-        self.assertIn('let pwr=n.gpu_power_known?val(n.gpu_power_w,"W"):"n/a"', dashboard.DASHBOARD_HTML)
-        self.assertIn('Pwr <b>${pwr}</b>', dashboard.DASHBOARD_HTML)
+    def test_dashboard_card_omits_power_and_marks_missing_vllm_na(self):
+        self.assertNotIn('Pwr <b>', dashboard.DASHBOARD_HTML)
+        self.assertNotIn('let pwr=', dashboard.DASHBOARD_HTML)
         self.assertIn('Svc <b>${n.ds_service_id||"n/a"}</b>', dashboard.DASHBOARD_HTML)
         self.assertIn('bar("KV",n.kv_pct,"kv",n.kv_known,n.kv_label)', dashboard.DASHBOARD_HTML)
         self.assertIn('function workKnown(n)', dashboard.DASHBOARD_HTML)
@@ -273,18 +273,20 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertIn('workKnown(n)?val(n[key],unit):"n/a"', dashboard.DASHBOARD_HTML)
         self.assertIn('n.vllm_metrics_up?pct(n.cache_hit_pct):"n/a"', dashboard.DASHBOARD_HTML)
 
-    def test_dashboard_summary_combines_tokens_and_shows_total_power(self):
-        self.assertIn('grid-template-columns:repeat(7,minmax(110px,1fr))', dashboard.DASHBOARD_HTML)
+    def test_dashboard_summary_combines_tokens_and_omits_power(self):
+        self.assertIn('grid-template-columns:repeat(6,minmax(110px,1fr))', dashboard.DASHBOARD_HTML)
         self.assertIn('metric("GPU Avg",d.gpu_known?pct(d.avg_gpu_pct):"n/a")', dashboard.DASHBOARD_HTML)
         self.assertIn('metric("DS Models",d.ds_services_known?`${fmt(d.ds_service_count)} svc`:"n/a")', dashboard.DASHBOARD_HTML)
         self.assertIn('metric("Tok/s In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`)', dashboard.DASHBOARD_HTML)
-        self.assertIn('metric("Total Power",d.power_known?val(d.total_gpu_power_w,"W"):"n/a")', dashboard.DASHBOARD_HTML)
+        self.assertNotIn('metric("Total Power"', dashboard.DASHBOARD_HTML)
         self.assertNotIn('metric("In tok/s"', dashboard.DASHBOARD_HTML)
         self.assertNotIn('metric("Out tok/s"', dashboard.DASHBOARD_HTML)
         self.assertNotIn('metric("Cache hit"', dashboard.DASHBOARD_HTML)
 
-    def test_dashboard_history_hides_power_series_when_unknown(self):
-        self.assertIn('m.key!=="power_w"||data.power_known', dashboard.DASHBOARD_HTML)
+    def test_dashboard_history_omits_power_series(self):
+        self.assertNotIn('"power_w"', dashboard.DASHBOARD_HTML)
+        self.assertNotIn('data.power_known', dashboard.DASHBOARD_HTML)
+        self.assertNotIn('PWR', dashboard.DASHBOARD_HTML)
 
 
 if __name__ == "__main__":
