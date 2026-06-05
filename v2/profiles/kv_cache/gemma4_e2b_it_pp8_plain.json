@@ -61,7 +61,7 @@
   "pipeline_parallel_size": 8,
   "profile_id": "gemma4_e2b_it_pp8_peer_v1",
   "python_bin": "python3",
-  "pythonpath": "/home/{node}/ds4_on_spark/v2/src",
+  "pythonpath": "/home/{node}/src/ds4_on_spark/v2/src",
   "runtime_contract_id": "gemma4_e2b_it_pp8_v1",
   "served_model_name": "gemma-4-e2b-it-pp8",
   "spark_node": "spark0",
@@ -83,5 +83,5 @@
     "spark6",
     "spark7"
   ],
-  "working_directory": "/home/{node}/ds4_on_spark/v2"
+  "working_directory": "/home/{node}/src/ds4_on_spark/v2"
 }
