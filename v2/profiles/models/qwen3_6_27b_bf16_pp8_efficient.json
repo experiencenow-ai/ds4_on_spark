@@ -17,6 +17,7 @@
   },
   "routing": {
     "chat_template_thinking_key": "enable_thinking",
+    "tokenizer_path": "/home/spark0/models/hf/Qwen/Qwen3.6-27B",
     "default_for": [
       "efficient",
       "world_model"

@@ -66,6 +66,17 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(qwen.stages()[-1].layer_end, 64)
         self.assertEqual(dsv4.stages()[-1].layer_end, 43)
 
+    def test_production_chat_profiles_have_authoritative_tokenizer_path(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        missing = [
+            profile.profile_id
+            for profile in registry.all_profiles()
+            if profile.production_eligible
+            and profile.supports_chat
+            and not profile.routing.get("tokenizer_path")
+        ]
+        self.assertEqual(missing, [])
+
     def test_pipeline_node_override_supports_six_sparks(self) -> None:
         with patch.dict("os.environ", {"DS4_PIPELINE_NODES": "spark0,spark1,spark2,spark3,spark4,spark5"}):
             topology = SparkTopology.load(TOPOLOGY)
