@@ -31,6 +31,42 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         self.assertTrue(cases[0]["question"])
         self.assertTrue(cases[0]["answer"])
 
+    def test_default_eval_prompt_keeps_official_contract(self) -> None:
+        prompt = self.runner.build_question_prompt(
+            {"question": "Pick one.", "choices": ["alpha", "beta"], "source": "X"}
+        )
+
+        self.assertIn("At the end", prompt)
+        self.assertIn("Answer: <letter>", prompt)
+        self.assertNotIn("Output exactly one line", prompt)
+
+    def test_concise_eval_prompt_requests_short_reasoning(self) -> None:
+        prompt = self.runner.build_question_prompt(
+            {"question": "Pick one.", "choices": ["alpha", "beta"], "source": "X"},
+            response_style="concise",
+        )
+
+        self.assertIn("at most three short sentences", prompt)
+        self.assertIn("Answer: <letter>", prompt)
+
+    def test_answer_only_eval_prompt_requests_single_line(self) -> None:
+        prompt = self.runner.build_question_prompt(
+            {"question": "Pick one.", "choices": ["alpha", "beta"], "source": "X"},
+            response_style="answer_only",
+        )
+
+        self.assertIn("Output exactly one line", prompt)
+        self.assertIn("Answer: <letter>", prompt)
+
+    def test_official_eval_prompt_keeps_legacy_end_marker_contract(self) -> None:
+        prompt = self.runner.build_question_prompt(
+            {"question": "Pick one.", "choices": ["alpha", "beta"], "source": "X"},
+            response_style="official",
+        )
+
+        self.assertIn("At the end", prompt)
+        self.assertIn("Answer: <letter>", prompt)
+
     def test_grades_choice_integer_and_compsec_answers(self) -> None:
         got, ok = self.runner._grade_one({"choices": ["x", "y", "z"], "answer": "B"}, "Reasoning.\nAnswer: B")
         self.assertEqual(got, "B")
@@ -51,6 +87,42 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         )
 
         self.assertEqual(got, "F")
+        self.assertTrue(ok)
+
+    def test_multiple_choice_prefers_high_confidence_phrase_fallback(self) -> None:
+        got, ok = self.runner._grade_one(
+            {"choices": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"], "answer": "C"},
+            "Choice C is plausible. A is wrong. J is a distractor.",
+        )
+
+        self.assertEqual(got, "C")
+        self.assertTrue(ok)
+
+    def test_multiple_choice_accepts_select_option_phrase(self) -> None:
+        got, ok = self.runner._grade_one(
+            {"choices": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"], "answer": "J"},
+            "The correct title is Shuowen Jiezi. Select the correct option: J.",
+        )
+
+        self.assertEqual(got, "J")
+        self.assertTrue(ok)
+
+    def test_multiple_choice_ignores_placeholder_answer_marker(self) -> None:
+        got, ok = self.runner._grade_one(
+            {"choices": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"], "answer": "J"},
+            'The requested format is "Answer: <letter>". Option J corresponds to the correct title. A is close but wrong.',
+        )
+
+        self.assertEqual(got, "J")
+        self.assertTrue(ok)
+
+    def test_multiple_choice_accepts_option_description_phrase(self) -> None:
+        got, ok = self.runner._grade_one(
+            {"choices": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"], "answer": "C"},
+            "C. a block of grass - This seems plausible. J. a bundle of sticks - no.",
+        )
+
+        self.assertEqual(got, "C")
         self.assertTrue(ok)
 
     def test_multiple_choice_answer_marker_beats_later_prose(self) -> None:
