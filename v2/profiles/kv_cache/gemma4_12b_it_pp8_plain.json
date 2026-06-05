@@ -34,6 +34,7 @@
   ],
   "extra_env": {
     "PYTHONHASHSEED": "0",
+    "VLLM_HOST_IP": "{fabric_ip}",
     "VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1",
     "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR": "0",
     "VLLM_DS4_PP_DIRECT_CUDA_TENSOR_DICT": "1",
@@ -43,6 +44,7 @@
     "VLLM_USE_V1": "1"
   },
   "format": "ds4-vllm-kv-cache-deployment-v1",
+  "fabric_topology": "../transfer/spark_200g.json",
   "host": "0.0.0.0",
   "http_port": 8116,
   "layer_partition": [

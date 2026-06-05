@@ -7,6 +7,7 @@ import shlex
 from typing import Any
 
 from ds4_infer.pipelines import even_layer_partition
+from ds4_transfer.service import TransferNode, TransferTopology
 
 KV_CACHE_DEPLOYMENT_FORMAT = "ds4-vllm-kv-cache-deployment-v1"
 KV_CACHE_PLAN_FORMAT = "ds4-vllm-kv-cache-launch-plan-v1"
@@ -108,6 +109,7 @@ class KvCacheDeployment:
     python_bin: str
     working_directory: str | None
     pythonpath: str | None
+    fabric_topology: str | None
     extra_env: dict[str, str]
     cache_directories: tuple[str, ...]
     connector: KvCacheConnector
@@ -155,6 +157,7 @@ class KvCacheDeployment:
             python_bin=str(data.get("python_bin", _default_python_bin(str(data.get("vllm_bin", "vllm"))))),
             working_directory=str(data["working_directory"]) if data.get("working_directory") else None,
             pythonpath=str(data["pythonpath"]) if data.get("pythonpath") else None,
+            fabric_topology=str(data["fabric_topology"]) if data.get("fabric_topology") else None,
             extra_env={str(key): str(value) for key, value in dict(data.get("extra_env", {})).items()},
             cache_directories=tuple(str(item) for item in data.get("cache_directories", [])),
             connector=KvCacheConnector.from_json(dict(data["connector"])),
@@ -168,8 +171,12 @@ class KvCacheDeployment:
 
     @staticmethod
     def load(path: str | Path) -> "KvCacheDeployment":
-        with Path(path).open("r", encoding="utf-8") as handle:
-            return KvCacheDeployment.from_json(json.load(handle))
+        profile_path = Path(path)
+        with profile_path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        if data.get("fabric_topology"):
+            data["fabric_topology"] = _resolve_relative_profile_path(str(data["fabric_topology"]), base=profile_path.parent)
+        return KvCacheDeployment.from_json(data)
 
     @property
     def is_pipeline(self) -> bool:
@@ -193,9 +200,10 @@ def kv_transfer_config(connector: KvCacheConnector) -> dict[str, Any]:
 def plan_deployment(deployment: KvCacheDeployment) -> dict[str, Any]:
     env = _deployment_env(deployment)
     connector = _connector_with_server(deployment.connector, deployment.cache_server)
+    fabric_nodes = _fabric_nodes(deployment)
     client_host = deployment.spark_node if deployment.host in {"0.0.0.0", "::"} else deployment.host
     rank = deployment.node_rank if deployment.node_rank is not None else 0
-    vllm_plan = _vllm_node_plan(deployment, connector, node_rank=rank, env=env)
+    vllm_plan = _vllm_node_plan(deployment, connector, node_rank=rank, env=env, fabric_nodes=fabric_nodes)
     return_plan: dict[str, Any] = {
         "format": KV_CACHE_PLAN_FORMAT,
         "deployment_id": deployment.deployment_id,
@@ -225,7 +233,7 @@ def plan_deployment(deployment: KvCacheDeployment) -> dict[str, Any]:
         "vllm": vllm_plan,
     }
     if deployment.is_pipeline:
-        return_plan["vllm_nodes"] = [_vllm_node_plan(deployment, connector, node_rank=index, env=env) for index in range(deployment.pipeline_parallel_size)]
+        return_plan["vllm_nodes"] = [_vllm_node_plan(deployment, connector, node_rank=index, env=env, fabric_nodes=fabric_nodes) for index in range(deployment.pipeline_parallel_size)]
     if deployment.cache_server is not None:
         return_plan["cache_server"] = _lmcache_server_plan(deployment.cache_server, deployment)
     return return_plan
@@ -241,7 +249,8 @@ def write_launch_scripts(deployment: KvCacheDeployment, output_dir: str | Path) 
     }
     if deployment.cache_server is not None:
         scripts["start_cache_server"] = root / "start_lmcache_server.sh"
-    scripts["install"].write_text(_install_script(deployment), encoding="utf-8")  # type: ignore[union-attr]
+    fabric_nodes = _fabric_nodes(deployment)
+    scripts["install"].write_text(_install_script(deployment, fabric_nodes), encoding="utf-8")  # type: ignore[union-attr]
     if deployment.is_pipeline:
         node_scripts: dict[str, str] = {}
         for node_plan in plan["vllm_nodes"]:
@@ -280,24 +289,27 @@ def _deployment_env(deployment: KvCacheDeployment) -> dict[str, str]:
     return env
 
 
-def _vllm_node_plan(deployment: KvCacheDeployment, connector: KvCacheConnector, *, node_rank: int, env: dict[str, str]) -> dict[str, Any]:
+def _vllm_node_plan(deployment: KvCacheDeployment, connector: KvCacheConnector, *, node_rank: int, env: dict[str, str], fabric_nodes: dict[str, TransferNode]) -> dict[str, Any]:
     if node_rank < 0 or node_rank >= deployment.pipeline_parallel_size:
         raise ValueError("node_rank is outside the pipeline stage range")
     spark_node = deployment.worker_nodes[node_rank] if deployment.is_pipeline else deployment.spark_node
-    rank_env = _env_for_rank(env, deployment, node_rank=node_rank, spark_node=spark_node)
-    argv = _vllm_argv(deployment, connector, node_rank=node_rank, spark_node=spark_node)
+    fabric_node = fabric_nodes.get(spark_node)
+    rank_env = _env_for_rank(env, deployment, node_rank=node_rank, spark_node=spark_node, fabric_node=fabric_node)
+    argv = _vllm_argv(deployment, connector, node_rank=node_rank, spark_node=spark_node, fabric_node=fabric_node)
     command = _format_env_command(rank_env, argv)
     return dict(
-        _stage_plan(deployment, node_rank=node_rank, spark_node=spark_node),
-        working_directory=_expand_rank_template(deployment.working_directory, spark_node=spark_node, node_rank=node_rank) if deployment.working_directory else None,
+        _stage_plan(deployment, node_rank=node_rank, spark_node=spark_node, fabric_node=fabric_node),
+        working_directory=_expand_rank_template(deployment.working_directory, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node) if deployment.working_directory else None,
         env=rank_env,
         argv=argv,
         command=command,
     )
 
 
-def _stage_plan(deployment: KvCacheDeployment, *, node_rank: int, spark_node: str) -> dict[str, Any]:
+def _stage_plan(deployment: KvCacheDeployment, *, node_rank: int, spark_node: str, fabric_node: TransferNode | None = None) -> dict[str, Any]:
     stage: dict[str, Any] = {"spark_node": spark_node, "node_rank": node_rank}
+    if fabric_node is not None:
+        stage.update({"fabric_host": fabric_node.fabric_host, "fabric_ip": fabric_node.fabric_ip})
     if deployment.layer_partition:
         start = sum(deployment.layer_partition[:node_rank])
         count = deployment.layer_partition[node_rank]
@@ -305,8 +317,8 @@ def _stage_plan(deployment: KvCacheDeployment, *, node_rank: int, spark_node: st
     return stage
 
 
-def _env_for_rank(env: dict[str, str], deployment: KvCacheDeployment, *, node_rank: int, spark_node: str) -> dict[str, str]:
-    out = {key: _expand_rank_template(value, spark_node=spark_node, node_rank=node_rank) for key, value in env.items()}
+def _env_for_rank(env: dict[str, str], deployment: KvCacheDeployment, *, node_rank: int, spark_node: str, fabric_node: TransferNode | None = None) -> dict[str, str]:
+    out = {key: _expand_rank_template(value, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node) for key, value in env.items()}
     if deployment.is_pipeline:
         out.setdefault("NODE_RANK", str(node_rank))
         out.setdefault("DS4_NODE_ID", spark_node)
@@ -315,10 +327,10 @@ def _env_for_rank(env: dict[str, str], deployment: KvCacheDeployment, *, node_ra
     return out
 
 
-def _vllm_argv(deployment: KvCacheDeployment, connector: KvCacheConnector, *, node_rank: int = 0, spark_node: str | None = None) -> list[str]:
+def _vllm_argv(deployment: KvCacheDeployment, connector: KvCacheConnector, *, node_rank: int = 0, spark_node: str | None = None, fabric_node: TransferNode | None = None) -> list[str]:
     spark_node = spark_node or deployment.spark_node
-    vllm_bin = _expand_rank_template(deployment.vllm_bin, spark_node=spark_node, node_rank=node_rank)
-    model_id = _expand_rank_template(deployment.model_id, spark_node=spark_node, node_rank=node_rank)
+    vllm_bin = _expand_rank_template(deployment.vllm_bin, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node)
+    model_id = _expand_rank_template(deployment.model_id, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node)
     argv = _vllm_serve_prefix(vllm_bin) + [model_id]
     if not deployment.is_pipeline or node_rank == 0:
         argv.extend(["--host", deployment.host, "--port", str(deployment.http_port)])
@@ -343,10 +355,10 @@ def _vllm_argv(deployment: KvCacheDeployment, connector: KvCacheConnector, *, no
     if transfer:
         argv.extend(["--kv-transfer-config", json.dumps(transfer, sort_keys=True)])
     if deployment.served_model_name:
-        argv.extend(["--served-model-name", _expand_rank_template(deployment.served_model_name, spark_node=spark_node, node_rank=node_rank)])
+        argv.extend(["--served-model-name", _expand_rank_template(deployment.served_model_name, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node)])
     if deployment.text_only:
         argv.append("--language-model-only")
-    extra_args = tuple(_expand_rank_template(item, spark_node=spark_node, node_rank=node_rank) for item in deployment.extra_args)
+    extra_args = tuple(_expand_rank_template(item, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node) for item in deployment.extra_args)
     argv.extend(_dedupe_args(extra_args, present=set(item for item in argv if item.startswith("--"))))
     if deployment.is_pipeline and node_rank != 0 and "--headless" not in argv:
         argv.append("--headless")
@@ -532,18 +544,33 @@ def _format_env_command(env: dict[str, str], argv: list[str]) -> str:
     return " ".join(pieces)
 
 
-def _expand_rank_template(value: str, *, spark_node: str, node_rank: int) -> str:
+def _fabric_nodes(deployment: KvCacheDeployment) -> dict[str, TransferNode]:
+    if not deployment.fabric_topology:
+        return {}
+    topology = TransferTopology.load(deployment.fabric_topology)
+    nodes: dict[str, TransferNode] = {}
+    for node_id in deployment.worker_nodes:
+        nodes[node_id] = topology.get_node(node_id)
+    return nodes
+
+
+def _expand_rank_template(value: str, *, spark_node: str, node_rank: int, fabric_node: TransferNode | None = None) -> str:
+    if ("{fabric_ip}" in value or "{fabric_host}" in value) and fabric_node is None:
+        raise ValueError("fabric topology is required to expand fabric templates")
     return (
         value.replace("{node}", spark_node)
         .replace("{spark_node}", spark_node)
         .replace("{node_rank}", str(node_rank))
         .replace("{rank}", str(node_rank))
+        .replace("{fabric_host}", fabric_node.fabric_host if fabric_node is not None else "")
+        .replace("{fabric_ip}", fabric_node.fabric_ip if fabric_node is not None else "")
     )
 
 
-def _install_script(deployment: KvCacheDeployment) -> str:
+def _install_script(deployment: KvCacheDeployment, fabric_nodes: dict[str, TransferNode]) -> str:
     packages = " ".join(shlex.quote(item) for item in deployment.connector.install_packages)
-    workdir = _expand_rank_template(deployment.working_directory or ".", spark_node=deployment.spark_node, node_rank=0)
+    fabric_node = fabric_nodes.get(deployment.spark_node)
+    workdir = _expand_rank_template(deployment.working_directory or ".", spark_node=deployment.spark_node, node_rank=0, fabric_node=fabric_node)
     lines = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
@@ -555,21 +582,34 @@ def _install_script(deployment: KvCacheDeployment) -> str:
         wheel_argv = [deployment.python_bin, "-m", "pip", "wheel", "--no-build-isolation", "--no-deps", "--wheel-dir", wheel_dir]
         wheel_argv.extend(deployment.connector.install_packages)
         lines.append("mkdir -p " + shlex.quote(wheel_dir))
-        lines.append(_format_env_command(_env_for_rank(deployment.extra_env, deployment, node_rank=0, spark_node=deployment.spark_node), wheel_argv))
+        lines.append(_format_env_command(_env_for_rank(deployment.extra_env, deployment, node_rank=0, spark_node=deployment.spark_node, fabric_node=fabric_node), wheel_argv))
         lines.append("wheel=$(find " + shlex.quote(wheel_dir) + " -maxdepth 1 -name " + shlex.quote(wheel_glob) + " -print -quit)")
         lines.append('if [ -z "${wheel}" ]; then echo "[ds4-kvcache] LMCache wheel not found" >&2; exit 2; fi')
         install_argv = [deployment.python_bin, "-m", "pip", "install", "--no-deps"]
-        lines.append(_format_env_command(_env_for_rank(deployment.extra_env, deployment, node_rank=0, spark_node=deployment.spark_node), install_argv) + ' "${wheel}"')
+        lines.append(_format_env_command(_env_for_rank(deployment.extra_env, deployment, node_rank=0, spark_node=deployment.spark_node, fabric_node=fabric_node), install_argv) + ' "${wheel}"')
     elif packages:
         argv = [deployment.python_bin, "-m", "pip", "install", "--upgrade"]
         argv.extend(deployment.connector.install_args)
         argv.extend(deployment.connector.install_packages)
-        lines.append(_format_env_command(_env_for_rank(deployment.extra_env, deployment, node_rank=0, spark_node=deployment.spark_node), argv))
+        lines.append(_format_env_command(_env_for_rank(deployment.extra_env, deployment, node_rank=0, spark_node=deployment.spark_node, fabric_node=fabric_node), argv))
     else:
         lines.append("echo '[ds4-kvcache] no connector packages requested'")
     for path in deployment.cache_directories:
-        lines.append("mkdir -p " + shlex.quote(_expand_rank_template(path, spark_node=deployment.spark_node, node_rank=0)))
+        lines.append("mkdir -p " + shlex.quote(_expand_rank_template(path, spark_node=deployment.spark_node, node_rank=0, fabric_node=fabric_node)))
     return "\n".join(lines) + "\n"
+
+
+def _resolve_relative_profile_path(value: str, *, base: Path) -> str:
+    path = Path(value)
+    if path.is_absolute():
+        return str(path)
+    candidate = (base / path).resolve()
+    if candidate.exists():
+        return str(candidate)
+    candidate = (Path.cwd() / path).resolve()
+    if candidate.exists():
+        return str(candidate)
+    return str((base / path).resolve())
 
 
 def _lmcache_wheel_glob(packages: tuple[str, ...]) -> str:
