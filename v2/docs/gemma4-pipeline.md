@@ -33,9 +33,9 @@ Each node must have the model under the node-local Hugging Face cache:
 
 The launch recipes require the source-built `experiencenow-ai/vllm` runtime,
 not a PyPI vLLM fallback. Gemma4 Unified support is carried in
-`experiencenow-ai/vllm#279` at commit
-`09ba6907f3b716c7afe6e7a58adc09d188b198bf`, cherry-picked from upstream vLLM
-Gemma4 Unified support.
+`experiencenow-ai/vllm#279` plus the follow-up helper fix in
+`experiencenow-ai/vllm#280`, with merged source commit
+`55192abf198725fed935a94acdec27ff1f6a0730`.
 
 The Python runtime also needs Hugging Face `transformers` source with
 `transformers.models.gemma4_unified`. The current required source point is

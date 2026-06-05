@@ -39,7 +39,7 @@
       "--language-model-only"
     ],
     "host": "0.0.0.0",
-    "master_addr": "spark0",
+    "master_addr": "10.10.100.10",
     "master_port": 29614,
     "port": 8114
   },
@@ -96,8 +96,8 @@
   },
   "vllm": {
     "required_source": "experiencenow-ai/vllm source build with Gemma4 Unified support; do not use PyPI vLLM fallback",
-    "required_source_commit": "09ba6907f3b716c7afe6e7a58adc09d188b198bf",
-    "fork_pr": "experiencenow-ai/vllm#279",
+    "required_source_commit": "55192abf198725fed935a94acdec27ff1f6a0730",
+    "fork_pr": "experiencenow-ai/vllm#279, experiencenow-ai/vllm#280",
     "required_transformers_source": "Hugging Face transformers source with transformers.models.gemma4_unified",
     "required_transformers_commit": "ece3b9a353b20b69485293927bcc729f8b34844d",
     "trim_endpoint": "/v1/trim_memory"
