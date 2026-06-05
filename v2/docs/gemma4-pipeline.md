@@ -31,11 +31,23 @@ Each node must have the model under the node-local Hugging Face cache:
 /home/{node}/models/hf/google/gemma-4-31B-it
 ```
 
-The launch recipes require the source-built, Gemma4-capable vLLM runtime from
-the standard Spark environment. Do not use a PyPI vLLM fallback for these
-profiles. The initial recipes use plain vLLM pipeline serving with no LMCache,
-HMA, or CPU offload connector; the goal is to prove pipeline execution and DS4
-routing first.
+The launch recipes require the source-built `experiencenow-ai/vllm` runtime,
+not a PyPI vLLM fallback. Gemma4 Unified support is carried in
+`experiencenow-ai/vllm#279` at commit
+`09ba6907f3b716c7afe6e7a58adc09d188b198bf`, cherry-picked from upstream vLLM
+Gemma4 Unified support.
+
+The Python runtime also needs Hugging Face `transformers` source with
+`transformers.models.gemma4_unified`. The current required source point is
+`huggingface/transformers@ece3b9a353b20b69485293927bcc729f8b34844d` or newer.
+On spark3, the existing standard venv reported `transformers 5.9.0` but only
+contained `gemma4` and `gemma4_assistant`; that runtime registered the vLLM
+arch name but failed a direct `gemma4_unified` import. Treat that as a hard
+runtime mismatch, not a Gemma model problem.
+
+The initial recipes use plain vLLM pipeline serving with no LMCache, HMA, or
+CPU offload connector; the goal is to prove pipeline execution and DS4 routing
+first.
 
 ## Plan or write launch scripts
 

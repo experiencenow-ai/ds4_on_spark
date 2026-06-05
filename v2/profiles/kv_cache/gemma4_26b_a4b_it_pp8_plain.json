@@ -70,7 +70,9 @@
   "total_layers": 30,
   "vllm_bin": "vllm",
   "vllm_fork": "https://github.com/experiencenow-ai/vllm",
-  "vllm_source_commit": "source-built-gemma4-capable-main",
+  "vllm_fork_pr": "experiencenow-ai/vllm#279",
+  "vllm_source_commit": "09ba6907f3b716c7afe6e7a58adc09d188b198bf",
+  "transformers_source_commit": "ece3b9a353b20b69485293927bcc729f8b34844d",
   "worker_nodes": [
     "spark0",
     "spark1",

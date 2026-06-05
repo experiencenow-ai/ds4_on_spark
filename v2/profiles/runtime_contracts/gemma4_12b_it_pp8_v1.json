@@ -96,8 +96,11 @@
     "query": "mode=abort&reset_external=true&release_offload_memory=true&malloc_trim=true&resume=true"
   },
   "vllm": {
-    "required_source": "source-built Gemma4-capable vLLM from the standard Spark runtime; do not use PyPI fallback",
-    "required_source_commit": "source-built-gemma4-capable-main",
+    "required_source": "experiencenow-ai/vllm source build with Gemma4 Unified support; do not use PyPI vLLM fallback",
+    "required_source_commit": "09ba6907f3b716c7afe6e7a58adc09d188b198bf",
+    "fork_pr": "experiencenow-ai/vllm#279",
+    "required_transformers_source": "Hugging Face transformers source with transformers.models.gemma4_unified",
+    "required_transformers_commit": "ece3b9a353b20b69485293927bcc729f8b34844d",
     "trim_endpoint": "/v1/trim_memory"
   }
 }
