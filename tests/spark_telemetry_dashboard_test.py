@@ -21,8 +21,8 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
                 "local_queue_queued": 3,
             },
             "nodes": {
-                "spark0": {"sample_count": 2, "last_gpu_util_pct": 96, "last_gpu_power_w": 37, "last_cpu_util_pct": 40, "last_vllm_metrics_up": 1, "last_vllm_requests_running": 4, "last_vllm_requests_waiting": 0, "last_vllm_kv_cache_pct": 50, "last_vllm_tokens_per_s": 2, "last_vllm_prompt_tokens_per_s": 7, "last_vllm_generation_tokens_per_s": 2, "last_vllm_prompt_tokens_cached_per_s": 3, "last_vllm_prompt_cache_hit_pct": 42},
-                "spark1": {"sample_count": 2, "last_gpu_util_pct": 96, "last_gpu_power_w": 13, "last_gpu_temp_c": 82, "last_vllm_requests_running": 0, "last_vllm_requests_waiting": 0, "last_vllm_kv_cache_pct": 92},
+                "spark0": {"sample_count": 2, "last_gpu_util_pct": 96, "last_gpu_power_w": 37, "last_gpu_power_raw_w": 37, "last_gpu_power_limit_w": 120, "last_gpu_power_known": 1, "last_cpu_util_pct": 40, "last_vllm_metrics_up": 1, "last_vllm_requests_running": 4, "last_vllm_requests_waiting": 0, "last_vllm_kv_cache_pct": 50, "last_vllm_tokens_per_s": 2, "last_vllm_prompt_tokens_per_s": 7, "last_vllm_generation_tokens_per_s": 2, "last_vllm_prompt_tokens_cached_per_s": 3, "last_vllm_prompt_cache_hit_pct": 42},
+                "spark1": {"sample_count": 2, "last_gpu_util_pct": 96, "last_gpu_power_w": 13, "last_gpu_power_raw_w": 13, "last_gpu_power_limit_w": 120, "last_gpu_power_known": 1, "last_gpu_temp_c": 82, "last_vllm_requests_running": 0, "last_vllm_requests_waiting": 0, "last_vllm_kv_cache_pct": 92},
                 "spark2": {"sample_count": 2, "stale_data": 1, "fetch_error": "ssh timed out", "last_gpu_util_pct": 10},
                 "spark6": {"sample_count": 0, "error": "ssh timed out"},
             },
@@ -41,6 +41,8 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["input_tok_s"], 7)
         self.assertEqual(snap["output_tok_s"], 2)
         self.assertEqual(snap["tok_s"], 9)
+        self.assertTrue(snap["power_known"])
+        self.assertEqual(snap["power_known_node_count"], 2)
         self.assertEqual(snap["total_gpu_power_w"], 50.0)
         self.assertTrue(snap["gpu_known"])
         self.assertEqual(snap["avg_gpu_pct"], 67.33)
@@ -55,6 +57,27 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["nodes"][1]["tok_s"], 0)
         self.assertEqual(snap["nodes"][0]["cpu_pct"], 800)
         self.assertEqual(snap["nodes"][0]["gpu_power_w"], 37)
+        self.assertTrue(snap["nodes"][0]["gpu_power_known"])
+
+    def test_snapshot_excludes_untrusted_power_from_total(self):
+        payload = {
+            "updated_iso": "2026-05-26T00:00:00+00:00",
+            "updated_unix": 1,
+            "nodes": {
+                "spark0": {"sample_count": 2, "last_gpu_util_pct": 96, "last_gpu_power_w": 0, "last_gpu_power_raw_w": 11, "last_gpu_power_limit_w": 0, "last_gpu_power_known": 0, "last_gpu_power_reason": "nvml-power-limit-unavailable"},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "summary.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            snap = dashboard.build_snapshot(str(path))
+        node = snap["nodes"][0]
+        self.assertFalse(snap["power_known"])
+        self.assertEqual(snap["total_gpu_power_w"],0)
+        self.assertFalse(node["gpu_power_known"])
+        self.assertEqual(node["gpu_power_w"],0)
+        self.assertEqual(node["gpu_power_raw_w"],11)
+        self.assertEqual(node["gpu_power_reason"],"nvml-power-limit-unavailable")
 
     def test_node_down_requires_three_distinct_error_snapshots(self):
         payload = {
@@ -130,6 +153,10 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
                 "local_queue_stage_gpu_util_by_node": "spark0:96",
                 "local_queue_stage_gpu_temp_by_node": "spark0:47",
                 "local_queue_stage_gpu_power_by_node": "spark0:17.5",
+                "local_queue_stage_gpu_power_raw_by_node": "spark0:17.5",
+                "local_queue_stage_gpu_power_limit_by_node": "spark0:120",
+                "local_queue_stage_gpu_power_known_by_node": "spark0:1",
+                "local_queue_stage_gpu_power_source_by_node": "spark0:nvml.power.draw",
                 "local_queue_stage_cpu_pct_by_node": "spark0:4",
                 "local_queue_stage_mem_pct_by_node": "spark0:85",
                 "local_queue_stage_prompt_tok_s_by_node": "spark0:12",
@@ -148,6 +175,8 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(node["gpu_pct"],96)
         self.assertEqual(node["gpu_temp_c"],47)
         self.assertEqual(node["gpu_power_w"],17.5)
+        self.assertTrue(node["gpu_power_known"])
+        self.assertEqual(node["gpu_power_raw_w"],17.5)
         self.assertEqual(node["cpu_pct"],80)
         self.assertEqual(node["mem_pct"],85)
         self.assertEqual(node["input_tok_s"],12)
@@ -235,7 +264,8 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertIn("cpu_pct:CPU_PCT_MAX", dashboard.DASHBOARD_HTML)
 
     def test_dashboard_card_shows_watts_and_marks_missing_vllm_na(self):
-        self.assertIn('Pwr <b>${val(n.gpu_power_w,"W")}</b>', dashboard.DASHBOARD_HTML)
+        self.assertIn('let pwr=n.gpu_power_known?val(n.gpu_power_w,"W"):"n/a"', dashboard.DASHBOARD_HTML)
+        self.assertIn('Pwr <b>${pwr}</b>', dashboard.DASHBOARD_HTML)
         self.assertIn('Svc <b>${n.ds_service_id||"n/a"}</b>', dashboard.DASHBOARD_HTML)
         self.assertIn('bar("KV",n.kv_pct,"kv",n.kv_known,n.kv_label)', dashboard.DASHBOARD_HTML)
         self.assertIn('function workKnown(n)', dashboard.DASHBOARD_HTML)
@@ -248,10 +278,13 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertIn('metric("GPU Avg",d.gpu_known?pct(d.avg_gpu_pct):"n/a")', dashboard.DASHBOARD_HTML)
         self.assertIn('metric("DS Models",d.ds_services_known?`${fmt(d.ds_service_count)} svc`:"n/a")', dashboard.DASHBOARD_HTML)
         self.assertIn('metric("Tok/s In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`)', dashboard.DASHBOARD_HTML)
-        self.assertIn('metric("Total Power",val(d.total_gpu_power_w,"W"))', dashboard.DASHBOARD_HTML)
+        self.assertIn('metric("Total Power",d.power_known?val(d.total_gpu_power_w,"W"):"n/a")', dashboard.DASHBOARD_HTML)
         self.assertNotIn('metric("In tok/s"', dashboard.DASHBOARD_HTML)
         self.assertNotIn('metric("Out tok/s"', dashboard.DASHBOARD_HTML)
         self.assertNotIn('metric("Cache hit"', dashboard.DASHBOARD_HTML)
+
+    def test_dashboard_history_hides_power_series_when_unknown(self):
+        self.assertIn('m.key!=="power_w"||data.power_known', dashboard.DASHBOARD_HTML)
 
 
 if __name__ == "__main__":
