@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from ds4_infer import api as api_module
-from ds4_infer.api import CoordinatorApi
+from ds4_infer.api import CoordinatorApi, _resolve_profile
 from ds4_infer.api_stream import _drain_completion_stream_events, openai_chat_stream_events, openai_completion_stream_events
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.runners import OpenAICompatibleRunner, PipelineOpenAIRunner, _openai_payload
@@ -69,6 +69,30 @@ class PipelineApiTests(unittest.TestCase):
             }
         )
         self.assertEqual(_openai_payload(request, profile)["model"], "qwen27-bf16-pp8")
+
+    def test_gemma_alias_resolves_to_profile_pinned_pipeline(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        topology = SparkTopology.load(TOPOLOGY)
+        profile = _resolve_profile(registry, topology, "gemma12")
+        request = InferenceRequest.from_json(
+            {
+                "format": "ds4-inference-request-v1",
+                "request_id": "gemma-served-name",
+                "capability": None,
+                "chat": True,
+                "immediate": False,
+                "job_class": "analysis",
+                "max_output_tokens": 8,
+                "thinking_budget_tokens": 0,
+                "temperature": 0,
+                "input": {"messages": [{"role": "user", "content": "ping"}]},
+                "output_contract": {"format": "text"},
+            }
+        )
+        assignment = topology.assign_profile(profile, immediate=True, current_load={})
+        self.assertEqual(profile.profile_id, "gemma4_12b_it_pp8_peer_v1")
+        self.assertEqual(assignment.service_id, "gemma4_12b_pp8")
+        self.assertEqual(_openai_payload(request, profile)["model"], "gemma-4-12b-it-pp8")
 
     def test_pipeline_openai_payload_uses_shared_thinking_fields(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

@@ -20,6 +20,8 @@ VALIDATION_TASKS = ROOT / "profiles" / "validation" / "xhigh_live_validation_tas
 ALL_SPARKS = tuple(f"spark{index}" for index in range(8))
 QWEN_PP = "qwen3_6_27b_bf16_pp8_efficient_v1"
 DSV4_PP = "dsv4_vllm_mtp_pp8_smartest_v1"
+GEMMA12_PP = "gemma4_12b_it_pp8_peer_v1"
+GEMMA31_PP = "gemma4_31b_it_pp8_peer_v1"
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 
@@ -55,16 +57,39 @@ class StaticSparkTopologyTests(unittest.TestCase):
         topology = SparkTopology.load(TOPOLOGY)
         qwen = topology.pipeline_service_by_id("qwen27_bf16_pp8")
         dsv4 = topology.pipeline_service_by_id("dsv4_flash_pp8")
+        gemma31 = topology.pipeline_service_by_id("gemma4_31b_pp8")
         self.assertEqual(qwen.entry_node_id, "spark0")
         self.assertEqual(dsv4.entry_node_id, "spark0")
+        self.assertEqual(gemma31.entry_node_id, "spark0")
         self.assertEqual(qwen.node_ids, ALL_SPARKS)
         self.assertEqual(dsv4.node_ids, ALL_SPARKS)
+        self.assertEqual(gemma31.node_ids, ALL_SPARKS)
         self.assertEqual(qwen.compute_domain, "spark-fleet-0")
         self.assertEqual(dsv4.compute_domain, "spark-fleet-0")
+        self.assertEqual(gemma31.compute_domain, "spark-fleet-0")
         self.assertEqual(qwen.layer_partition, (9, 9, 9, 8, 8, 8, 8, 5))
         self.assertEqual(dsv4.layer_partition, tuple(DSV4_PRODUCTION["layer_partition"]))
+        self.assertEqual(gemma31.layer_partition, (8, 8, 8, 8, 7, 7, 7, 7))
         self.assertEqual(qwen.stages()[-1].layer_end, 64)
         self.assertEqual(dsv4.stages()[-1].layer_end, 43)
+        self.assertEqual(gemma31.stages()[-1].layer_end, 60)
+
+    def test_gemma_pipeline_profiles_are_profile_pin_only(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        topology = SparkTopology.load(TOPOLOGY)
+        profile = registry.get(GEMMA12_PP)
+        assignment = topology.assign_profile(profile, immediate=True, current_load={})
+
+        self.assertFalse(profile.production_eligible)
+        self.assertTrue(profile.routing["requires_profile_pin"])
+        self.assertEqual(assignment.node_id, "spark0")
+        self.assertEqual(assignment.node_ids, ALL_SPARKS)
+        self.assertEqual(assignment.service_id, "gemma4_12b_pp8")
+        self.assertEqual(topology.estimate_capacity_by_profile()[GEMMA12_PP], 16)
+        with self.assertRaisesRegex(ValueError, "no production profile"):
+            registry.resolve(capability="gemma4", chat=True, job_class="analysis")
+        pinned = registry.resolve(capability=None, chat=True, job_class="analysis", model_pin={"profile_id": GEMMA12_PP})
+        self.assertEqual(pinned.profile_id, GEMMA12_PP)
 
     def test_production_chat_profiles_have_authoritative_tokenizer_path(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
@@ -94,15 +119,20 @@ class StaticSparkTopologyTests(unittest.TestCase):
             topology = SparkTopology.load(TOPOLOGY)
         qwen = topology.pipeline_service_by_id("qwen27_bf16_pp8")
         dsv4 = topology.pipeline_service_by_id("dsv4_flash_pp8")
+        gemma31 = topology.pipeline_service_by_id("gemma4_31b_pp8")
         self.assertEqual(topology.topology_id, "static_sparks_2026_05_29_dual_pp_v1_n6")
         self.assertEqual(qwen.node_ids, tuple(f"spark{index}" for index in range(6)))
         self.assertEqual(dsv4.node_ids, tuple(f"spark{index}" for index in range(6)))
+        self.assertEqual(gemma31.node_ids, tuple(f"spark{index}" for index in range(6)))
         self.assertEqual(qwen.pipeline_parallel_size, 6)
         self.assertEqual(dsv4.pipeline_parallel_size, 6)
+        self.assertEqual(gemma31.pipeline_parallel_size, 6)
         self.assertEqual(qwen.layer_partition, (11, 11, 11, 11, 10, 10))
         self.assertEqual(dsv4.layer_partition, (8, 7, 7, 7, 7, 7))
+        self.assertEqual(gemma31.layer_partition, (10, 10, 10, 10, 10, 10))
         self.assertAlmostEqual(qwen.kv_cache["expected_entry_fraction_per_node"], 1.0 / 6)
         self.assertEqual(dsv4.telemetry["expected_stage_count"], 6)
+        self.assertEqual(gemma31.telemetry["expected_stage_count"], 6)
 
     def test_efficient_request_binds_to_qwen_pipeline(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

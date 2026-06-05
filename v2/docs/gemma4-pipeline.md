@@ -1,0 +1,94 @@
+# Gemma4 pipeline profiles
+
+Gemma4 is wired as an experimental all-Spark vLLM pipeline family. These
+profiles are deliberately profile-pin-only and `production_eligible=false`, so
+they do not change normal `smart`, `smartest`, or reboot startup behavior.
+
+## Profiles and aliases
+
+| Alias | Profile | Service | Port | Layers | Partition |
+| --- | --- | --- | --- | --- | --- |
+| `gemma-e2b` | `gemma4_e2b_it_pp8_peer_v1` | `gemma4_e2b_pp8` | 8112 | 35 | `5,5,5,4,4,4,4,4` |
+| `gemma-e4b` | `gemma4_e4b_it_pp8_peer_v1` | `gemma4_e4b_pp8` | 8114 | 42 | `6,6,5,5,5,5,5,5` |
+| `gemma`, `gemma12`, `gemma4-12b` | `gemma4_12b_it_pp8_peer_v1` | `gemma4_12b_pp8` | 8116 | 48 | `6,6,6,6,6,6,6,6` |
+| `gemma26`, `gemma-a4b` | `gemma4_26b_a4b_it_pp8_peer_v1` | `gemma4_26b_a4b_pp8` | 8118 | 30 | `4,4,4,4,4,4,3,3` |
+| `gemma31` | `gemma4_31b_it_pp8_peer_v1` | `gemma4_31b_pp8` | 8120 | 60 | `8,8,8,8,7,7,7,7` |
+
+All five services use `spark0` as the OpenAI ingress and `spark0` through
+`spark7` as vLLM pipeline ranks. They share the `spark-fleet-0` compute domain
+with Qwen27 and DSV4 so the DS4 scheduler does not admit two all-Spark
+pipelines onto the same GPUs at the same time.
+
+## Runtime assumptions
+
+Each node must have the model under the node-local Hugging Face cache:
+
+```text
+/home/{node}/models/hf/google/gemma-4-E2B-it
+/home/{node}/models/hf/google/gemma-4-E4B-it
+/home/{node}/models/hf/google/gemma-4-12B-it
+/home/{node}/models/hf/google/gemma-4-26B-A4B-it
+/home/{node}/models/hf/google/gemma-4-31B-it
+```
+
+The launch recipes require the source-built, Gemma4-capable vLLM runtime from
+the standard Spark environment. Do not use a PyPI vLLM fallback for these
+profiles. The initial recipes use plain vLLM pipeline serving with no LMCache,
+HMA, or CPU offload connector; the goal is to prove pipeline execution and DS4
+routing first.
+
+## Plan or write launch scripts
+
+From a Spark checkout:
+
+```bash
+cd ~/ds4_on_spark/v2
+PYTHONPATH=src python3 -m ds4_kvcache.cli plan \
+  --deployment profiles/kv_cache/gemma4_12b_it_pp8_plain.json
+PYTHONPATH=src python3 -m ds4_kvcache.cli write-scripts \
+  --deployment profiles/kv_cache/gemma4_12b_it_pp8_plain.json \
+  --output-dir /tmp/ds4_gemma4_12b_pp8
+```
+
+Use the matching `profiles/kv_cache/gemma4_*_plain.json` file for the other
+family members. The generated per-rank scripts expand `{node}` into the actual
+Spark node, so rank 7 serves from `/home/spark7/...` and uses
+`/home/spark7/ds4_on_spark/v2/src` as `PYTHONPATH`.
+
+## Request surface
+
+The OpenAI API model resolver and CLI aliases understand the short names above.
+For example:
+
+```json
+{
+  "model": "gemma12",
+  "messages": [{"role": "user", "content": "ping"}],
+  "max_tokens": 64,
+  "temperature": 0
+}
+```
+
+That resolves to `gemma4_12b_it_pp8_peer_v1` and sends the live vLLM request to
+served model name `gemma-4-12b-it-pp8`.
+
+Thinking is disabled by default through `chat_template_kwargs`:
+
+```json
+{"enable_thinking": false}
+```
+
+Requests with a positive `thinking_budget_tokens` flip it on for that request.
+
+## Promotion rule
+
+Do not add Gemma to reboot startup or normal `smart` routing until a live PP8
+run passes:
+
+```text
+1. /v1/models exposes the served Gemma name on the selected port.
+2. Single chat/completion requests succeed through DS4 API model alias.
+3. Batched requests complete through the queue without starving Qwen/DSV4.
+4. DS4-eval runs through the DS4 API path and records accuracy and tok/s.
+5. trim_memory works through the pipeline ingress after an abort/reset.
+```

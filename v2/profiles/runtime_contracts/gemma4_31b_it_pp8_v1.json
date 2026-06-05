@@ -1,0 +1,102 @@
+{
+  "contract_id": "gemma4_31b_it_pp8_v1",
+  "description": "Gemma4 31B instruction all-Spark vLLM layer-pipeline runtime. Experimental/profile-pin-only; spark0 is the API ingress.",
+  "format": "ds4-runtime-contract-v1",
+  "kv_cache": {
+    "connector": "none",
+    "deployment": "profiles/kv_cache/gemma4_31b_it_pp8_plain.json",
+    "expected_node_fraction": "1/8",
+    "sharding": "pipeline_layers"
+  },
+  "launch": {
+    "api_base_url": "http://127.0.0.1:8120",
+    "args": [
+      "--distributed-executor-backend",
+      "mp",
+      "--trust-remote-code",
+      "--max-model-len",
+      "8192",
+      "--max-num-seqs",
+      "8",
+      "--max-num-batched-tokens",
+      "16384",
+      "--gpu-memory-utilization",
+      "0.6",
+      "--dtype",
+      "bfloat16",
+      "--enable-prefix-caching",
+      "--generation-config",
+      "vllm",
+      "--reasoning-parser",
+      "gemma4",
+      "--tool-call-parser",
+      "gemma4",
+      "--enable-auto-tool-choice",
+      "--chat-template",
+      "/home/{node}/standard-runtimes/vllm-main-gdn-nixl/vllm/examples/tool_chat_template_gemma4.jinja",
+      "--default-chat-template-kwargs",
+      "{\"enable_thinking\":false}",
+      "--language-model-only"
+    ],
+    "host": "0.0.0.0",
+    "master_addr": "spark0",
+    "master_port": 29620,
+    "port": 8120
+  },
+  "model": {
+    "model_id": "google/gemma-4-31B-it",
+    "model_path": "/home/{node}/models/hf/google/gemma-4-31B-it",
+    "served_model_name": "gemma-4-31b-it-pp8"
+  },
+  "pipeline": {
+    "dtype": "bfloat16",
+    "entry_base_url": "http://127.0.0.1:8120",
+    "head_node": "spark0",
+    "layer_partition": [
+      8,
+      8,
+      8,
+      8,
+      7,
+      7,
+      7,
+      7
+    ],
+    "pipeline_parallel_size": 8,
+    "tensor_parallel_size": 1,
+    "text_only": true,
+    "total_layers": 60,
+    "worker_nodes": [
+      "spark1",
+      "spark2",
+      "spark3",
+      "spark4",
+      "spark5",
+      "spark6",
+      "spark7"
+    ]
+  },
+  "profile_ids": [
+    "gemma4_31b_it_pp8_peer_v1"
+  ],
+  "required_nodes": [
+    "spark0",
+    "spark1",
+    "spark2",
+    "spark3",
+    "spark4",
+    "spark5",
+    "spark6",
+    "spark7"
+  ],
+  "trim_request": {
+    "method": "POST",
+    "path": "/v1/trim_memory",
+    "query": "mode=abort&reset_external=true&release_offload_memory=true&malloc_trim=true&resume=true"
+  },
+  "vllm": {
+    "required_source": "source-built Gemma4-capable vLLM from the standard Spark runtime; do not use PyPI fallback",
+    "required_source_commit": "source-built-gemma4-capable-main",
+    "trim_endpoint": "/v1/trim_memory"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "backend": "vllm_pipeline",
+  "capability_classes": [
+    "gemma4",
+    "peer",
+    "smart"
+  ],
+  "format": "ds4-model-profile-v1",
+  "model_id": "google/gemma-4-E4B-it",
+  "performance": {
+    "latency_rank": 0.45,
+    "target": "8-stage Gemma4 experimental layer pipeline; small peer model for high-throughput confidence checks"
+  },
+  "production_eligible": false,
+  "profile_id": "gemma4_e4b_it_pp8_peer_v1",
+  "quality": {
+    "status": "pending DS4-eval; added so the E4B member uses the same pipeline controls as the rest of the family"
+  },
+  "routing": {
+    "chat_template_thinking_key": "enable_thinking",
+    "default_chat_template_kwargs": {
+      "enable_thinking": false
+    },
+    "optional_kv_cache_deployments": [
+      "profiles/kv_cache/gemma4_e4b_it_pp8_plain.json"
+    ],
+    "pipeline": {
+      "api_base_url": "http://127.0.0.1:8114",
+      "compute_domain": "spark-fleet-0",
+      "entry_node_id": "spark0",
+      "served_model_name": "gemma-4-e4b-it-pp8",
+      "service_id": "gemma4_e4b_pp8"
+    },
+    "pipeline_service_id": "gemma4_e4b_pp8",
+    "rank": 710,
+    "requires_profile_pin": true,
+    "served_model_name": "gemma-4-e4b-it-pp8",
+    "tokenizer_path": "/home/spark0/models/hf/google/gemma-4-E4B-it"
+  },
+  "runtime_contract_id": "gemma4_e4b_it_pp8_v1",
+  "supported_job_classes": [
+    "analysis",
+    "atom_edit",
+    "debug",
+    "json_repair",
+    "summary",
+    "tool_chat",
+    "triage"
+  ],
+  "supports_chat": true,
+  "supports_completion": true,
+  "supports_thinking": true
+}

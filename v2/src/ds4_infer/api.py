@@ -16,6 +16,7 @@ import uuid
 
 from .api_chat_render import anthropic_messages_input_payload, openai_chat_input_payload
 from .api_stream import openai_chat_stream_events, openai_completion_requests, openai_completion_stream_events, write_sse
+from .builders import MODEL_ALIASES, resolve_model_alias
 from .dispatcher_resident import PendingDispatcherCohort, ResidentServicePlan
 from .dispatcher_resident import pending_claim_count as _pending_claim_count
 from .dispatcher_resident import pending_claim_count_by_service as _pending_claim_count_by_service
@@ -1022,6 +1023,15 @@ def _openai_output_contract(body: dict[str, Any]) -> dict[str, Any]:
 def _openai_models(registry: ProfileRegistry, topology: SparkTopology) -> dict[str, Any]:
     seen: set[str] = set()
     data: list[dict[str, Any]] = []
+    for alias, profile_id in sorted(MODEL_ALIASES.items()):
+        try:
+            profile = registry.get(profile_id)
+        except ValueError:
+            continue
+        if alias in seen:
+            continue
+        seen.add(alias)
+        data.append({"id": alias, "object": "model", "owned_by": "ds4", "ds4_profile_id": profile.profile_id, "ds4_model_alias": True})
     for service in topology.pipeline_services.values():
         for model_id in (service.service_id, service.model_id, service.profile_id):
             if model_id in seen:
@@ -1038,6 +1048,9 @@ def _openai_models(registry: ProfileRegistry, topology: SparkTopology) -> dict[s
 
 def _resolve_profile(registry: ProfileRegistry, topology: SparkTopology, model: str | None) -> ModelProfile:
     if model:
+        aliased = resolve_model_alias(model)
+        if aliased != model:
+            return registry.get(aliased)
         try:
             return registry.get(model)
         except ValueError:
