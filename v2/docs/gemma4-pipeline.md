@@ -16,8 +16,10 @@ they do not change normal `smart`, `smartest`, or reboot startup behavior.
 
 All five services use `spark0` as the OpenAI ingress and `spark0` through
 `spark7` as vLLM pipeline ranks. They share the `spark-fleet-0` compute domain
-with Qwen27 and DSV4 so the DS4 scheduler does not admit two all-Spark
-pipelines onto the same GPUs at the same time.
+with Qwen27 and DSV4. Gemma launch configs cap vLLM
+`--gpu-memory-utilization` at `0.40` so experimental Gemma runs can be
+co-resident with the other resident pipelines instead of forcing a full-cluster
+stop.
 
 ## Runtime assumptions
 
@@ -60,6 +62,11 @@ addresses during process-group formation.
 
 Use the shared pipeline lifecycle runner for Gemma bring-up, the same as Qwen
 and DSV4. Do not keep Gemma-specific SSH launch notes outside the repo script.
+Always target the specific Gemma service being tested; do not use `--service
+all` for Gemma experiments because other developers may have co-resident Qwen or
+DSV4 work running. The lifecycle runner rejects mutating `--service all
+--execute` calls unless `--allow-all-services` is passed for planned fleet-wide
+maintenance.
 
 Dry-run the standard sequence first:
 

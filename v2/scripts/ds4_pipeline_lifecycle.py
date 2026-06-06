@@ -20,6 +20,8 @@ def main() -> int:
     args = _args()
     entries = _select_entries(_load_entries(args.topology, args.profiles_dir), args.service)
     actions = _expand_actions(args.actions)
+    if _is_dangerous_all_services(args, actions):
+        raise SystemExit("refusing mutating --service all --execute; pass --allow-all-services only for planned fleet-wide maintenance")
     if any(item in {"pull", "stop", "write-scripts", "launch"} for item in actions) and not args.execute:
         for entry in entries:
             print(f"plan {entry['service_id']}: actions={','.join(actions)} nodes={','.join(entry['node_ids'])} deployment={entry['deployment_rel']}")
@@ -43,6 +45,7 @@ def _args() -> argparse.Namespace:
     parser.add_argument("--probe-timeout-s", type=float, default=15.0)
     parser.add_argument("--stagger-s", type=float, default=2.0)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--allow-all-services", action="store_true")
     parser.add_argument("--json", action="store_true")
     return parser.parse_args()
 
@@ -52,6 +55,11 @@ def _expand_actions(actions: list[str]) -> list[str]:
     for action in actions:
         out.extend(["pull", "stop", "write-scripts", "launch", "probe"] if action == "relaunch" else [action])
     return out
+
+
+def _is_dangerous_all_services(args: argparse.Namespace, actions: list[str]) -> bool:
+    mutating = {"pull", "stop", "write-scripts", "launch"}
+    return bool(args.execute and args.service == "all" and not args.allow_all_services and any(action in mutating for action in actions))
 
 
 def _load_entries(topology_path: str, profiles_dir: str) -> list[dict[str, object]]:

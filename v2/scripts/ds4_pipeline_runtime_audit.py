@@ -21,6 +21,7 @@ def main() -> int:
     service_id = str(dsv4_profile["service_id"])
     _check_dsv4(dsv4_profile, services[service_id], errors, checks)
     _check_qwen(errors, checks)
+    _check_gemma_co_residency(errors, checks)
     _check_relaunch_defaults(dsv4_profile, errors, checks)
     _check_spark_update_scripts(errors, checks)
     if errors:
@@ -107,6 +108,13 @@ def _check_qwen(errors: list[str], checks: list[str]) -> None:
         errors.append("Qwen BF16 LMCache root must be FP8-KV namespaced")
     else:
         checks.append("Qwen BF16 LMCache root is FP8-KV namespaced")
+
+
+def _check_gemma_co_residency(errors: list[str], checks: list[str]) -> None:
+    for path in sorted((ROOT / "profiles" / "kv_cache").glob("gemma4_*_pp8_plain.json")):
+        data = _load(path)
+        args = data.get("extra_args") if isinstance(data.get("extra_args"), list) else []
+        _require_arg(args, "--gpu-memory-utilization", "0.40", f"{path.name} co-resident GPU memory cap", errors, checks)
 
 
 def _check_relaunch_defaults(profile: dict[str, Any], errors: list[str], checks: list[str]) -> None:
