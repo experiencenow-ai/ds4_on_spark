@@ -138,7 +138,7 @@ def _check_dsv4_env(profile: dict[str, Any], env: dict[str, Any], errors: list[s
         "VLLM_DS4_PP_TORCH_PAIR_GROUPS": "0",
         "VLLM_DS4_PP_TORCH_GROUP_WARMUP": "0",
         "VLLM_DS4_PP_OVERLAP_SEND": "1",
-        "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "4",
+        "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": str(profile["max_num_seqs"]),
         "VLLM_DS4_FINAL_ONLY_NONSTREAMING": "1",
         "DS4_FLASHINFER_JIT_MAX_JOBS": "1",
         "MAX_JOBS": "1",

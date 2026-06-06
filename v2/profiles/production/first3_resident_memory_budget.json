@@ -58,7 +58,7 @@
     "completion_pp_safe_cohort_max": 128,
     "completion_chunk_concurrency": 1,
     "dispatch_kv_capacity_bytes": 8589934592,
-    "notes": "First-three resident feed settings keep Qwen/Gemma saturated while DSV4 stays bounded by its service-level batch limit."
+      "notes": "First-three resident feed settings keep Qwen/Gemma saturated while DSV4 uses its service-level batch limit from the DSV4 production profile."
   },
   "baseline_with_qwen_gemma_available_gib": {
     "spark0": 48.6,
@@ -111,7 +111,7 @@
       "spark7": 27.6
     },
     "floor_gib": 21.9,
-    "notes": "Projection starts from live idle MemAvailable with all three resident on 2026-06-06 after the merged-main COMPSEC warm-cache run, then reserves one additional GiB per rank for the +10% DSV4 capacity step. The step restores 4 active DSV4 sequences, 2048 batched tokens, 1GiB resident/offload KV, and a 0.18 DSV4 GPU cap while leaving the lowest projected node, spark2, above 21 GiB available. First-run compiler workers can exceed this steady-state model and must run DSV4-only."
+    "notes": "Projection starts from live idle MemAvailable with all three resident on 2026-06-06 after the merged-main COMPSEC warm-cache run, then reserves one additional GiB per rank for the DSV4 capacity step. The step keeps 1GiB resident/offload KV and a 0.18 DSV4 GPU cap, then raises DSV4 active sequences and batched-token compile range without adding resident GPU memory. First-run compiler workers can exceed this steady-state model and must run DSV4-only."
   },
   "warmup_policy": {
     "required_before_first3_residency": true,
