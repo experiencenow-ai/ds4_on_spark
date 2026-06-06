@@ -121,6 +121,11 @@ def _check_qwen_pp8_deployment(errors: list[str], checks: list[str]) -> None:
         errors.append("Qwen BF16 LMCache root must be FP8-KV namespaced")
     else:
         checks.append("Qwen BF16 LMCache root is FP8-KV namespaced")
+    config = deployment.get("lmcache_config") if isinstance(deployment.get("lmcache_config"), dict) else {}
+    _require_equal(config.get("local_disk"), root, "Qwen BF16 LMCache config uses the declared root", errors, checks)
+    _require_equal(config.get("chunk_size"), 256, "Qwen BF16 LMCache config chunk size", errors, checks)
+    _require_equal(config.get("local_cpu"), True, "Qwen BF16 LMCache config enables local CPU buffer", errors, checks)
+    _require_equal(config.get("save_unfull_chunk"), False, "Qwen BF16 LMCache config keeps partial chunks off", errors, checks)
 
 
 def _check_qwen_pp8_env(env: dict[str, Any], errors: list[str], checks: list[str]) -> None:

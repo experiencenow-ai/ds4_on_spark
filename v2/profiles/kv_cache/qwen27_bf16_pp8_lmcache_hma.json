@@ -92,6 +92,17 @@
     8,
     5
   ],
+  "lmcache_config": {
+    "chunk_size": 256,
+    "local_cpu": true,
+    "max_local_cpu_size": 5,
+    "local_disk": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv",
+    "max_local_disk_size": 64,
+    "save_unfull_chunk": false,
+    "extra_config": {
+      "save_chunk_meta": false
+    }
+  },
   "master_addr": "10.10.100.10",
   "master_port": 29527,
   "model_id": "/home/{node}/models/hf/Qwen/Qwen3.6-27B",
