@@ -14,6 +14,7 @@
     "kv_role": "kv_both"
   },
   "deployment_id": "dsv4_flash_pp8_simple_offload_v1",
+  "external_backend": "dsv4_hma",
   "extra_args": [
     "--distributed-executor-backend",
     "mp",
@@ -25,7 +26,7 @@
     "--kv-cache-memory-bytes",
     "8589934592",
     "--gpu-memory-utilization",
-    "0.35",
+    "0.33",
     "--block-size",
     "256",
     "--kv-cache-dtype",
@@ -103,14 +104,14 @@
   "host": "0.0.0.0",
   "http_port": 8102,
   "layer_partition": [
-    5,
-    6,
-    6,
-    6,
-    6,
+    4,
     5,
     5,
-    4
+    6,
+    6,
+    5,
+    6,
+    6
   ],
   "master_addr": "10.10.100.10",
   "master_port": 29544,
@@ -139,6 +140,6 @@
   ],
   "working_directory": "/home/{node}/src/ds4_on_spark/v2",
   "performance_mode": "native_blackwell_strict_fastpath",
-  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 64-sequence admission and 8GiB resident KV per rank; raise DSV4_GPU_MEMORY_UTILIZATION only for DSV4-only runs.",
+  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 64-sequence admission and 8GiB resident KV per rank; keep the first-three residency cap below the no-headroom 0.35 startup point and raise DSV4_GPU_MEMORY_UTILIZATION only for DSV4-only runs.",
   "max_batch_size": 64
 }

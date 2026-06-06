@@ -164,6 +164,13 @@ def _audit(entries: list[dict[str, object]], args: argparse.Namespace) -> None:
         _check(str(dep.get("python_bin")) not in {"python3", "vllm"}, f"{entry['service_id']}: KV deployment python_bin is explicit", errors, checks)
         _check(str(dep.get("vllm_bin")) not in {"python3", "vllm"}, f"{entry['service_id']}: KV deployment vllm_bin is explicit", errors, checks)
         _check(str(dep.get("master_addr")) != entry["entry_node_id"], f"{entry['service_id']}: KV deployment master_addr avoids management hostname", errors, checks)
+        service_kv = entry["service"].get("kv_cache") if isinstance(entry["service"].get("kv_cache"), dict) else {}
+        deployment_connector = dep.get("connector") if isinstance(dep.get("connector"), dict) else {}
+        if service_kv.get("connector_id"):
+            _check(str(service_kv.get("connector_id")) == str(deployment_connector.get("connector_id")), f"{entry['service_id']}: topology connector matches KV deployment", errors, checks)
+        if service_kv.get("cache_root"):
+            directories = dep.get("cache_directories") if isinstance(dep.get("cache_directories"), list) else []
+            _check(bool(directories) and str(directories[0]) == str(service_kv.get("cache_root")), f"{entry['service_id']}: topology cache root matches KV deployment", errors, checks)
     if args.json:
         print(json.dumps({"ok": not errors, "checks": checks, "errors": errors}, indent=2, sort_keys=True))
     else:

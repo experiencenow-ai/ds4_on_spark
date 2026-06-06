@@ -610,8 +610,22 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(code, 503)
         self.assertFalse(payload["ready"])
         self.assertEqual(payload["active_resident_service_ids"], ["dsv4_flash_pp8", "gemma4_26b_a4b_pp8", "qwen27_bf16_pp8"])
+        self.assertEqual(
+            payload["resident_kv_backends"],
+            {"dsv4_flash_pp8": "dsv4_hma", "gemma4_26b_a4b_pp8": "lmcache_hma", "qwen27_bf16_pp8": "lmcache_hma"},
+        )
+        self.assertEqual(
+            payload["resident_kv_connectors"],
+            {"dsv4_flash_pp8": "simple_cpu_offload", "gemma4_26b_a4b_pp8": "lmcache", "qwen27_bf16_pp8": "lmcache"},
+        )
+        self.assertEqual(payload["resident_gpu_memory_utilization"], {"dsv4_flash_pp8": 0.33, "gemma4_26b_a4b_pp8": 0.25, "qwen27_bf16_pp8": 0.25})
+        self.assertAlmostEqual(payload["resident_gpu_memory_utilization_sum"], 0.83)
         failed = {item["name"] for item in payload["checks"] if not item["ok"] and item["severity"] == "error"}
         self.assertIn("jit_kv_prefetch_token_present", failed)
+        self.assertNotIn("first3_gpu_budget_under_hard_cap", failed)
+        passing = {item["name"] for item in payload["checks"] if item["ok"]}
+        self.assertIn("dsv4_flash_pp8:external_kv_backend_expected", passing)
+        self.assertIn("dsv4_gpu_budget_below_no_headroom_startup_point", passing)
 
     def test_pipeline_runner_prestages_common_strict_kv_prefix(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

@@ -38,7 +38,7 @@
       "enable_thinking": false
     },
     "optional_kv_cache_deployments": [
-      "profiles/kv_cache/gemma4_26b_a4b_it_pp8_plain.json"
+      "profiles/kv_cache/gemma4_26b_a4b_it_pp8_lmcache_hma.json"
     ],
     "pipeline": {
       "api_base_url": "http://127.0.0.1:8118",

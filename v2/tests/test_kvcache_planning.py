@@ -20,6 +20,7 @@ DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "dsv4_spark45_hma_cpu_offload.json
 QWEN_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_lmcache_mp_spark7.json"
 QWEN_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_lmcache_hma.json"
 QWEN_BF16KV_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_bf16kv_lmcache_hma.json"
+GEMMA26_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_26b_a4b_it_pp8_lmcache_hma.json"
 DSV4_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "dsv4_flash_pp8_simple_offload.json"
 GEMMA31_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_31b_it_pp8_plain.json"
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
@@ -244,15 +245,48 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertIn("--gpu-memory-utilization 0.35", rank0)
             self.assertIn("local_disk: \"/home/spark7/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_bf16kv\"", rank7)
 
+    def test_gemma26_pp8_lmcache_hma_plan_is_pipeline_sharded(self) -> None:
+        deployment = KvCacheDeployment.load(GEMMA26_PP_DEPLOYMENT)
+        plan = plan_deployment(deployment)
+
+        self.assertEqual(plan["profile_id"], "gemma4_26b_a4b_it_pp8_peer_v1")
+        self.assertEqual(plan["connector"]["connector_id"], "lmcache")
+        self.assertEqual(plan["connector"]["install_packages"], ["lmcache==0.4.5"])
+        self.assertEqual(plan["connector"]["kv_transfer_config"]["kv_connector"], "LMCacheConnectorV1")
+        self.assertEqual(plan["layer_partition"], [4, 4, 4, 4, 4, 4, 3, 3])
+        self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["path"], "/tmp/lmcache_gemma4_26b_a4b_pp8_bf16kv.yaml")
+        self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["data"]["local_disk"], "/home/spark0/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv")
+        self.assertEqual(plan["vllm_nodes"][-1]["lmcache_config"]["data"]["local_disk"], "/home/spark7/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv")
+        self.assertIn("--kv-transfer-config", plan["vllm_nodes"][0]["argv"])
+
+    def test_write_gemma26_lmcache_scripts_materialize_config(self) -> None:
+        deployment = KvCacheDeployment.load(GEMMA26_PP_DEPLOYMENT)
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = write_launch_scripts(deployment, tmp)
+            rank0 = Path(manifest["scripts"]["start_vllm_nodes"]["spark0"]).read_text()
+            rank7 = Path(manifest["scripts"]["start_vllm_nodes"]["spark7"]).read_text()
+
+            self.assertIn("cat > /tmp/lmcache_gemma4_26b_a4b_pp8_bf16kv.yaml", rank0)
+            self.assertIn("LMCACHE_ROOT=/home/spark0/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv", rank0)
+            self.assertIn("local_disk: \"/home/spark0/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv\"", rank0)
+            self.assertIn("--kv-transfer-config", rank0)
+            self.assertIn("local_disk: \"/home/spark7/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv\"", rank7)
+
     def test_dsv4_flash_pp8_simple_offload_plan_is_pipeline_sharded(self) -> None:
         deployment = KvCacheDeployment.load(DSV4_PP_DEPLOYMENT)
         plan = plan_deployment(deployment)
 
         self.assertEqual(plan["profile_id"], "dsv4_vllm_mtp_pp8_smartest_v1")
+        self.assertEqual(plan["connector"]["connector_id"], "simple_cpu_offload")
+        self.assertEqual(plan["connector"]["kv_transfer_config"]["kv_connector"], "SimpleCPUOffloadConnector")
+        self.assertEqual(plan["connector"]["kv_transfer_config"]["kv_connector_extra_config"]["spec_name"], "SimpleCPUOffloadingSpec")
         self.assertEqual(plan["pipeline_parallel_size"], DSV4_PRODUCTION["pipeline_parallel_size"])
         self.assertEqual(plan["cache_sharding"], "pipeline_layers")
         self.assertEqual(plan["layer_partition"], DSV4_PRODUCTION["layer_partition"])
         self.assertEqual(plan["vllm_nodes"][-1]["layer_end"], 43)
+        self.assertEqual(plan["vllm_nodes"][0]["env"]["VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT"], "/home/spark0/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload")
+        self.assertEqual(plan["vllm_nodes"][-1]["env"]["VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT"], "/home/spark7/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload")
+        self.assertEqual(plan["vllm_nodes"][0]["env"]["VLLM_SIMPLE_KV_OFFLOAD_PERSIST_RANK"], "spark0-r0")
         self.assertIn("SimpleCPUOffloadConnector", plan["vllm_nodes"][0]["command"])
         self.assertIn("--kv-cache-dtype", plan["vllm_nodes"][0]["argv"])
         self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--kv-cache-dtype") + 1], DSV4_PRODUCTION["kv_cache_dtype"])
@@ -367,9 +401,11 @@ class KvCachePlanningTests(unittest.TestCase):
         pp_dsv4 = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
         pp_qwen = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
         pp_qwen_bf16kv = registry.get("qwen3_6_27b_bf16_pp8_bf16kv_efficient_v1")
+        pp_gemma26 = registry.get("gemma4_26b_a4b_it_pp8_peer_v1")
         self.assertEqual(pp_dsv4.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/dsv4_flash_pp8_simple_offload.json"])
         self.assertEqual(pp_qwen.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json"])
         self.assertEqual(pp_qwen_bf16kv.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/qwen27_bf16_pp8_bf16kv_lmcache_hma.json"])
+        self.assertEqual(pp_gemma26.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/gemma4_26b_a4b_it_pp8_lmcache_hma.json"])
         self.assertTrue(pp_qwen_bf16kv.routing["requires_profile_pin"])
         self.assertFalse(pp_qwen_bf16kv.production_eligible)
         with self.assertRaisesRegex(ValueError, "no production profile"):
