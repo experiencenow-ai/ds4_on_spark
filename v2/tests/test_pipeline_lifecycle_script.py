@@ -83,6 +83,21 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertNotIn("google", needles)
         self.assertNotIn("spark0", needles)
 
+    def test_remote_kill_collects_matched_process_descendants(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        entry = {
+            "service_id": "gemma4_12b_pp8",
+            "profile_id": "gemma4_12b_it_pp8_peer_v1",
+            "model_id": "google/gemma-4-12B-it",
+            "deployment": {"model_id": "/home/{node}/models/hf/google/gemma-4-12B-it", "served_model_name": "gemma-4-12b-it-pp8"},
+        }
+
+        script = lifecycle._remote_kill(entry)
+
+        self.assertIn("pid=,ppid=,args=", script)
+        self.assertIn("children.setdefault(ppid,[]).append(pid)", script)
+        self.assertIn("stack.extend(children.get(pid,[]))", script)
+
     def test_spark_updater_disables_legacy_runtime_config_path(self) -> None:
         script = (ROOT.parent / "scripts" / "ds4_update_spark_nodes.sh").read_text(encoding="utf-8")
 

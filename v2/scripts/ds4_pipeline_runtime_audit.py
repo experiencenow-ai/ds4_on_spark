@@ -115,6 +115,10 @@ def _check_gemma_co_residency(errors: list[str], checks: list[str]) -> None:
         data = _load(path)
         args = data.get("extra_args") if isinstance(data.get("extra_args"), list) else []
         _require_arg(args, "--gpu-memory-utilization", "0.40", f"{path.name} co-resident GPU memory cap", errors, checks)
+        if "--disable-hybrid-kv-cache-manager" not in [str(item) for item in args]:
+            errors.append(f"{path.name}: Gemma PP8 must disable hybrid KV cache manager")
+        else:
+            checks.append(f"{path.name} disables hybrid KV cache manager")
 
 
 def _check_relaunch_defaults(profile: dict[str, Any], errors: list[str], checks: list[str]) -> None:

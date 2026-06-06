@@ -58,6 +58,10 @@ the node's 200G fabric IP. Gemma also pins Gloo and vLLM host identity to the
 200G fabric because the first live PP8 bring-up otherwise advertised loopback
 addresses during process-group formation.
 
+Gemma PP8 disables the hybrid KV cache manager explicitly. Some pipeline ranks
+can end up with only one attention group after layer partitioning, and vLLM's
+`HybridKVCacheCoordinator` asserts when a rank has fewer than two groups.
+
 ## Lifecycle runner
 
 Use the shared pipeline lifecycle runner for Gemma bring-up, the same as Qwen
@@ -66,7 +70,8 @@ Always target the specific Gemma service being tested; do not use `--service
 all` for Gemma experiments because other developers may have co-resident Qwen or
 DSV4 work running. The lifecycle runner rejects mutating `--service all
 --execute` calls unless `--allow-all-services` is passed for planned fleet-wide
-maintenance.
+maintenance. Scoped stops kill the matched service process tree so failed vLLM
+worker children do not stay orphaned on the GPU.
 
 Dry-run the standard sequence first:
 
