@@ -257,6 +257,24 @@ def format_text_map(values: Dict[str,str]) -> str:
     return(";".join(parts)[:240])
 
 
+def add_service_id(values: Dict[str,object], raw: Any) -> None:
+    service_id = str(raw or "").strip()
+    if service_id:
+        values[service_id] = True
+
+
+def add_lease_service_ids(values: Dict[str,object], raw: Any) -> None:
+    if isinstance(raw,dict):
+        for key in ("service_id","selected_service_id","ds4_service_id"):
+            add_service_id(values,raw.get(key))
+        for value in raw.values():
+            if isinstance(value,(dict,list,tuple)):
+                add_lease_service_ids(values,value)
+    elif isinstance(raw,(list,tuple)):
+        for item in raw:
+            add_lease_service_ids(values,item)
+
+
 def empty_queue_summary() -> Dict[str,object]:
     return({
         "local_queue_source": "",
@@ -271,6 +289,8 @@ def empty_queue_summary() -> Dict[str,object]:
         "local_queue_ds_services": "",
         "local_queue_ds_service_count": 0,
         "local_queue_ds_model_count": 0,
+        "local_queue_active_services": "",
+        "local_queue_active_service_count": 0,
         "local_queue_last_service": "",
         "local_queue_resident_multimodel": 0,
         "local_queue_kv_shards": 0,
@@ -314,6 +334,7 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
     resident_targets_raw = dispatcher.get("resident_service_targets",{})
     resident_targets = {str(k):num(v) for k,v in resident_targets_raw.items()} if isinstance(resident_targets_raw,dict) else {}
     service_ids: Dict[str,object] = {}
+    active_service_ids: Dict[str,object] = {}
     model_count = 0
     for item in models.get("data",[]) if isinstance(models.get("data",[]),list) else []:
         if not isinstance(item,dict):
@@ -325,12 +346,19 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
     for service_id in list(pending_by_service) + list(resident_targets):
         if service_id:
             service_ids[service_id] = True
+    for service_id,count in pending_by_service.items():
+        if service_id and count > 0.0:
+            active_service_ids[service_id] = True
     last_service = str(dispatcher.get("last_claimed_service_id") or "")
     if last_service:
         service_ids[last_service] = True
     pipeline = data.get("pipeline_status",{})
     kv_shards = pipeline.get("kv_shards",[]) if isinstance(pipeline,dict) else []
     stages = pipeline.get("stages",[]) if isinstance(pipeline,dict) else []
+    if isinstance(pipeline,dict):
+        add_service_id(active_service_ids,pipeline.get("service_id"))
+        add_lease_service_ids(active_service_ids,pipeline.get("active_compute_leases",[]))
+    add_lease_service_ids(active_service_ids,data.get("active_compute_leases",[]))
     kv_services: Dict[str,object] = {}
     kv_by_node: Dict[str,str] = {}
     stage_services: Dict[str,str] = {}
@@ -345,6 +373,7 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
             if service_id:
                 kv_services[service_id] = True
                 service_ids[service_id] = True
+                active_service_ids[service_id] = True
             if node_id and service_id:
                 kv_by_node[node_id] = service_id
             kv_entries += int(num(shard.get("entries",0)))
@@ -360,6 +389,7 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
             if service_id:
                 stage_services[node_id] = service_id
                 service_ids[service_id] = True
+                active_service_ids[service_id] = True
                 if node_id not in kv_by_node:
                     kv_by_node[node_id] = service_id
     out.update({
@@ -376,6 +406,8 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
         "local_queue_ds_services": ",".join(sorted(service_ids)),
         "local_queue_ds_service_count": len(service_ids),
         "local_queue_ds_model_count": model_count,
+        "local_queue_active_services": ",".join(sorted(active_service_ids)),
+        "local_queue_active_service_count": len(active_service_ids),
         "local_queue_last_service": last_service,
         "local_queue_resident_multimodel": 1 if bool(dispatcher.get("resident_multimodel",False)) else 0,
         "local_queue_kv_shards": len(kv_shards) if isinstance(kv_shards,list) else 0,
