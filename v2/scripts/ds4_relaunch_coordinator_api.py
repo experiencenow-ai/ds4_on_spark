@@ -13,6 +13,7 @@ from urllib import request
 
 ROOT = Path(__file__).resolve().parents[1]
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
+FIRST3_MEMORY_BUDGET = ROOT / "profiles" / "production" / "first3_resident_memory_budget.json"
 STATIC_SPARKS_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 DEFAULT_COORDINATOR_PYTHON = Path("/home/spark0/ds4-vllm-local/bin/python")
 
@@ -186,8 +187,7 @@ def _common_profile_defaults(dsv4: dict[str, object]) -> dict[str, str]:
 
 
 def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str) -> dict[str, str]:
-    coordinator = dict(dsv4["coordinator"])
-    max_num_seqs = int(dsv4["max_num_seqs"])
+    coordinator = dict(_load_first3_memory_budget().get("coordinator") or {})
     if profile == "resident256":
         coordinator.update(
             {
@@ -199,7 +199,6 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str) -> dict[str, s
                 "completion_chunk_concurrency": 4,
             }
         )
-        max_num_seqs = 256
     return {
         "DS4_API_DISPATCH_WINDOW": str(coordinator["dispatch_window"]),
         "DS4_API_DISPATCH_REFILL_BATCH": str(coordinator["dispatch_refill_batch"]),
@@ -209,12 +208,16 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str) -> dict[str, s
         "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": str(coordinator["completion_pp_safe_cohort_max"]),
         "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": str(coordinator["completion_chunk_concurrency"]),
         "DS4_API_DISPATCH_KV_CAPACITY_BYTES": str(coordinator["dispatch_kv_capacity_bytes"]),
-        "DS4_API_BATCH_LIMITS_JSON": json.dumps(_pipeline_batch_limits(overrides={str(dsv4["service_id"]): max_num_seqs}), separators=(",", ":")),
+        "DS4_API_BATCH_LIMITS_JSON": json.dumps(_pipeline_batch_limits(overrides={str(dsv4["service_id"]): int(dsv4["max_num_seqs"])}), separators=(",", ":")),
     }
 
 
 def _load_dsv4_production_profile() -> dict[str, object]:
     return json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
+
+
+def _load_first3_memory_budget() -> dict[str, object]:
+    return json.loads(FIRST3_MEMORY_BUDGET.read_text(encoding="utf-8"))
 
 
 def _pipeline_batch_limits(*, topology_path: Path = STATIC_SPARKS_TOPOLOGY, overrides: dict[str, int] | None = None) -> dict[str, int]:

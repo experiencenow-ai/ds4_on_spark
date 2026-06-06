@@ -357,7 +357,8 @@ def _check_first3_memory_budget(topology: dict[str, Any], dsv4_profile: dict[str
 def _check_relaunch_defaults(profile: dict[str, Any], errors: list[str], checks: list[str]) -> None:
     module = _load_module(ROOT / "scripts" / "ds4_relaunch_coordinator_api.py")
     defaults = module._profile_defaults(str(profile["coordinator_profile"]))
-    coordinator = profile["coordinator"]
+    budget = _load(ROOT / "profiles" / "production" / "first3_resident_memory_budget.json")
+    coordinator = budget.get("coordinator") if isinstance(budget.get("coordinator"), dict) else {}
     topology = _load(ROOT / "profiles" / "topology" / "static_sparks.json")
     routing = topology.get("routing_policy") if isinstance(topology.get("routing_policy"), dict) else {}
     services = routing.get("pipeline_services") if isinstance(routing.get("pipeline_services"), dict) else {}

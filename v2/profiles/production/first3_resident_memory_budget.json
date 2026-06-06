@@ -50,6 +50,16 @@
     "dsv4_flash_pp8": 0.08,
     "active_sum": 0.58
   },
+  "coordinator": {
+    "dispatch_window": 128,
+    "dispatch_refill_batch": 128,
+    "completion_cohort_max": 128,
+    "completion_token_budget": 32768,
+    "completion_pp_safe_cohort_max": 128,
+    "completion_chunk_concurrency": 1,
+    "dispatch_kv_capacity_bytes": 8589934592,
+    "notes": "First-three resident feed settings keep Qwen/Gemma saturated while DSV4 stays bounded by its service-level batch limit."
+  },
   "baseline_with_qwen_gemma_available_gib": {
     "spark0": 48.6,
     "spark1": 53.4,

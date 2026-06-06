@@ -14,6 +14,8 @@ STOP_SCRIPT = ROOT / "scripts" / "ds4_stop_coordinator_api.py"
 RELAUNCH_SCRIPT = ROOT / "scripts" / "ds4_relaunch_coordinator_api.py"
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
+FIRST3_MEMORY_BUDGET_PROFILE = ROOT / "profiles" / "production" / "first3_resident_memory_budget.json"
+FIRST3_MEMORY_BUDGET = json.loads(FIRST3_MEMORY_BUDGET_PROFILE.read_text(encoding="utf-8"))
 STATIC_SPARKS_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 STATIC_TOPOLOGY = json.loads(STATIC_SPARKS_TOPOLOGY.read_text(encoding="utf-8"))
 
@@ -59,11 +61,11 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         for profile_name in ("throughput", "production", "resident128"):
             self.assertEqual(relaunch._profile_defaults(profile_name), resident)
 
-    def test_relaunch_resident128_profile_sets_bounded_feed_defaults(self) -> None:
+    def test_relaunch_resident128_profile_sets_first3_feed_defaults(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
 
         defaults = relaunch._profile_defaults(DSV4_PRODUCTION["coordinator_profile"])
-        coordinator = DSV4_PRODUCTION["coordinator"]
+        coordinator = FIRST3_MEMORY_BUDGET["coordinator"]
 
         self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], str(coordinator["dispatch_window"]))
         self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], str(coordinator["dispatch_refill_batch"]))
@@ -101,7 +103,6 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         relaunch = load_script(RELAUNCH_SCRIPT)
 
         defaults = relaunch._profile_defaults("resident256")
-        coordinator = DSV4_PRODUCTION["coordinator"]
 
         self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "256")
         self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "256")
@@ -109,8 +110,8 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "98304")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "256")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "4")
-        self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(coordinator["dispatch_kv_capacity_bytes"]))
-        self.assertEqual(json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])[DSV4_PRODUCTION["service_id"]], 256)
+        self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(FIRST3_MEMORY_BUDGET["coordinator"]["dispatch_kv_capacity_bytes"]))
+        self.assertEqual(json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])[DSV4_PRODUCTION["service_id"]], DSV4_PRODUCTION["max_num_seqs"])
 
     def test_relaunch_arg_parser_accepts_resident128_profile(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
@@ -199,7 +200,7 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
                 os.environ.pop("DS4_API_RESIDENT_SERVICE_IDS", None)
             else:
                 os.environ["DS4_API_RESIDENT_SERVICE_IDS"] = old_services
-        self.assertEqual(env["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(DSV4_PRODUCTION["coordinator"]["dispatch_kv_capacity_bytes"]))
+        self.assertEqual(env["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(FIRST3_MEMORY_BUDGET["coordinator"]["dispatch_kv_capacity_bytes"]))
         self.assertEqual(env["DS4_API_RESIDENT_MULTIMODEL"], "1")
         self.assertEqual(env["DS4_API_RESIDENT_SERVICE_IDS"], "qwen27_bf16_pp8,gemma4_26b_a4b_pp8,dsv4_flash_pp8")
 
