@@ -36,12 +36,34 @@ scripts/ds4_pull_spark_nodes.sh
 ```
 
 That command only pulls `origin/main` on reachable Spark checkouts. It does not
-rewrite runtime env, install systemd units, or restart services. Use
-`scripts/ds4_update_spark_nodes.sh --runtime-config` only when the runtime
-configuration step is intentional.
+rewrite runtime env, install systemd units, or restart services. Legacy
+runtime-config and spark4/spark5 DSV4 restart modes are disabled; resident
+pipeline side effects go through the lifecycle runner below.
 
 Those scripts require the remote repos to be on `main` and clean. They should
 fail rather than hide drift.
+
+## GitHub PR workflow
+
+Use the repo-owned PR helper instead of typing raw `gh pr create/checks/merge`
+commands:
+
+```bash
+scripts/ds4_github_pr.py create --title "Short PR title" --body-file /tmp/pr-body.md
+scripts/ds4_github_pr.py checks
+scripts/ds4_github_pr.py merge
+```
+
+For the full standard path from a feature branch:
+
+```bash
+scripts/ds4_github_pr.py ship --title "Short PR title" --body-file /tmp/pr-body.md
+```
+
+The helper pushes the current branch first, creates the PR with an explicit
+`--head`, waits for checks to pass, and only then merges. This avoids GitHub CLI
+guesswork such as creating a PR before the branch has an upstream or relying on
+`gh` to infer the head branch.
 
 ## Pipeline lifecycle
 
