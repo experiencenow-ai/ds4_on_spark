@@ -163,7 +163,7 @@
           4,
           7
         ],
-        "max_batch_size": 4,
+        "max_batch_size": 16,
         "model_id": "/home/{node}/models/hf/deepseek-ai/DeepSeek-V4-Flash",
         "node_ids": [
           "spark0",
@@ -183,8 +183,8 @@
           "max_running_batches_per_compute_domain": 1,
           "queue_limit": 64,
           "refill_low_watermark": 8,
-          "vllm_max_num_batched_tokens": 2048,
-          "vllm_max_num_seqs": 4
+          "vllm_max_num_batched_tokens": 8192,
+          "vllm_max_num_seqs": 16
         },
         "service_id": "dsv4_flash_pp8",
         "telemetry": {
