@@ -28,10 +28,10 @@
       4,
       4,
       4,
-      4,
+      3,
       4,
       3,
-      3
+      4
     ],
     "dsv4_flash_pp8": [
       5,
@@ -82,12 +82,14 @@
         4,
         4,
         4,
-        4,
+        3,
         4,
         3,
-        3
+        4
       ],
-      "keep_unchanged": true
+      "retune_layer_memory_gib": 1.5,
+      "spark4_to_spark7_layer_shift": true,
+      "notes": "Live all-three coordinator smoke left spark4 at 11.3 GiB available. Moving one Gemma layer from spark4 to spark7 preserves Gemma max stage depth at 4 while restoring the 12 GiB floor."
     },
     "dsv4_flash_pp8": {
       "per_layer": 3.33,
@@ -99,17 +101,17 @@
   },
   "projection": {
     "post_first3_available_gib": {
-      "spark0": 18.5,
-      "spark1": 23.1,
-      "spark2": 20.8,
-      "spark3": 25.8,
+      "spark0": 19.8,
+      "spark1": 22.7,
+      "spark2": 21.5,
+      "spark3": 26.3,
       "spark4": 12.8,
-      "spark5": 13.6,
-      "spark6": 18.1,
-      "spark7": 29.8
+      "spark5": 13.1,
+      "spark6": 21.1,
+      "spark7": 28.3
     },
     "floor_gib": 12.8,
-    "notes": "Projection starts from live post-request MemAvailable with all three resident on 2026-06-06, keeps the 64-chunk DSV4 vLLM multiprocessing broadcast ring, shifts Qwen one layer off sparks 4-6, and shifts two DSV4 layers off sparks 4-6. First-run compiler workers can exceed this steady-state model and must run DSV4-only."
+    "notes": "Projection starts from live post-request MemAvailable with all three resident on 2026-06-06 after coordinator-routed smoke requests, then shifts one Gemma layer from spark4 to spark7. This preserves the Gemma max stage depth at 4, keeps spark7 within headroom, and restores spark4 to the 12 GiB target. First-run compiler workers can exceed this steady-state model and must run DSV4-only."
   },
   "warmup_policy": {
     "required_before_first3_residency": true,

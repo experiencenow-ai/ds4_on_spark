@@ -253,7 +253,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["connector"]["connector_id"], "lmcache")
         self.assertEqual(plan["connector"]["install_packages"], ["lmcache==0.4.5"])
         self.assertEqual(plan["connector"]["kv_transfer_config"]["kv_connector"], "LMCacheConnectorV1")
-        self.assertEqual(plan["layer_partition"], [4, 4, 4, 4, 4, 4, 3, 3])
+        self.assertEqual(plan["layer_partition"], [4, 4, 4, 4, 3, 4, 3, 4])
         self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["path"], "/tmp/lmcache_gemma4_26b_a4b_pp8_bf16kv.yaml")
         self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["data"]["local_disk"], "/home/spark0/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv")
         self.assertEqual(plan["vllm_nodes"][-1]["lmcache_config"]["data"]["local_disk"], "/home/spark7/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv")
