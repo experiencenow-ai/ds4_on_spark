@@ -262,10 +262,10 @@
           4,
           4,
           4,
-          4,
+          3,
           4,
           3,
-          3
+          4
         ],
         "max_batch_size": 64,
         "model_id": "google/gemma-4-26B-A4B-it",
