@@ -46,6 +46,10 @@ caller asks to relieve spark5.
 
 ## DSV4 Launch Rule
 
+The spark4+spark5 local DSV4 lane below is historical and disabled. Current
+resident DSV4 work uses the all-Spark `dsv4_flash_pp8` service through
+`scripts/ds4_pipeline_lifecycle.py`.
+
 The spark4+spark5 DSV4 lane must use the source-built, host-local vLLM runtime
 with vLLM's hybrid KV cache manager enabled. This is not an interchangeable
 implementation detail. Each Spark has one GPU, and the working DSV4 result uses

@@ -38,11 +38,11 @@ Initial default intent:
 
 ## Static Spark topology
 
-The production Spark allocation is fixed in `profiles/topology/static_sparks.json`:
+The resident Spark pipeline catalog is fixed in `profiles/topology/static_sparks.json`:
 
-- spark0-3 and spark6 host resident Qwen lanes;
-- spark4+spark5 jointly host one DSV4 vLLM/MTP lane because that profile consumes both Sparks;
-- spark7 is the only dynamic experiment lane.
+- Qwen27, DSV4 Flash, and Gemma4 pipeline services use the standard spark0-7 topology.
+- spark0 is the API/queue ingress for resident pipeline services.
+- All resident pipelines share `spark-fleet-0`; the DS4 scheduler owns admission.
 
 Memory relief uses the same client-level control API for every Spark:
 
@@ -59,17 +59,16 @@ The API resolves topology and runtime contracts before it calls the Spark-local
 
 This keeps Centaur-facing requests capability-based instead of Spark/backend-specific. See `docs/static-spark-topology.md`.
 
-Production Sparks should run `ds4-infer startup-models` after reboot. The
-command warms only the resident profiles assigned to that Spark by topology;
-spark7 stays on demand.
+Resident pipeline launch, stop, script generation, and probes must use the
+shared lifecycle runner:
 
-KV cache is launch plumbing, not a separate production model variant. The
-normal DSV4 service is the source-built local vLLM runtime from
-`experiencenow-ai/vllm@d523ead071132cd291e66e3dfd68f55446c27357`, launched by
-`scripts/ds4_dsv4_spark45_local_vllm.sh` with native SimpleCPUOffload. The live
-spark4+spark5 shape reports `max_model_len=1048576`, a 2,088,846-token GPU KV
-pool, and roughly two 1M-token full-context request slots. See
-`docs/kv-cache.md`.
+```bash
+python3 scripts/ds4_pipeline_lifecycle.py --service qwen27_bf16_pp8 relaunch
+python3 scripts/ds4_pipeline_lifecycle.py --service qwen27_bf16_pp8 relaunch --execute
+```
+
+The old spark4/spark5 DSV4 launchers and runtime-config updater path are
+disabled. See `docs/pipeline-lifecycle.md`.
 
 ## Inference queue
 

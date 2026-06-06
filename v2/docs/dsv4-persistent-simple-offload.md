@@ -1,5 +1,14 @@
 # DSV4 Persistent Native HMA Offload
 
+This document is historical for the spark4/spark5 local DSV4 lane. Those
+launchers are disabled. Current resident DSV4 work uses the all-Spark
+`dsv4_flash_pp8` lifecycle:
+
+```bash
+cd ~/src/ds4_on_spark/v2
+python3 scripts/ds4_pipeline_lifecycle.py --service dsv4_flash_pp8 relaunch --execute
+```
+
 DSV4 persistent KV is implemented on top of vLLM's native
 `SimpleCPUOffloadConnector`. This is deliberately not an LMCache launch. The
 live DSV4 path already stores the correct HMA KV block tensors in native CPU

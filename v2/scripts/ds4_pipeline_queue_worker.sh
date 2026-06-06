@@ -14,10 +14,12 @@ CONCURRENCY="${CONCURRENCY:-32}"
 KV_CAPACITY_BYTES="${KV_CAPACITY_BYTES:-0}"
 BATCH_LINGER_S="${BATCH_LINGER_S:-0.05}"
 
-DEFAULT_PIPELINE_BASE_URLS_JSON='{"qwen27_bf16_pp8":"http://127.0.0.1:8101","qwen3_6_27b_bf16_pp8_efficient_v1":"http://127.0.0.1:8101","Qwen/Qwen3.6-27B":"http://127.0.0.1:8101","dsv4_flash_pp8":"http://127.0.0.1:8102","dsv4_vllm_mtp_pp8_smartest_v1":"http://127.0.0.1:8102","deepseek-ai/DeepSeek-V4-Flash":"http://127.0.0.1:8102"}'
-export DS4_PIPELINE_BASE_URLS_JSON="${DS4_PIPELINE_BASE_URLS_JSON:-${DEFAULT_PIPELINE_BASE_URLS_JSON}}"
 export PYTHONPATH="$V2_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 cd "$V2_ROOT"
+if [ -z "${DS4_PIPELINE_BASE_URLS_JSON:-}" ]; then
+	DS4_PIPELINE_BASE_URLS_JSON="$(python3 -c 'import json; from ds4_infer.topology import SparkTopology; topology=SparkTopology.load("'"$TOPOLOGY"'"); urls={}; [urls.update({service.service_id: service.api_base_url, service.profile_id: service.api_base_url, service.model_id: service.api_base_url}) for service in topology.pipeline_services.values()]; print(json.dumps(urls, separators=(",", ":"), sort_keys=True))')"
+	export DS4_PIPELINE_BASE_URLS_JSON
+fi
 
 exec python3 -m ds4_infer.cli queue-worker \
     --queue-dir "${QUEUE_DIR}" \

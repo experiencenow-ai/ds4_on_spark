@@ -43,6 +43,28 @@ configuration step is intentional.
 Those scripts require the remote repos to be on `main` and clean. They should
 fail rather than hide drift.
 
+## Pipeline lifecycle
+
+For resident Qwen, DSV4, and Gemma pipeline tests, use the shared lifecycle
+runner instead of hand-written thread-local SSH commands:
+
+```bash
+cd ~/src/ds4_on_spark/v2
+python3 scripts/ds4_pipeline_lifecycle.py --service qwen27_bf16_pp8 relaunch
+python3 scripts/ds4_pipeline_lifecycle.py --service qwen27_bf16_pp8 relaunch --execute
+```
+
+The dry run prints the standard action sequence. The executed relaunch uses the
+same script path for every pipeline:
+
+```text
+pull -> stop -> write-scripts -> launch -> probe
+```
+
+General fixes to topology, launch, stop, probe, or coordinator defaults belong
+in the lifecycle/coordinator code first, then each model-specific branch pulls
+or rebases onto `main`.
+
 ## Spark0 coordinator relaunch
 
 On spark0, use the repo-owned relaunch script instead of ad-hoc `pkill -f`

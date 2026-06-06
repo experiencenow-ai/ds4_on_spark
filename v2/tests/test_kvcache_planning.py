@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
+import os
 import tempfile
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from ds4_infer.profiles import ProfileRegistry
+from ds4_kvcache.cli import main as kvcache_cli_main
 from ds4_kvcache.service import KvCacheDeployment, kv_transfer_config, plan_deployment, write_launch_scripts
 from ds4_tools.registry import ToolRegistry
 
@@ -227,6 +232,20 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertIn("--node-rank 0", rank0)
             self.assertIn("--node-rank 7", rank7)
             self.assertIn("--headless", rank7)
+
+    def test_static_pipeline_cli_write_scripts_requires_lifecycle_runner(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("DS4_PIPELINE_LIFECYCLE", None)
+                with self.assertRaisesRegex(SystemExit, "ds4_pipeline_lifecycle"):
+                    kvcache_cli_main(["write-scripts", "--deployment", str(QWEN_PP_DEPLOYMENT), "--output-dir", tmp])
+
+    def test_static_pipeline_cli_write_scripts_allows_lifecycle_runner(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {"DS4_PIPELINE_LIFECYCLE": "1"}):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(kvcache_cli_main(["write-scripts", "--deployment", str(QWEN_PP_DEPLOYMENT), "--output-dir", tmp]), 0)
+            self.assertTrue((Path(tmp) / "kv_cache_launch_manifest.json").exists())
 
     def test_gemma_pipeline_launch_scripts_use_200g_fabric_host_ips(self) -> None:
         deployment = KvCacheDeployment.load(GEMMA31_PP_DEPLOYMENT)
