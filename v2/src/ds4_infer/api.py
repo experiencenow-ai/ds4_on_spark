@@ -96,6 +96,8 @@ class CoordinatorApi:
             return 200, self.dispatcher_status()
         if path == "/ds4/queue/status":
             return 200, self.queue.status(request_id=_one(query, "request_id"), batch_id=_one(query, "batch_id"), job_id=_one(query, "job_id"), refresh=_query_bool(query, "refresh", False))
+        if path == "/ds4/queue/usage":
+            return 200, self.queue.usage(window_s=_query_float(query, "window_s", 300.0))
         if path == "/ds4/queue/poll":
             return 200, self.queue.poll(after_event_id=int(_one(query, "after_event_id") or 0), limit=int(_one(query, "limit") or 100))
         if path == "/ds4/queue/collect":
@@ -1390,6 +1392,13 @@ def _query_bool(query: dict[str, list[str]], key: str, default: bool) -> bool:
     if value is None or value == "":
         return default
     return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _query_float(query: dict[str, list[str]], key: str, default: float) -> float:
+    value = _one(query, key)
+    if value is None or value == "":
+        return float(default)
+    return float(value)
 
 
 def _optional_str(value: Any) -> str | None:

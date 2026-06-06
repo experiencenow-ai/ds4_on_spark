@@ -253,6 +253,39 @@ class InferenceQueueTests(unittest.TestCase):
             self.assertEqual(queue.status(batch_id="job", refresh=False)["state"], "queued")
             self.assertEqual(queue.status(batch_id="job", refresh=True)["state"], "completed")
 
+    def test_usage_summarizes_completed_window(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            requests = [req("a"), req("b"), req("old")]
+            queue.submit_requests(requests=requests, registry=registry, batch_id="job")
+            queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id="job", limit=3, leased_by="worker", lease_ttl_s=30)
+            claims = queue.claim_ready_batch(node_id="spark0", batch_id="job", limit=3, leased_by="worker", lease_ttl_s=30)
+            claims_by_id = {claim.request_id: claim for claim in claims}
+            result_a = make_result(request=claims_by_id["a"].request, profile_id=QWEN, model_id="model", backend="fake", text="a")
+            result_a["usage"] = {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
+            result_b = make_result(request=claims_by_id["b"].request, profile_id=QWEN, model_id="model", backend="fake", text="b")
+            result_b["usage"] = {"input_tokens": 5, "output_tokens": 15}
+            result_old = make_result(request=claims_by_id["old"].request, profile_id=QWEN, model_id="model", backend="fake", text="old")
+            result_old["usage"] = {"prompt_tokens": 100, "completion_tokens": 200, "total_tokens": 300}
+            self.assertTrue(queue.finish_request(request_id="a", lease_id=claims_by_id["a"].lease_id, state="completed", result=result_a))
+            self.assertTrue(queue.finish_request(request_id="b", lease_id=claims_by_id["b"].lease_id, state="completed", result=result_b))
+            self.assertTrue(queue.finish_request(request_id="old", lease_id=claims_by_id["old"].lease_id, state="completed", result=result_old))
+            with sqlite3.connect(Path(tmp) / "queue.sqlite3") as conn:
+                conn.execute("update requests set completed_at=990.0, updated_at=990.0 where request_id='a'")
+                conn.execute("update requests set completed_at=995.0, updated_at=995.0 where request_id='b'")
+                conn.execute("update requests set completed_at=850.0, updated_at=850.0 where request_id='old'")
+            usage = queue.usage(window_s=100.0, now=1000.0)
+            self.assertEqual(usage["format"],"ds4-inference-queue-v1")
+            self.assertEqual(usage["completed_count"],2)
+            self.assertEqual(usage["usage_count"],2)
+            self.assertEqual(usage["prompt_tokens"],15)
+            self.assertEqual(usage["completion_tokens"],35)
+            self.assertEqual(usage["total_tokens"],50)
+            self.assertEqual(usage["prompt_tok_s"],0.15)
+            self.assertEqual(usage["completion_tok_s"],0.35)
+            self.assertEqual(usage["total_tok_s"],0.5)
+
     def test_expired_lease_requeues_then_fails_after_attempt_budget(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             queue = InferenceQueue(tmp)

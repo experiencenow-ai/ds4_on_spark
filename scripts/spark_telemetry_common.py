@@ -291,6 +291,11 @@ def empty_queue_summary() -> Dict[str,object]:
         "local_queue_ds_model_count": 0,
         "local_queue_active_services": "",
         "local_queue_active_service_count": 0,
+        "local_queue_prompt_tok_s": 0.0,
+        "local_queue_completion_tok_s": 0.0,
+        "local_queue_total_tok_s": 0.0,
+        "local_queue_token_rate_window_s": 0.0,
+        "local_queue_token_rate_completed": 0,
         "local_queue_last_service": "",
         "local_queue_resident_multimodel": 0,
         "local_queue_kv_shards": 0,
@@ -317,13 +322,29 @@ def read_json_url(url: str, timeout: float) -> Tuple[Dict[str,object],str]:
     return(data if isinstance(data,dict) else {}, "")
 
 
-def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: Dict[str,object] | None = None, models: Dict[str,object] | None = None) -> Dict[str,object]:
+def ds4_api_token_rates(base: str, newest_event_id: int, timeout: float, rate_window_s: float) -> Dict[str,object]:
+    del newest_event_id
+    window = max(1.0,float(rate_window_s))
+    usage,error = read_json_url("%s/ds4/queue/usage?window_s=%.3f" % (base,window),timeout)
+    if error != "" or str(usage.get("format","")) != "ds4-inference-queue-v1":
+        return({})
+    return({
+        "local_queue_prompt_tok_s": num(usage.get("prompt_tok_s",0.0)),
+        "local_queue_completion_tok_s": num(usage.get("completion_tok_s",0.0)),
+        "local_queue_total_tok_s": num(usage.get("total_tok_s",0.0)),
+        "local_queue_token_rate_window_s": num(usage.get("window_s",window)),
+        "local_queue_token_rate_completed": int(num(usage.get("completed_count",0))),
+    })
+
+
+def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: Dict[str,object] | None = None, models: Dict[str,object] | None = None, token_rates: Dict[str,object] | None = None) -> Dict[str,object]:
     out = empty_queue_summary()
     counts_raw = data.get("state_counts",{})
     if not isinstance(counts_raw,dict):
         return(out)
     dispatcher = dispatcher or {}
     models = models or {}
+    token_rates = token_rates or {}
     counts = {str(k):int(num(v)) for k,v in counts_raw.items()}
     queued = int(counts.get("queued",0) + counts.get("prefilling",0) + counts.get("ready",0))
     running = int(counts.get("running",0))
@@ -408,6 +429,11 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
         "local_queue_ds_model_count": model_count,
         "local_queue_active_services": ",".join(sorted(active_service_ids)),
         "local_queue_active_service_count": len(active_service_ids),
+        "local_queue_prompt_tok_s": num(token_rates.get("local_queue_prompt_tok_s",0.0)),
+        "local_queue_completion_tok_s": num(token_rates.get("local_queue_completion_tok_s",0.0)),
+        "local_queue_total_tok_s": num(token_rates.get("local_queue_total_tok_s",0.0)),
+        "local_queue_token_rate_window_s": num(token_rates.get("local_queue_token_rate_window_s",0.0)),
+        "local_queue_token_rate_completed": int(num(token_rates.get("local_queue_token_rate_completed",0))),
         "local_queue_last_service": last_service,
         "local_queue_resident_multimodel": 1 if bool(dispatcher.get("resident_multimodel",False)) else 0,
         "local_queue_kv_shards": len(kv_shards) if isinstance(kv_shards,list) else 0,
@@ -421,7 +447,6 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
 
 
 def read_ds4_api_queue(raw_url: str, timeout: float, rate_window_s: float = QUEUE_RATE_WINDOW_S) -> Dict[str,object]:
-    del rate_window_s
     base = str(raw_url or "").strip().rstrip("/")
     if base == "":
         return(empty_queue_summary())
@@ -432,4 +457,5 @@ def read_ds4_api_queue(raw_url: str, timeout: float, rate_window_s: float = QUEU
         return(empty_queue_summary())
     if str(data.get("format","")) != "ds4-inference-queue-v1":
         return(empty_queue_summary())
-    return(ds4_api_queue_from_status(data,"ds4-api:%s" % base,dispatcher,models))
+    token_rates = ds4_api_token_rates(base,int(num(data.get("newest_event_id",0))),timeout,rate_window_s)
+    return(ds4_api_queue_from_status(data,"ds4-api:%s" % base,dispatcher,models,token_rates))

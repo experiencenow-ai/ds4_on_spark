@@ -308,7 +308,10 @@ class SparkTelemetryTest(unittest.TestCase):
             return({},"bad url")
         try:
             telemetry.read_json_url = fake_read_json
-            q = telemetry.read_ds4_api_queue("http://10.20.0.10:8700",1.0)
+            status = fake_read_json("http://10.20.0.10:8700/ds4/queue/status",1.0)[0]
+            dispatcher = fake_read_json("http://10.20.0.10:8700/ds4/dispatcher/status",1.0)[0]
+            models = fake_read_json("http://10.20.0.10:8700/v1/models",1.0)[0]
+            q = telemetry.ds4_api_queue_from_status(status,"ds4-api:http://10.20.0.10:8700",dispatcher,models)
         finally:
             telemetry.read_json_url = old
         self.assertEqual(q["local_queue_source"],"ds4-api:http://10.20.0.10:8700")
@@ -322,6 +325,8 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(q["local_queue_ds_model_count"],3)
         self.assertEqual(q["local_queue_active_service_count"],1)
         self.assertEqual(q["local_queue_active_services"],"dsv4_flash_pp8")
+        self.assertEqual(q["local_queue_prompt_tok_s"],0.0)
+        self.assertEqual(q["local_queue_completion_tok_s"],0.0)
         self.assertEqual(q["local_queue_last_service"],"dsv4_flash_pp8")
         self.assertEqual(q["local_queue_resident_multimodel"],1)
         self.assertIn("dsv4_flash_pp8", q["local_queue_ds_services"])
@@ -336,6 +341,22 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertNotIn("local_queue_stage_gpu_util_by_node",q)
         self.assertNotIn("local_queue_stage_gpu_power_by_node",q)
         self.assertNotIn("local_queue_stage_vllm_running_by_node",q)
+
+    def test_ds4_api_token_rates_reads_usage_endpoint(self):
+        old_read = telemetry.read_json_url
+        def fake_read_json(url,timeout):
+            if url == "http://x/ds4/queue/usage?window_s=50.000":
+                return({"format": "ds4-inference-queue-v1", "window_s": 50.0, "completed_count": 2, "prompt_tok_s": 0.2, "completion_tok_s": 0.5, "total_tok_s": 0.7},"")
+            return({},"bad url")
+        try:
+            telemetry.read_json_url = fake_read_json
+            rates = telemetry.ds4_api_token_rates("http://x",1000,1.0,50.0)
+        finally:
+            telemetry.read_json_url = old_read
+        self.assertEqual(rates["local_queue_token_rate_completed"],2)
+        self.assertEqual(rates["local_queue_prompt_tok_s"],0.2)
+        self.assertEqual(rates["local_queue_completion_tok_s"],0.5)
+        self.assertEqual(rates["local_queue_total_tok_s"],0.7)
 
 if __name__ == "__main__":
     unittest.main()
