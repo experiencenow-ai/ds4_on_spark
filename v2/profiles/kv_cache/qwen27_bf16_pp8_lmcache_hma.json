@@ -52,6 +52,8 @@
     "LMCACHE_CONFIG_FILE": "/tmp/lmcache_qwen27_bf16_pp8_fp8kv.yaml",
     "LMCACHE_LOG_LEVEL": "INFO",
     "LMCACHE_ROOT": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv",
+    "CPATH": "/home/{node}/standard-runtimes/python3.12-dev-extract/usr/include:/home/{node}/standard-runtimes/python3.12-dev-extract/usr/include/python3.12:/home/{node}/standard-runtimes/python3.12-dev-extract/usr/include/aarch64-linux-gnu/python3.12",
+    "PATH": "/home/{node}/ds4-vllm-local/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     "PYTHONHASHSEED": "0",
     "TP_SOCKET_IFNAME": "ds4ring0",
     "DS4_PP_TRANSPORT": "tcp-staged",
