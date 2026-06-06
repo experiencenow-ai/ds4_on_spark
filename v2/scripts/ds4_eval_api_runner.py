@@ -19,7 +19,7 @@ DEFAULT_SOURCE_C = ROOT / "fixtures" / "ds4_eval" / "ds4_eval.c"
 TERMINAL = {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled", "failed"}
 
 
-def _post_json(base_url: str, endpoint: str, payload: dict) -> dict:
+def _post_json(base_url: str, endpoint: str, payload: dict, *, timeout: float = 120) -> dict:
     data = json.dumps(payload).encode("utf-8")
     req = request.Request(
         base_url.rstrip("/") + endpoint,
@@ -27,7 +27,7 @@ def _post_json(base_url: str, endpoint: str, payload: dict) -> dict:
         headers={"content-type": "application/json"},
         method="POST",
     )
-    with request.urlopen(req, timeout=120) as response:
+    with request.urlopen(req, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -556,6 +556,133 @@ def grade_collect(requests_by_id: dict[str, dict], collect: dict) -> dict:
     return summary
 
 
+def run_direct_vllm_eval(args: argparse.Namespace) -> None:
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    batch_id = args.batch_id or f"ds4-eval-direct-{uuid.uuid4().hex[:16]}"
+    source_requests, requests_path, requests_payload = _prepare_run_requests(args, out_dir, batch_id)
+    requests_by_id = _request_meta_by_id(requests_payload)
+    collect, response, run_s = _run_direct_vllm_batch(args, requests_payload)
+    _write_json(out_dir / "vllm_response.json", response)
+    _write_json(out_dir / "collect.json", collect)
+    grade_summary = grade_collect(requests_by_id, collect)
+    _write_json(out_dir / "grade.json", grade_summary)
+    answers = _write_direct_answers(out_dir / "answers.jsonl", requests_by_id, collect, run_s)
+    _write_direct_manifest(args, out_dir, batch_id, source_requests, requests_path, requests_payload, run_s)
+    summary = _run_summary(batch_id, requests_payload, answers, len(answers), run_s, 0.0, grade_summary, out_dir)
+    summary.update({"mode": "direct-vllm", "vllm_url": args.vllm_url, "served_model": args.served_model})
+    _write_json(out_dir / "summary.json", summary)
+    print(json.dumps(summary, sort_keys=True))
+
+
+def _run_direct_vllm_batch(args: argparse.Namespace, requests_payload: list[dict]) -> tuple[dict, dict, float]:
+    payload = _direct_completion_payload(args, requests_payload)
+    started = time.time()
+    response = _post_json(args.vllm_url, "/v1/completions", payload, timeout=float(args.vllm_timeout_s))
+    run_s = time.time() - started
+    return _direct_collect_from_completion(requests_payload, response), response, run_s
+
+
+def _direct_completion_payload(args: argparse.Namespace, requests_payload: list[dict]) -> dict:
+    prompts = []
+    for row in requests_payload:
+        prompt = ((row.get("input") or {}).get("rendered_prompt") or "")
+        if not isinstance(prompt, str) or not prompt:
+            raise ValueError(f"request {row.get('request_id')} is missing input.rendered_prompt")
+        prompts.append(prompt)
+    return {
+        "model": args.served_model,
+        "prompt": prompts,
+        "max_tokens": int(args.max_output_tokens),
+        "temperature": float(args.temperature),
+        "stream": False,
+    }
+
+
+def _direct_collect_from_completion(requests_payload: list[dict], response: dict) -> dict:
+    choices = response.get("choices")
+    if not isinstance(choices, list):
+        raise ValueError(f"completion response missing choices: {response}")
+    by_index = {_choice_index(choice, pos): choice for pos, choice in enumerate(choices) if isinstance(choice, dict)}
+    usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
+    results = []
+    for idx, row in enumerate(requests_payload):
+        choice = by_index.get(idx, {})
+        text = str(choice.get("text") or "") if isinstance(choice, dict) else ""
+        item_usage = _direct_choice_usage(choice, usage, len(requests_payload), idx)
+        request_id = str(row.get("request_id") or "")
+        results.append(
+            {
+                "request": {"request_id": request_id, "state": "completed"},
+                "result": {
+                    "request_id": request_id,
+                    "status": "completed",
+                    "output": {"text": text},
+                    "usage": item_usage,
+                },
+            }
+        )
+    return {"format": "ds4-eval-direct-vllm-collect-v1", "results": results}
+
+
+def _choice_index(choice: dict, fallback: int) -> int:
+    value = choice.get("index")
+    return int(value) if isinstance(value, (int, float)) else fallback
+
+
+def _direct_choice_usage(choice: dict, aggregate_usage: dict, count: int, index: int) -> dict:
+    usage = choice.get("usage") if isinstance(choice.get("usage"), dict) else {}
+    if usage:
+        return {key: int(value) for key, value in usage.items() if isinstance(value, (int, float))}
+    completion = _split_usage_value(aggregate_usage, "completion_tokens", count, index)
+    prompt = _split_usage_value(aggregate_usage, "prompt_tokens", count, index)
+    out = {"completion_tokens": completion, "prompt_tokens": prompt}
+    out["total_tokens"] = prompt + completion
+    return out
+
+
+def _split_usage_value(usage: dict, key: str, count: int, index: int) -> int:
+    value = usage.get(key)
+    if not isinstance(value, (int, float)) or count <= 0:
+        return 0
+    whole = max(0, int(value))
+    base = whole // count
+    return base + (1 if index < (whole % count) else 0)
+
+
+def _write_direct_answers(path: Path, requests_by_id: dict[str, dict], collect: dict, run_s: float) -> list[dict]:
+    answers = []
+    state = {"passed": 0, "completion_tokens": 0}
+    with path.open("w", encoding="utf-8") as answer_handle:
+        items = list(_collect_items_by_request_id(collect).values())
+        total = len(items)
+        for item in items:
+            request_id = _collect_item_request_id(item)
+            record = _answer_record(requests_by_id.get(request_id, {}), item, elapsed_s=run_s)
+            state["passed"] += 1 if record.get("passed") else 0
+            state["completion_tokens"] += int(record.get("completion_tokens", 0) or 0)
+            _attach_cumulative_stats(record, len(answers) + 1, total, state["passed"], state["completion_tokens"])
+            answers.append(record)
+            answer_handle.write(json.dumps(record, sort_keys=True) + "\n")
+            print(_answer_line(record), flush=True)
+    return answers
+
+
+def _write_direct_manifest(args: argparse.Namespace, out_dir: Path, batch_id: str, source_requests: Path, requests_path: Path, requests_payload: list[dict], run_s: float) -> None:
+    manifest = {
+        "format": "ds4-eval-direct-vllm-run-v1",
+        "batch_id": batch_id,
+        "vllm_url": args.vllm_url,
+        "served_model": args.served_model,
+        "source": _source_filters(args),
+        "request_count": len(requests_payload),
+        "requests_jsonl": str(requests_path),
+        "source_requests_jsonl": str(source_requests),
+        "run_s": round(run_s, 6),
+    }
+    _write_json(out_dir / "manifest.json", manifest)
+
+
 def run_eval(args: argparse.Namespace) -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -900,6 +1027,8 @@ def main() -> None:
         write_requests(args)
     elif args.cmd == "grade":
         grade(args)
+    elif args.cmd == "run-direct-vllm":
+        run_direct_vllm_eval(args)
     elif args.cmd == "run":
         run_eval(args)
 
@@ -926,6 +1055,25 @@ def _build_parser() -> argparse.ArgumentParser:
     g.add_argument("--requests-jsonl", required=True)
     g.add_argument("--collect-json", required=True)
     g.add_argument("--out-json")
+    d = sub.add_parser("run-direct-vllm")
+    d.add_argument("--requests-jsonl")
+    d.add_argument("--source-c", default=str(DEFAULT_SOURCE_C))
+    d.add_argument("--out-dir", required=True)
+    d.add_argument("--batch-id")
+    d.add_argument("--preserve-request-ids", action="store_true")
+    d.add_argument("--vllm-url", default="http://10.20.0.10:8102")
+    d.add_argument("--served-model", default="deepseek-v4-flash-pp8")
+    d.add_argument("--model", default="dsv4_vllm_mtp_pp8_smartest_v1")
+    d.add_argument("--max-output-tokens", type=int, default=512)
+    d.add_argument("--response-style", choices=("official", "concise", "answer_only", "answer_first"), default="official")
+    d.add_argument("--enable-thinking", dest="enable_thinking", action="store_true", default=True)
+    d.add_argument("--disable-thinking", dest="enable_thinking", action="store_false")
+    d.add_argument("--chat-template-thinking-key", default="thinking")
+    d.add_argument("--thinking-budget-tokens", type=int, default=1024)
+    d.add_argument("--temperature", type=float, default=0.0)
+    d.add_argument("--source", action="append", default=[], help="Only include ds4-eval cases with this source; repeat for multiple sources.")
+    d.add_argument("--limit", type=int, default=0)
+    d.add_argument("--vllm-timeout-s", type=float, default=3600.0)
     r = sub.add_parser("run")
     r.add_argument("--base-url", default="http://10.20.0.10:8700")
     r.add_argument("--requests-jsonl")
