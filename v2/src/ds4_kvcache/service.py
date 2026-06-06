@@ -114,6 +114,7 @@ class KvCacheDeployment:
     cache_directories: tuple[str, ...]
     connector: KvCacheConnector
     cache_server: LmcacheServer | None
+    lmcache_config: dict[str, Any]
     extra_args: tuple[str, ...]
     cache_sharding: str
     text_only: bool
@@ -162,6 +163,7 @@ class KvCacheDeployment:
             cache_directories=tuple(str(item) for item in data.get("cache_directories", [])),
             connector=KvCacheConnector.from_json(dict(data["connector"])),
             cache_server=LmcacheServer.from_json(dict(data["cache_server"])) if data.get("cache_server") else None,
+            lmcache_config=dict(data.get("lmcache_config", {})),
             extra_args=tuple(str(item) for item in data.get("extra_args", [])),
             cache_sharding=str(data.get("cache_sharding", data.get("kv_cache_sharding", "replicated"))),
             text_only=bool(data.get("text_only", False)),
@@ -297,13 +299,17 @@ def _vllm_node_plan(deployment: KvCacheDeployment, connector: KvCacheConnector, 
     rank_env = _env_for_rank(env, deployment, node_rank=node_rank, spark_node=spark_node, fabric_node=fabric_node)
     argv = _vllm_argv(deployment, connector, node_rank=node_rank, spark_node=spark_node, fabric_node=fabric_node)
     command = _format_env_command(rank_env, argv)
-    return dict(
+    node_plan = dict(
         _stage_plan(deployment, node_rank=node_rank, spark_node=spark_node, fabric_node=fabric_node),
         working_directory=_expand_rank_template(deployment.working_directory, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node) if deployment.working_directory else None,
         env=rank_env,
         argv=argv,
         command=command,
     )
+    lmcache_config = _lmcache_config_plan(deployment, rank_env=rank_env, node_rank=node_rank, spark_node=spark_node, fabric_node=fabric_node)
+    if lmcache_config is not None:
+        node_plan["lmcache_config"] = lmcache_config
+    return node_plan
 
 
 def _stage_plan(deployment: KvCacheDeployment, *, node_rank: int, spark_node: str, fabric_node: TransferNode | None = None) -> dict[str, Any]:
@@ -325,6 +331,35 @@ def _env_for_rank(env: dict[str, str], deployment: KvCacheDeployment, *, node_ra
         if deployment.connector.connector_id == "simple_cpu_offload":
             out.setdefault("VLLM_SIMPLE_KV_OFFLOAD_PERSIST_RANK", f"{spark_node}-r{node_rank}")
     return out
+
+
+def _lmcache_config_plan(
+    deployment: KvCacheDeployment,
+    *,
+    rank_env: dict[str, str],
+    node_rank: int,
+    spark_node: str,
+    fabric_node: TransferNode | None = None,
+) -> dict[str, Any] | None:
+    if not deployment.lmcache_config:
+        return None
+    config_path = rank_env.get("LMCACHE_CONFIG_FILE")
+    if not config_path:
+        raise ValueError("lmcache_config requires LMCACHE_CONFIG_FILE in extra_env")
+    return {
+        "path": config_path,
+        "data": _expand_rank_data(deployment.lmcache_config, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node),
+    }
+
+
+def _expand_rank_data(data: Any, *, spark_node: str, node_rank: int, fabric_node: TransferNode | None = None) -> Any:
+    if isinstance(data, str):
+        return _expand_rank_template(data, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node)
+    if isinstance(data, list):
+        return [_expand_rank_data(item, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node) for item in data]
+    if isinstance(data, dict):
+        return {str(key): _expand_rank_data(value, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node) for key, value in data.items()}
+    return data
 
 
 def _vllm_argv(deployment: KvCacheDeployment, connector: KvCacheConnector, *, node_rank: int = 0, spark_node: str | None = None, fabric_node: TransferNode | None = None) -> list[str]:
@@ -638,11 +673,64 @@ def _start_script(vllm_plan: dict[str, Any], deployment: KvCacheDeployment) -> s
     workdir = vllm_plan.get("working_directory") or deployment.working_directory
     if workdir:
         lines.append("cd " + shlex.quote(str(workdir)))
+    lines.extend(_lmcache_config_script(vllm_plan))
     if vllm_plan.get("env") or _starts_with_env_assignment(vllm_plan["command"]):
         lines.append("exec env " + vllm_plan["command"])
     else:
         lines.append("exec " + vllm_plan["command"])
     return "\n".join(lines) + "\n"
+
+
+def _lmcache_config_script(vllm_plan: dict[str, Any]) -> list[str]:
+    config = vllm_plan.get("lmcache_config")
+    if not isinstance(config, dict):
+        return []
+    config_path = str(config["path"])
+    data = dict(config["data"])
+    lines: list[str] = []
+    parent = str(Path(config_path).parent)
+    if parent and parent != ".":
+        lines.append("mkdir -p " + shlex.quote(parent))
+    local_disk = data.get("local_disk")
+    if isinstance(local_disk, str) and local_disk:
+        for item in local_disk.split(","):
+            path = item.strip()
+            if path:
+                lines.append("mkdir -p " + shlex.quote(path))
+    lines.append("cat > " + shlex.quote(config_path) + " <<'DS4_LMCACHE_CONFIG_EOF'")
+    lines.extend(_format_yaml(data).splitlines())
+    lines.append("DS4_LMCACHE_CONFIG_EOF")
+    return lines
+
+
+def _format_yaml(data: dict[str, Any]) -> str:
+    return "\n".join(_format_yaml_lines(data, 0)) + "\n"
+
+
+def _format_yaml_lines(data: dict[str, Any], indent: int) -> list[str]:
+    lines: list[str] = []
+    pad = " " * indent
+    for key, value in data.items():
+        if isinstance(value, dict):
+            lines.append(f"{pad}{key}:")
+            lines.extend(_format_yaml_lines(value, indent + 2))
+        elif isinstance(value, list):
+            lines.append(f"{pad}{key}:")
+            for item in value:
+                lines.append(f"{pad}  - {_yaml_scalar(item)}")
+        else:
+            lines.append(f"{pad}{key}: {_yaml_scalar(value)}")
+    return lines
+
+
+def _yaml_scalar(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return "null"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return json.dumps(str(value))
 
 
 def _deployment_layer_partition(data: dict[str, Any], *, worker_nodes: tuple[str, ...], stage_count: int, total_layers: int | None) -> tuple[int, ...]:

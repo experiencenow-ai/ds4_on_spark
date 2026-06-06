@@ -182,6 +182,9 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["vllm_nodes"][0]["env"]["VLLM_DS4_PP_TORCH_GROUP_WARMUP"], "0")
         self.assertEqual(plan["vllm_nodes"][0]["env"]["VLLM_HOST_IP"], "10.10.100.10")
         self.assertEqual(plan["vllm_nodes"][-1]["env"]["VLLM_HOST_IP"], "10.10.100.17")
+        self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["path"], "/tmp/lmcache_qwen27_bf16_pp8_fp8kv.yaml")
+        self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["data"]["local_disk"], "/home/spark0/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv")
+        self.assertEqual(plan["vllm_nodes"][-1]["lmcache_config"]["data"]["local_disk"], "/home/spark7/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv")
         self.assertIn("--dtype", plan["vllm_nodes"][0]["argv"])
         self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--dtype") + 1], "bfloat16")
         self.assertIn("--kv-cache-dtype", plan["vllm_nodes"][0]["argv"])
@@ -191,6 +194,20 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertIn("LMCacheConnectorV1", plan["vllm_nodes"][0]["command"])
         self.assertIn("VLLM_PP_LAYER_PARTITION=9,9,9,8,8,8,8,5", plan["vllm_nodes"][0]["command"])
         self.assertIn("--headless", plan["vllm_nodes"][-1]["argv"])
+
+    def test_write_qwen_bf16_pp8_scripts_materialize_lmcache_config(self) -> None:
+        deployment = KvCacheDeployment.load(QWEN_PP_DEPLOYMENT)
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = write_launch_scripts(deployment, tmp)
+            rank0 = Path(manifest["scripts"]["start_vllm_nodes"]["spark0"]).read_text()
+            rank7 = Path(manifest["scripts"]["start_vllm_nodes"]["spark7"]).read_text()
+
+            self.assertIn("cat > /tmp/lmcache_qwen27_bf16_pp8_fp8kv.yaml", rank0)
+            self.assertIn("local_disk: \"/home/spark0/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv\"", rank0)
+            self.assertIn("max_local_disk_size: 64", rank0)
+            self.assertIn("--gpu-memory-utilization 0.25", rank0)
+            self.assertIn("local_disk: \"/home/spark7/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv\"", rank7)
+            self.assertIn("VLLM_DS4_PP_TCP_ADVERTISE_HOST=10.10.100.17", rank7)
 
     def test_dsv4_flash_pp8_simple_offload_plan_is_pipeline_sharded(self) -> None:
         deployment = KvCacheDeployment.load(DSV4_PP_DEPLOYMENT)
