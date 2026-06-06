@@ -49,6 +49,9 @@ class PipelineRuntimeAuditTests(unittest.TestCase):
             "indexed",
         )
         self.assertEqual(profile["warmup"]["compile_env"]["VLLM_DEEP_GEMM_WARMUP"], "skip")
+        self.assertEqual(profile["warmup"]["compile_env"]["NCCL_IB_DISABLE"], "1")
+        self.assertEqual(profile["warmup"]["compile_env"]["NCCL_SOCKET_IFNAME"], "ds4ring0")
+        self.assertEqual(profile["warmup"]["compile_env"]["NCCL_SOCKET_FAMILY"], "AF_INET")
 
     def test_first3_memory_budget_tracks_profile_partitions_and_gpu_caps(self) -> None:
         budget = json.loads(FIRST3_MEMORY_BUDGET.read_text(encoding="utf-8"))

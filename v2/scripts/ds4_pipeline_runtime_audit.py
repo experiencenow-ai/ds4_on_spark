@@ -109,6 +109,11 @@ def _check_dsv4(profile: dict[str, Any], service: dict[str, Any], errors: list[s
 def _check_dsv4_env(profile: dict[str, Any], env: dict[str, Any], errors: list[str], checks: list[str]) -> None:
     expected = {
         "GLOO_SOCKET_IFNAME": "ds4ring0",
+        "NCCL_IB_DISABLE": "1",
+        "NCCL_SOCKET_IFNAME": "ds4ring0",
+        "NCCL_SOCKET_FAMILY": "AF_INET",
+        "NCCL_IGNORE_CPU_AFFINITY": "1",
+        "NCCL_DEBUG": "WARN",
         "CPATH": "/home/{node}/standard-runtimes/python3.12-dev-extract/usr/include:/home/{node}/standard-runtimes/python3.12-dev-extract/usr/include/python3.12:/home/{node}/standard-runtimes/python3.12-dev-extract/usr/include/aarch64-linux-gnu/python3.12",
         "PATH": "/home/{node}/ds4-vllm-local/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "TP_SOCKET_IFNAME": "ds4ring0",

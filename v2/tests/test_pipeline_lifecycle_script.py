@@ -114,6 +114,9 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertEqual(env["NVCC_THREADS"], "1")
         self.assertEqual(env["VLLM_DS4_DSV4_SPARSE_MLA_PREFILL_BACKEND"], "indexed")
         self.assertEqual(env["VLLM_DEEP_GEMM_WARMUP"], "skip")
+        self.assertEqual(env["NCCL_IB_DISABLE"], "1")
+        self.assertEqual(env["NCCL_SOCKET_IFNAME"], "ds4ring0")
+        self.assertEqual(env["NCCL_SOCKET_FAMILY"], "AF_INET")
 
     def test_dsv4_warmup_runner_stops_peers_and_launches_dsv4_without_probe(self) -> None:
         warm = load_script(WARM_SCRIPT)
