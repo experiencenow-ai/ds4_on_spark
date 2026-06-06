@@ -31,7 +31,7 @@
     "--max-num-batched-tokens",
     "65536",
     "--gpu-memory-utilization",
-    "0.25",
+    "0.35",
     "--dtype",
     "bfloat16",
     "--kv-cache-dtype",

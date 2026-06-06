@@ -1,6 +1,6 @@
 {
   "contract_id": "qwen27_bf16_pp8_bf16kv_v1",
-  "description": "Qwen3.6-27B BF16 text-only 8-stage vLLM layer-pipeline runtime with non-quantized BF16 KV cache. Profile-pin-only comparison lane; spark0 is the API ingress.",
+  "description": "Qwen3.6-27B BF16 text-only 8-stage vLLM layer-pipeline runtime with non-quantized BF16 KV cache. Profile-pin-only comparison lane; spark0 is the API ingress. Uses a larger memory cap than the FP8-KV lane because BF16 KV does not allocate cache blocks at 0.25.",
   "format": "ds4-runtime-contract-v1",
   "kv_cache": {
     "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_bf16kv",
@@ -34,7 +34,7 @@
       "--max-num-batched-tokens",
       "65536",
       "--gpu-memory-utilization",
-      "0.25",
+      "0.35",
       "--enable-prefix-caching",
       "--enable-chunked-prefill",
       "--no-disable-hybrid-kv-cache-manager",
