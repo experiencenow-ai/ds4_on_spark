@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "dsv4_spark45_hma_cpu_offload.json"
 QWEN_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_lmcache_mp_spark7.json"
 QWEN_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_lmcache_hma.json"
+QWEN_BF16KV_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_bf16kv_lmcache_hma.json"
 DSV4_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "dsv4_flash_pp8_simple_offload.json"
 GEMMA31_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_31b_it_pp8_plain.json"
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
@@ -209,6 +210,39 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertIn("local_disk: \"/home/spark7/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv\"", rank7)
             self.assertIn("VLLM_DS4_PP_TCP_ADVERTISE_HOST=10.10.100.17", rank7)
 
+    def test_qwen_bf16_pp8_bf16kv_plan_is_pipeline_sharded(self) -> None:
+        deployment = KvCacheDeployment.load(QWEN_BF16KV_PP_DEPLOYMENT)
+        plan = plan_deployment(deployment)
+
+        self.assertEqual(plan["profile_id"], "qwen3_6_27b_bf16_pp8_bf16kv_efficient_v1")
+        self.assertEqual(plan["spark_node"], "spark0")
+        self.assertEqual(plan["openai_base_url"], "http://spark0:8103")
+        self.assertEqual(plan["pipeline_parallel_size"], 8)
+        self.assertEqual(plan["tensor_parallel_size"], 1)
+        self.assertEqual(plan["layer_partition"], [9, 9, 9, 8, 8, 8, 8, 5])
+        self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["path"], "/tmp/lmcache_qwen27_bf16_pp8_bf16kv.yaml")
+        self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["data"]["local_disk"], "/home/spark0/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_bf16kv")
+        self.assertEqual(plan["vllm_nodes"][-1]["lmcache_config"]["data"]["local_disk"], "/home/spark7/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_bf16kv")
+        self.assertIn("--kv-cache-dtype", plan["vllm_nodes"][0]["argv"])
+        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--kv-cache-dtype") + 1], "auto")
+        self.assertIn("--gpu-memory-utilization", plan["vllm_nodes"][0]["argv"])
+        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--gpu-memory-utilization") + 1], "0.25")
+        self.assertIn("--served-model-name", plan["vllm_nodes"][0]["argv"])
+        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--served-model-name") + 1], "qwen27-bf16-pp8-bf16kv")
+
+    def test_write_qwen_bf16_pp8_bf16kv_scripts_materialize_lmcache_config(self) -> None:
+        deployment = KvCacheDeployment.load(QWEN_BF16KV_PP_DEPLOYMENT)
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = write_launch_scripts(deployment, tmp)
+            rank0 = Path(manifest["scripts"]["start_vllm_nodes"]["spark0"]).read_text()
+            rank7 = Path(manifest["scripts"]["start_vllm_nodes"]["spark7"]).read_text()
+
+            self.assertIn("cat > /tmp/lmcache_qwen27_bf16_pp8_bf16kv.yaml", rank0)
+            self.assertIn("local_disk: \"/home/spark0/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_bf16kv\"", rank0)
+            self.assertIn("--kv-cache-dtype auto", rank0)
+            self.assertIn("--gpu-memory-utilization 0.25", rank0)
+            self.assertIn("local_disk: \"/home/spark7/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_bf16kv\"", rank7)
+
     def test_dsv4_flash_pp8_simple_offload_plan_is_pipeline_sharded(self) -> None:
         deployment = KvCacheDeployment.load(DSV4_PP_DEPLOYMENT)
         plan = plan_deployment(deployment)
@@ -331,12 +365,18 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(qwen.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/qwen27_lmcache_mp_spark7.json"])
         pp_dsv4 = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
         pp_qwen = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
+        pp_qwen_bf16kv = registry.get("qwen3_6_27b_bf16_pp8_bf16kv_efficient_v1")
         self.assertEqual(pp_dsv4.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/dsv4_flash_pp8_simple_offload.json"])
         self.assertEqual(pp_qwen.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json"])
+        self.assertEqual(pp_qwen_bf16kv.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/qwen27_bf16_pp8_bf16kv_lmcache_hma.json"])
+        self.assertTrue(pp_qwen_bf16kv.routing["requires_profile_pin"])
+        self.assertFalse(pp_qwen_bf16kv.production_eligible)
         with self.assertRaisesRegex(ValueError, "no production profile"):
             registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
         pinned = registry.resolve(capability=None, chat=True, job_class="tool_chat", model_pin={"profile_id": pp_dsv4.profile_id})
         self.assertEqual(pinned.profile_id, pp_dsv4.profile_id)
+        pinned_qwen = registry.resolve(capability=None, chat=True, job_class="analysis", model_pin={"profile_id": pp_qwen_bf16kv.profile_id})
+        self.assertEqual(pinned_qwen.profile_id, pp_qwen_bf16kv.profile_id)
         self.assertEqual(registry.resolve(capability="efficient", chat=False, job_class="atom_edit").profile_id, pp_qwen.profile_id)
 
     def test_tool_registry_has_kvcache_plan_tool(self) -> None:
