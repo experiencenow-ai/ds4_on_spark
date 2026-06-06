@@ -3,10 +3,22 @@ set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]
 then
-	exec sudo "$0" "$@"
+	exec sudo env DS4_NODE_ID="${DS4_NODE_ID:-}" "$0" "$@"
 fi
 
-node="${DS4_NODE_ID:-$(hostname -s)}"
+node="${DS4_NODE_ID:-}"
+if [ "$node" = "" ] && printf '%s' "${SUDO_USER:-}" | grep -Eq '^spark[0-7]$'
+then
+	node="$SUDO_USER"
+fi
+if [ "$node" = "" ] && printf '%s' "${USER:-}" | grep -Eq '^spark[0-7]$'
+then
+	node="$USER"
+fi
+if [ "$node" = "" ]
+then
+	node="$(hostname -s)"
+fi
 rank="${node#spark}"
 if ! printf '%s' "$rank" | grep -Eq '^[0-7]$'
 then
