@@ -21,6 +21,7 @@
     "bfloat16",
     "--enable-prefix-caching",
     "--no-async-scheduling",
+    "--disable-hybrid-kv-cache-manager",
     "--generation-config",
     "vllm",
     "--reasoning-parser",

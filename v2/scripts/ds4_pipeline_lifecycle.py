@@ -220,7 +220,7 @@ def _remote_status(entry: dict[str, object]) -> str:
 
 
 def _remote_kill(entry: dict[str, object]) -> str:
-    code = "import json,os,signal,subprocess,time\nn=json.loads(os.environ['N']);t=[]\nfor l in subprocess.run(['ps','-eo','pid=,args='],text=True,stdout=subprocess.PIPE).stdout.splitlines():\n p=l.strip().split(None,1)\n if len(p)==2 and ('vllm' in p[1] or '--pipeline-parallel-size' in p[1]) and any(x and x in p[1] for x in n): t.append(int(p[0]))\nfor p in t:\n os.kill(p,signal.SIGTERM)\ntime.sleep(2)\nfor p in t:\n try: os.kill(p,0); os.kill(p,signal.SIGKILL)\n except ProcessLookupError: pass\nprint(json.dumps({'killed':t},sort_keys=True))"
+    code = "import json,os,signal,subprocess,time\nn=json.loads(os.environ['N']);parents=[];children={}\nfor l in subprocess.run(['ps','-eo','pid=,ppid=,args='],text=True,stdout=subprocess.PIPE).stdout.splitlines():\n p=l.strip().split(None,2)\n if len(p)<3: continue\n pid=int(p[0]);ppid=int(p[1]);cmd=p[2]\n children.setdefault(ppid,[]).append(pid)\n if ('vllm' in cmd or '--pipeline-parallel-size' in cmd) and any(x and x in cmd for x in n): parents.append(pid)\nt=[];stack=list(parents)\nwhile stack:\n pid=stack.pop()\n if pid in t: continue\n t.append(pid);stack.extend(children.get(pid,[]))\nfor p in t:\n try: os.kill(p,signal.SIGTERM)\n except ProcessLookupError: pass\ntime.sleep(2)\nfor p in t:\n try: os.kill(p,0); os.kill(p,signal.SIGKILL)\n except ProcessLookupError: pass\nprint(json.dumps({'killed':t},sort_keys=True))"
     return f"N={shlex.quote(json.dumps(_needles(entry), separators=(',', ':')))} python3 -c {shlex.quote(code)}"
 
 
