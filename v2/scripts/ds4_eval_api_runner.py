@@ -294,12 +294,16 @@ def _eval_request_payload(args: argparse.Namespace, idx: int, case: dict) -> dic
         "immediate": False,
         "job_class": "analysis",
         "max_output_tokens": int(args.max_output_tokens),
-        "thinking_budget_tokens": int(args.thinking_budget_tokens),
+        "thinking_budget_tokens": _effective_thinking_budget_tokens(args),
         "temperature": float(args.temperature),
         "input": _request_input_payload(case, question_prompt, rendered, idx),
         "output_contract": {"format": "text"},
         "model_pin": {"profile_id": args.model},
     }
+
+
+def _effective_thinking_budget_tokens(args: argparse.Namespace) -> int:
+    return int(args.thinking_budget_tokens) if bool(args.enable_thinking) else 0
 
 
 def _request_input_payload(case: dict, question_prompt: str, rendered: str, idx: int) -> dict:
@@ -339,7 +343,7 @@ def _write_request_manifest(args: argparse.Namespace, out: Path, request_count: 
         "request_count": request_count,
         "max_output_tokens": int(args.max_output_tokens),
         "enable_thinking": bool(args.enable_thinking),
-        "thinking_budget_tokens": int(args.thinking_budget_tokens),
+        "thinking_budget_tokens": _effective_thinking_budget_tokens(args),
         "temperature": float(args.temperature),
         "response_style": str(args.response_style),
         "written_at": time.time(),
