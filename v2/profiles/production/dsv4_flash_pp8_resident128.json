@@ -28,7 +28,7 @@
   "refill_low_watermark": 96,
   "max_running_batches_per_compute_domain": 1,
   "kv_cache_memory_bytes": 8589934592,
-  "gpu_memory_utilization": "0.33",
+  "gpu_memory_utilization": "0.28",
   "kv_cache_dtype": "fp8",
   "pp_transport": "tcp-staged",
   "pp_edge_rail": "enp",
@@ -49,5 +49,5 @@
     "completion_chunk_concurrency": 4,
     "dispatch_kv_capacity_bytes": 8589934592
   },
-  "notes": "Single source of truth for the bounded DSV4 PP8 resident production envelope. Materialized topology/runtime/KV JSON files must match this file. This profile feeds up to 64 active sequences without using the max-KV 512-shape, keeps first-three residency below the observed 0.35 no-headroom startup point, and shifts layers away from hotter Qwen/Gemma early Spark stages while keeping max stage width at 6."
+  "notes": "Single source of truth for the bounded DSV4 PP8 resident production envelope. Materialized topology/runtime/KV JSON files must match this file. This profile feeds up to 64 active sequences without using the max-KV 512-shape, keeps first-three residency below the observed 0.33 no-headroom startup point, and shifts layers away from hotter Qwen/Gemma early Spark stages while keeping max stage width at 6."
 }
