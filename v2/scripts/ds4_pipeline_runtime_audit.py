@@ -303,6 +303,7 @@ def _first3_deployment_for_service(service_id: str, service: dict[str, Any], err
 def _check_dsv4_hma_connector(connector: dict[str, Any], env: dict[str, Any], errors: list[str], checks: list[str]) -> None:
     extra = connector.get("kv_connector_extra_config") if isinstance(connector.get("kv_connector_extra_config"), dict) else {}
     _require_equal(extra.get("spec_name"), "SimpleCPUOffloadingSpec", "Dsv4 HMA SimpleCPUOffload spec", errors, checks)
+    _require_equal(extra.get("lazy_offload"), False, "Dsv4 HMA explicit cache-ref eager offload", errors, checks)
     _require_equal(env.get("VLLM_USE_SIMPLE_KV_OFFLOAD"), "1", "Dsv4 HMA simple offload runtime enabled", errors, checks)
 
 

@@ -8,7 +8,7 @@
     "kv_connector_extra_config": {
       "cpu_bytes_to_use": "536870912",
       "eviction_policy": "lru",
-      "lazy_offload": true,
+      "lazy_offload": false,
       "spec_name": "SimpleCPUOffloadingSpec"
     },
     "kv_role": "kv_both"
@@ -153,6 +153,6 @@
   ],
   "working_directory": "/home/{node}/src/ds4_on_spark/v2",
   "performance_mode": "native_blackwell_strict_fastpath",
-  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 2-sequence admission, 1024-token compile range, 512MiB resident/offload KV per rank, balanced first-three layer placement, a 64-chunk vLLM multiprocessing broadcast ring, and single-job FlashInfer/CUDA compile caps. Warm DSV4 alone before all-three residency so first-run native-kernel compilation populates persistent caches without Qwen/Gemma resident pressure.",
+  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 2-sequence admission, 1024-token compile range, 512MiB resident/offload KV per rank, eager SimpleCPUOffload cache-ref write-back, balanced first-three layer placement, a 64-chunk vLLM multiprocessing broadcast ring, and single-job FlashInfer/CUDA compile caps. Warm DSV4 alone before all-three residency so first-run native-kernel compilation populates persistent caches without Qwen/Gemma resident pressure.",
   "max_batch_size": 2
 }
