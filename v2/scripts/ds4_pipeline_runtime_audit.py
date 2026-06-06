@@ -86,46 +86,58 @@ def _check_dsv4(profile: dict[str, Any], service: dict[str, Any], errors: list[s
 
 
 def _check_qwen(errors: list[str], checks: list[str]) -> None:
-    pp8_gpu_caps = {
-        "profiles/runtime_contracts/qwen27_bf16_pp8_v1.json": "0.25",
-        "profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json": "0.25",
+    qwen_launches = {
+        "profiles/runtime_contracts/qwen27_bf16_pp8_v1.json": ("fp8", "0.25"),
+        "profiles/runtime_contracts/qwen27_bf16_pp8_bf16kv_v1.json": ("auto", "0.25"),
+        "profiles/runtime_contracts/qwen27_vllm_trim_v1.json": ("fp8", ""),
+        "profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json": ("fp8", "0.25"),
+        "profiles/kv_cache/qwen27_bf16_pp8_bf16kv_lmcache_hma.json": ("auto", "0.25"),
+        "profiles/kv_cache/qwen27_lmcache_mp_spark7.json": ("fp8", ""),
     }
-    for rel in (
-        "profiles/runtime_contracts/qwen27_bf16_pp8_v1.json",
-        "profiles/runtime_contracts/qwen27_vllm_trim_v1.json",
-        "profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json",
-        "profiles/kv_cache/qwen27_lmcache_mp_spark7.json",
-    ):
+    for rel, (expected_kv_dtype, expected_gpu_cap) in qwen_launches.items():
         path = ROOT / rel
         data = _load(path)
         args = data.get("extra_args") if isinstance(data.get("extra_args"), list) else data.get("launch", {}).get("args", [])
-        _require_arg(args, "--kv-cache-dtype", "fp8", f"{rel} explicit FP8 KV", errors, checks)
-        _require_arg(args, "--attention-backend", "TRITON_ATTN", f"{rel} Triton attention for FP8 KV", errors, checks)
-        if rel in pp8_gpu_caps:
-            _require_arg(args, "--gpu-memory-utilization", pp8_gpu_caps[rel], f"{rel} co-resident GPU memory cap", errors, checks)
+        _require_arg(args, "--kv-cache-dtype", expected_kv_dtype, f"{rel} explicit Qwen KV dtype", errors, checks)
+        _require_arg(args, "--attention-backend", "TRITON_ATTN", f"{rel} Triton attention", errors, checks)
+        if expected_gpu_cap:
+            _require_arg(args, "--gpu-memory-utilization", expected_gpu_cap, f"{rel} co-resident GPU memory cap", errors, checks)
         if "--async-scheduling" in args:
             errors.append(f"{rel}: Qwen production launch must not enable vLLM async scheduling")
         else:
             checks.append(f"{rel} does not enable vLLM async scheduling")
-    _check_qwen_pp8_deployment(errors, checks)
+    _check_qwen_pp8_deployment(
+        "profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json",
+        "Qwen BF16 FP8-KV PP8",
+        "fp8kv",
+        errors,
+        checks,
+    )
+    _check_qwen_pp8_deployment(
+        "profiles/kv_cache/qwen27_bf16_pp8_bf16kv_lmcache_hma.json",
+        "Qwen BF16 BF16-KV PP8",
+        "bf16kv",
+        errors,
+        checks,
+    )
 
 
-def _check_qwen_pp8_deployment(errors: list[str], checks: list[str]) -> None:
-    deployment = _load(ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_lmcache_hma.json")
-    _require_equal(deployment.get("model_id"), "/home/{node}/models/hf/Qwen/Qwen3.6-27B", "Qwen BF16 PP8 launch uses node-local model path", errors, checks)
-    _require_equal(deployment.get("fabric_topology"), "../transfer/spark_200g.json", "Qwen BF16 PP8 launch uses static 200G fabric topology", errors, checks)
+def _check_qwen_pp8_deployment(rel: str, label: str, root_marker: str, errors: list[str], checks: list[str]) -> None:
+    deployment = _load(ROOT / rel)
+    _require_equal(deployment.get("model_id"), "/home/{node}/models/hf/Qwen/Qwen3.6-27B", f"{label} launch uses node-local model path", errors, checks)
+    _require_equal(deployment.get("fabric_topology"), "../transfer/spark_200g.json", f"{label} launch uses static 200G fabric topology", errors, checks)
     env = deployment.get("extra_env") if isinstance(deployment.get("extra_env"), dict) else {}
     _check_qwen_pp8_env(env, errors, checks)
     root = str(env.get("LMCACHE_ROOT") or "")
-    if "fp8kv" not in root:
-        errors.append("Qwen BF16 LMCache root must be FP8-KV namespaced")
+    if root_marker not in root:
+        errors.append(f"{label} LMCache root must be {root_marker} namespaced")
     else:
-        checks.append("Qwen BF16 LMCache root is FP8-KV namespaced")
+        checks.append(f"{label} LMCache root is {root_marker} namespaced")
     config = deployment.get("lmcache_config") if isinstance(deployment.get("lmcache_config"), dict) else {}
-    _require_equal(config.get("local_disk"), root, "Qwen BF16 LMCache config uses the declared root", errors, checks)
-    _require_equal(config.get("chunk_size"), 256, "Qwen BF16 LMCache config chunk size", errors, checks)
-    _require_equal(config.get("local_cpu"), True, "Qwen BF16 LMCache config enables local CPU buffer", errors, checks)
-    _require_equal(config.get("save_unfull_chunk"), False, "Qwen BF16 LMCache config keeps partial chunks off", errors, checks)
+    _require_equal(config.get("local_disk"), root, f"{label} LMCache config uses the declared root", errors, checks)
+    _require_equal(config.get("chunk_size"), 256, f"{label} LMCache config chunk size", errors, checks)
+    _require_equal(config.get("local_cpu"), True, f"{label} LMCache config enables local CPU buffer", errors, checks)
+    _require_equal(config.get("save_unfull_chunk"), False, f"{label} LMCache config keeps partial chunks off", errors, checks)
 
 
 def _check_qwen_pp8_env(env: dict[str, Any], errors: list[str], checks: list[str]) -> None:

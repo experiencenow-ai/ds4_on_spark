@@ -18,6 +18,7 @@ CONTRACTS = ROOT / "profiles" / "runtime_contracts"
 TOOLS = ROOT / "tools" / "registry.jsonl"
 VLLM_COMMIT = "c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34"
 QWEN_PP = "qwen3_6_27b_bf16_pp8_efficient_v1"
+QWEN_BF16KV_PP = "qwen3_6_27b_bf16_pp8_bf16kv_efficient_v1"
 DSV4_PP = "dsv4_vllm_mtp_pp8_smartest_v1"
 GEMMA31_PP = "gemma4_31b_it_pp8_peer_v1"
 
@@ -36,6 +37,9 @@ class SparkControlTests(unittest.TestCase):
         qwen_profiles = {profile.profile_id: profile for profile in registry.all_profiles() if profile.model_id.startswith("Qwen/Qwen3.6-27B")}
         self.assertIn("qwen3_6_27b_fp8_efficient_v1", qwen_profiles)
         self.assertIn(QWEN_PP, qwen_profiles)
+        self.assertIn(QWEN_BF16KV_PP, qwen_profiles)
+        self.assertFalse(qwen_profiles[QWEN_BF16KV_PP].production_eligible)
+        self.assertTrue(qwen_profiles[QWEN_BF16KV_PP].routing["requires_profile_pin"])
         self.assertEqual(registry.resolve(capability="efficient", chat=False, job_class="atom_edit").profile_id, QWEN_PP)
 
     def test_qwen27_bf16_pipeline_contract_uses_spark0_entry_and_pp8(self) -> None:
@@ -57,6 +61,15 @@ class SparkControlTests(unittest.TestCase):
         self.assertEqual(plan["ingress_node_id"], "spark0")
         self.assertEqual(plan["endpoint"]["base_url"], "http://127.0.0.1:8101")
         self.assertEqual(plan["endpoint"]["path"], "/v1/trim_memory")
+        self.assertIn("release_offload_memory=true", plan["endpoint"]["query"])
+
+    def test_qwen_bf16kv_trim_plan_uses_profile_pinned_pipeline_entry(self) -> None:
+        plan = trim_spark_memory(node_id="spark0", profile_id=QWEN_BF16KV_PP, topology_path=TOPOLOGY, profiles_dir=PROFILES, contracts_dir=CONTRACTS)
+        self.assertFalse(plan["execute"])
+        self.assertEqual(plan["profile_id"], QWEN_BF16KV_PP)
+        self.assertEqual(plan["runtime_contract_id"], "qwen27_bf16_pp8_bf16kv_v1")
+        self.assertEqual(plan["ingress_node_id"], "spark0")
+        self.assertEqual(plan["endpoint"]["base_url"], "http://127.0.0.1:8103")
         self.assertIn("release_offload_memory=true", plan["endpoint"]["query"])
 
     def test_dsv4_trim_plan_requires_profile_and_uses_pipeline_entry(self) -> None:
