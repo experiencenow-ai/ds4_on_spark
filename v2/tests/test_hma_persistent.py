@@ -87,8 +87,8 @@ class HmaPersistentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no spark node has resident profile"):
             topology.assign_profile(profile, immediate=False, current_load={})
         self.assertNotIn(profile.profile_id, topology.estimate_capacity_by_profile())
-        default = registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
-        self.assertEqual(default.profile_id, "dsv4_vllm_mtp_pp8_smartest_v1")
+        with self.assertRaisesRegex(ValueError, "no production profile"):
+            registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
         pinned = registry.resolve(capability=None, chat=True, job_class="longmem", model_pin={"profile_id": profile.profile_id})
         self.assertEqual(pinned.profile_id, profile.profile_id)
 

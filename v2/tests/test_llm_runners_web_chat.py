@@ -145,8 +145,8 @@ class LlmRunnersWebChatTests(unittest.TestCase):
     def test_openai_runner_uses_chat_and_completion_endpoints(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         runner = CapturingRunner()
-        chat_profile = registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
-        completion_profile = registry.resolve(capability="smart", chat=False, job_class="atom_edit")
+        chat_profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
+        completion_profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
         chat_result = runner.run_one(make_request(chat=True), chat_profile)
         completion_result = runner.run_one(make_request(chat=False), completion_profile)
         self.assertEqual(chat_result["output"]["text"], "chat ok")
@@ -156,7 +156,7 @@ class LlmRunnersWebChatTests(unittest.TestCase):
 
     def test_openai_runner_coalesces_compatible_completion_batch(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
-        profile = registry.resolve(capability="smart", chat=False, job_class="atom_edit")
+        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
         first = make_request(chat=False)
         first.raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": 64}
         first = InferenceRequest.from_json(first.raw)
@@ -178,14 +178,14 @@ class LlmRunnersWebChatTests(unittest.TestCase):
 
     def test_openai_runner_does_not_coalesce_chat_batch(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
-        profile = registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
+        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
         runner = CapturingCoalescedRunner()
         self.assertIsNone(runner.run_many_completion([make_request(chat=True), make_request(chat=True)], profile))
         self.assertEqual(runner.calls, [])
 
     def test_openai_runner_coalesces_rendered_chat_batch_as_completion_prompts(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
-        profile = registry.resolve(capability="smartest", chat=True, job_class="tool_chat")
+        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
         first_raw = make_request(chat=True).raw
         first_raw["input"]["rendered_prompt"] = "rendered chat one"
         second_raw = make_request(chat=True).raw
@@ -350,7 +350,7 @@ class LlmRunnersWebChatTests(unittest.TestCase):
     def test_antirez_runner_falls_back_to_openai_completion_endpoint(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         runner = CapturingAntirezRunner()
-        profile = registry.resolve(capability="smart", chat=False, job_class="atom_edit")
+        profile = registry.get("dsv4_antirez_smart_v1")
         result = runner.run_one(make_request(chat=False), profile)
         self.assertEqual(result["output"]["text"], "ANTIREZ_OK")
         self.assertEqual([call[0] for call in runner.calls], ["/completion", "/v1/completions"])
