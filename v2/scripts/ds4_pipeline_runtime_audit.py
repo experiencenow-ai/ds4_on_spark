@@ -32,6 +32,7 @@ FIRST3_EXTERNAL_CACHE = {
     },
 }
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
+FIRST3_MEMORY_BUDGET = ROOT / "profiles" / "production" / "first3_resident_memory_budget.json"
 
 
 def main() -> int:
@@ -46,6 +47,7 @@ def main() -> int:
     _check_qwen(errors, checks)
     _check_gemma_co_residency(errors, checks)
     _check_first3_external_cache_contract(topology, errors, checks)
+    _check_first3_memory_budget(topology, dsv4_profile, errors, checks)
     _check_relaunch_defaults(dsv4_profile, errors, checks)
     _check_spark_update_scripts(errors, checks)
     if errors:
@@ -130,6 +132,11 @@ def _check_dsv4_env(profile: dict[str, Any], env: dict[str, Any], errors: list[s
         "VLLM_DS4_PP_OVERLAP_SEND": "1",
         "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "2",
         "VLLM_DS4_FINAL_ONLY_NONSTREAMING": "1",
+        "DS4_FLASHINFER_JIT_MAX_JOBS": "1",
+        "MAX_JOBS": "1",
+        "CMAKE_BUILD_PARALLEL_LEVEL": "1",
+        "TORCHINDUCTOR_COMPILE_THREADS": "1",
+        "NVCC_THREADS": "1",
     }
     for key, value in expected.items():
         _require_equal(env.get(key), value, f"DSV4 env {key}", errors, checks)
@@ -297,6 +304,43 @@ def _check_first3_gpu_sum(errors: list[str], checks: list[str]) -> None:
         errors.append(f"first-three GPU memory cap sum {gpu_sum:.2f} exceeds 0.85")
     else:
         checks.append("first-three GPU memory cap sum leaves deployment headroom")
+
+
+def _check_first3_memory_budget(topology: dict[str, Any], dsv4_profile: dict[str, Any], errors: list[str], checks: list[str]) -> None:
+    budget = _load(FIRST3_MEMORY_BUDGET)
+    routing = topology.get("routing_policy") if isinstance(topology.get("routing_policy"), dict) else {}
+    services = routing.get("pipeline_services") if isinstance(routing.get("pipeline_services"), dict) else {}
+    partitions = budget.get("layer_partitions") if isinstance(budget.get("layer_partitions"), dict) else {}
+    gpu_caps = budget.get("gpu_memory_utilization") if isinstance(budget.get("gpu_memory_utilization"), dict) else {}
+    target = budget.get("target") if isinstance(budget.get("target"), dict) else {}
+    projection = budget.get("projection") if isinstance(budget.get("projection"), dict) else {}
+    projected_available = projection.get("post_first3_available_gib") if isinstance(projection.get("post_first3_available_gib"), dict) else {}
+    warmup = budget.get("warmup_policy") if isinstance(budget.get("warmup_policy"), dict) else {}
+    _require_equal(budget.get("active_services"), list(FIRST3_EXTERNAL_CACHE), "first-three memory budget active services", errors, checks)
+    _require_equal(float(target.get("min_available_ratio", 0.0)), 0.1, "first-three memory budget 10% RAM floor", errors, checks)
+    _require_equal(warmup.get("required_before_first3_residency"), True, "first-three memory budget requires DSV4 warmup", errors, checks)
+    _require_equal(warmup.get("script"), "scripts/ds4_warm_dsv4_flashinfer_cache.py", "first-three memory budget warmup script", errors, checks)
+    _require_equal(dsv4_profile.get("memory_budget"), "profiles/production/first3_resident_memory_budget.json", "DSV4 profile links first-three memory budget", errors, checks)
+    for service_id, spec in FIRST3_EXTERNAL_CACHE.items():
+        service = services.get(service_id) if isinstance(services.get(service_id), dict) else {}
+        _require_equal(partitions.get(service_id), service.get("layer_partition"), f"{service_id} memory-budget layer partition", errors, checks)
+        _require_equal(float(gpu_caps.get(service_id, 0.0)), float(spec["gpu_memory_utilization"]), f"{service_id} memory-budget GPU cap", errors, checks)
+    floor = min([float(item) for item in projected_available.values()] or [0.0])
+    min_gib = float(target.get("min_available_gib", 0.0))
+    if floor < min_gib:
+        errors.append(f"first-three projected available floor {floor:.1f}GiB is below {min_gib:.1f}GiB")
+    else:
+        checks.append("first-three projected memory floor leaves >=10% RAM headroom")
+    dsv4_layers = [int(item) for item in partitions.get("dsv4_flash_pp8", [])]
+    qwen_layers = [int(item) for item in partitions.get("qwen27_bf16_pp8", [])]
+    if dsv4_layers and dsv4_layers[0] > min(dsv4_layers[1:]):
+        errors.append("Dsv4 memory budget must keep spark0 at or below peer DSV4 layer count")
+    else:
+        checks.append("Dsv4 memory budget keeps spark0 below peer layer count")
+    if qwen_layers and qwen_layers[0] > min(qwen_layers[1:]):
+        errors.append("Qwen memory budget must keep spark0 at or below peer Qwen layer count")
+    else:
+        checks.append("Qwen memory budget keeps spark0 below peer layer count")
 
 
 def _check_relaunch_defaults(profile: dict[str, Any], errors: list[str], checks: list[str]) -> None:

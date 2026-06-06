@@ -9,6 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "ds4_pipeline_lifecycle.py"
+WARM_SCRIPT = ROOT / "scripts" / "ds4_warm_dsv4_flashinfer_cache.py"
 TOPOLOGY = json.loads((ROOT / "profiles" / "topology" / "static_sparks.json").read_text(encoding="utf-8"))
 
 
@@ -95,6 +96,45 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertIn("export VLLM_DS4_KV_PREFETCH_API=1", script)
         self.assertIn("export VLLM_DS4_KV_PREFETCH_TOKEN=unit-test-token", script)
         self.assertLess(script.index("export VLLM_DS4_KV_PREFETCH_API=1"), script.index('nohup bash "$script"'))
+
+    def test_dsv4_warmup_runner_exports_prefetch_and_compile_caps(self) -> None:
+        warm = load_script(WARM_SCRIPT)
+        args = type("Args", (), {"prefetch_max_concurrent": 4})()
+
+        env = dict(warm._warmup_remote_env("unit-test-token", args))
+
+        self.assertEqual(env["VLLM_DS4_KV_PREFETCH_API"], "1")
+        self.assertEqual(env["VLLM_DS4_KV_PREFETCH_REQUIRE_TOKEN"], "1")
+        self.assertEqual(env["VLLM_DS4_KV_PREFETCH_TOKEN"], "unit-test-token")
+        self.assertEqual(env["VLLM_DS4_KV_PREFETCH_MAX_CONCURRENT"], "4")
+        self.assertEqual(env["DS4_FLASHINFER_JIT_MAX_JOBS"], "1")
+        self.assertEqual(env["MAX_JOBS"], "1")
+        self.assertEqual(env["CMAKE_BUILD_PARALLEL_LEVEL"], "1")
+        self.assertEqual(env["TORCHINDUCTOR_COMPILE_THREADS"], "1")
+        self.assertEqual(env["NVCC_THREADS"], "1")
+
+    def test_dsv4_warmup_runner_stops_peers_and_launches_dsv4_without_probe(self) -> None:
+        warm = load_script(WARM_SCRIPT)
+        args = type("Args", (), {
+            "execute": False,
+            "skip_stop_peers": False,
+            "skip_fabric_check": True,
+            "remote_repo": "$HOME/src/ds4_on_spark",
+            "connect_timeout_s": 8,
+            "stagger_s": 2.0,
+            "prefetch_max_concurrent": 4,
+        })()
+
+        plan = warm._plan(args, token="unit-test-token")
+
+        self.assertEqual(len(plan["peer_stop"]), 2)
+        self.assertIn("qwen27_bf16_pp8", plan["peer_stop"][0])
+        self.assertIn("gemma4_26b_a4b_pp8", plan["peer_stop"][1])
+        self.assertIn("stop", plan["dsv4_stop"])
+        self.assertIn("write-scripts", plan["dsv4_launch"])
+        self.assertIn("launch", plan["dsv4_launch"])
+        self.assertNotIn("probe", plan["dsv4_launch"])
+        self.assertIn("--remote-env", plan["dsv4_launch"])
 
     def test_remote_env_requires_valid_key_value_pairs(self) -> None:
         lifecycle = load_script(SCRIPT)

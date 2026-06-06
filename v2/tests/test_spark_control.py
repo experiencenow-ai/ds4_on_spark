@@ -48,7 +48,7 @@ class SparkControlTests(unittest.TestCase):
         self.assertEqual(contract["vllm"]["required_source_commit"], VLLM_COMMIT)
         self.assertEqual(contract["launch"]["api_base_url"], "http://127.0.0.1:8101")
         self.assertEqual(contract["pipeline"]["total_layers"], 64)
-        self.assertEqual(contract["pipeline"]["layer_partition"], [9, 9, 9, 8, 8, 8, 8, 5])
+        self.assertEqual(contract["pipeline"]["layer_partition"], [7, 7, 7, 9, 9, 9, 9, 7])
         self.assertEqual(args[args.index("--pipeline-parallel-size") + 1], "8")
         self.assertEqual(args[args.index("--dtype") + 1], "bfloat16")
         self.assertIn("--language-model-only", args)
