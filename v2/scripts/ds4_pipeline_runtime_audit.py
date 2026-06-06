@@ -86,6 +86,10 @@ def _check_dsv4(profile: dict[str, Any], service: dict[str, Any], errors: list[s
 
 
 def _check_qwen(errors: list[str], checks: list[str]) -> None:
+    pp8_gpu_caps = {
+        "profiles/runtime_contracts/qwen27_bf16_pp8_v1.json": "0.25",
+        "profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json": "0.25",
+    }
     for rel in (
         "profiles/runtime_contracts/qwen27_bf16_pp8_v1.json",
         "profiles/runtime_contracts/qwen27_vllm_trim_v1.json",
@@ -97,6 +101,8 @@ def _check_qwen(errors: list[str], checks: list[str]) -> None:
         args = data.get("extra_args") if isinstance(data.get("extra_args"), list) else data.get("launch", {}).get("args", [])
         _require_arg(args, "--kv-cache-dtype", "fp8", f"{rel} explicit FP8 KV", errors, checks)
         _require_arg(args, "--attention-backend", "TRITON_ATTN", f"{rel} Triton attention for FP8 KV", errors, checks)
+        if rel in pp8_gpu_caps:
+            _require_arg(args, "--gpu-memory-utilization", pp8_gpu_caps[rel], f"{rel} co-resident GPU memory cap", errors, checks)
         if "--async-scheduling" in args:
             errors.append(f"{rel}: Qwen production launch must not enable vLLM async scheduling")
         else:
