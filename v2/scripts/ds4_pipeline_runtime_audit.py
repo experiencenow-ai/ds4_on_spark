@@ -27,7 +27,7 @@ FIRST3_EXTERNAL_CACHE = {
         "external_backend": "dsv4_hma",
         "connector_id": "simple_cpu_offload",
         "cache_root": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload",
-        "gpu_memory_utilization": "0.12",
+        "gpu_memory_utilization": "0.08",
         "env_root": "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT",
     },
 }
@@ -128,7 +128,7 @@ def _check_dsv4_env(profile: dict[str, Any], env: dict[str, Any], errors: list[s
         "VLLM_DS4_PP_TORCH_PAIR_GROUPS": "0",
         "VLLM_DS4_PP_TORCH_GROUP_WARMUP": "0",
         "VLLM_DS4_PP_OVERLAP_SEND": "1",
-        "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "4",
+        "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "2",
         "VLLM_DS4_FINAL_ONLY_NONSTREAMING": "1",
     }
     for key, value in expected.items():
