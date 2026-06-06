@@ -71,7 +71,10 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
 
         self.assertIn('launch_dir="${launch_dir/#\\$HOME/$HOME}"', script)
         self.assertIn('log_dir="${log_dir/#\\$HOME/$HOME}"', script)
+        self.assertIn('install="$launch_dir/00_install_kv_cache_deps.sh"', script)
+        self.assertIn('DS4_NODE_ID=spark0 bash "$install"', script)
         self.assertIn('nohup bash "$script" > "$log"', script)
+        self.assertLess(script.index('DS4_NODE_ID=spark0 bash "$install"'), script.index('nohup bash "$script"'))
         self.assertIn('log=%s\\n" "$!" "$log"', script)
 
     def test_remote_launch_exports_prefetch_env_before_nohup(self) -> None:

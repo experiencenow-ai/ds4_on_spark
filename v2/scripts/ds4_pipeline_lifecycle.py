@@ -236,7 +236,7 @@ def _remote_launch(entry: dict[str, object], rank: int, node: str, args: argpars
     env_exports = _remote_env_exports(args)
     if env_exports:
         env_exports = "\n" + env_exports
-    return _remote_write(entry, args) + f'\n{log_dir}{env_exports}\nscript="$launch_dir/start_vllm_rank{rank}_{node}.sh"\nlog="$log_dir/rank{rank}_{stamp}.log"\nmkdir -p "$log_dir"\ntest -x "$script"\nnohup bash "$script" > "$log" 2>&1 < /dev/null &\nprintf "started {entry["service_id"]} rank={rank} node={node} pid=%s log=%s\\n" "$!" "$log"'
+    return _remote_write(entry, args) + f'\n{log_dir}{env_exports}\ninstall="$launch_dir/00_install_kv_cache_deps.sh"\nscript="$launch_dir/start_vllm_rank{rank}_{node}.sh"\nlog="$log_dir/rank{rank}_{stamp}.log"\nmkdir -p "$log_dir"\ntest -x "$install"\ntest -x "$script"\nDS4_NODE_ID={shlex.quote(node)} bash "$install"\nnohup bash "$script" > "$log" 2>&1 < /dev/null &\nprintf "started {entry["service_id"]} rank={rank} node={node} pid=%s log=%s\\n" "$!" "$log"'
 
 
 def _remote_env_exports(args: argparse.Namespace) -> str:
