@@ -8,6 +8,7 @@ from .profiles import ModelProfile, ProfileRegistry
 from .schemas import InferenceRequest
 
 MODEL_ALIASES = {
+    "deepseek-ai/DeepSeek-V4-Flash": "dsv4_vllm_mtp_pp8_smartest_v1",
     "ds4v": "dsv4_vllm_mtp_pp8_smartest_v1",
     "dsv4": "dsv4_vllm_mtp_pp8_smartest_v1",
     "gemma": "gemma4_26b_a4b_it_pp8_peer_v1",

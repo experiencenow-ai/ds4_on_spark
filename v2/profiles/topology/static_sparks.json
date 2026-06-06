@@ -161,7 +161,7 @@
           4
         ],
         "max_batch_size": 128,
-        "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+        "model_id": "/home/{node}/models/hf/deepseek-ai/DeepSeek-V4-Flash",
         "node_ids": [
           "spark0",
           "spark1",
