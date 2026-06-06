@@ -88,10 +88,10 @@ def _check_dsv4(profile: dict[str, Any], service: dict[str, Any], errors: list[s
 def _check_qwen(errors: list[str], checks: list[str]) -> None:
     qwen_launches = {
         "profiles/runtime_contracts/qwen27_bf16_pp8_v1.json": ("fp8", "0.25"),
-        "profiles/runtime_contracts/qwen27_bf16_pp8_bf16kv_v1.json": ("auto", "0.25"),
+        "profiles/runtime_contracts/qwen27_bf16_pp8_bf16kv_v1.json": ("auto", "0.35"),
         "profiles/runtime_contracts/qwen27_vllm_trim_v1.json": ("fp8", ""),
         "profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json": ("fp8", "0.25"),
-        "profiles/kv_cache/qwen27_bf16_pp8_bf16kv_lmcache_hma.json": ("auto", "0.25"),
+        "profiles/kv_cache/qwen27_bf16_pp8_bf16kv_lmcache_hma.json": ("auto", "0.35"),
         "profiles/kv_cache/qwen27_lmcache_mp_spark7.json": ("fp8", ""),
     }
     for rel, (expected_kv_dtype, expected_gpu_cap) in qwen_launches.items():

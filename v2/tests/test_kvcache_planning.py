@@ -226,7 +226,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertIn("--kv-cache-dtype", plan["vllm_nodes"][0]["argv"])
         self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--kv-cache-dtype") + 1], "auto")
         self.assertIn("--gpu-memory-utilization", plan["vllm_nodes"][0]["argv"])
-        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--gpu-memory-utilization") + 1], "0.25")
+        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--gpu-memory-utilization") + 1], "0.35")
         self.assertIn("--served-model-name", plan["vllm_nodes"][0]["argv"])
         self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--served-model-name") + 1], "qwen27-bf16-pp8-bf16kv")
 
@@ -240,7 +240,7 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertIn("cat > /tmp/lmcache_qwen27_bf16_pp8_bf16kv.yaml", rank0)
             self.assertIn("local_disk: \"/home/spark0/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_bf16kv\"", rank0)
             self.assertIn("--kv-cache-dtype auto", rank0)
-            self.assertIn("--gpu-memory-utilization 0.25", rank0)
+            self.assertIn("--gpu-memory-utilization 0.35", rank0)
             self.assertIn("local_disk: \"/home/spark7/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_bf16kv\"", rank7)
 
     def test_dsv4_flash_pp8_simple_offload_plan_is_pipeline_sharded(self) -> None:

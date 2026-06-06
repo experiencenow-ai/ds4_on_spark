@@ -13,7 +13,7 @@
   "production_eligible": false,
   "profile_id": "qwen3_6_27b_bf16_pp8_bf16kv_efficient_v1",
   "quality": {
-    "status": "profile-pin-only BF16-KV comparison lane; COMPSEC17 and ds4-eval measurement pending"
+    "status": "profile-pin-only BF16-KV comparison lane; COMPSEC17 and ds4-eval measurement pending; launch requires gpu_memory_utilization=0.35 because 0.25 produced no available KV cache memory"
   },
   "routing": {
     "chat_template_thinking_key": "enable_thinking",
