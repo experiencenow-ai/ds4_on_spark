@@ -20,6 +20,7 @@
     "--dtype",
     "bfloat16",
     "--enable-prefix-caching",
+    "--no-async-scheduling",
     "--generation-config",
     "vllm",
     "--reasoning-parser",
