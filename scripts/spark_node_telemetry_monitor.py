@@ -9,6 +9,7 @@ import csv
 import datetime as dt
 import json
 import os
+import shlex
 import socket
 import subprocess
 import time
@@ -36,7 +37,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--summary-samples", type=int, default=720)
     p.add_argument("--nvidia-smi-timeout", type=float, default=3.0)
     p.add_argument("--gateway-url", default="http://127.0.0.1:8700")
-    p.add_argument("--metrics-urls", default="http://127.0.0.1:8102/metrics,http://127.0.0.1:8101/metrics")
+    p.add_argument("--metrics-urls", default="auto,http://127.0.0.1:8102/metrics,http://127.0.0.1:8101/metrics")
     p.add_argument("--http-timeout", type=float, default=1.5)
     return(p.parse_args())
 
@@ -366,6 +367,62 @@ def prometheus_label(line: str, key: str) -> str:
     return(line[start:end] if end >= start else "")
 
 
+def vllm_metrics_port_from_argv(argv: List[str]) -> Optional[int]:
+    if "serve" not in argv or "--headless" in argv:
+        return(None)
+    joined = " ".join(argv)
+    if "vllm.entrypoints.cli.main" not in joined and os.path.basename(argv[0] if argv else "") != "vllm":
+        return(None)
+    for i,arg in enumerate(argv):
+        if arg == "--port" and (i + 1) < len(argv):
+            try:
+                return(int(argv[i + 1]))
+            except Exception:
+                return(None)
+        if arg.startswith("--port="):
+            try:
+                return(int(arg.split("=",1)[1]))
+            except Exception:
+                return(None)
+    return(8000)
+
+
+def discover_vllm_metrics_urls(timeout: float) -> List[str]:
+    try:
+        p = subprocess.run(["ps","-eo","args"],text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=max(1.0,timeout))
+    except Exception:
+        return([])
+    if p.returncode != 0:
+        return([])
+    urls: List[str] = []
+    seen: Dict[str,object] = {}
+    for line in p.stdout.splitlines():
+        try:
+            argv = shlex.split(line)
+        except Exception:
+            continue
+        port = vllm_metrics_port_from_argv(argv)
+        if port is None:
+            continue
+        url = "http://127.0.0.1:%d/metrics" % port
+        if url not in seen:
+            seen[url] = True
+            urls.append(url)
+    return(urls)
+
+
+def metrics_urls(raw_urls: str, timeout: float) -> List[str]:
+    urls: List[str] = []
+    seen: Dict[str,object] = {}
+    for item in [part.strip() for part in raw_urls.split(",") if part.strip()]:
+        expanded = discover_vllm_metrics_urls(timeout) if item == "auto" else [item]
+        for url in expanded:
+            if url not in seen:
+                seen[url] = True
+                urls.append(url)
+    return(urls)
+
+
 def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,float]] = None, now: Optional[float] = None) -> Dict[str,object]:
     out: Dict[str,object] = {
         "vllm_metrics_up": 0,
@@ -402,7 +459,7 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
     source_prompt_total = 0.0
     request_counter_total = 0.0
     http_request_counter_total = 0.0
-    for url in [item.strip() for item in raw_urls.split(",") if item.strip()]:
+    for url in metrics_urls(raw_urls,timeout):
         text,error = read_text_url(url,timeout)
         if error != "":
             continue

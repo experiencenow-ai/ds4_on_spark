@@ -198,6 +198,43 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(metrics["vllm_kv_cache_pct"],25.0)
         self.assertEqual(metrics["vllm_generation_tokens_total"],456.0)
 
+    def test_vllm_metrics_auto_discovers_local_serve_ports(self):
+        ps_text = "\n".join([
+            "ARGS",
+            "/venv/bin/python -m vllm.entrypoints.cli.main serve /models/gemma --port 8131 --served-model-name gemma-single",
+            "/venv/bin/python -m vllm.entrypoints.cli.main serve /models/pipeline --port 8116 --headless",
+        ])
+        metrics_text = "\n".join([
+            'vllm:num_requests_running{model_name="gemma-single"} 3.0',
+            'vllm:num_requests_waiting{model_name="gemma-single"} 35.0',
+            'vllm:kv_cache_usage_perc{model_name="gemma-single"} 0.93',
+            'vllm:generation_tokens_total{model_name="gemma-single"} 57183.0',
+        ])
+        class Result:
+            returncode = 0
+            stdout = ps_text
+            stderr = ""
+        def fake_run(cmd, **kwargs):
+            self.assertEqual(cmd,["ps","-eo","args"])
+            return(Result())
+        def fake_read_text(url,timeout):
+            if url == "http://127.0.0.1:8131/metrics":
+                return(metrics_text,"")
+            return("","down")
+        old_read = node_mon.read_text_url
+        try:
+            node_mon.read_text_url = fake_read_text
+            with mock.patch.object(node_mon.subprocess,"run",fake_run):
+                metrics = node_mon.read_vllm_metrics("auto,http://127.0.0.1:8102/metrics",1.0)
+        finally:
+            node_mon.read_text_url = old_read
+        self.assertEqual(metrics["vllm_metrics_up"],1)
+        self.assertEqual(metrics["vllm_requests_running"],3.0)
+        self.assertEqual(metrics["vllm_requests_waiting"],35.0)
+        self.assertEqual(metrics["vllm_kv_cache_pct"],93.0)
+        self.assertEqual(metrics["vllm_generation_tokens_total"],57183.0)
+        self.assertEqual(metrics["vllm_metrics_sources"],"http://127.0.0.1:8131/metrics")
+
     def test_vllm_metrics_parser_handles_source_tokens_and_rates(self):
         text = "\n".join([
             'vllm:num_requests_running 3.0',
