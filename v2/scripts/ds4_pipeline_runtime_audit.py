@@ -107,25 +107,45 @@ def _check_qwen(errors: list[str], checks: list[str]) -> None:
             errors.append(f"{rel}: Qwen production launch must not enable vLLM async scheduling")
         else:
             checks.append(f"{rel} does not enable vLLM async scheduling")
+    _check_qwen_pp8_deployment(errors, checks)
+
+
+def _check_qwen_pp8_deployment(errors: list[str], checks: list[str]) -> None:
     deployment = _load(ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_lmcache_hma.json")
     _require_equal(deployment.get("model_id"), "/home/{node}/models/hf/Qwen/Qwen3.6-27B", "Qwen BF16 PP8 launch uses node-local model path", errors, checks)
     _require_equal(deployment.get("fabric_topology"), "../transfer/spark_200g.json", "Qwen BF16 PP8 launch uses static 200G fabric topology", errors, checks)
     env = deployment.get("extra_env") if isinstance(deployment.get("extra_env"), dict) else {}
+    _check_qwen_pp8_env(env, errors, checks)
+    root = str(env.get("LMCACHE_ROOT") or "")
+    if "fp8kv" not in root:
+        errors.append("Qwen BF16 LMCache root must be FP8-KV namespaced")
+    else:
+        checks.append("Qwen BF16 LMCache root is FP8-KV namespaced")
+
+
+def _check_qwen_pp8_env(env: dict[str, Any], errors: list[str], checks: list[str]) -> None:
     for key, value in {
         "GLOO_SOCKET_IFNAME": "ds4ring0",
         "TP_SOCKET_IFNAME": "ds4ring0",
         "VLLM_HOST_IP": "{fabric_ip}",
         "DS4_PP_TRANSPORT": "tcp-staged",
         "VLLM_DS4_PP_EDGE_RAIL": "enp",
-        "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR": "0",
-        "VLLM_DS4_PP_DIRECT_CUDA_TENSOR_DICT": "1",
+        "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR": "1",
+        "VLLM_DS4_PP_CPU_STAGED_TENSOR_DICT": "0",
+        "VLLM_DS4_PP_TCP_TENSOR_DICT": "1",
+        "VLLM_DS4_PP_TCP_STRIPES": "16",
+        "VLLM_DS4_PP_TCP_MIN_BYTES": "1",
+        "VLLM_DS4_PP_TCP_BIND_HOST": "{fabric_ip}",
+        "VLLM_DS4_PP_TCP_ADVERTISE_HOST": "{fabric_ip}",
+        "VLLM_DS4_PP_DEVICE_TENSOR_DICT_METADATA": "0",
+        "VLLM_DS4_PP_PYNCCL_TENSOR_DICT": "0",
+        "VLLM_DS4_PP_PYNCCL_PAIR_COMMUNICATORS": "0",
+        "VLLM_DS4_PP_DIRECT_CUDA_TENSOR_DICT": "0",
+        "VLLM_DS4_PP_TORCH_PG_TENSOR_DICT": "0",
+        "VLLM_DS4_PP_TORCH_PAIR_GROUPS": "0",
+        "VLLM_DS4_PP_TORCH_GROUP_WARMUP": "0",
     }.items():
         _require_equal(env.get(key), value, f"Qwen BF16 PP8 env {key}", errors, checks)
-    root = str(env.get("LMCACHE_ROOT") or "")
-    if "fp8kv" not in root:
-        errors.append("Qwen BF16 LMCache root must be FP8-KV namespaced")
-    else:
-        checks.append("Qwen BF16 LMCache root is FP8-KV namespaced")
 
 
 def _check_gemma_co_residency(errors: list[str], checks: list[str]) -> None:
