@@ -109,7 +109,18 @@ def _check_qwen(errors: list[str], checks: list[str]) -> None:
             checks.append(f"{rel} does not enable vLLM async scheduling")
     deployment = _load(ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_lmcache_hma.json")
     _require_equal(deployment.get("model_id"), "/home/{node}/models/hf/Qwen/Qwen3.6-27B", "Qwen BF16 PP8 launch uses node-local model path", errors, checks)
+    _require_equal(deployment.get("fabric_topology"), "../transfer/spark_200g.json", "Qwen BF16 PP8 launch uses static 200G fabric topology", errors, checks)
     env = deployment.get("extra_env") if isinstance(deployment.get("extra_env"), dict) else {}
+    for key, value in {
+        "GLOO_SOCKET_IFNAME": "ds4ring0",
+        "TP_SOCKET_IFNAME": "ds4ring0",
+        "VLLM_HOST_IP": "{fabric_ip}",
+        "DS4_PP_TRANSPORT": "tcp-staged",
+        "VLLM_DS4_PP_EDGE_RAIL": "enp",
+        "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR": "0",
+        "VLLM_DS4_PP_DIRECT_CUDA_TENSOR_DICT": "1",
+    }.items():
+        _require_equal(env.get(key), value, f"Qwen BF16 PP8 env {key}", errors, checks)
     root = str(env.get("LMCACHE_ROOT") or "")
     if "fp8kv" not in root:
         errors.append("Qwen BF16 LMCache root must be FP8-KV namespaced")
