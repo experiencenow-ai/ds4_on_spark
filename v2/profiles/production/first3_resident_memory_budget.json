@@ -47,8 +47,8 @@
   "gpu_memory_utilization": {
     "qwen27_bf16_pp8": 0.25,
     "gemma4_26b_a4b_pp8": 0.25,
-    "dsv4_flash_pp8": 0.08,
-    "active_sum": 0.58
+    "dsv4_flash_pp8": 0.18,
+    "active_sum": 0.68
   },
   "coordinator": {
     "dispatch_window": 128,
@@ -101,17 +101,17 @@
   },
   "projection": {
     "post_first3_available_gib": {
-      "spark0": 19.8,
-      "spark1": 22.7,
-      "spark2": 21.5,
-      "spark3": 26.3,
-      "spark4": 12.8,
-      "spark5": 13.1,
-      "spark6": 21.1,
-      "spark7": 28.3
+      "spark0": 24.3,
+      "spark1": 25.0,
+      "spark2": 21.9,
+      "spark3": 28.3,
+      "spark4": 44.9,
+      "spark5": 39.7,
+      "spark6": 48.4,
+      "spark7": 27.6
     },
-    "floor_gib": 12.8,
-    "notes": "Projection starts from live post-request MemAvailable with all three resident on 2026-06-06 after coordinator-routed smoke requests, then shifts one Gemma layer from spark4 to spark7. This preserves the Gemma max stage depth at 4, keeps spark7 within headroom, and restores spark4 to the 12 GiB target. First-run compiler workers can exceed this steady-state model and must run DSV4-only."
+    "floor_gib": 21.9,
+    "notes": "Projection starts from live idle MemAvailable with all three resident on 2026-06-06 after the merged-main COMPSEC warm-cache run, then reserves one additional GiB per rank for the +10% DSV4 capacity step. The step restores 4 active DSV4 sequences, 2048 batched tokens, 1GiB resident/offload KV, and a 0.18 DSV4 GPU cap while leaving the lowest projected node, spark2, above 21 GiB available. First-run compiler workers can exceed this steady-state model and must run DSV4-only."
   },
   "warmup_policy": {
     "required_before_first3_residency": true,

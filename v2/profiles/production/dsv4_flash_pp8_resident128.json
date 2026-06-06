@@ -20,15 +20,15 @@
     7
   ],
   "max_model_len": 262144,
-  "max_num_seqs": 2,
-  "max_num_batched_tokens": 1024,
-  "max_batch_size": 2,
-  "queue_concurrency": 2,
+  "max_num_seqs": 4,
+  "max_num_batched_tokens": 2048,
+  "max_batch_size": 4,
+  "queue_concurrency": 4,
   "queue_limit": 64,
-  "refill_low_watermark": 4,
+  "refill_low_watermark": 8,
   "max_running_batches_per_compute_domain": 1,
-  "kv_cache_memory_bytes": 536870912,
-  "gpu_memory_utilization": "0.08",
+  "kv_cache_memory_bytes": 1073741824,
+  "gpu_memory_utilization": "0.18",
   "kv_cache_dtype": "fp8",
   "pp_transport": "tcp-staged",
   "pp_edge_rail": "enp",
@@ -41,13 +41,13 @@
   "speculative_decode": false,
   "coordinator_profile": "resident128",
   "coordinator": {
-    "dispatch_window": 2,
-    "dispatch_refill_batch": 2,
-    "completion_cohort_max": 2,
-    "completion_token_budget": 1024,
-    "completion_pp_safe_cohort_max": 2,
+    "dispatch_window": 4,
+    "dispatch_refill_batch": 4,
+    "completion_cohort_max": 4,
+    "completion_token_budget": 2048,
+    "completion_pp_safe_cohort_max": 4,
     "completion_chunk_concurrency": 4,
-    "dispatch_kv_capacity_bytes": 536870912
+    "dispatch_kv_capacity_bytes": 1073741824
   },
   "warmup": {
     "required_before_first3_residency": true,
@@ -72,5 +72,5 @@
     }
   },
   "memory_budget": "profiles/production/first3_resident_memory_budget.json",
-  "notes": "Single source of truth for the bounded DSV4 PP8 resident production envelope. Materialized topology/runtime/KV JSON files must match this file. This profile is first-three co-resident survival mode after live Qwen+Gemma+DSV4 startup at 4 seqs/2048 tokens/1GiB KV loaded successfully but drove spark2 below the 10% available-RAM floor, after a 2 seqs/1024 tokens/512MiB KV launch exposed first-run FlashInfer/CUDA compiler RAM pressure on sparks 4-6, and after live all-three post-request telemetry showed sparks 4-6 below the 10% available-RAM floor. It caps DSV4 at 2 active sequences, 1024 batched tokens, 512MiB resident/offload KV per rank, 0.08 GPU utilization, retunes DSV4 layers as 5/6/6/7/4/4/4/7, skips the SM121 DeepGEMM pre-JIT warmup that can hit gemm.hpp:99 before serving, pins sparse MLA prefill to the batch-qualified indexed Triton backend, forces DSV4 PP sampled-token NCCL broadcasts onto IPv4 sockets over ds4ring0 instead of RoCE QPs, and requires a DSV4-only warmup before all-three residency."
+  "notes": "Single source of truth for the bounded DSV4 PP8 resident production envelope. Materialized topology/runtime/KV JSON files must match this file. This profile is the first-three +10% DSV4 capacity step after live Qwen+Gemma+DSV4 startup and warm-cache COMPSEC runs showed stable steady-state RAM headroom. It restores the previously successful 4 active sequences, 2048 batched tokens, 1GiB resident/offload KV per rank, and 0.18 GPU utilization while preserving the 5/6/6/7/4/4/4/7 layer partition, SM121 DeepGEMM warmup skip, indexed sparse MLA prefill, IPv4 socket DSV4 PP sampled-token NCCL broadcasts over ds4ring0, and DSV4-only warmup requirement before all-three residency."
 }
