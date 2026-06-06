@@ -49,8 +49,25 @@ def _pr_for_branch(branch: str) -> dict[str, object] | None:
     return json.loads(stdout)
 
 
+def _repo_name() -> str:
+    stdout, _, _ = _out(["gh", "repo", "view", "--json", "nameWithOwner"])
+    return str(json.loads(stdout)["nameWithOwner"])
+
+
+def _pr_meta(ref: str) -> dict[str, object]:
+    stdout, _, _ = _out(["gh", "pr", "view", ref, "--json", "number,title,headRefName,headRepository,state,url"])
+    return json.loads(stdout)
+
+
+def _push_target(remote: str) -> str:
+    stdout, code, _ = _out(["git", "config", "--get", f"remote.{remote}.url"], check=False)
+    if code == 0 and stdout != "":
+        return stdout
+    return remote
+
+
 def push_branch(branch: str, remote: str) -> None:
-    _run(["git", "push", remote, f"HEAD:refs/heads/{branch}"])
+    _run(["git", "push", _push_target(remote), f"HEAD:refs/heads/{branch}"])
 
 
 def create_pr(args: argparse.Namespace) -> str:
@@ -96,6 +113,8 @@ def _resolve_pr(ref: str | None) -> str:
 def _check_rows(ref: str) -> list[dict[str, object]]:
     stdout, code, stderr = _out(["gh", "pr", "checks", ref, "--json", "bucket,name,link"], check=False)
     if code not in {0, 8}:
+        if "no checks reported" in stderr:
+            return []
         sys.stderr.write(stderr + "\n")
         raise SystemExit(code)
     if stdout == "":
@@ -127,10 +146,44 @@ def merge_pr(args: argparse.Namespace) -> None:
         code = wait_checks(ref, interval=args.interval, timeout=args.timeout, once=False)
         if code != 0:
             raise SystemExit(code)
-    argv = ["gh", "pr", "merge", ref, f"--{args.method}"]
-    if args.delete_branch:
-        argv.append("--delete-branch")
-    _run(argv)
+    _merge_via_api(ref, args.method, args.delete_branch)
+
+
+def _merge_via_api(ref: str, method: str, delete_branch: bool) -> None:
+    repo = _repo_name()
+    meta = _pr_meta(ref)
+    if meta.get("state") != "MERGED":
+        _run([
+            "gh",
+            "api",
+            "-X",
+            "PUT",
+            f"repos/{repo}/pulls/{meta['number']}/merge",
+            "-f",
+            f"merge_method={method}",
+            "-f",
+            f"commit_title={meta['title']}",
+        ])
+    else:
+        print(f"PR {meta['number']} is already merged", file=sys.stderr)
+    if delete_branch:
+        head_repo = meta.get("headRepository")
+        if isinstance(head_repo, dict) and head_repo.get("nameWithOwner") is not None:
+            _delete_branch(str(head_repo["nameWithOwner"]), str(meta["headRefName"]))
+
+
+def _delete_branch(repo: str, branch: str) -> None:
+    path = f"repos/{repo}/git/refs/heads/{branch}"
+    stdout, code, stderr = _out(["gh", "api", "-X", "DELETE", path], check=False)
+    if code == 0:
+        if stdout:
+            print(stdout)
+        return
+    if "Not Found" in stderr or "Reference does not exist" in stderr:
+        print(f"branch already deleted: {repo}:{branch}", file=sys.stderr)
+        return
+    sys.stderr.write(stderr + "\n")
+    raise SystemExit(code)
 
 
 def main(argv: list[str] | None = None) -> int:
