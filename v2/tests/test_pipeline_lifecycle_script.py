@@ -59,6 +59,7 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
             "remote_repo": "$HOME/src/ds4_on_spark",
             "launch_root": "$HOME/.cache/ds4_pipeline_lifecycle",
             "log_dir": "$HOME/ds4_logs/pipeline_lifecycle",
+            "remote_env": [],
         })()
 
         script = lifecycle._remote_launch(entry, 0, "spark0", args)
@@ -67,6 +68,51 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertIn('log_dir="${log_dir/#\\$HOME/$HOME}"', script)
         self.assertIn('nohup bash "$script" > "$log"', script)
         self.assertIn('log=%s\\n" "$!" "$log"', script)
+
+    def test_remote_launch_exports_prefetch_env_before_nohup(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        entry = {
+            "service_id": "qwen27_bf16_pp8",
+            "deployment_rel": "profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json",
+        }
+        args = type("Args", (), {
+            "remote_repo": "$HOME/src/ds4_on_spark",
+            "launch_root": "$HOME/.cache/ds4_pipeline_lifecycle",
+            "log_dir": "$HOME/ds4_logs/pipeline_lifecycle",
+            "remote_env": ["VLLM_DS4_KV_PREFETCH_API=1", "VLLM_DS4_KV_PREFETCH_TOKEN=unit-test-token"],
+        })()
+
+        script = lifecycle._remote_launch(entry, 0, "spark0", args)
+
+        self.assertIn("export VLLM_DS4_KV_PREFETCH_API=1", script)
+        self.assertIn("export VLLM_DS4_KV_PREFETCH_TOKEN=unit-test-token", script)
+        self.assertLess(script.index("export VLLM_DS4_KV_PREFETCH_API=1"), script.index('nohup bash "$script"'))
+
+    def test_remote_env_requires_valid_key_value_pairs(self) -> None:
+        lifecycle = load_script(SCRIPT)
+
+        with self.assertRaisesRegex(ValueError, "KEY=VALUE"):
+            lifecycle._parse_remote_env(["VLLM_DS4_KV_PREFETCH_API"])
+        with self.assertRaisesRegex(ValueError, "invalid"):
+            lifecycle._parse_remote_env(["1BAD=value"])
+
+    def test_probe_result_requires_json_ok_true(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        good = lifecycle.subprocess.CompletedProcess(["ssh"], 0, stdout='{"ok": true}\n', stderr="")
+        bad_http = lifecycle.subprocess.CompletedProcess(["ssh"], 0, stdout='{"ok": false, "error": "down"}\n', stderr="")
+        bad_json = lifecycle.subprocess.CompletedProcess(["ssh"], 0, stdout="not json\n", stderr="")
+
+        self.assertTrue(lifecycle._probe_result_ok(good))
+        self.assertFalse(lifecycle._probe_result_ok(bad_http))
+        self.assertFalse(lifecycle._probe_result_ok(bad_json))
+
+    def test_printed_commands_redact_secret_assignments(self) -> None:
+        lifecycle = load_script(SCRIPT)
+
+        redacted = lifecycle._redact_secrets("export VLLM_DS4_KV_PREFETCH_TOKEN=unit-test-token OTHER=1")
+
+        self.assertIn("VLLM_DS4_KV_PREFETCH_TOKEN=<redacted>", redacted)
+        self.assertNotIn("unit-test-token", redacted)
 
     def test_kill_needles_include_service_profile_and_model_names(self) -> None:
         lifecycle = load_script(SCRIPT)
