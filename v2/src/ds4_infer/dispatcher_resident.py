@@ -79,9 +79,12 @@ def resident_service_plans(topology: SparkTopology, *, entry_node_id: str, defau
     lows = _json_int_env("DS4_API_SERVICE_LOW_WATERMARKS_JSON")
     cohort_sizes = _json_int_env("DS4_API_SERVICE_MAX_COHORTS_JSON")
     linger = _json_float_env("DS4_API_SERVICE_LINGER_JSON")
+    active = active_resident_service_ids(topology)
     plans: dict[str, ResidentServicePlan] = {}
     for service in topology.pipeline_services.values():
         if service.entry_node_id != entry_node_id:
+            continue
+        if active is not None and service.service_id not in active:
             continue
         plans[service.service_id] = _resident_service_plan(
             service,
@@ -93,6 +96,20 @@ def resident_service_plans(topology: SparkTopology, *, entry_node_id: str, defau
             linger=linger,
         )
     return plans
+
+
+def active_resident_service_ids(topology: SparkTopology) -> set[str] | None:
+    raw_env = os.environ.get("DS4_API_RESIDENT_SERVICE_IDS") or os.environ.get("DS4_API_ACTIVE_RESIDENT_SERVICES")
+    if raw_env:
+        return _parse_service_ids(raw_env)
+    raw = topology.routing_policy.get("active_resident_service_ids")
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        return _parse_service_ids(raw)
+    if isinstance(raw, list):
+        return {str(item) for item in raw if str(item)}
+    return None
 
 
 def service_target_active(service: Any) -> int:
@@ -195,3 +212,7 @@ def _json_env(name: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _parse_service_ids(raw: str) -> set[str]:
+    return {item.strip() for item in raw.replace(";", ",").split(",") if item.strip()}

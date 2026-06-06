@@ -1,8 +1,9 @@
 # Gemma4 pipeline profiles
 
-Gemma4 is wired as an experimental all-Spark vLLM pipeline family. These
-profiles are deliberately profile-pin-only and `production_eligible=false`, so
-they do not change normal `smart`, `smartest`, or reboot startup behavior.
+Gemma4 is wired as an all-Spark vLLM pipeline family. Most Gemma profiles remain
+experimental, profile-pin-only, and `production_eligible=false`. The 2026-06-06
+DS4-eval snapshot promoted Gemma4 26B-A4B as the production `smart` fast-slot
+profile while keeping reboot startup autoload disabled.
 
 ## Profiles and aliases
 
@@ -139,7 +140,13 @@ Gemma4 26B-A4B is the fast-slot winner from this snapshot. Dense 31B is the
 accuracy leader, but it is much slower and has far less KV headroom at the
 current co-resident cap. The 12B profile is useful as a light/fast specialist
 and scored 17/17 on COMPSEC, but it is weaker on AIME and lower overall than
-26B-A4B.
+26B-A4B. The 26B-A4B profile is therefore `production_eligible=true`,
+`default_for=["smart"]`, and `requires_profile_pin=false`.
+
+Production eligibility does not mean reboot autoload. The 26B-A4B profile sets
+`startup_autoload=false`, so `ds4-startup-models` does not load it at power-on;
+the model is routed as `smart` and should be started by the shared lifecycle or
+lazy service path.
 
 The 4096-token cap is part of the quality result. A 31B comparison run at a
 1024-token cap scored 62/92 with 22 capped outputs and 21 no-marker answers;

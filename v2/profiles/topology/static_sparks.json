@@ -126,6 +126,11 @@
     }
   ],
   "routing_policy": {
+    "active_resident_service_ids": [
+      "qwen27_bf16_pp8",
+      "gemma4_26b_a4b_pp8",
+      "dsv4_flash_pp8"
+    ],
     "allow_dynamic_load_for_unmatched_profiles": false,
     "bind_on_submit": true,
     "immediate_requests_prefer_roles": [

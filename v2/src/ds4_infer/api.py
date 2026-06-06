@@ -18,6 +18,7 @@ from .api_chat_render import anthropic_messages_input_payload, openai_chat_input
 from .api_stream import openai_chat_stream_events, openai_completion_requests, openai_completion_stream_events, write_sse
 from .builders import MODEL_ALIASES, resolve_model_alias
 from .dispatcher_resident import PendingDispatcherCohort, ResidentServicePlan
+from .dispatcher_resident import active_resident_service_ids as _active_resident_service_ids
 from .dispatcher_resident import pending_claim_count as _pending_claim_count
 from .dispatcher_resident import pending_claim_count_by_service as _pending_claim_count_by_service
 from .dispatcher_resident import pending_claims as _pending_claims
@@ -832,8 +833,11 @@ def _topology_dispatch_window(topology_path: Path) -> int:
         topology = SparkTopology.load(topology_path)
     except Exception:
         return 64
+    active = _active_resident_service_ids(topology)
     values: list[int] = []
     for service in topology.pipeline_services.values():
+        if active is not None and service.service_id not in active:
+            continue
         try:
             values.append(_service_target_active(service))
         except Exception:

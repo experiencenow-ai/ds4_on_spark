@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from ds4_infer.profiles import ProfileRegistry
+from ds4_infer.dispatcher_resident import active_resident_service_ids, resident_service_plans
 from ds4_infer.runners import FakeRunner
 from ds4_infer.schemas import InferenceRequest
 from ds4_infer.service import run_requests
@@ -22,9 +23,12 @@ QWEN_PP = "qwen3_6_27b_bf16_pp8_efficient_v1"
 QWEN_BF16KV_PP = "qwen3_6_27b_bf16_pp8_bf16kv_efficient_v1"
 DSV4_PP = "dsv4_vllm_mtp_pp8_smartest_v1"
 GEMMA12_PP = "gemma4_12b_it_pp8_peer_v1"
+GEMMA26_PP = "gemma4_26b_a4b_it_pp8_peer_v1"
 GEMMA31_PP = "gemma4_31b_it_pp8_peer_v1"
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
+DSV4_KV_PROFILE = ROOT / "profiles" / "kv_cache" / "dsv4_flash_pp8_simple_offload.json"
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
+DSV4_KV = json.loads(DSV4_KV_PROFILE.read_text(encoding="utf-8"))
 
 
 def make_request(request_id: str, *, capability: str, job_class: str, chat: bool = False, immediate: bool = False, model_pin: dict[str, str] | None = None) -> InferenceRequest:
@@ -83,6 +87,22 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(dsv4.stages()[-1].layer_end, 43)
         self.assertEqual(gemma31.stages()[-1].layer_end, 60)
 
+    def test_resident_dispatcher_only_targets_active_services(self) -> None:
+        topology = SparkTopology.load(TOPOLOGY)
+        active = active_resident_service_ids(topology)
+        plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+
+        self.assertEqual(active, {"qwen27_bf16_pp8", "gemma4_26b_a4b_pp8", "dsv4_flash_pp8"})
+        self.assertEqual(set(plans), active)
+
+    def test_dsv4_kv_profile_binds_cpu_groups_to_static_fabric(self) -> None:
+        env = DSV4_KV["extra_env"]
+
+        self.assertEqual(env["GLOO_SOCKET_IFNAME"], "ds4ring0")
+        self.assertEqual(env["TP_SOCKET_IFNAME"], "ds4ring0")
+        self.assertEqual(env["VLLM_DS4_PP_EDGE_RAIL"], "enp")
+        self.assertEqual(DSV4_KV["master_addr"], "10.10.100.10")
+
     def test_gemma_pipeline_profiles_are_profile_pin_only(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         topology = SparkTopology.load(TOPOLOGY)
@@ -95,10 +115,26 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(assignment.node_ids, ALL_SPARKS)
         self.assertEqual(assignment.service_id, "gemma4_12b_pp8")
         self.assertEqual(topology.estimate_capacity_by_profile()[GEMMA12_PP], 16)
-        with self.assertRaisesRegex(ValueError, "no production profile"):
-            registry.resolve(capability="gemma4", chat=True, job_class="analysis")
+        promoted = registry.resolve(capability="gemma4", chat=True, job_class="analysis")
+        self.assertEqual(promoted.profile_id, GEMMA26_PP)
         pinned = registry.resolve(capability=None, chat=True, job_class="analysis", model_pin={"profile_id": GEMMA12_PP})
         self.assertEqual(pinned.profile_id, GEMMA12_PP)
+
+    def test_gemma26_is_production_smart_but_not_startup_autoload(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        topology = SparkTopology.load(TOPOLOGY)
+        profile = registry.resolve(capability="smart", chat=True, job_class="analysis")
+        assignment = topology.assign_profile(profile, immediate=True, current_load={})
+
+        self.assertEqual(profile.profile_id, GEMMA26_PP)
+        self.assertTrue(profile.production_eligible)
+        self.assertFalse(profile.routing["requires_profile_pin"])
+        self.assertFalse(profile.routing["startup_autoload"])
+        self.assertEqual(profile.routing["default_for"], ["smart"])
+        self.assertEqual(assignment.node_id, "spark0")
+        self.assertEqual(assignment.node_ids, ALL_SPARKS)
+        self.assertEqual(assignment.service_id, "gemma4_26b_a4b_pp8")
+        self.assertEqual(topology.estimate_capacity_by_profile()[GEMMA26_PP], 16)
 
     def test_production_chat_profiles_have_authoritative_tokenizer_path(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

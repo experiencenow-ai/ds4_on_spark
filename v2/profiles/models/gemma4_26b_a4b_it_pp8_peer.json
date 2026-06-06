@@ -20,7 +20,7 @@
     "rank0_model_load_gib": 7.57,
     "target": "8-stage Gemma4 experimental layer pipeline; active-4B larger peer candidate"
   },
-  "production_eligible": false,
+  "production_eligible": true,
   "profile_id": "gemma4_26b_a4b_it_pp8_peer_v1",
   "quality": {
     "aime2025": "16/25 PP8 DS4 API ds4-eval, thinking off, 4k output cap",
@@ -48,9 +48,13 @@
       "service_id": "gemma4_26b_a4b_pp8"
     },
     "pipeline_service_id": "gemma4_26b_a4b_pp8",
+    "default_for": [
+      "smart"
+    ],
     "rank": 730,
-    "requires_profile_pin": true,
+    "requires_profile_pin": false,
     "served_model_name": "gemma-4-26b-a4b-it-pp8",
+    "startup_autoload": false,
     "tokenizer_path": "/home/spark0/models/hf/google/gemma-4-26B-A4B-it"
   },
   "runtime_contract_id": "gemma4_26b_a4b_it_pp8_v1",
