@@ -14,6 +14,7 @@ RAIL_DEVS = {
     "enP2p1s0f0np0",
     "enP2p1s0f1np1",
 }
+CONTROL_IFACE = "ds4ring0"
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,27 @@ class RouteSpec:
         if sudo:
             argv.insert(0, "sudo")
         return " ".join(shlex.quote(item) for item in argv)
+
+
+@dataclass(frozen=True)
+class ControlIfaceSpec:
+    rank: int
+    ip: str
+
+    @property
+    def label(self) -> str:
+        return f"spark{self.rank}"
+
+    def ip_cmds(self, sudo: bool, *, remove_loopback: bool) -> list[str]:
+        prefix = ["sudo"] if sudo else []
+        cmds = [
+            _shell_cmd(prefix + ["ip", "link", "add", CONTROL_IFACE, "type", "dummy"]) + " 2>/dev/null || true",
+            _shell_cmd(prefix + ["ip", "addr", "replace", f"{self.ip}/32", "dev", CONTROL_IFACE]),
+            _shell_cmd(prefix + ["ip", "link", "set", CONTROL_IFACE, "up"]),
+        ]
+        if remove_loopback:
+            cmds.insert(1, _shell_cmd(prefix + ["ip", "addr", "del", f"{self.ip}/32", "dev", "lo"]) + " 2>/dev/null || true")
+        return cmds
 
 
 def fabric_ip(rank: int) -> str:
@@ -85,6 +107,10 @@ def build_specs(nodes: int, *, adjacent_only: bool, head_only: bool) -> list[Rou
     return specs
 
 
+def build_control_iface_specs(ranks: list[int]) -> list[ControlIfaceSpec]:
+    return [ControlIfaceSpec(rank=rank, ip=fabric_ip(rank)) for rank in ranks]
+
+
 def run_ssh(host: str, command: str, timeout_s: int) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["ssh", host, command],
@@ -121,6 +147,21 @@ def route_get(spec: RouteSpec, timeout_s: int, *, strict_next_hop: bool) -> tupl
     return (ok, first)
 
 
+def control_iface_get(spec: ControlIfaceSpec, timeout_s: int) -> tuple[bool, str]:
+    completed = run_ssh(
+        f"spark{spec.rank}",
+        f"ip -o -4 addr show dev {CONTROL_IFACE} && ip -d link show {CONTROL_IFACE}",
+        timeout_s,
+    )
+    output = (completed.stdout + completed.stderr).strip()
+    if completed.returncode != 0:
+        return (False, output)
+    has_ip = f" inet {spec.ip}/32 " in f" {output} "
+    has_dummy = " dummy " in f" {output} "
+    has_up = "<" in output and "UP" in output.split(">", 1)[0]
+    return (has_ip and has_dummy and has_up, output.splitlines()[0] if output else "")
+
+
 def apply_specs(specs: list[RouteSpec], sudo: bool, timeout_s: int) -> int:
     failures = 0
     by_source: dict[int, list[RouteSpec]] = {}
@@ -138,6 +179,19 @@ def apply_specs(specs: list[RouteSpec], sudo: bool, timeout_s: int) -> int:
     return failures
 
 
+def apply_control_iface_specs(specs: list[ControlIfaceSpec], sudo: bool, timeout_s: int, *, remove_loopback: bool) -> int:
+    failures = 0
+    for spec in specs:
+        remote_command = " && ".join(spec.ip_cmds(sudo=sudo, remove_loopback=remove_loopback))
+        completed = run_ssh(f"spark{spec.rank}", remote_command, timeout_s)
+        if completed.returncode != 0:
+            failures += 1
+            print(f"FAIL apply {spec.label} {CONTROL_IFACE}: {completed.stderr.strip() or completed.stdout.strip()}")
+        else:
+            print(f"PASS apply {spec.label} {CONTROL_IFACE}: {spec.ip}/32")
+    return failures
+
+
 def print_repairs(specs: list[RouteSpec], sudo: bool) -> None:
     by_source: dict[int, list[RouteSpec]] = {}
     for spec in specs:
@@ -147,12 +201,38 @@ def print_repairs(specs: list[RouteSpec], sudo: bool) -> None:
         print(f"ssh spark{source_rank} {shlex.quote('; '.join(commands))}")
 
 
+def print_control_iface_repairs(specs: list[ControlIfaceSpec], sudo: bool, *, remove_loopback: bool) -> None:
+    for spec in specs:
+        commands = spec.ip_cmds(sudo=sudo, remove_loopback=remove_loopback)
+        print(f"ssh spark{spec.rank} {shlex.quote('; '.join(commands))}")
+
+
 def _extract_field(route: str, field: str) -> str | None:
     parts = route.split()
     for i, part in enumerate(parts[:-1]):
         if part == field:
             return parts[i + 1]
     return None
+
+
+def _shell_cmd(argv: list[str]) -> str:
+    return " ".join(shlex.quote(item) for item in argv)
+
+
+def _parse_rank_filter(raw: str | None, nodes: int) -> list[int]:
+    if raw is None or raw.strip() == "":
+        return list(range(nodes))
+    ranks: list[int] = []
+    for item in raw.split(","):
+        value = item.strip()
+        if value.startswith("spark"):
+            value = value[5:]
+        rank = int(value)
+        if rank < 0 or rank >= nodes:
+            raise ValueError(f"rank {rank} outside 0..{nodes - 1}")
+        if rank not in ranks:
+            ranks.append(rank)
+    return ranks
 
 
 def _dev_is_up(source_rank: int, dev: str | None, timeout_s: int) -> bool:
@@ -181,38 +261,106 @@ def check_specs(specs: list[RouteSpec], sudo: bool, timeout_s: int, *, strict_ne
     return len(failures)
 
 
+def check_control_iface_specs(specs: list[ControlIfaceSpec], sudo: bool, timeout_s: int, *, remove_loopback: bool) -> int:
+    failures: list[ControlIfaceSpec] = []
+    for spec in specs:
+        ok, state = control_iface_get(spec, timeout_s)
+        status = "PASS" if ok else "FAIL"
+        print(f"{status} {spec.label:<7} {CONTROL_IFACE:<9} {spec.ip:<13} :: {state}")
+        if not ok:
+            failures.append(spec)
+    if failures:
+        print("")
+        print("control interface repair commands:")
+        print_control_iface_repairs(failures, sudo=sudo, remove_loopback=remove_loopback)
+    return len(failures)
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Check or repair Spark 200G loopback host routes for the 0-7 line fabric.",
     )
     parser.add_argument("--nodes", type=int, default=8)
+    parser.add_argument("--only-ranks", default="", help="Comma-separated source ranks or spark names, for example 4,6 or spark4,spark6.")
     parser.add_argument("--adjacent-only", action="store_true")
     parser.add_argument("--head-only", action="store_true")
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--check-control-iface", action="store_true")
+    parser.add_argument("--apply-control-iface", action="store_true")
+    parser.add_argument("--control-only", action="store_true")
+    parser.add_argument("--remove-loopback-control-ip", action="store_true")
     parser.add_argument("--no-sudo", action="store_true")
     parser.add_argument("--strict-next-hop", action="store_true")
     parser.add_argument("--timeout-s", type=int, default=8)
     return parser.parse_args(argv)
 
 
-def main(argv: list[str]) -> int:
-    args = parse_args(argv)
-    if args.nodes < 2:
-        raise SystemExit("--nodes must be at least 2")
+def selected_route_specs(args: argparse.Namespace, source_ranks: list[int]) -> list[RouteSpec]:
     specs = build_specs(
         args.nodes,
         adjacent_only=bool(args.adjacent_only),
         head_only=bool(args.head_only),
     )
-    sudo = not bool(args.no_sudo)
+    return [spec for spec in specs if spec.source_rank in source_ranks]
+
+
+def handle_control_iface(args: argparse.Namespace, iface_specs: list[ControlIfaceSpec], sudo: bool) -> int:
+    failures = 0
+    if args.apply_control_iface:
+        failures += apply_control_iface_specs(
+            iface_specs,
+            sudo=sudo,
+            timeout_s=args.timeout_s,
+            remove_loopback=bool(args.remove_loopback_control_ip),
+        )
+        failures += check_control_iface_specs(
+            iface_specs,
+            sudo=sudo,
+            timeout_s=args.timeout_s,
+            remove_loopback=bool(args.remove_loopback_control_ip),
+        )
+    elif args.check_control_iface or args.control_only:
+        failures += check_control_iface_specs(
+            iface_specs,
+            sudo=sudo,
+            timeout_s=args.timeout_s,
+            remove_loopback=bool(args.remove_loopback_control_ip),
+        )
+    return failures
+
+
+def handle_routes(args: argparse.Namespace, specs: list[RouteSpec], sudo: bool) -> int:
+    if args.control_only:
+        return 0
     if args.apply:
         return apply_specs(specs, sudo=sudo, timeout_s=args.timeout_s)
-    failures = check_specs(
+    return check_specs(
         specs,
         sudo=sudo,
         timeout_s=args.timeout_s,
         strict_next_hop=bool(args.strict_next_hop),
     )
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    if args.nodes < 2:
+        raise SystemExit("--nodes must be at least 2")
+    try:
+        source_ranks = _parse_rank_filter(args.only_ranks, args.nodes)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    sudo = not bool(args.no_sudo)
+    specs = selected_route_specs(args, source_ranks)
+    iface_specs = build_control_iface_specs(source_ranks)
+    failures = handle_control_iface(args, iface_specs, sudo)
+    if args.control_only:
+        if failures:
+            print(f"control interface check failed: {failures} failed probes")
+            return 1
+        print("control interface check passed")
+        return 0
+    failures += handle_routes(args, specs, sudo)
     if failures:
         print(f"fabric route check failed: {failures} failed probes")
         return 1
