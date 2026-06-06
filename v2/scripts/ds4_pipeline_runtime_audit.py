@@ -114,7 +114,8 @@ def _check_gemma_co_residency(errors: list[str], checks: list[str]) -> None:
     for path in sorted((ROOT / "profiles" / "kv_cache").glob("gemma4_*_pp8_plain.json")):
         data = _load(path)
         args = data.get("extra_args") if isinstance(data.get("extra_args"), list) else []
-        _require_arg(args, "--gpu-memory-utilization", "0.25", f"{path.name} co-resident GPU memory cap", errors, checks)
+        expected_cap = "0.20" if path.name.startswith("gemma4_31b_") else "0.25"
+        _require_arg(args, "--gpu-memory-utilization", expected_cap, f"{path.name} co-resident GPU memory cap", errors, checks)
         if "--disable-hybrid-kv-cache-manager" not in [str(item) for item in args]:
             errors.append(f"{path.name}: Gemma PP8 must disable hybrid KV cache manager")
         else:
@@ -123,7 +124,8 @@ def _check_gemma_co_residency(errors: list[str], checks: list[str]) -> None:
         data = _load(path)
         launch = data.get("launch") if isinstance(data.get("launch"), dict) else {}
         args = launch.get("args") if isinstance(launch.get("args"), list) else []
-        _require_arg(args, "--gpu-memory-utilization", "0.25", f"{path.name} co-resident GPU memory cap", errors, checks)
+        expected_cap = "0.20" if path.name.startswith("gemma4_31b_") else "0.25"
+        _require_arg(args, "--gpu-memory-utilization", expected_cap, f"{path.name} co-resident GPU memory cap", errors, checks)
 
 
 def _check_relaunch_defaults(profile: dict[str, Any], errors: list[str], checks: list[str]) -> None:
