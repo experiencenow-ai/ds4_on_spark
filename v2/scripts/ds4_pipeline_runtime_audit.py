@@ -27,7 +27,7 @@ FIRST3_EXTERNAL_CACHE = {
         "external_backend": "dsv4_hma",
         "connector_id": "simple_cpu_offload",
         "cache_root": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload",
-        "gpu_memory_utilization": "0.28",
+        "gpu_memory_utilization": "0.20",
         "env_root": "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT",
     },
 }
@@ -128,7 +128,7 @@ def _check_dsv4_env(profile: dict[str, Any], env: dict[str, Any], errors: list[s
         "VLLM_DS4_PP_TORCH_PAIR_GROUPS": "0",
         "VLLM_DS4_PP_TORCH_GROUP_WARMUP": "0",
         "VLLM_DS4_PP_OVERLAP_SEND": "1",
-        "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "64",
+        "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "16",
         "VLLM_DS4_FINAL_ONLY_NONSTREAMING": "1",
     }
     for key, value in expected.items():
@@ -254,7 +254,7 @@ def _check_first3_topology_cache(
     _require_equal(kv_cache.get("external_backend"), spec["external_backend"], f"{service_id} semantic external KV backend", errors, checks)
     _require_equal(kv_cache.get("connector_id"), spec["connector_id"], f"{service_id} concrete external KV connector id", errors, checks)
     _require_equal(kv_cache.get("cache_root"), spec["cache_root"], f"{service_id} topology cache root", errors, checks)
-    _require_equal(str(kv_cache.get("gpu_memory_utilization")), spec["gpu_memory_utilization"], f"{service_id} topology GPU memory cap", errors, checks)
+    _require_equal(float(kv_cache.get("gpu_memory_utilization")), float(spec["gpu_memory_utilization"]), f"{service_id} topology GPU memory cap", errors, checks)
 
 
 def _check_first3_deployment_cache(

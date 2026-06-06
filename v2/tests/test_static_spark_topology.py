@@ -73,7 +73,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         expected = {
             "qwen27_bf16_pp8": ("lmcache_hma", "lmcache", "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv", 0.25),
             "gemma4_26b_a4b_pp8": ("lmcache_hma", "lmcache", "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv", 0.25),
-            "dsv4_flash_pp8": ("dsv4_hma", "simple_cpu_offload", "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload", 0.28),
+            "dsv4_flash_pp8": ("dsv4_hma", "simple_cpu_offload", "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload", 0.20),
         }
 
         for service_id, (backend, connector_id, cache_root, gpu_cap) in expected.items():
@@ -89,7 +89,9 @@ class StaticSparkTopologyTests(unittest.TestCase):
         topology = SparkTopology.load(TOPOLOGY)
         dsv4 = topology.pipeline_service_by_id("dsv4_flash_pp8")
 
-        for service in topology.pipeline_services.values():
+        for service_id, service in topology.pipeline_services.items():
+            if service_id == "dsv4_flash_pp8":
+                continue
             self.assertEqual(service.max_batch_size, 64)
             self.assertEqual(service.scheduler["queue_concurrency"], 64)
             self.assertEqual(service.scheduler["vllm_max_num_seqs"], 64)
@@ -97,7 +99,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(dsv4.max_batch_size, DSV4_PRODUCTION["max_num_seqs"])
         self.assertEqual(dsv4.scheduler["queue_concurrency"], DSV4_PRODUCTION["max_num_seqs"])
         self.assertEqual(dsv4.scheduler["vllm_max_num_seqs"], DSV4_PRODUCTION["max_num_seqs"])
-        self.assertEqual(dsv4.scheduler["queue_limit"], 512)
+        self.assertEqual(dsv4.scheduler["queue_limit"], DSV4_PRODUCTION["queue_limit"])
 
     def test_pipeline_services_are_all_spark_and_spark0_ingress(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
