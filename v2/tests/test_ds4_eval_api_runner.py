@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import importlib.util
 from pathlib import Path
 import unittest
@@ -75,6 +76,37 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         args = parser.parse_args(["run", "--out-dir", "/tmp/ds4-eval-test", "--disable-thinking"])
 
         self.assertFalse(args.enable_thinking)
+
+    def test_disabled_thinking_zeros_request_budget(self) -> None:
+        args = argparse.Namespace(
+            vllm_url="http://vllm",
+            served_model="model",
+            max_output_tokens=64,
+            enable_thinking=False,
+            chat_template_thinking_key="thinking",
+            thinking_budget_tokens=1024,
+            response_style="concise",
+            temperature=0.0,
+            model="profile",
+        )
+        case = {
+            "id": "compsec-x",
+            "question": "Find the bug.",
+            "source": "COMPSEC",
+            "domain": "kernel",
+            "title": "case",
+            "answer": "3",
+            "choices": [],
+        }
+        original_render_prompt = self.runner.render_prompt
+        self.runner.render_prompt = lambda *args, **kwargs: "rendered"
+        try:
+            payload = self.runner._eval_request_payload(args, 0, case)
+        finally:
+            self.runner.render_prompt = original_render_prompt
+
+        self.assertEqual(payload["thinking_budget_tokens"], 0)
+        self.assertEqual(payload["input"]["rendered_prompt"], "rendered")
 
     def test_default_eval_prompt_keeps_official_contract(self) -> None:
         prompt = self.runner.build_question_prompt(
