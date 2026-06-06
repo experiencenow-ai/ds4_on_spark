@@ -108,6 +108,34 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         self.assertEqual(payload["thinking_budget_tokens"], 0)
         self.assertEqual(payload["input"]["rendered_prompt"], "rendered")
 
+    def test_render_prompt_sends_explicit_disabled_thinking_kwarg(self) -> None:
+        calls = []
+        original_post_json = self.runner._post_json
+
+        def fake_post_json(base_url, path, payload):
+            calls.append((base_url, path, payload))
+            if path == "/v1/chat/completions/render":
+                return {"token_ids": [1, 2, 3]}
+            if path == "/detokenize":
+                return {"prompt": "rendered"}
+            raise AssertionError(path)
+
+        self.runner._post_json = fake_post_json
+        try:
+            rendered = self.runner.render_prompt(
+                "http://vllm",
+                "qwen",
+                "question",
+                64,
+                enable_thinking=False,
+                thinking_key="enable_thinking",
+            )
+        finally:
+            self.runner._post_json = original_post_json
+
+        self.assertEqual(rendered, "rendered")
+        self.assertEqual(calls[0][2]["chat_template_kwargs"], {"enable_thinking": False})
+
     def test_default_eval_prompt_keeps_official_contract(self) -> None:
         prompt = self.runner.build_question_prompt(
             {"question": "Pick one.", "choices": ["alpha", "beta"], "source": "X"}
