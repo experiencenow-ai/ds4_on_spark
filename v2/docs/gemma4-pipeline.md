@@ -17,7 +17,7 @@ they do not change normal `smart`, `smartest`, or reboot startup behavior.
 All five services use `spark0` as the OpenAI ingress and `spark0` through
 `spark7` as vLLM pipeline ranks. They share the `spark-fleet-0` compute domain
 with Qwen27 and DSV4. Gemma launch configs cap vLLM
-`--gpu-memory-utilization` at `0.40` so experimental Gemma runs can be
+`--gpu-memory-utilization` at `0.25` so experimental Gemma runs can be
 co-resident with the other resident pipelines instead of forcing a full-cluster
 stop.
 
