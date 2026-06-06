@@ -188,6 +188,16 @@ class KvCacheDeployment:
         return self.pipeline_parallel_size > 1
 
 
+@dataclass(frozen=True)
+class InstallContext:
+    spark_node: str
+    node_rank: int
+    workdir: str
+    python_bin: str
+    env: dict[str, str]
+    cache_directories: tuple[str, ...]
+
+
 def kv_transfer_config(connector: KvCacheConnector) -> dict[str, Any]:
     if connector.connector_id == "none" or not connector.kv_connector:
         return {}
@@ -610,35 +620,74 @@ def _expand_rank_template(value: str, *, spark_node: str, node_rank: int, fabric
 
 
 def _install_script(deployment: KvCacheDeployment, fabric_nodes: dict[str, TransferNode]) -> str:
-    packages = " ".join(shlex.quote(item) for item in deployment.connector.install_packages)
-    fabric_node = fabric_nodes.get(deployment.spark_node)
-    workdir = _expand_rank_template(deployment.working_directory or ".", spark_node=deployment.spark_node, node_rank=0, fabric_node=fabric_node)
     lines = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
-        "cd " + shlex.quote(workdir),
     ]
+    if deployment.is_pipeline:
+        lines.extend(_pipeline_install_script_lines(deployment, fabric_nodes))
+    else:
+        context = _install_context(deployment, fabric_nodes, spark_node=deployment.spark_node, node_rank=0)
+        lines.extend(_install_context_lines(deployment, context))
+    return "\n".join(lines) + "\n"
+
+
+def _pipeline_install_script_lines(deployment: KvCacheDeployment, fabric_nodes: dict[str, TransferNode]) -> list[str]:
+    lines = [
+        'node="${DS4_NODE_ID:-$(hostname -s)}"',
+        'case "$node" in',
+    ]
+    for node_rank, spark_node in enumerate(deployment.worker_nodes):
+        context = _install_context(deployment, fabric_nodes, spark_node=spark_node, node_rank=node_rank)
+        lines.append(f"{shlex.quote(spark_node)})")
+        lines.extend("    " + line for line in _install_context_lines(deployment, context))
+        lines.append("    ;;")
+    lines.extend([
+        '*)',
+        '    echo "[ds4-kvcache] unsupported pipeline install node: ${node}" >&2',
+        '    exit 64',
+        '    ;;',
+        'esac',
+    ])
+    return lines
+
+
+def _install_context(deployment: KvCacheDeployment, fabric_nodes: dict[str, TransferNode], *, spark_node: str, node_rank: int) -> InstallContext:
+    fabric_node = fabric_nodes.get(spark_node)
+    return InstallContext(
+        spark_node=spark_node,
+        node_rank=node_rank,
+        workdir=_expand_rank_template(deployment.working_directory or ".", spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node),
+        python_bin=_expand_rank_template(deployment.python_bin, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node),
+        env=_env_for_rank(deployment.extra_env, deployment, node_rank=node_rank, spark_node=spark_node, fabric_node=fabric_node),
+        cache_directories=tuple(_expand_rank_template(path, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node) for path in deployment.cache_directories),
+    )
+
+
+def _install_context_lines(deployment: KvCacheDeployment, context: InstallContext) -> list[str]:
+    packages = deployment.connector.install_packages
+    lines = ["cd " + shlex.quote(context.workdir)]
     if deployment.connector.connector_id == "lmcache_mp" and packages:
         wheel_dir = deployment.connector.wheel_dir or "/tmp/ds4_lmcache_wheels"
         wheel_glob = _lmcache_wheel_glob(deployment.connector.install_packages)
-        wheel_argv = [deployment.python_bin, "-m", "pip", "wheel", "--no-build-isolation", "--no-deps", "--wheel-dir", wheel_dir]
+        wheel_argv = [context.python_bin, "-m", "pip", "wheel", "--no-build-isolation", "--no-deps", "--wheel-dir", wheel_dir]
         wheel_argv.extend(deployment.connector.install_packages)
         lines.append("mkdir -p " + shlex.quote(wheel_dir))
-        lines.append(_format_env_command(_env_for_rank(deployment.extra_env, deployment, node_rank=0, spark_node=deployment.spark_node, fabric_node=fabric_node), wheel_argv))
+        lines.append(_format_env_command(context.env, wheel_argv))
         lines.append("wheel=$(find " + shlex.quote(wheel_dir) + " -maxdepth 1 -name " + shlex.quote(wheel_glob) + " -print -quit)")
         lines.append('if [ -z "${wheel}" ]; then echo "[ds4-kvcache] LMCache wheel not found" >&2; exit 2; fi')
-        install_argv = [deployment.python_bin, "-m", "pip", "install", "--no-deps"]
-        lines.append(_format_env_command(_env_for_rank(deployment.extra_env, deployment, node_rank=0, spark_node=deployment.spark_node, fabric_node=fabric_node), install_argv) + ' "${wheel}"')
+        install_argv = [context.python_bin, "-m", "pip", "install", "--no-deps"]
+        lines.append(_format_env_command(context.env, install_argv) + ' "${wheel}"')
     elif packages:
-        argv = [deployment.python_bin, "-m", "pip", "install", "--upgrade"]
+        argv = [context.python_bin, "-m", "pip", "install", "--upgrade"]
         argv.extend(deployment.connector.install_args)
         argv.extend(deployment.connector.install_packages)
-        lines.append(_format_env_command(_env_for_rank(deployment.extra_env, deployment, node_rank=0, spark_node=deployment.spark_node, fabric_node=fabric_node), argv))
+        lines.append(_format_env_command(context.env, argv))
     else:
         lines.append("echo '[ds4-kvcache] no connector packages requested'")
-    for path in deployment.cache_directories:
-        lines.append("mkdir -p " + shlex.quote(_expand_rank_template(path, spark_node=deployment.spark_node, node_rank=0, fabric_node=fabric_node)))
-    return "\n".join(lines) + "\n"
+    for path in context.cache_directories:
+        lines.append("mkdir -p " + shlex.quote(path))
+    return lines
 
 
 def _resolve_relative_profile_path(value: str, *, base: Path) -> str:

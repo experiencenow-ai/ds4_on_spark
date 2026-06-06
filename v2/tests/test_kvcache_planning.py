@@ -263,9 +263,15 @@ class KvCachePlanningTests(unittest.TestCase):
         deployment = KvCacheDeployment.load(GEMMA26_PP_DEPLOYMENT)
         with tempfile.TemporaryDirectory() as tmp:
             manifest = write_launch_scripts(deployment, tmp)
+            install = Path(manifest["scripts"]["install"]).read_text()
             rank0 = Path(manifest["scripts"]["start_vllm_nodes"]["spark0"]).read_text()
             rank7 = Path(manifest["scripts"]["start_vllm_nodes"]["spark7"]).read_text()
 
+            self.assertIn("spark4)", install)
+            self.assertIn("cd /home/spark4/src/ds4_on_spark/v2", install)
+            self.assertIn("/home/spark4/standard-runtimes/vllm-main-gdn-nixl/venv/bin/python -m pip install --upgrade --no-build-isolation lmcache==0.4.5", install)
+            self.assertIn("mkdir -p /home/spark4/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv", install)
+            self.assertNotIn("/home/{node}", install)
             self.assertIn("cat > /tmp/lmcache_gemma4_26b_a4b_pp8_bf16kv.yaml", rank0)
             self.assertIn("LMCACHE_ROOT=/home/spark0/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv", rank0)
             self.assertIn("local_disk: \"/home/spark0/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv\"", rank0)
