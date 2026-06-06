@@ -249,8 +249,8 @@ def render_prompt(vllm_url: str, model: str, question_prompt: str, max_tokens: i
         "max_tokens": max_tokens,
         "temperature": 0,
     }
-    if enable_thinking:
-        payload["chat_template_kwargs"] = {thinking_key: True}
+    if thinking_key:
+        payload["chat_template_kwargs"] = {thinking_key: bool(enable_thinking)}
     rendered = _post_json(vllm_url, "/v1/chat/completions/render", payload)
     token_ids = rendered.get("token_ids")
     if not isinstance(token_ids, list):
