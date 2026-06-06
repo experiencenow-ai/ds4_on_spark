@@ -165,6 +165,8 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["vllm_nodes"][0]["layer_start"], 0)
         self.assertEqual(plan["vllm_nodes"][-1]["layer_end"], 64)
         self.assertIn("--language-model-only", plan["vllm_nodes"][0]["argv"])
+        self.assertEqual(plan["vllm_nodes"][0]["argv"][4], "/home/spark0/models/hf/Qwen/Qwen3.6-27B")
+        self.assertEqual(plan["vllm_nodes"][-1]["argv"][4], "/home/spark7/models/hf/Qwen/Qwen3.6-27B")
         self.assertIn("--dtype", plan["vllm_nodes"][0]["argv"])
         self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--dtype") + 1], "bfloat16")
         self.assertIn("--kv-cache-dtype", plan["vllm_nodes"][0]["argv"])
