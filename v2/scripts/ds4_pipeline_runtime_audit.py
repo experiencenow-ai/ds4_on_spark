@@ -113,6 +113,7 @@ def _check_dsv4_env(profile: dict[str, Any], env: dict[str, Any], errors: list[s
         "PATH": "/home/{node}/ds4-vllm-local/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "TP_SOCKET_IFNAME": "ds4ring0",
         "VLLM_HOST_IP": "{fabric_ip}",
+        "VLLM_MQ_MAX_CHUNKS": "64",
         "DS4_PP_TRANSPORT": str(profile["pp_transport"]),
         "VLLM_DS4_PP_EDGE_RAIL": str(profile["pp_edge_rail"]),
         "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR": "1",
@@ -315,11 +316,14 @@ def _check_first3_memory_budget(topology: dict[str, Any], dsv4_profile: dict[str
     target = budget.get("target") if isinstance(budget.get("target"), dict) else {}
     projection = budget.get("projection") if isinstance(budget.get("projection"), dict) else {}
     projected_available = projection.get("post_first3_available_gib") if isinstance(projection.get("post_first3_available_gib"), dict) else {}
+    observed = budget.get("observed_layer_memory_fit_gib") if isinstance(budget.get("observed_layer_memory_fit_gib"), dict) else {}
+    dsv4_observed = observed.get("dsv4_flash_pp8") if isinstance(observed.get("dsv4_flash_pp8"), dict) else {}
     warmup = budget.get("warmup_policy") if isinstance(budget.get("warmup_policy"), dict) else {}
     _require_equal(budget.get("active_services"), list(FIRST3_EXTERNAL_CACHE), "first-three memory budget active services", errors, checks)
     _require_equal(float(target.get("min_available_ratio", 0.0)), 0.1, "first-three memory budget 10% RAM floor", errors, checks)
     _require_equal(warmup.get("required_before_first3_residency"), True, "first-three memory budget requires DSV4 warmup", errors, checks)
     _require_equal(warmup.get("script"), "scripts/ds4_warm_dsv4_flashinfer_cache.py", "first-three memory budget warmup script", errors, checks)
+    _require_equal(float(dsv4_observed.get("vllm_mq_shared_memory_gib", 0.0)), 1.0, "first-three memory budget includes DSV4 broadcast ring RAM", errors, checks)
     _require_equal(dsv4_profile.get("memory_budget"), "profiles/production/first3_resident_memory_budget.json", "DSV4 profile links first-three memory budget", errors, checks)
     for service_id, spec in FIRST3_EXTERNAL_CACHE.items():
         service = services.get(service_id) if isinstance(services.get(service_id), dict) else {}
