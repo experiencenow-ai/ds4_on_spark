@@ -8,16 +8,28 @@
   "format": "ds4-model-profile-v1",
   "model_id": "google/gemma-4-31B-it",
   "performance": {
+    "aggregate_completion_tok_s": 17.924022,
+    "gpu_memory_utilization": 0.2,
     "latency_rank": 1.0,
+    "max_concurrency_8192": 10.59,
+    "max_num_batched_tokens": 16384,
+    "max_num_seqs": 8,
+    "measurement_notes": "2026-06-06 DS4 API PP8 ds4-eval run with thinking disabled and max_output_tokens=4096. Highest Gemma accuracy in this snapshot, but much slower than 26B-A4B.",
+    "rank0_gpu_kv_cache_tokens": 86720,
+    "rank0_model_load_gib": 10.28,
     "target": "8-stage Gemma4 experimental layer pipeline; largest peer candidate for Qwen/DSV4 confidence checks"
   },
   "production_eligible": false,
   "profile_id": "gemma4_31b_it_pp8_peer_v1",
   "quality": {
-    "aime": "9/25 direct single-Spark fair run",
-    "baseline": "63/92 direct single-Spark DS4-eval on 2026-06-05; PP8 DS4-eval pending",
-    "compsec": "16/17 direct single-Spark fair run",
-    "mc": "38/50 direct single-Spark fair run"
+    "aime2025": "18/25 PP8 DS4 API ds4-eval, thinking off, 4k output cap",
+    "compsec": "16/17 PP8 DS4 API ds4-eval, thinking off, 4k output cap",
+    "direct_single_spark_baseline": "63/92 direct single-Spark DS4-eval on 2026-06-05",
+    "ds4_eval_accuracy": 0.782609,
+    "ds4_eval_correct": 72,
+    "ds4_eval_total": 92,
+    "gpqa_diamond": "17/24 PP8 DS4 API ds4-eval, thinking off, 4k output cap",
+    "supergpqa": "20/25 PP8 DS4 API ds4-eval, thinking off, 4k output cap"
   },
   "routing": {
     "chat_template_thinking_key": "enable_thinking",

@@ -123,6 +123,30 @@ Thinking is disabled by default through `chat_template_kwargs`:
 
 Requests with a positive `thinking_budget_tokens` flip it on for that request.
 
+## DS4-eval snapshot
+
+The 2026-06-06 PP8 DS4 API snapshot used thinking off, temperature `0`, and a
+4096-token output cap. The structured record is
+`profiles/validation/gemma4_ds4_eval_20260606.json`.
+
+| Profile | Score | Aggregate decode | Output tokens | Capped/no marker | Resource notes |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `gemma4_12b_it_pp8_peer_v1` | 63/92 (68.5%) | 52.59 tok/s | 113,630 | 13/13 | 25% GPU cap, 523,616 KV tokens, 63.92x max concurrency at 8192 tokens/request |
+| `gemma4_26b_a4b_it_pp8_peer_v1` | 69/92 (75.0%) | 70.00 tok/s | 103,190 | 8/9 | 25% GPU cap, 568,032 KV tokens, 69.34x max concurrency at 8192 tokens/request |
+| `gemma4_31b_it_pp8_peer_v1` | 72/92 (78.3%) | 17.92 tok/s | 80,745 | 5/4 | 20% GPU cap, 86,720 KV tokens, 10.59x max concurrency at 8192 tokens/request |
+
+Gemma4 26B-A4B is the fast-slot winner from this snapshot. Dense 31B is the
+accuracy leader, but it is much slower and has far less KV headroom at the
+current co-resident cap. The 12B profile is useful as a light/fast specialist
+and scored 17/17 on COMPSEC, but it is weaker on AIME and lower overall than
+26B-A4B.
+
+The 4096-token cap is part of the quality result. A 31B comparison run at a
+1024-token cap scored 62/92 with 22 capped outputs and 21 no-marker answers;
+the 4096-token run recovered 11 answers, regressed 1, and scored 72/92. For
+production, prefer an adaptive budget: start smaller for ordinary requests and
+escalate hard math, capped outputs, or missing answer markers to 4096.
+
 ## Promotion rule
 
 Do not add Gemma to reboot startup or normal `smart` routing until a live PP8
