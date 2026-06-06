@@ -34,5 +34,5 @@ for node in "${nodes[@]}"
 do
 	echo "==> $node: install ds4-ring-control-iface.service"
 	ssh $ssh_opts -tt -o ConnectTimeout="$connect_timeout" "$node" \
-		"cd $remote_repo && DS4_NODE_ID=$node sudo ./scripts/ds4_install_ring_control_iface_local.sh"
+		"cd $remote_repo && sudo env DS4_NODE_ID=$node ./scripts/ds4_install_ring_control_iface_local.sh"
 done
