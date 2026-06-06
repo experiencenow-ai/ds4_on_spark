@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import time
@@ -14,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 PROFILES = ROOT / "profiles" / "models"
+SECRET_ASSIGN_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY)[A-Za-z0-9_]*=)(?:'[^']*'|\"[^\"]*\"|[^ \n]+)")
 
 
 def main() -> int:
@@ -44,6 +46,7 @@ def _args() -> argparse.Namespace:
     parser.add_argument("--connect-timeout-s", type=int, default=8)
     parser.add_argument("--probe-timeout-s", type=float, default=15.0)
     parser.add_argument("--stagger-s", type=float, default=2.0)
+    parser.add_argument("--remote-env", action="append", default=[], metavar="KEY=VALUE", help="export KEY=VALUE before launch scripts on each Spark node")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--allow-all-services", action="store_true")
     parser.add_argument("--json", action="store_true")
@@ -191,8 +194,20 @@ def _probe(entries: list[dict[str, object]], args: argparse.Namespace) -> None:
         url = f"http://127.0.0.1:{entry['http_port']}/v1/models"
         code = "import json,os,urllib.request\nu=os.environ['U'];t=float(os.environ['T'])\ntry:\n r=urllib.request.urlopen(u,timeout=t);print(json.dumps({'ok':True,'status':r.status,'body':r.read(512).decode('utf-8','replace')}))\nexcept Exception as e:\n print(json.dumps({'ok':False,'error':str(e)}))"
         result = _ssh(str(entry["entry_node_id"]), f"U={shlex.quote(url)} T={args.probe_timeout_s} python3 -c {shlex.quote(code)}", args, capture=True)
-        rows.append({"service_id": entry["service_id"], "url": url, "ok": result.returncode == 0, "out": result.stdout.strip(), "err": result.stderr.strip()})
+        rows.append({"service_id": entry["service_id"], "url": url, "ok": _probe_result_ok(result), "out": result.stdout.strip(), "err": result.stderr.strip()})
     _emit_rows(rows, args)
+    if any(not row["ok"] for row in rows):
+        raise SystemExit(1)
+
+
+def _probe_result_ok(result: subprocess.CompletedProcess[str]) -> bool:
+    if result.returncode != 0:
+        return False
+    try:
+        body = json.loads(result.stdout.strip())
+    except json.JSONDecodeError:
+        return False
+    return body.get("ok") is True
 
 
 def _emit_rows(rows: list[dict[str, object]], args: argparse.Namespace) -> None:
@@ -211,7 +226,33 @@ def _remote_write(entry: dict[str, object], args: argparse.Namespace) -> str:
 def _remote_launch(entry: dict[str, object], rank: int, node: str, args: argparse.Namespace) -> str:
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     log_dir = _remote_path_assign("log_dir", args.log_dir, str(entry["service_id"]))
-    return _remote_write(entry, args) + f'\n{log_dir}\nscript="$launch_dir/start_vllm_rank{rank}_{node}.sh"\nlog="$log_dir/rank{rank}_{stamp}.log"\nmkdir -p "$log_dir"\ntest -x "$script"\nnohup bash "$script" > "$log" 2>&1 < /dev/null &\nprintf "started {entry["service_id"]} rank={rank} node={node} pid=%s log=%s\\n" "$!" "$log"'
+    env_exports = _remote_env_exports(args)
+    if env_exports:
+        env_exports = "\n" + env_exports
+    return _remote_write(entry, args) + f'\n{log_dir}{env_exports}\nscript="$launch_dir/start_vllm_rank{rank}_{node}.sh"\nlog="$log_dir/rank{rank}_{stamp}.log"\nmkdir -p "$log_dir"\ntest -x "$script"\nnohup bash "$script" > "$log" 2>&1 < /dev/null &\nprintf "started {entry["service_id"]} rank={rank} node={node} pid=%s log=%s\\n" "$!" "$log"'
+
+
+def _remote_env_exports(args: argparse.Namespace) -> str:
+    lines = []
+    for key, value in _parse_remote_env(getattr(args, "remote_env", []) or []):
+        lines.append(f"export {key}={shlex.quote(value)}")
+    return "\n".join(lines)
+
+
+def _parse_remote_env(items: list[str]) -> list[tuple[str, str]]:
+    out = []
+    for item in items:
+        if "=" not in item:
+            raise ValueError("--remote-env requires KEY=VALUE")
+        key, value = item.split("=", 1)
+        if not _valid_env_name(key):
+            raise ValueError(f"invalid --remote-env name: {key}")
+        out.append((key, value))
+    return out
+
+
+def _valid_env_name(name: str) -> bool:
+    return bool(name and (name[0].isalpha() or name[0] == "_") and all(ch.isalnum() or ch == "_" for ch in name))
 
 
 def _remote_status(entry: dict[str, object]) -> str:
@@ -251,8 +292,12 @@ def _ssh(node: str, script: str, args: argparse.Namespace, *, capture: bool = Fa
 def _local(argv: list[str], *, capture: bool = False) -> subprocess.CompletedProcess[str]:
     if capture:
         return subprocess.run(argv, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
-    print("+ " + " ".join(shlex.quote(item) for item in argv))
+    print("+ " + " ".join(shlex.quote(_redact_secrets(item)) for item in argv))
     return subprocess.run(argv, text=True, check=True)
+
+
+def _redact_secrets(text: str) -> str:
+    return SECRET_ASSIGN_RE.sub(r"\1<redacted>", text)
 
 
 def _nodes(entries: list[dict[str, object]]) -> list[str]:
