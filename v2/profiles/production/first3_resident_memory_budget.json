@@ -82,6 +82,7 @@
     "dsv4_flash_pp8": {
       "per_layer": 3.33,
       "base_per_rank": 0.3,
+      "vllm_mq_shared_memory_gib": 1.0,
       "spark0_entry_overhead": 0.9,
       "spark7_final_overhead": 2.0
     }
@@ -98,7 +99,7 @@
       "spark7": 45.8
     },
     "floor_gib": 33.5,
-    "notes": "Projection assumes DSV4 FlashInfer/CUDA native-kernel compile artifacts are already warmed. First-run compiler workers can exceed this steady-state model and must run DSV4-only."
+    "notes": "Projection assumes DSV4 FlashInfer/CUDA native-kernel compile artifacts are already warmed and includes the 64-chunk vLLM multiprocessing broadcast ring. First-run compiler workers can exceed this steady-state model and must run DSV4-only."
   },
   "warmup_policy": {
     "required_before_first3_residency": true,
