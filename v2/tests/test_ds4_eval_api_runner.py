@@ -77,6 +77,13 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
 
         self.assertFalse(args.enable_thinking)
 
+    def test_direct_vllm_run_can_disable_thinking_for_diagnostics(self) -> None:
+        parser = self.runner._build_parser()
+        args = parser.parse_args(["run-direct-vllm", "--out-dir", "/tmp/ds4-eval-test", "--disable-thinking"])
+
+        self.assertFalse(args.enable_thinking)
+        self.assertEqual(args.vllm_timeout_s, 3600.0)
+
     def test_disabled_thinking_zeros_request_budget(self) -> None:
         args = argparse.Namespace(
             vllm_url="http://vllm",
@@ -298,6 +305,37 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         items = self.runner._collect_items_by_request_id(collect)
 
         self.assertEqual(set(items), {"r1", "r2"})
+
+    def test_direct_vllm_payload_uses_rendered_prompt_array(self) -> None:
+        args = argparse.Namespace(served_model="qwen", max_output_tokens=2048, temperature=0.0)
+        rows = [
+            {"request_id": "a", "input": {"rendered_prompt": "rendered a"}},
+            {"request_id": "b", "input": {"rendered_prompt": "rendered b"}},
+        ]
+
+        payload = self.runner._direct_completion_payload(args, rows)
+
+        self.assertEqual(payload["model"], "qwen")
+        self.assertEqual(payload["prompt"], ["rendered a", "rendered b"])
+        self.assertEqual(payload["max_tokens"], 2048)
+        self.assertFalse(payload["stream"])
+
+    def test_direct_vllm_collect_maps_choice_indices_to_request_ids(self) -> None:
+        rows = [
+            {"request_id": "a", "input": {"rendered_prompt": "rendered a"}},
+            {"request_id": "b", "input": {"rendered_prompt": "rendered b"}},
+        ]
+        response = {
+            "choices": [{"index": 1, "text": "Answer: B"}, {"index": 0, "text": "Answer: A"}],
+            "usage": {"prompt_tokens": 20, "completion_tokens": 10},
+        }
+
+        collect = self.runner._direct_collect_from_completion(rows, response)
+        items = self.runner._collect_items_by_request_id(collect)
+
+        self.assertEqual(items["a"]["result"]["output"]["text"], "Answer: A")
+        self.assertEqual(items["b"]["result"]["output"]["text"], "Answer: B")
+        self.assertEqual(sum(item["result"]["usage"]["completion_tokens"] for item in items.values()), 10)
 
 
 if __name__ == "__main__":
