@@ -74,7 +74,7 @@
   ],
   "master_addr": "10.10.100.10",
   "master_port": 29527,
-  "model_id": "Qwen/Qwen3.6-27B",
+  "model_id": "/home/{node}/models/hf/Qwen/Qwen3.6-27B",
   "pipeline_parallel_size": 8,
   "profile_id": "qwen3_6_27b_bf16_pp8_efficient_v1",
   "python_bin": "/home/{node}/ds4-vllm-local/bin/python",

@@ -108,6 +108,7 @@ def _check_qwen(errors: list[str], checks: list[str]) -> None:
         else:
             checks.append(f"{rel} does not enable vLLM async scheduling")
     deployment = _load(ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_lmcache_hma.json")
+    _require_equal(deployment.get("model_id"), "/home/{node}/models/hf/Qwen/Qwen3.6-27B", "Qwen BF16 PP8 launch uses node-local model path", errors, checks)
     env = deployment.get("extra_env") if isinstance(deployment.get("extra_env"), dict) else {}
     root = str(env.get("LMCACHE_ROOT") or "")
     if "fp8kv" not in root:
