@@ -100,6 +100,7 @@ class KvCacheDeployment:
     http_port: int
     tensor_parallel_size: int
     pipeline_parallel_size: int
+    max_batch_size: int | None
     master_addr: str | None
     master_port: int | None
     layer_partition: tuple[int, ...]
@@ -130,6 +131,7 @@ class KvCacheDeployment:
         http_port = int(data.get("http_port", 8000))
         tensor_parallel_size = int(data.get("tensor_parallel_size", 1))
         pipeline_parallel_size = int(data.get("pipeline_parallel_size", 1))
+        max_batch_size = int(data["max_batch_size"]) if data.get("max_batch_size") is not None else None
         worker_nodes = tuple(str(item) for item in data.get("pipeline_nodes", data.get("worker_nodes", [data["spark_node"]])))
         total_layers = int(data["total_layers"]) if data.get("total_layers") is not None else None
         layer_partition = _deployment_layer_partition(data, worker_nodes=worker_nodes, stage_count=pipeline_parallel_size, total_layers=total_layers)
@@ -149,6 +151,7 @@ class KvCacheDeployment:
             http_port=http_port,
             tensor_parallel_size=tensor_parallel_size,
             pipeline_parallel_size=pipeline_parallel_size,
+            max_batch_size=max_batch_size,
             master_addr=str(data["master_addr"]) if data.get("master_addr") else str(data["spark_node"]),
             master_port=int(data["master_port"]) if data.get("master_port") is not None else None,
             layer_partition=layer_partition,
@@ -393,6 +396,8 @@ def _vllm_argv(deployment: KvCacheDeployment, connector: KvCacheConnector, *, no
         argv.extend(["--served-model-name", _expand_rank_template(deployment.served_model_name, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node)])
     if deployment.text_only:
         argv.append("--language-model-only")
+    if deployment.max_batch_size is not None:
+        argv.extend(["--max-num-seqs", str(deployment.max_batch_size)])
     extra_args = tuple(_expand_rank_template(item, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node) for item in deployment.extra_args)
     argv.extend(_dedupe_args(extra_args, present=set(item for item in argv if item.startswith("--"))))
     if deployment.is_pipeline and node_rank != 0 and "--headless" not in argv:
@@ -504,6 +509,8 @@ def _validate_lmcache_server(server: LmcacheServer) -> None:
 
 
 def _validate_deployment(deployment: KvCacheDeployment) -> None:
+    if deployment.max_batch_size is not None and deployment.max_batch_size < 1:
+        raise ValueError("max_batch_size must be positive")
     if deployment.pipeline_parallel_size > 1:
         if len(deployment.worker_nodes) != deployment.pipeline_parallel_size:
             raise ValueError("pipeline_parallel_size must match worker_nodes length for pipeline deployments")

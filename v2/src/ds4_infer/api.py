@@ -29,6 +29,7 @@ from .dispatcher_resident import service_target_active as _service_target_active
 from .deployment import deployment_readiness
 from .env_utils import env_bool as _env_bool
 from .jit_kv import JitKvCircuitBreaker
+from .pipelines import pipeline_service_batch_limit
 from .profiles import ModelProfile, ProfileRegistry
 from .kv_cache import KV_CACHE_DIRECTIVE_FORMAT, KV_CACHE_PLAN_FORMAT, normalize_kv_cache_directive
 from .runners import FakeRunner, PipelineOpenAIRunner, Runner
@@ -1367,7 +1368,7 @@ def _pipeline_base_urls(topology: SparkTopology) -> dict[str, str]:
 
 
 def _batch_limits_by_service(topology: SparkTopology) -> dict[str, int]:
-    limits = {service.service_id: int(service.scheduler.get("queue_limit") or service.max_batch_size) for service in topology.pipeline_services.values()}
+    limits = {service.service_id: pipeline_service_batch_limit(service) for service in topology.pipeline_services.values()}
     overrides = {}
     raw_overrides = os.environ.get("DS4_API_BATCH_LIMITS_JSON")
     if raw_overrides:

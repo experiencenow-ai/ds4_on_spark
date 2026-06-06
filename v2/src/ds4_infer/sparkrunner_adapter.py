@@ -9,6 +9,7 @@ from typing import Any
 
 from .builders import new_id, sparkrunner_request
 from .profiles import ProfileRegistry
+from .pipelines import pipeline_service_batch_limit
 from .queue import InferenceQueue
 from .runners import make_runner
 from .topology import SparkTopology
@@ -39,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
             limit=max(1, args.work_limit),
             concurrency=max(1, args.concurrency),
             kv_shard_layouts_by_profile=dict(topology.profile_pipeline_services),
-            batch_limits_by_service={service.service_id: int(service.scheduler.get("queue_limit") or service.max_batch_size) for service in topology.pipeline_services.values()},
+            batch_limits_by_service={service.service_id: pipeline_service_batch_limit(service) for service in topology.pipeline_services.values()},
             refill_low_watermarks_by_service={service.service_id: int(service.scheduler.get("refill_low_watermark") or 0) for service in topology.pipeline_services.values()},
             on_result=lambda claim, result: _append_response(response_path, record_by_request_id, args.model, args.response_format, claim.request_id, result),
         )
