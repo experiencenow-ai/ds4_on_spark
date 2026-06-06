@@ -161,6 +161,35 @@ def parse_eval_cases(path: Path) -> list[dict]:
     return cases
 
 
+def _source_filters(args: argparse.Namespace) -> list[str]:
+    return [str(item) for item in getattr(args, "source", []) or [] if str(item)]
+
+
+def _filter_cases(cases: list[dict], sources: list[str]) -> list[dict]:
+    if not sources:
+        return cases
+    wanted = set(sources)
+    filtered = [case for case in cases if case.get("source") in wanted]
+    if not filtered:
+        raise ValueError(f"no ds4-eval cases matched --source {','.join(sources)}")
+    return filtered
+
+
+def _request_payload_source(row: dict) -> str:
+    meta = ((row.get("input") or {}).get("metadata") or {}).get("ds4_eval") or {}
+    return str(meta.get("source") or "") if isinstance(meta, dict) else ""
+
+
+def _filter_request_payloads(rows: list[dict], sources: list[str]) -> list[dict]:
+    if not sources:
+        return rows
+    wanted = set(sources)
+    filtered = [row for row in rows if _request_payload_source(row) in wanted]
+    if not filtered:
+        raise ValueError(f"no ds4-eval requests matched --source {','.join(sources)}")
+    return filtered
+
+
 def build_question_prompt(case: dict, *, response_style: str = "official") -> str:
     parts = [case["question"] + "\n"]
     choices = case.get("choices") or []
@@ -235,6 +264,7 @@ def render_prompt(vllm_url: str, model: str, question_prompt: str, max_tokens: i
 
 def write_requests(args: argparse.Namespace) -> None:
     cases = parse_eval_cases(Path(args.source_c))
+    cases = _filter_cases(cases, _source_filters(args))
     if args.limit:
         cases = cases[: int(args.limit)]
     out = Path(args.out_jsonl)
@@ -304,6 +334,7 @@ def _write_request_manifest(args: argparse.Namespace, out: Path, request_count: 
     manifest = {
         "format": "ds4-eval-api-request-manifest-v1",
         "source_c": str(Path(args.source_c)),
+        "source": _source_filters(args),
         "requests_jsonl": str(out),
         "request_count": request_count,
         "max_output_tokens": int(args.max_output_tokens),
@@ -549,6 +580,7 @@ def _prepare_run_requests(args: argparse.Namespace, out_dir: Path, batch_id: str
     if not args.requests_jsonl:
         write_requests(_write_args_for_run(args, source_requests))
     requests_payload = _load_requests_jsonl(source_requests)
+    requests_payload = _filter_request_payloads(requests_payload, _source_filters(args))
     if args.limit and args.requests_jsonl:
         requests_payload = requests_payload[: int(args.limit)]
     if not args.preserve_request_ids:
@@ -571,6 +603,7 @@ def _write_args_for_run(args: argparse.Namespace, source_requests: Path) -> argp
         chat_template_thinking_key=args.chat_template_thinking_key,
         thinking_budget_tokens=args.thinking_budget_tokens,
         temperature=args.temperature,
+        source=args.source,
         limit=args.limit,
     )
 
@@ -591,6 +624,7 @@ def _write_run_manifest(args: argparse.Namespace, out_dir: Path, batch_id: str, 
         "format": "ds4-eval-api-live-run-v1",
         "batch_id": batch_id,
         "base_url": args.base_url,
+        "source": _source_filters(args),
         "request_count": len(requests_payload),
         "requests_jsonl": str(requests_path),
         "source_requests_jsonl": str(source_requests),
@@ -882,6 +916,7 @@ def _build_parser() -> argparse.ArgumentParser:
     w.add_argument("--chat-template-thinking-key", default="thinking")
     w.add_argument("--thinking-budget-tokens", type=int, default=1024)
     w.add_argument("--temperature", type=float, default=0.0)
+    w.add_argument("--source", action="append", default=[], help="Only include ds4-eval cases with this source; repeat for multiple sources.")
     w.add_argument("--limit", type=int, default=0)
     g = sub.add_parser("grade")
     g.add_argument("--requests-jsonl", required=True)
@@ -904,6 +939,7 @@ def _build_parser() -> argparse.ArgumentParser:
     r.add_argument("--chat-template-thinking-key", default="thinking")
     r.add_argument("--thinking-budget-tokens", type=int, default=1024)
     r.add_argument("--temperature", type=float, default=0.0)
+    r.add_argument("--source", action="append", default=[], help="Only include ds4-eval cases with this source; repeat for multiple sources.")
     r.add_argument("--limit", type=int, default=0)
     r.add_argument("--priority", type=int)
     r.add_argument("--timeout-s", type=float, default=1800.0)

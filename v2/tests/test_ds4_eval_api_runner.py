@@ -31,12 +31,44 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         self.assertTrue(cases[0]["question"])
         self.assertTrue(cases[0]["answer"])
 
+    def test_source_filter_selects_compsec17_cases(self) -> None:
+        cases = self.runner.parse_eval_cases(self.runner.DEFAULT_SOURCE_C)
+
+        filtered = self.runner._filter_cases(cases, ["COMPSEC"])
+
+        self.assertEqual(len(filtered), 17)
+        self.assertTrue(all(case["source"] == "COMPSEC" for case in filtered))
+        self.assertEqual(filtered[0]["id"], "compsec-076")
+        self.assertEqual(filtered[-1]["id"], "compsec-092")
+
+    def test_request_payload_source_filter_selects_metadata_source(self) -> None:
+        rows = [
+            {
+                "request_id": "a",
+                "input": {"metadata": {"ds4_eval": {"source": "AIME2025"}}},
+            },
+            {
+                "request_id": "b",
+                "input": {"metadata": {"ds4_eval": {"source": "COMPSEC"}}},
+            },
+        ]
+
+        filtered = self.runner._filter_request_payloads(rows, ["COMPSEC"])
+
+        self.assertEqual([row["request_id"] for row in filtered], ["b"])
+
     def test_run_defaults_enable_thinking_with_bounded_budget(self) -> None:
         parser = self.runner._build_parser()
         args = parser.parse_args(["run", "--out-dir", "/tmp/ds4-eval-test"])
 
         self.assertTrue(args.enable_thinking)
         self.assertEqual(args.thinking_budget_tokens, 1024)
+
+    def test_run_accepts_source_filter(self) -> None:
+        parser = self.runner._build_parser()
+        args = parser.parse_args(["run", "--out-dir", "/tmp/ds4-eval-test", "--source", "COMPSEC"])
+
+        self.assertEqual(args.source, ["COMPSEC"])
 
     def test_run_can_disable_thinking_for_diagnostics(self) -> None:
         parser = self.runner._build_parser()
