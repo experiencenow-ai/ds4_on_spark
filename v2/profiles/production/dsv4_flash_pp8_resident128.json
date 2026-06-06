@@ -10,14 +10,14 @@
   "pipeline_parallel_size": 8,
   "tensor_parallel_size": 1,
   "layer_partition": [
+    5,
+    6,
+    6,
+    7,
     4,
-    5,
-    5,
-    6,
-    6,
-    6,
-    6,
-    5
+    4,
+    4,
+    7
   ],
   "max_model_len": 262144,
   "max_num_seqs": 2,
@@ -72,5 +72,5 @@
     }
   },
   "memory_budget": "profiles/production/first3_resident_memory_budget.json",
-  "notes": "Single source of truth for the bounded DSV4 PP8 resident production envelope. Materialized topology/runtime/KV JSON files must match this file. This profile is first-three co-resident survival mode after live Qwen+Gemma+DSV4 startup at 4 seqs/2048 tokens/1GiB KV loaded successfully but drove spark2 below the 10% available-RAM floor, and after a 2 seqs/1024 tokens/512MiB KV launch exposed first-run FlashInfer/CUDA compiler RAM pressure on sparks 4-6. It caps DSV4 at 2 active sequences, 1024 batched tokens, 512MiB resident/offload KV per rank, 0.08 GPU utilization, balances DSV4 layers as 4/5/5/6/6/6/6/5, skips the SM121 DeepGEMM pre-JIT warmup that can hit gemm.hpp:99 before serving, pins sparse MLA prefill to the batch-qualified indexed Triton backend, forces DSV4 PP sampled-token NCCL broadcasts onto IPv4 sockets over ds4ring0 instead of RoCE QPs, and requires a DSV4-only warmup before all-three residency."
+  "notes": "Single source of truth for the bounded DSV4 PP8 resident production envelope. Materialized topology/runtime/KV JSON files must match this file. This profile is first-three co-resident survival mode after live Qwen+Gemma+DSV4 startup at 4 seqs/2048 tokens/1GiB KV loaded successfully but drove spark2 below the 10% available-RAM floor, after a 2 seqs/1024 tokens/512MiB KV launch exposed first-run FlashInfer/CUDA compiler RAM pressure on sparks 4-6, and after live all-three post-request telemetry showed sparks 4-6 below the 10% available-RAM floor. It caps DSV4 at 2 active sequences, 1024 batched tokens, 512MiB resident/offload KV per rank, 0.08 GPU utilization, retunes DSV4 layers as 5/6/6/7/4/4/4/7, skips the SM121 DeepGEMM pre-JIT warmup that can hit gemm.hpp:99 before serving, pins sparse MLA prefill to the batch-qualified indexed Triton backend, forces DSV4 PP sampled-token NCCL broadcasts onto IPv4 sockets over ds4ring0 instead of RoCE QPs, and requires a DSV4-only warmup before all-three residency."
 }
