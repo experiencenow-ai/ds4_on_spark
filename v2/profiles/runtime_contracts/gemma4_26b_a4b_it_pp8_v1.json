@@ -3,8 +3,11 @@
   "description": "Gemma4 26B-A4B instruction all-Spark vLLM layer-pipeline runtime. Experimental/profile-pin-only; spark0 is the API ingress.",
   "format": "ds4-runtime-contract-v1",
   "kv_cache": {
-    "connector": "none",
-    "deployment": "profiles/kv_cache/gemma4_26b_a4b_it_pp8_plain.json",
+    "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv",
+    "connector": "LMCacheConnectorV1",
+    "deployment": "profiles/kv_cache/gemma4_26b_a4b_it_pp8_lmcache_hma.json",
+    "dtype": "bfloat16",
+    "external_backend": "lmcache_hma",
     "expected_node_fraction": "1/8",
     "sharding": "pipeline_layers"
   },

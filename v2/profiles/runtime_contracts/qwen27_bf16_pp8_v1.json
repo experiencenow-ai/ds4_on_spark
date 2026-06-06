@@ -7,6 +7,7 @@
     "connector": "LMCacheConnectorV1",
     "deployment": "profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json",
     "dtype": "fp8",
+    "external_backend": "lmcache_hma",
     "expected_node_fraction": "1/8",
     "sharding": "pipeline_layers"
   },

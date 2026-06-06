@@ -38,6 +38,11 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
             self.assertNotIn(str(deployment["python_bin"]), {"python3", "vllm"})
             self.assertNotIn(str(deployment["vllm_bin"]), {"python3", "vllm"})
             self.assertNotEqual(str(deployment["master_addr"]), entry["entry_node_id"])
+            service_kv = TOPOLOGY["routing_policy"]["pipeline_services"][service_id].get("kv_cache", {})
+            if service_kv.get("connector_id"):
+                self.assertEqual(deployment["connector"]["connector_id"], service_kv["connector_id"])
+            if service_kv.get("cache_root"):
+                self.assertEqual(deployment["cache_directories"][0], service_kv["cache_root"])
 
     def test_selector_accepts_service_profile_and_model_ids(self) -> None:
         lifecycle = load_script(SCRIPT)

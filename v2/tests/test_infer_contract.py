@@ -35,6 +35,7 @@ class InferenceContractTests(unittest.TestCase):
         self.assertTrue(profile.production_eligible)
         self.assertFalse(profile.routing["requires_profile_pin"])
         self.assertFalse(profile.routing["startup_autoload"])
+        self.assertEqual(profile.routing["optional_kv_cache_deployments"], ["profiles/kv_cache/gemma4_26b_a4b_it_pp8_lmcache_hma.json"])
 
     def test_first3_model_aliases_resolve_to_resident_services(self) -> None:
         self.assertEqual(resolve_model_alias("qwen27"), "qwen3_6_27b_bf16_pp8_efficient_v1")

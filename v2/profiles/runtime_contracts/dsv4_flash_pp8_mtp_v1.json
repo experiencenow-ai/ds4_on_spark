@@ -3,9 +3,10 @@
   "description": "DeepSeek V4 Flash all-Spark vLLM layer-pipeline runtime. Existing mixed FP4/FP8 checkpoint and native SimpleCPUOffload/HMA path are preserved.",
   "format": "ds4-runtime-contract-v1",
   "kv_cache": {
-    "cache_root": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8",
+    "cache_root": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload",
     "connector": "SimpleCPUOffloadConnector",
     "deployment": "profiles/kv_cache/dsv4_flash_pp8_simple_offload.json",
+    "external_backend": "dsv4_hma",
     "expected_node_fraction": "1/8",
     "sharding": "pipeline_layers"
   },
@@ -34,7 +35,7 @@
       "--kv-cache-memory-bytes",
       "8589934592",
       "--gpu-memory-utilization",
-      "0.35",
+      "0.33",
       "--no-disable-hybrid-kv-cache-manager",
       "--kv-offloading-size",
       "2",
@@ -63,14 +64,14 @@
     "entry_base_url": "http://127.0.0.1:8102",
     "head_node": "spark0",
     "layer_partition": [
-      5,
-      6,
-      6,
-      6,
-      6,
+      4,
       5,
       5,
-      4
+      6,
+      6,
+      5,
+      6,
+      6
     ],
     "pipeline_parallel_size": 8,
     "tensor_parallel_size": 1,

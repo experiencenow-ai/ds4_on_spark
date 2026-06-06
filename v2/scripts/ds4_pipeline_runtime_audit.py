@@ -8,6 +8,29 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+FIRST3_EXTERNAL_CACHE = {
+    "qwen27_bf16_pp8": {
+        "external_backend": "lmcache_hma",
+        "connector_id": "lmcache",
+        "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv",
+        "gpu_memory_utilization": "0.25",
+        "env_root": "LMCACHE_ROOT",
+    },
+    "gemma4_26b_a4b_pp8": {
+        "external_backend": "lmcache_hma",
+        "connector_id": "lmcache",
+        "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv",
+        "gpu_memory_utilization": "0.25",
+        "env_root": "LMCACHE_ROOT",
+    },
+    "dsv4_flash_pp8": {
+        "external_backend": "dsv4_hma",
+        "connector_id": "simple_cpu_offload",
+        "cache_root": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload",
+        "gpu_memory_utilization": "0.33",
+        "env_root": "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT",
+    },
+}
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
 
 
@@ -22,6 +45,7 @@ def main() -> int:
     _check_dsv4(dsv4_profile, services[service_id], errors, checks)
     _check_qwen(errors, checks)
     _check_gemma_co_residency(errors, checks)
+    _check_first3_external_cache_contract(topology, errors, checks)
     _check_relaunch_defaults(dsv4_profile, errors, checks)
     _check_spark_update_scripts(errors, checks)
     if errors:
@@ -211,6 +235,70 @@ def _check_gemma_co_residency(errors: list[str], checks: list[str]) -> None:
         _require_arg(args, "--gpu-memory-utilization", expected_cap, f"{path.name} co-resident GPU memory cap", errors, checks)
 
 
+def _check_first3_external_cache_contract(topology: dict[str, Any], errors: list[str], checks: list[str]) -> None:
+    routing = topology.get("routing_policy") if isinstance(topology.get("routing_policy"), dict) else {}
+    services = routing.get("pipeline_services") if isinstance(routing.get("pipeline_services"), dict) else {}
+    active = set(str(item) for item in routing.get("active_resident_service_ids", []))
+    _require_equal(active, set(FIRST3_EXTERNAL_CACHE), "first-three active service set", errors, checks)
+    for service_id, spec in FIRST3_EXTERNAL_CACHE.items():
+        service = services.get(service_id) if isinstance(services.get(service_id), dict) else {}
+        _check_first3_topology_cache(service_id, service, spec, errors, checks)
+        _check_first3_deployment_cache(service_id, service, spec, errors, checks)
+    _check_first3_gpu_sum(errors, checks)
+
+
+def _check_first3_topology_cache(
+    service_id: str, service: dict[str, Any], spec: dict[str, str], errors: list[str], checks: list[str]
+) -> None:
+    kv_cache = service.get("kv_cache") if isinstance(service.get("kv_cache"), dict) else {}
+    _require_equal(kv_cache.get("external_backend"), spec["external_backend"], f"{service_id} semantic external KV backend", errors, checks)
+    _require_equal(kv_cache.get("connector_id"), spec["connector_id"], f"{service_id} concrete external KV connector id", errors, checks)
+    _require_equal(kv_cache.get("cache_root"), spec["cache_root"], f"{service_id} topology cache root", errors, checks)
+    _require_equal(str(kv_cache.get("gpu_memory_utilization")), spec["gpu_memory_utilization"], f"{service_id} topology GPU memory cap", errors, checks)
+
+
+def _check_first3_deployment_cache(
+    service_id: str, service: dict[str, Any], spec: dict[str, str], errors: list[str], checks: list[str]
+) -> None:
+    deployment = _first3_deployment_for_service(service_id, service, errors)
+    if deployment is None:
+        return
+    connector = deployment.get("connector") if isinstance(deployment.get("connector"), dict) else {}
+    env = deployment.get("extra_env") if isinstance(deployment.get("extra_env"), dict) else {}
+    args = _effective_launch_args(deployment)
+    _require_equal(deployment.get("external_backend"), spec["external_backend"], f"{service_id} deployment semantic external KV backend", errors, checks)
+    _require_equal(connector.get("connector_id"), spec["connector_id"], f"{service_id} deployment connector id", errors, checks)
+    _require_equal(_first_cache_directory(deployment), spec["cache_root"], f"{service_id} deployment cache root", errors, checks)
+    _require_equal(env.get(str(spec["env_root"])), spec["cache_root"], f"{service_id} deployment env cache root", errors, checks)
+    _require_arg(args, "--gpu-memory-utilization", spec["gpu_memory_utilization"], f"{service_id} deployment GPU memory cap", errors, checks)
+    if service_id == "dsv4_flash_pp8":
+        _check_dsv4_hma_connector(connector, env, errors, checks)
+
+
+def _first3_deployment_for_service(service_id: str, service: dict[str, Any], errors: list[str]) -> dict[str, Any] | None:
+    profile = _profile_by_id(str(service.get("profile_id")))
+    routing = profile.get("routing") if isinstance(profile.get("routing"), dict) else {}
+    deployments = routing.get("optional_kv_cache_deployments", [])
+    if len(deployments) != 1:
+        errors.append(f"{service_id}: expected exactly one optional KV deployment")
+        return None
+    return _load(ROOT / str(deployments[0]))
+
+
+def _check_dsv4_hma_connector(connector: dict[str, Any], env: dict[str, Any], errors: list[str], checks: list[str]) -> None:
+    extra = connector.get("kv_connector_extra_config") if isinstance(connector.get("kv_connector_extra_config"), dict) else {}
+    _require_equal(extra.get("spec_name"), "SimpleCPUOffloadingSpec", "Dsv4 HMA SimpleCPUOffload spec", errors, checks)
+    _require_equal(env.get("VLLM_USE_SIMPLE_KV_OFFLOAD"), "1", "Dsv4 HMA simple offload runtime enabled", errors, checks)
+
+
+def _check_first3_gpu_sum(errors: list[str], checks: list[str]) -> None:
+    gpu_sum = sum(float(spec["gpu_memory_utilization"]) for spec in FIRST3_EXTERNAL_CACHE.values())
+    if gpu_sum > 0.85:
+        errors.append(f"first-three GPU memory cap sum {gpu_sum:.2f} exceeds 0.85")
+    else:
+        checks.append("first-three GPU memory cap sum leaves deployment headroom")
+
+
 def _check_relaunch_defaults(profile: dict[str, Any], errors: list[str], checks: list[str]) -> None:
     module = _load_module(ROOT / "scripts" / "ds4_relaunch_coordinator_api.py")
     defaults = module._profile_defaults(str(profile["coordinator_profile"]))
@@ -249,6 +337,21 @@ def _scheduler_value(service: dict[str, Any], scheduler: dict[str, Any], key: st
     if key in {"queue_concurrency", "queue_limit", "vllm_max_num_seqs"}:
         return service.get("max_batch_size")
     return None
+
+
+def _profile_by_id(profile_id: str) -> dict[str, Any]:
+    for path in sorted((ROOT / "profiles" / "models").glob("*.json")):
+        data = _load(path)
+        if str(data.get("profile_id")) == profile_id:
+            return data
+    raise ValueError(f"unknown profile id: {profile_id}")
+
+
+def _first_cache_directory(deployment: dict[str, Any]) -> str:
+    directories = deployment.get("cache_directories")
+    if isinstance(directories, list) and directories:
+        return str(directories[0])
+    return ""
 
 
 def _check_spark_update_scripts(errors: list[str], checks: list[str]) -> None:

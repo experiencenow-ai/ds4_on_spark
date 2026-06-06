@@ -9,6 +9,22 @@ from .topology import SparkTopology
 
 READINESS_FORMAT = "ds4-deployment-readiness-v1"
 DEFAULT_FIRST3_SERVICES = ("qwen27_bf16_pp8", "gemma4_26b_a4b_pp8", "dsv4_flash_pp8")
+FIRST3_GPU_UTILIZATION_HARD_CAP = 0.85
+FIRST3_CACHE_CONNECTORS = {
+    "qwen27_bf16_pp8": "lmcache",
+    "gemma4_26b_a4b_pp8": "lmcache",
+    "dsv4_flash_pp8": "simple_cpu_offload",
+}
+FIRST3_CACHE_BACKENDS = {
+    "qwen27_bf16_pp8": "lmcache_hma",
+    "gemma4_26b_a4b_pp8": "lmcache_hma",
+    "dsv4_flash_pp8": "dsv4_hma",
+}
+FIRST3_GPU_UTILIZATION_FLOORS = {
+    "qwen27_bf16_pp8": 0.20,
+    "gemma4_26b_a4b_pp8": 0.20,
+    "dsv4_flash_pp8": 0.30,
+}
 
 
 def deployment_readiness(
@@ -39,6 +55,9 @@ def deployment_readiness(
     )
     for service in services:
         _pipeline_checks(checks, service)
+    _external_kv_checks(checks, services=services)
+    gpu_budget = _gpu_budget_by_service(services)
+    _resident_gpu_budget_checks(checks, services=services, gpu_budget=gpu_budget)
     _jit_kv_checks(checks, strict=strict)
     return _readiness_payload(
         checks=checks,
@@ -50,6 +69,7 @@ def deployment_readiness(
         dispatcher_window=dispatcher_window,
         dispatcher_refill_batch=dispatcher_refill_batch,
         dispatcher_cohort_workers=dispatcher_cohort_workers,
+        gpu_budget=gpu_budget,
     )
 
 
@@ -129,6 +149,7 @@ def _readiness_payload(
     dispatcher_window: int,
     dispatcher_refill_batch: int,
     dispatcher_cohort_workers: int,
+    gpu_budget: dict[str, float],
 ) -> dict[str, Any]:
     errors = [item for item in checks if item["severity"] == "error" and not item["ok"]]
     warnings = [item for item in checks if item["severity"] == "warning" and not item["ok"]]
@@ -143,6 +164,10 @@ def _readiness_payload(
         "dispatcher_window": int(dispatcher_window),
         "dispatcher_refill_batch": int(dispatcher_refill_batch),
         "dispatcher_cohort_workers": int(dispatcher_cohort_workers),
+        "resident_gpu_memory_utilization": gpu_budget,
+        "resident_gpu_memory_utilization_sum": round(sum(gpu_budget.values()), 6),
+        "resident_kv_backends": {service.service_id: str(service.kv_cache.get("external_backend") or "") for service in services},
+        "resident_kv_connectors": {service.service_id: str(service.kv_cache.get("connector_id") or "") for service in services},
         "hard_error_count": len(errors),
         "warning_count": len(warnings),
         "checks": checks,
@@ -198,6 +223,139 @@ def _pipeline_checks(checks: list[dict[str, Any]], service: Any) -> None:
         "no pipeline stage has zero layers",
         details={"partition": list(service.layer_partition)},
     )
+
+
+def _external_kv_checks(checks: list[dict[str, Any]], *, services: list[Any]) -> None:
+    for service in services:
+        _external_kv_service_checks(checks, service)
+
+
+def _external_kv_service_checks(checks: list[dict[str, Any]], service: Any) -> None:
+    kv_cache = dict(getattr(service, "kv_cache", {}) or {})
+    connector_id = str(kv_cache.get("connector_id") or "")
+    cache_root = str(kv_cache.get("cache_root") or kv_cache.get("storage_root") or "")
+    backend = str(kv_cache.get("external_backend") or "")
+    _external_kv_root_connector_checks(checks, service, cache_root, connector_id)
+    _external_kv_backend_checks(checks, service, backend, connector_id)
+    _external_kv_sharding_checks(checks, service, kv_cache)
+
+
+def _external_kv_root_connector_checks(
+    checks: list[dict[str, Any]], service: Any, cache_root: str, connector_id: str
+) -> None:
+    _check(
+        checks,
+        bool(cache_root),
+        f"{service.service_id}:external_kv_cache_root",
+        "active resident service declares a node-local external KV cache root",
+        details={"cache_root": cache_root},
+    )
+    _check(
+        checks,
+        bool(connector_id) and connector_id != "none",
+        f"{service.service_id}:external_kv_connector_present",
+        "active resident service declares a non-cold external KV connector",
+        details={"connector_id": connector_id},
+    )
+
+
+def _external_kv_backend_checks(
+    checks: list[dict[str, Any]], service: Any, backend: str, connector_id: str
+) -> None:
+    expected_connector = FIRST3_CACHE_CONNECTORS.get(service.service_id)
+    expected_backend = FIRST3_CACHE_BACKENDS.get(service.service_id)
+    if expected_connector is not None:
+        _check(
+            checks,
+            connector_id == expected_connector,
+            f"{service.service_id}:external_kv_connector_expected",
+            "active resident service uses the expected first-three external KV connector",
+            details={"expected": expected_connector, "actual": connector_id},
+        )
+    if expected_backend is not None:
+        _check(
+            checks,
+            backend == expected_backend,
+            f"{service.service_id}:external_kv_backend_expected",
+            "active resident service uses the expected first-three external KV backend",
+            details={"expected": expected_backend, "actual": backend},
+        )
+
+
+def _external_kv_sharding_checks(checks: list[dict[str, Any]], service: Any, kv_cache: dict[str, Any]) -> None:
+    expected_fraction = 1.0 / max(1, len(service.node_ids))
+    actual_fraction = _float_or_none(kv_cache.get("expected_entry_fraction_per_node"))
+    _check(
+        checks,
+        str(kv_cache.get("sharding", "")) == "pipeline_layers",
+        f"{service.service_id}:external_kv_pipeline_sharded",
+        "external KV entries are sharded by pipeline stage",
+        details={"sharding": kv_cache.get("sharding")},
+    )
+    _check(
+        checks,
+        actual_fraction is not None and abs(actual_fraction - expected_fraction) < 0.000001,
+        f"{service.service_id}:external_kv_node_fraction",
+        "external KV node fraction matches the pipeline width",
+        details={"expected": expected_fraction, "actual": actual_fraction},
+    )
+
+
+def _resident_gpu_budget_checks(checks: list[dict[str, Any]], *, services: list[Any], gpu_budget: dict[str, float]) -> None:
+    missing = [service.service_id for service in services if service.service_id not in gpu_budget]
+    _check(
+        checks,
+        not missing,
+        "resident_gpu_budget_declared",
+        "active resident services declare GPU memory utilization caps",
+        details={"missing": missing, "budget": gpu_budget},
+    )
+    total = sum(gpu_budget.values())
+    _check(
+        checks,
+        total <= FIRST3_GPU_UTILIZATION_HARD_CAP,
+        "first3_gpu_budget_under_hard_cap",
+        "first-three resident GPU memory utilization leaves deployment headroom",
+        details={"sum": round(total, 6), "hard_cap": FIRST3_GPU_UTILIZATION_HARD_CAP},
+    )
+    for service in services:
+        value = gpu_budget.get(service.service_id)
+        floor = FIRST3_GPU_UTILIZATION_FLOORS.get(service.service_id)
+        if value is None or floor is None:
+            continue
+        _check(
+            checks,
+            value >= floor,
+            f"{service.service_id}:gpu_budget_not_starved",
+            "GPU memory utilization cap is not below the known first-three service floor",
+            details={"value": value, "floor": floor},
+            severity="warning",
+        )
+    dsv4 = gpu_budget.get("dsv4_flash_pp8")
+    if dsv4 is not None:
+        _check(
+            checks,
+            dsv4 < 0.35,
+            "dsv4_gpu_budget_below_no_headroom_startup_point",
+            "DSV4 GPU cap stays below the observed 0.35 no-headroom startup failure point",
+            details={"value": dsv4, "failed_startup_point": 0.35},
+        )
+
+
+def _gpu_budget_by_service(services: list[Any]) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for service in services:
+        value = _float_or_none(dict(getattr(service, "kv_cache", {}) or {}).get("gpu_memory_utilization"))
+        if value is not None:
+            out[service.service_id] = value
+    return out
+
+
+def _float_or_none(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _jit_kv_checks(checks: list[dict[str, Any]], *, strict: bool) -> None:

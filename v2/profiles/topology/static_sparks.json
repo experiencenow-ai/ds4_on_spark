@@ -1,5 +1,5 @@
 {
-  "description": "Dual all-Spark pipeline topology. spark0 is the only queue/API ingress. Qwen27 BF16 and DSV4 Flash are both resident across spark0-7 as layer pipelines; KV cache entries are sharded by pipeline stage instead of replicated per possible worker.",
+  "description": "First-three all-Spark pipeline topology. spark0 is the only queue/API ingress. Qwen27 BF16, Gemma4 26B-A4B, and DSV4 Flash are resident across spark0-7 as layer pipelines; KV cache entries are sharded by pipeline stage instead of replicated per possible worker.",
   "format": "ds4-spark-topology-v1",
   "nodes": [
     {
@@ -9,7 +9,7 @@
       "node_id": "spark0",
       "resident_profiles": [
         "qwen3_6_27b_bf16_pp8_efficient_v1",
-        "qwen3_6_27b_bf16_pp8_bf16kv_efficient_v1",
+        "gemma4_26b_a4b_it_pp8_peer_v1",
         "dsv4_vllm_mtp_pp8_smartest_v1"
       ],
       "roles": [
@@ -26,7 +26,7 @@
       "node_id": "spark1",
       "resident_profiles": [
         "qwen3_6_27b_bf16_pp8_efficient_v1",
-        "qwen3_6_27b_bf16_pp8_bf16kv_efficient_v1",
+        "gemma4_26b_a4b_it_pp8_peer_v1",
         "dsv4_vllm_mtp_pp8_smartest_v1"
       ],
       "roles": [
@@ -41,7 +41,7 @@
       "node_id": "spark2",
       "resident_profiles": [
         "qwen3_6_27b_bf16_pp8_efficient_v1",
-        "qwen3_6_27b_bf16_pp8_bf16kv_efficient_v1",
+        "gemma4_26b_a4b_it_pp8_peer_v1",
         "dsv4_vllm_mtp_pp8_smartest_v1"
       ],
       "roles": [
@@ -56,7 +56,7 @@
       "node_id": "spark3",
       "resident_profiles": [
         "qwen3_6_27b_bf16_pp8_efficient_v1",
-        "qwen3_6_27b_bf16_pp8_bf16kv_efficient_v1",
+        "gemma4_26b_a4b_it_pp8_peer_v1",
         "dsv4_vllm_mtp_pp8_smartest_v1"
       ],
       "roles": [
@@ -71,7 +71,7 @@
       "node_id": "spark4",
       "resident_profiles": [
         "qwen3_6_27b_bf16_pp8_efficient_v1",
-        "qwen3_6_27b_bf16_pp8_bf16kv_efficient_v1",
+        "gemma4_26b_a4b_it_pp8_peer_v1",
         "dsv4_vllm_mtp_pp8_smartest_v1"
       ],
       "roles": [
@@ -86,7 +86,7 @@
       "node_id": "spark5",
       "resident_profiles": [
         "qwen3_6_27b_bf16_pp8_efficient_v1",
-        "qwen3_6_27b_bf16_pp8_bf16kv_efficient_v1",
+        "gemma4_26b_a4b_it_pp8_peer_v1",
         "dsv4_vllm_mtp_pp8_smartest_v1"
       ],
       "roles": [
@@ -101,7 +101,7 @@
       "node_id": "spark6",
       "resident_profiles": [
         "qwen3_6_27b_bf16_pp8_efficient_v1",
-        "qwen3_6_27b_bf16_pp8_bf16kv_efficient_v1",
+        "gemma4_26b_a4b_it_pp8_peer_v1",
         "dsv4_vllm_mtp_pp8_smartest_v1"
       ],
       "roles": [
@@ -116,7 +116,7 @@
       "node_id": "spark7",
       "resident_profiles": [
         "qwen3_6_27b_bf16_pp8_efficient_v1",
-        "qwen3_6_27b_bf16_pp8_bf16kv_efficient_v1",
+        "gemma4_26b_a4b_it_pp8_peer_v1",
         "dsv4_vllm_mtp_pp8_smartest_v1"
       ],
       "roles": [
@@ -146,19 +146,22 @@
         "dtype": "mixed-fp4-fp8",
         "entry_node_id": "spark0",
         "kv_cache": {
-          "cache_root": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8",
+          "cache_root": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload",
+          "connector_id": "simple_cpu_offload",
           "expected_entry_fraction_per_node": 0.125,
+          "external_backend": "dsv4_hma",
+          "gpu_memory_utilization": 0.33,
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
-          5,
-          6,
-          6,
-          6,
-          6,
+          4,
           5,
           5,
-          4
+          6,
+          6,
+          5,
+          6,
+          6
         ],
         "max_batch_size": 64,
         "model_id": "/home/{node}/models/hf/deepseek-ai/DeepSeek-V4-Flash",
@@ -246,7 +249,11 @@
         "dtype": "bfloat16",
         "entry_node_id": "spark0",
         "kv_cache": {
+          "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv",
+          "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.125,
+          "external_backend": "lmcache_hma",
+          "gpu_memory_utilization": 0.25,
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
@@ -443,7 +450,10 @@
         "entry_node_id": "spark0",
         "kv_cache": {
           "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv",
+          "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.125,
+          "external_backend": "lmcache_hma",
+          "gpu_memory_utilization": 0.25,
           "sharding": "pipeline_layers"
         },
         "layer_partition": [

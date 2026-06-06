@@ -57,13 +57,33 @@ class StaticSparkTopologyTests(unittest.TestCase):
         capacity = topology.estimate_capacity_by_profile()
         self.assertEqual(capacity[QWEN_PP], 64)
         self.assertEqual(capacity[QWEN_BF16KV_PP], 64)
+        self.assertEqual(capacity[GEMMA26_PP], 64)
         self.assertEqual(capacity[DSV4_PP], DSV4_PRODUCTION["max_num_seqs"])
         self.assertNotIn("qwen3_6_27b_fp8_efficient_v1", capacity)
         self.assertNotIn("dsv4_vllm_mtp_smartest_v1", capacity)
+        for node in topology.nodes:
+            self.assertEqual(set(node.resident_profiles), {QWEN_PP, GEMMA26_PP, DSV4_PP})
         self.assertEqual(
             topology.routing_policy["active_resident_service_ids"],
             ["qwen27_bf16_pp8", "gemma4_26b_a4b_pp8", "dsv4_flash_pp8"],
         )
+
+    def test_first_three_services_declare_external_cache_backends_and_safe_gpu_caps(self) -> None:
+        topology = SparkTopology.load(TOPOLOGY)
+        expected = {
+            "qwen27_bf16_pp8": ("lmcache_hma", "lmcache", "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv", 0.25),
+            "gemma4_26b_a4b_pp8": ("lmcache_hma", "lmcache", "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv", 0.25),
+            "dsv4_flash_pp8": ("dsv4_hma", "simple_cpu_offload", "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload", 0.33),
+        }
+
+        for service_id, (backend, connector_id, cache_root, gpu_cap) in expected.items():
+            kv_cache = topology.pipeline_service_by_id(service_id).kv_cache
+            self.assertEqual(kv_cache["external_backend"], backend)
+            self.assertEqual(kv_cache["connector_id"], connector_id)
+            self.assertEqual(kv_cache["cache_root"], cache_root)
+            self.assertEqual(kv_cache["gpu_memory_utilization"], gpu_cap)
+            self.assertEqual(kv_cache["sharding"], "pipeline_layers")
+        self.assertLessEqual(sum(item[3] for item in expected.values()), 0.85)
 
     def test_pipeline_scheduler_batch_defaults_follow_model_capacity(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
