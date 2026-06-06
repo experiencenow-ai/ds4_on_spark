@@ -6,7 +6,7 @@
   "connector": {
     "connector_id": "simple_cpu_offload",
     "kv_connector_extra_config": {
-      "cpu_bytes_to_use": "1073741824",
+      "cpu_bytes_to_use": "536870912",
       "eviction_policy": "lru",
       "lazy_offload": true,
       "spec_name": "SimpleCPUOffloadingSpec"
@@ -22,18 +22,18 @@
     "--max-model-len",
     "262144",
     "--max-num-batched-tokens",
-    "2048",
+    "1024",
     "--kv-cache-memory-bytes",
-    "1073741824",
+    "536870912",
     "--gpu-memory-utilization",
-    "0.12",
+    "0.08",
     "--block-size",
     "256",
     "--kv-cache-dtype",
     "fp8",
     "--enable-prefix-caching",
     "--kv-offloading-size",
-    "1",
+    "0.5",
     "--kv-offloading-backend",
     "native",
     "--linear-backend",
@@ -95,7 +95,7 @@
     "VLLM_DS4_PP_TORCH_GROUP_WARMUP": "0",
     "VLLM_DS4_PP_OVERLAP_SEND": "1",
     "VLLM_DS4_PP_SEND_BUFFER_SLOTS": "4",
-    "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "4",
+    "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "2",
     "VLLM_DS4_FINAL_ONLY_NONSTREAMING": "1",
     "VLLM_DS4_SM12X_MQA_TOPK_CUDA_SELECT": "1"
   },
@@ -104,14 +104,14 @@
   "host": "0.0.0.0",
   "http_port": 8102,
   "layer_partition": [
+    1,
     2,
-    3,
-    3,
-    7,
-    7,
+    1,
     8,
     8,
-    5
+    8,
+    7,
+    8
   ],
   "master_addr": "10.10.100.10",
   "master_port": 29544,
@@ -140,6 +140,6 @@
   ],
   "working_directory": "/home/{node}/src/ds4_on_spark/v2",
   "performance_mode": "native_blackwell_strict_fastpath",
-  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 4-sequence admission, 2048-token compile range, and 1GiB resident/offload KV per rank; raise DSV4 limits only for DSV4-only runs.",
-  "max_batch_size": 4
+  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 2-sequence admission, 1024-token compile range, and 512MiB resident/offload KV per rank; raise DSV4 limits only after live all-three memory proof.",
+  "max_batch_size": 2
 }

@@ -20,7 +20,7 @@
       "profiles": ["dsv4_vllm_mtp_pp8_smartest_v1"],
       "purpose": "Verify the DSV4 Flash pipeline launched from the vLLM repo exposes the OpenAI API on spark0.",
       "command_template": "curl -fsS http://spark0:8102/v1/models",
-      "acceptance": ["all eight ranks stay running", "rank0 serves /v1/models on spark0:8102", "startup logs show SimpleCPUOffloadConnector/native KV offload", "startup logs do not show DeepSeek MTP speculative config", "VLLM_PP_LAYER_PARTITION is 2,3,3,7,7,8,8,5", "DSV4 precision and KV cache dtype remain mixed checkpoint/fp8 cache"]
+      "acceptance": ["all eight ranks stay running", "rank0 serves /v1/models on spark0:8102", "startup logs show SimpleCPUOffloadConnector/native KV offload", "startup logs do not show DeepSeek MTP speculative config", "VLLM_PP_LAYER_PARTITION is 1,2,1,8,8,8,7,8", "DSV4 precision and KV cache dtype remain mixed checkpoint/fp8 cache"]
     },
     {
       "task_id": "xhv-003-single-ingress-queue-submit",
