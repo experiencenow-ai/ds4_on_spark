@@ -113,7 +113,8 @@
       "MAX_JOBS": "1",
       "CMAKE_BUILD_PARALLEL_LEVEL": "1",
       "TORCHINDUCTOR_COMPILE_THREADS": "1",
-      "NVCC_THREADS": "1"
+      "NVCC_THREADS": "1",
+      "VLLM_DEEP_GEMM_WARMUP": "skip"
     }
   }
 }

@@ -112,6 +112,7 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertEqual(env["CMAKE_BUILD_PARALLEL_LEVEL"], "1")
         self.assertEqual(env["TORCHINDUCTOR_COMPILE_THREADS"], "1")
         self.assertEqual(env["NVCC_THREADS"], "1")
+        self.assertEqual(env["VLLM_DEEP_GEMM_WARMUP"], "skip")
 
     def test_dsv4_warmup_runner_stops_peers_and_launches_dsv4_without_probe(self) -> None:
         warm = load_script(WARM_SCRIPT)

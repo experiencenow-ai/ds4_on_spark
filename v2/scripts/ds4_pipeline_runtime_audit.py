@@ -114,6 +114,7 @@ def _check_dsv4_env(profile: dict[str, Any], env: dict[str, Any], errors: list[s
         "TP_SOCKET_IFNAME": "ds4ring0",
         "VLLM_HOST_IP": "{fabric_ip}",
         "VLLM_MQ_MAX_CHUNKS": "64",
+        "VLLM_DEEP_GEMM_WARMUP": "skip",
         "DS4_PP_TRANSPORT": str(profile["pp_transport"]),
         "VLLM_DS4_PP_EDGE_RAIL": str(profile["pp_edge_rail"]),
         "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR": "1",

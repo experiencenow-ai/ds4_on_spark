@@ -44,6 +44,7 @@ class PipelineRuntimeAuditTests(unittest.TestCase):
         self.assertTrue((ROOT / profile["memory_budget"]).exists())
         self.assertTrue(profile["warmup"]["required_before_first3_residency"])
         self.assertEqual(profile["warmup"]["script"], "scripts/ds4_warm_dsv4_flashinfer_cache.py")
+        self.assertEqual(profile["warmup"]["compile_env"]["VLLM_DEEP_GEMM_WARMUP"], "skip")
 
     def test_first3_memory_budget_tracks_profile_partitions_and_gpu_caps(self) -> None:
         budget = json.loads(FIRST3_MEMORY_BUDGET.read_text(encoding="utf-8"))
