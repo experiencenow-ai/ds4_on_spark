@@ -6,7 +6,7 @@
     "world_model_deep"
   ],
   "format": "ds4-model-profile-v1",
-  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "model_id": "/home/{node}/models/hf/deepseek-ai/DeepSeek-V4-Flash",
   "performance": {
     "latency_rank": 2.0,
     "target": "8-stage layer pipeline; native Blackwell DeepGEMM/MXFP4 fast path; no Marlin/emulation fallback; MTP enabled",

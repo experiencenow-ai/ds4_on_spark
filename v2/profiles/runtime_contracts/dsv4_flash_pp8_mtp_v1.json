@@ -55,7 +55,7 @@
     "port": 8102
   },
   "model": {
-    "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+    "model_id": "/home/{node}/models/hf/deepseek-ai/DeepSeek-V4-Flash",
     "served_model_name": "deepseek-v4-flash"
   },
   "pipeline": {

@@ -228,7 +228,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(profile.profile_id, DSV4_PP)
         self.assertFalse(profile.production_eligible)
         self.assertTrue(profile.routing["requires_profile_pin"])
-        self.assertEqual(profile.model_id, "deepseek-ai/DeepSeek-V4-Flash")
+        self.assertEqual(profile.model_id, "/home/{node}/models/hf/deepseek-ai/DeepSeek-V4-Flash")
         self.assertEqual(assignment.node_id, "spark0")
         self.assertEqual(assignment.node_ids, ALL_SPARKS)
         self.assertEqual(assignment.service_id, "dsv4_flash_pp8")

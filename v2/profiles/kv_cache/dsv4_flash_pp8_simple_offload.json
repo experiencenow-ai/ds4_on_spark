@@ -115,7 +115,7 @@
   ],
   "master_addr": "10.10.100.10",
   "master_port": 29544,
-  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "model_id": "/home/{node}/models/hf/deepseek-ai/DeepSeek-V4-Flash",
   "pipeline_parallel_size": 8,
   "profile_id": "dsv4_vllm_mtp_pp8_smartest_v1",
   "python_bin": "/home/{node}/ds4-vllm-local/bin/python",
