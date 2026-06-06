@@ -51,6 +51,23 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
 
         self.assertEqual(lifecycle._expand_actions(["relaunch"]), ["pull", "stop", "write-scripts", "launch", "probe"])
 
+    def test_remote_launch_expands_home_paths_before_quoting(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        entries = lifecycle._load_entries(str(ROOT / "profiles" / "topology" / "static_sparks.json"), str(ROOT / "profiles" / "models"))
+        entry = [item for item in entries if item["service_id"] == "gemma4_12b_pp8"][0]
+        args = type("Args", (), {
+            "remote_repo": "$HOME/src/ds4_on_spark",
+            "launch_root": "$HOME/.cache/ds4_pipeline_lifecycle",
+            "log_dir": "$HOME/ds4_logs/pipeline_lifecycle",
+        })()
+
+        script = lifecycle._remote_launch(entry, 0, "spark0", args)
+
+        self.assertIn('launch_dir="${launch_dir/#\\$HOME/$HOME}"', script)
+        self.assertIn('log_dir="${log_dir/#\\$HOME/$HOME}"', script)
+        self.assertIn('nohup bash "$script" > "$log"', script)
+        self.assertIn('log=%s\\n" "$!" "$log"', script)
+
     def test_kill_needles_include_service_profile_and_model_names(self) -> None:
         lifecycle = load_script(SCRIPT)
         entries = lifecycle._load_entries(str(ROOT / "profiles" / "topology" / "static_sparks.json"), str(ROOT / "profiles" / "models"))

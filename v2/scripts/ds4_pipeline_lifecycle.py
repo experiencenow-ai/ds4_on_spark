@@ -196,16 +196,14 @@ def _emit_rows(rows: list[dict[str, object]], args: argparse.Namespace) -> None:
 
 
 def _remote_write(entry: dict[str, object], args: argparse.Namespace) -> str:
-    out = _remote_path(args.launch_root, str(entry["service_id"]))
-    return _repo(args) + f'\nmkdir -p {shlex.quote(out)}\nDS4_PIPELINE_LIFECYCLE=1 PYTHONPATH=src python3 -m ds4_kvcache.cli write-scripts --deployment {shlex.quote(str(entry["deployment_rel"]))} --output-dir {shlex.quote(out)}'
+    launch_dir = _remote_path_assign("launch_dir", args.launch_root, str(entry["service_id"]))
+    return _repo(args) + f'\n{launch_dir}\nmkdir -p "$launch_dir"\nDS4_PIPELINE_LIFECYCLE=1 PYTHONPATH=src python3 -m ds4_kvcache.cli write-scripts --deployment {shlex.quote(str(entry["deployment_rel"]))} --output-dir "$launch_dir"'
 
 
 def _remote_launch(entry: dict[str, object], rank: int, node: str, args: argparse.Namespace) -> str:
-    out = _remote_path(args.launch_root, str(entry["service_id"]))
-    log_dir = _remote_path(args.log_dir, str(entry["service_id"]))
-    script = f"{out}/start_vllm_rank{rank}_{node}.sh"
-    log = f"{log_dir}/rank{rank}_{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}.log"
-    return _remote_write(entry, args) + f'\nmkdir -p {shlex.quote(log_dir)}\ntest -x {shlex.quote(script)}\nnohup bash {shlex.quote(script)} > {shlex.quote(log)} 2>&1 < /dev/null &\nprintf "started {entry["service_id"]} rank={rank} node={node} pid=%s log={log}\\n" "$!"'
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    log_dir = _remote_path_assign("log_dir", args.log_dir, str(entry["service_id"]))
+    return _remote_write(entry, args) + f'\n{log_dir}\nscript="$launch_dir/start_vllm_rank{rank}_{node}.sh"\nlog="$log_dir/rank{rank}_{stamp}.log"\nmkdir -p "$log_dir"\ntest -x "$script"\nnohup bash "$script" > "$log" 2>&1 < /dev/null &\nprintf "started {entry["service_id"]} rank={rank} node={node} pid=%s log=%s\\n" "$!" "$log"'
 
 
 def _remote_status(entry: dict[str, object]) -> str:
@@ -247,6 +245,11 @@ def _nodes(entries: list[dict[str, object]]) -> list[str]:
 
 def _remote_path(root: str, leaf: str) -> str:
     return root.rstrip("/") + "/" + leaf
+
+
+def _remote_path_assign(name: str, root: str, leaf: str) -> str:
+    path = _remote_path(root, leaf)
+    return f'{name}={shlex.quote(path)}\n{name}="${{{name}/#\\~/$HOME}}"\n{name}="${{{name}/#\\$HOME/$HOME}}"'
 
 
 def _load(path: Path) -> dict[str, object]:
