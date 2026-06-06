@@ -5,7 +5,7 @@ usage()
 {
 	local code="${1:-2}"
 	cat >&2 <<'EOF'
-usage: scripts/ds4_update_spark_nodes.sh [--code-only|--runtime-config] [spark0 spark1 ...]
+usage: scripts/ds4_update_spark_nodes.sh [--code-only] [spark0 spark1 ...]
 
 Updates reachable Spark nodes to the merged DS4 repo ref. The default mode is
 --code-only: pull origin/main on all reachable Spark checkouts and do not touch
@@ -13,26 +13,26 @@ runtime env, systemd units, or running services.
 
 Modes:
   --code-only                  pull Spark checkouts only; no service side effects
-  --runtime-config             pull code, configure Qwen runtime, install DSV4 units
+  --runtime-config             DISABLED; use v2/scripts/ds4_pipeline_lifecycle.py
   --self-update                fetch/detach this Mac checkout before running
   --restart-qwen               restart Qwen gateways after runtime env update
-  --restart-dsv4               restart spark5 worker then spark4 head
+  --restart-dsv4               DISABLED; use v2/scripts/ds4_pipeline_lifecycle.py
 
 Important environment knobs:
-  DS4_UPDATE_MODE=code-only       code-only or runtime-config
+  DS4_UPDATE_MODE=code-only       code-only only
   DS4_SELF_UPDATE=0               set 1 to fetch/detach this local worktree first
   DS4_UPDATE_REF=origin/main        git ref to deploy on each Spark checkout
   DS4_REMOTE_REPO=$HOME/src/ds4_on_spark remote repo path on each Spark
   DS4_CONFIGURE_QWEN_RUNTIME=0     set 1 to point Qwen gateways at host-local vLLM
   DS4_RESTART_QWEN=0               restart Qwen model gateways after env update
   DS4_QWEN_RUNTIME_TARGET=...      trim-capable target for ~/ds4-vllm-local
-  DS4_INSTALL_DSV4_LOCAL=0         set 1 to install spark4/spark5 local vLLM units
-  DS4_RESTART_DSV4=0               set 1 to restart spark5 worker then spark4 head
+  DS4_INSTALL_DSV4_LOCAL=0         must remain 0; old spark4/spark5 lane is disabled
+  DS4_RESTART_DSV4=0               must remain 0; use the lifecycle runner
   DS4_DSV4_KV_OFFLOAD_SIZE=4       recovery-safe total GiB for spark4+spark5
 
 Zero-drift rule:
-  this script refuses local sync payloads and installs service units from the
-  pulled Spark checkout, not from the Mac working tree.
+  this script refuses local sync payloads and only updates clean Spark
+  checkouts. Resident pipeline launch is handled by the lifecycle runner.
 EOF
 	exit "$code"
 }
@@ -54,7 +54,8 @@ do
 		update_mode="code-only"
 		;;
 	--runtime-config|--configure-runtime)
-		update_mode="runtime-config"
+		echo "ERROR: --runtime-config is disabled; use v2/scripts/ds4_pipeline_lifecycle.py" >&2
+		exit 64
 		;;
 	--self-update)
 		DS4_SELF_UPDATE=1
@@ -63,7 +64,8 @@ do
 		DS4_RESTART_QWEN=1
 		;;
 	--restart-dsv4)
-		DS4_RESTART_DSV4=1
+		echo "ERROR: --restart-dsv4 is disabled; use v2/scripts/ds4_pipeline_lifecycle.py --service dsv4_flash_pp8 relaunch --execute" >&2
+		exit 64
 		;;
 	--)
 		shift
@@ -92,9 +94,8 @@ code-only)
 	default_install_dsv4_local=0
 	;;
 runtime-config)
-	default_self_update=1
-	default_configure_qwen_runtime=1
-	default_install_dsv4_local=1
+	echo "ERROR: DS4_UPDATE_MODE=runtime-config is disabled; use v2/scripts/ds4_pipeline_lifecycle.py" >&2
+	exit 64
 	;;
 *)
 	echo "unknown DS4_UPDATE_MODE: $update_mode" >&2
@@ -123,6 +124,10 @@ dsv4_pythonhashseed="${DS4_DSV4_PYTHONHASHSEED:-0}"
 if [ "$update_remote" != "origin" ] || [ "$update_branch" != "main" ] || [ "$update_ref" != "origin/main" ]; then
 	echo "zero-drift deployment requires DS4_UPDATE_REMOTE=origin DS4_UPDATE_BRANCH=main DS4_UPDATE_REF=origin/main" >&2
 	exit 13
+fi
+if [ "$install_dsv4_local" != "0" ] || [ "$restart_dsv4" != "0" ]; then
+	echo "ERROR: deprecated spark4/spark5 DSV4 unit install/restart is disabled; use v2/scripts/ds4_pipeline_lifecycle.py --service dsv4_flash_pp8 relaunch --execute" >&2
+	exit 64
 fi
 
 self_update_local_checkout()

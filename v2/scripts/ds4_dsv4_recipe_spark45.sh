@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "ERROR: deprecated spark4/spark5 Docker DSV4 recipe is disabled." >&2
+echo "Use the shared all-Spark lifecycle runner instead:" >&2
+echo "  cd ~/src/ds4_on_spark/v2" >&2
+echo "  python3 scripts/ds4_pipeline_lifecycle.py --service dsv4_flash_pp8 relaunch --execute" >&2
+exit 64
+
 mode="${1:-start}"
 recipe_repo="${DS4_DSV4_RECIPE_RUNNER_DIR:-$HOME/spark-vllm-docker}"
 recipe_source="${DS4_DSV4_RECIPE_SOURCE:-$HOME/ds4_on_spark/v2/recipes/deepseek-v4-flash-spark45.yaml}"

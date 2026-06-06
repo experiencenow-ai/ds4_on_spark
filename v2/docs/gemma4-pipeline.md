@@ -53,23 +53,35 @@ from the current DSV4 PP8 deployment: `DS4_PP_TRANSPORT=tcp-staged` and
 200G fabric because the first live PP8 bring-up otherwise advertised loopback
 addresses during process-group formation.
 
-## Plan or write launch scripts
+## Lifecycle runner
 
-From a Spark checkout:
+Use the shared pipeline lifecycle runner for Gemma bring-up, the same as Qwen
+and DSV4. Do not keep Gemma-specific SSH launch notes outside the repo script.
+
+Dry-run the standard sequence first:
+
+```bash
+cd ~/src/ds4_on_spark/v2
+python3 scripts/ds4_pipeline_lifecycle.py --service gemma4_12b_pp8 relaunch
+```
+
+Then execute it:
+
+```bash
+python3 scripts/ds4_pipeline_lifecycle.py --service gemma4_12b_pp8 relaunch --execute
+```
+
+For direct plan inspection from a Spark checkout:
 
 ```bash
 cd ~/src/ds4_on_spark/v2
 PYTHONPATH=src python3 -m ds4_kvcache.cli plan \
   --deployment profiles/kv_cache/gemma4_12b_it_pp8_plain.json
-PYTHONPATH=src python3 -m ds4_kvcache.cli write-scripts \
-  --deployment profiles/kv_cache/gemma4_12b_it_pp8_plain.json \
-  --output-dir /tmp/ds4_gemma4_12b_pp8
 ```
 
 Use the matching `profiles/kv_cache/gemma4_*_plain.json` file for the other
-family members. The generated per-rank scripts expand `{node}` into the actual
-Spark node, so rank 7 serves from `/home/spark7/...` and uses
-`/home/spark7/src/ds4_on_spark/v2/src` as `PYTHONPATH`.
+family members. Runnable script generation for resident topology pipelines is
+deliberately gated behind `scripts/ds4_pipeline_lifecycle.py`.
 
 ## Request surface
 

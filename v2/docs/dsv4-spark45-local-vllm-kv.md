@@ -1,5 +1,13 @@
 # DSV4 Spark4/5 Local vLLM KV Recipe
 
+This runbook is historical. The spark4/spark5 DSV4 launcher and Docker recipe
+now exit with an error. Use the shared all-Spark lifecycle runner:
+
+```bash
+cd ~/src/ds4_on_spark/v2
+python3 scripts/ds4_pipeline_lifecycle.py --service dsv4_flash_pp8 relaunch --execute
+```
+
 This is the live-verified local install recipe for DeepSeek V4 Flash on
 spark4/spark5. It replaces the earlier Docker-backed service with a host-local
 vLLM runtime and keeps native DSV4 KV offload enabled.

@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Durable source runtime:
+echo "ERROR: deprecated spark4/spark5 DSV4 launcher is disabled." >&2
+echo "Use the shared all-Spark lifecycle runner instead:" >&2
+echo "  cd ~/src/ds4_on_spark/v2" >&2
+echo "  python3 scripts/ds4_pipeline_lifecycle.py --service dsv4_flash_pp8 relaunch --execute" >&2
+exit 64
+
+# Historical source runtime:
 # https://github.com/experiencenow-ai/vllm
 # c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34
 

@@ -14,6 +14,8 @@ STOP_SCRIPT = ROOT / "scripts" / "ds4_stop_coordinator_api.py"
 RELAUNCH_SCRIPT = ROOT / "scripts" / "ds4_relaunch_coordinator_api.py"
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
+STATIC_SPARKS_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
+STATIC_TOPOLOGY = json.loads(STATIC_SPARKS_TOPOLOGY.read_text(encoding="utf-8"))
 
 
 def load_script(path: Path):
@@ -77,6 +79,19 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_PIPELINE_INTERNAL_STREAM_ALL_COHORTS"], "1")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS"], "1")
         self.assertEqual(json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])[DSV4_PRODUCTION["service_id"]], DSV4_PRODUCTION["max_num_seqs"])
+
+    def test_relaunch_batch_limits_come_from_static_topology(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+
+        limits = relaunch._pipeline_batch_limits()
+        services = STATIC_TOPOLOGY["routing_policy"]["pipeline_services"]
+
+        self.assertEqual(set(limits), set(services))
+        for service_id, service in services.items():
+            scheduler = service.get("scheduler", {})
+            expected = int(scheduler.get("vllm_max_num_seqs") or service["max_batch_size"])
+            self.assertEqual(limits[service_id], expected)
+        self.assertNotIn("qwen27_nvfp4_pp8", limits)
 
     def test_relaunch_resident256_profile_widens_feed_without_kv_bloat(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)

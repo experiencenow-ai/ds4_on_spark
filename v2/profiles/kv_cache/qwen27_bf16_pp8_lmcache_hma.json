@@ -72,19 +72,19 @@
     8,
     5
   ],
-  "master_addr": "spark0",
+  "master_addr": "10.10.100.10",
   "master_port": 29527,
   "model_id": "Qwen/Qwen3.6-27B",
   "pipeline_parallel_size": 8,
   "profile_id": "qwen3_6_27b_bf16_pp8_efficient_v1",
-  "python_bin": "python3",
-  "pythonpath": "/home/spark0/ds4_on_spark/v2/src",
+  "python_bin": "/home/{node}/ds4-vllm-local/bin/python",
+  "pythonpath": "/home/{node}/src/ds4_on_spark/v2/src",
   "runtime_contract_id": "qwen27_bf16_pp8_v1",
   "served_model_name": "qwen27-bf16-pp8",
   "spark_node": "spark0",
   "tensor_parallel_size": 1,
   "text_only": true,
-  "vllm_bin": "vllm",
+  "vllm_bin": "/home/{node}/ds4-vllm-local/bin/python",
   "vllm_fork": "https://github.com/experiencenow-ai/vllm",
   "vllm_source_commit": "ds4-local-dual-pp-qwen36-lmcache-hma",
   "worker_nodes": [
@@ -97,5 +97,5 @@
     "spark6",
     "spark7"
   ],
-  "working_directory": "/home/spark0/ds4_on_spark/v2"
+  "working_directory": "/home/{node}/src/ds4_on_spark/v2"
 }

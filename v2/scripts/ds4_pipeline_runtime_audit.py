@@ -113,6 +113,9 @@ def _check_relaunch_defaults(profile: dict[str, Any], errors: list[str], checks:
     module = _load_module(ROOT / "scripts" / "ds4_relaunch_coordinator_api.py")
     defaults = module._profile_defaults(str(profile["coordinator_profile"]))
     coordinator = profile["coordinator"]
+    topology = _load(ROOT / "profiles" / "topology" / "static_sparks.json")
+    routing = topology.get("routing_policy") if isinstance(topology.get("routing_policy"), dict) else {}
+    services = routing.get("pipeline_services") if isinstance(routing.get("pipeline_services"), dict) else {}
     for key, profile_key in {
         "DS4_API_DISPATCH_WINDOW": "dispatch_window",
         "DS4_API_DISPATCH_REFILL_BATCH": "dispatch_refill_batch",
@@ -125,6 +128,13 @@ def _check_relaunch_defaults(profile: dict[str, Any], errors: list[str], checks:
         _require_equal(defaults.get(key), str(coordinator[profile_key]), f"coordinator {profile['coordinator_profile']} {key}", errors, checks)
     batch_limits = json.loads(defaults.get("DS4_API_BATCH_LIMITS_JSON", "{}"))
     _require_equal(batch_limits.get(str(profile["service_id"])), profile["max_num_seqs"], f"coordinator {profile['coordinator_profile']} DSV4 batch limit", errors, checks)
+    _require_equal(set(batch_limits), set(services), f"coordinator {profile['coordinator_profile']} topology batch-limit services", errors, checks)
+    for service_id, service in services.items():
+        if not isinstance(service, dict):
+            continue
+        scheduler = service.get("scheduler") if isinstance(service.get("scheduler"), dict) else {}
+        expected = int(scheduler.get("vllm_max_num_seqs") or service.get("max_batch_size") or 0)
+        _require_equal(batch_limits.get(str(service_id)), expected, f"coordinator {profile['coordinator_profile']} {service_id} vLLM batch limit", errors, checks)
     if "DS4_API_DISPATCH_KV_CAPACITY_BYTES" not in module._SAFETY_PROFILE_DEFAULTS:
         errors.append("coordinator relaunch must override unsafe inherited KV admission env")
     else:

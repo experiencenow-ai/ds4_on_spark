@@ -6,46 +6,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class Dsv4RecipeLaunchTests(unittest.TestCase):
-    def test_local_source_launch_preserves_known_good_no_ray_hma_shape(self) -> None:
+    def test_deprecated_local_source_launch_is_disabled(self) -> None:
         script = (ROOT / "scripts" / "ds4_dsv4_spark45_local_vllm.sh").read_text()
-        self.assertIn("c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34", script)
-        self.assertIn("max_model_len=\"${DS4_DSV4_MAX_MODEL_LEN:-262144}\"", script)
-        self.assertIn("kv_offload_size=\"${DS4_DSV4_KV_OFFLOAD_SIZE:-2}\"", script)
-        self.assertIn("gpu_memory_utilization=\"${DS4_DSV4_GPU_MEMORY_UTILIZATION:-0.68}\"", script)
-        self.assertIn("max_num_batched_tokens=\"${DS4_DSV4_MAX_NUM_BATCHED_TOKENS:-2048}\"", script)
-        self.assertIn("max_num_seqs=\"${DS4_DSV4_MAX_NUM_SEQS:-1}\"", script)
-        self.assertIn("enable_mtp=\"${DS4_DSV4_ENABLE_MTP:-1}\"", script)
-        self.assertIn("mtp_tokens=\"${DS4_DSV4_MTP_TOKENS:-2}\"", script)
-        self.assertIn("DS4_DSV4_PYTHONHASHSEED", script)
-        self.assertIn("DS4_DSV4_PERSIST_STRICT", script)
-        self.assertIn("VLLM_USE_SIMPLE_KV_OFFLOAD", script)
-        self.assertIn("VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT", script)
-        self.assertIn("apply_runtime_mods=\"${DS4_DSV4_APPLY_RUNTIME_MODS:-0}\"", script)
-        self.assertIn("persistent_simple_offload_installed", script)
-        self.assertIn("persistent SimpleCPUOffload already installed", script)
-        self.assertIn("--max-model-len \"$max_model_len\"", script)
-        self.assertIn("--max-num-seqs \"$max_num_seqs\"", script)
-        self.assertIn("--max-num-batched-tokens \"$max_num_batched_tokens\"", script)
-        self.assertIn("--block-size 256", script)
-        self.assertIn("--kv-cache-dtype fp8", script)
-        self.assertIn("--enable-prefix-caching", script)
-        self.assertIn("--no-disable-hybrid-kv-cache-manager", script)
-        self.assertIn("--kv-offloading-size \"$kv_offload_size\"", script)
-        self.assertIn("--kv-offloading-backend native", script)
-        self.assertIn("--kv-cache-metrics", script)
-        self.assertIn("--enable-logging-iteration-details", script)
-        self.assertIn("--enforce-eager", script)
-        self.assertIn("--speculative-config", script)
-        self.assertIn("deepseek_mtp", script)
-        self.assertIn("--nnodes 2", script)
-        self.assertIn("--node-rank \"$node_rank\"", script)
-        self.assertIn("--headless", script)
-        self.assertIn("NCCL_IB_DISABLE=1", script)
-        self.assertNotIn("--kv-transfer-config", script)
-        self.assertNotIn("LMCacheConnectorV1Dynamic", script)
-        self.assertNotIn("LMCACHE_USE_EXPERIMENTAL", script)
+        self.assertIn("deprecated spark4/spark5 DSV4 launcher is disabled", script)
+        self.assertIn("ds4_pipeline_lifecycle.py --service dsv4_flash_pp8 relaunch --execute", script)
+        self.assertIn("exit 64", script)
 
-    def test_local_systemd_units_launch_source_built_scripts(self) -> None:
+    def test_deprecated_systemd_units_point_at_disabled_launcher(self) -> None:
         head = (ROOT / "deploy" / "systemd-user" / "ds4-dsv4-local-head.service").read_text()
         worker = (ROOT / "deploy" / "systemd-user" / "ds4-dsv4-local-worker.service").read_text()
         compat = (ROOT / "deploy" / "systemd-user" / "ds4-dsv4-vllm.service").read_text()
@@ -64,24 +31,11 @@ class Dsv4RecipeLaunchTests(unittest.TestCase):
         self.assertIn("ds4_dsv4_recipe_spark45.sh start", service)
         self.assertNotIn("--kv-offloading-size 16", recipe)
 
-    def test_service_wrapper_uses_pinned_recipe_runner(self) -> None:
+    def test_legacy_docker_recipe_wrapper_is_disabled(self) -> None:
         script = (ROOT / "scripts" / "ds4_dsv4_recipe_spark45.sh").read_text()
-        self.assertIn("legacy Docker recipe path", script)
-        self.assertIn("refs/remotes/origin/pr/219", script)
-        self.assertIn("+refs/pull/219/head:refs/remotes/origin/pr/219", script)
-        self.assertIn("vllm-node-dsv4-lmcache-rankfix", script)
-        self.assertIn("CONTAINER_NCCL_IB_DISABLE=1", script)
-        self.assertIn("CONTAINER_PYTHONHASHSEED", script)
-        self.assertIn("ds4_spark_launch_ed25519", script)
-        self.assertIn("--no-ray --no-cache-dirs -d", script)
-        self.assertIn("DS4_DSV4_PERSIST_STORE", script)
-        self.assertIn("VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT", script)
-        self.assertIn("persistent_mod_name=\"ds4-dsv4-persistent-simple-offload\"", script)
-        self.assertIn("mods/$persistent_mod_name", script)
-        self.assertIn("VLLM_SPARK_EXTRA_DOCKER_ARGS", script)
-        self.assertNotIn("CONTAINER_LMCACHE_CONFIG_FILE", script)
-        self.assertNotIn("write_lmcache_config", script)
-        self.assertNotIn("export_lmcache_mounts", script)
+        self.assertIn("deprecated spark4/spark5 Docker DSV4 recipe is disabled", script)
+        self.assertIn("ds4_pipeline_lifecycle.py --service dsv4_flash_pp8 relaunch --execute", script)
+        self.assertIn("exit 64", script)
 
     def test_persistent_simple_offload_runtime_mod_patches_native_hma_offload(self) -> None:
         mod = ROOT / "runtime_mods" / "dsv4_persistent_simple_offload"

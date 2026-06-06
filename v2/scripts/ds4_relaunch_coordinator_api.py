@@ -13,6 +13,7 @@ from urllib import request
 
 ROOT = Path(__file__).resolve().parents[1]
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
+STATIC_SPARKS_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 DEFAULT_COORDINATOR_PYTHON = Path("/home/spark0/ds4-vllm-local/bin/python")
 
 
@@ -190,12 +191,29 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str) -> dict[str, s
         "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": str(coordinator["completion_pp_safe_cohort_max"]),
         "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": str(coordinator["completion_chunk_concurrency"]),
         "DS4_API_DISPATCH_KV_CAPACITY_BYTES": str(coordinator["dispatch_kv_capacity_bytes"]),
-        "DS4_API_BATCH_LIMITS_JSON": json.dumps({"qwen27_bf16_pp8": 12, "qwen27_nvfp4_pp8": 12, str(dsv4["service_id"]): max_num_seqs}, separators=(",", ":")),
+        "DS4_API_BATCH_LIMITS_JSON": json.dumps(_pipeline_batch_limits(overrides={str(dsv4["service_id"]): max_num_seqs}), separators=(",", ":")),
     }
 
 
 def _load_dsv4_production_profile() -> dict[str, object]:
     return json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
+
+
+def _pipeline_batch_limits(*, topology_path: Path = STATIC_SPARKS_TOPOLOGY, overrides: dict[str, int] | None = None) -> dict[str, int]:
+    topology = json.loads(topology_path.read_text(encoding="utf-8"))
+    routing = topology.get("routing_policy") if isinstance(topology.get("routing_policy"), dict) else {}
+    services = routing.get("pipeline_services") if isinstance(routing.get("pipeline_services"), dict) else {}
+    limits: dict[str, int] = {}
+    for service_id, service in services.items():
+        if not isinstance(service, dict):
+            continue
+        scheduler = service.get("scheduler") if isinstance(service.get("scheduler"), dict) else {}
+        raw = scheduler.get("vllm_max_num_seqs") or service.get("max_batch_size") or scheduler.get("queue_limit")
+        if raw is None:
+            continue
+        limits[str(service_id)] = int(raw)
+    limits.update(overrides or {})
+    return dict(sorted(limits.items()))
 
 
 def _parse_env_overrides(items: list[str]) -> dict[str, str]:
