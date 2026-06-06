@@ -150,20 +150,20 @@
           "connector_id": "simple_cpu_offload",
           "expected_entry_fraction_per_node": 0.125,
           "external_backend": "dsv4_hma",
-          "gpu_memory_utilization": 0.28,
+          "gpu_memory_utilization": 0.2,
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
+          3,
           4,
-          5,
-          5,
-          6,
-          6,
-          5,
-          6,
-          6
+          4,
+          8,
+          8,
+          8,
+          4,
+          4
         ],
-        "max_batch_size": 64,
+        "max_batch_size": 16,
         "model_id": "/home/{node}/models/hf/deepseek-ai/DeepSeek-V4-Flash",
         "node_ids": [
           "spark0",
@@ -181,9 +181,10 @@
           "admission_mode": "single_active_batch_per_compute_domain",
           "batch_linger_s": 0.0,
           "max_running_batches_per_compute_domain": 1,
-          "queue_limit": 512,
-          "refill_low_watermark": 96,
-          "vllm_max_num_batched_tokens": 32768
+          "queue_limit": 256,
+          "refill_low_watermark": 24,
+          "vllm_max_num_batched_tokens": 8192,
+          "vllm_max_num_seqs": 16
         },
         "service_id": "dsv4_flash_pp8",
         "telemetry": {
