@@ -23,7 +23,7 @@ FIRST3_CACHE_BACKENDS = {
 FIRST3_GPU_UTILIZATION_FLOORS = {
     "qwen27_bf16_pp8": 0.20,
     "gemma4_26b_a4b_pp8": 0.20,
-    "dsv4_flash_pp8": 0.30,
+    "dsv4_flash_pp8": 0.28,
 }
 
 
@@ -335,10 +335,10 @@ def _resident_gpu_budget_checks(checks: list[dict[str, Any]], *, services: list[
     if dsv4 is not None:
         _check(
             checks,
-            dsv4 < 0.35,
+            dsv4 < 0.33,
             "dsv4_gpu_budget_below_no_headroom_startup_point",
-            "DSV4 GPU cap stays below the observed 0.35 no-headroom startup failure point",
-            details={"value": dsv4, "failed_startup_point": 0.35},
+            "DSV4 GPU cap stays below the observed co-resident no-headroom startup failure point",
+            details={"value": dsv4, "failed_startup_point": 0.33},
         )
 
 

@@ -26,7 +26,7 @@
     "--kv-cache-memory-bytes",
     "8589934592",
     "--gpu-memory-utilization",
-    "0.33",
+    "0.28",
     "--block-size",
     "256",
     "--kv-cache-dtype",
@@ -140,6 +140,6 @@
   ],
   "working_directory": "/home/{node}/src/ds4_on_spark/v2",
   "performance_mode": "native_blackwell_strict_fastpath",
-  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 64-sequence admission and 8GiB resident KV per rank; keep the first-three residency cap below the no-headroom 0.35 startup point and raise DSV4_GPU_MEMORY_UTILIZATION only for DSV4-only runs.",
+  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 64-sequence admission and 8GiB resident KV per rank; keep the first-three residency cap below the observed no-headroom 0.33 startup point and raise DSV4_GPU_MEMORY_UTILIZATION only for DSV4-only runs.",
   "max_batch_size": 64
 }

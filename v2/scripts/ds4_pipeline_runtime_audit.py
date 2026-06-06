@@ -27,7 +27,7 @@ FIRST3_EXTERNAL_CACHE = {
         "external_backend": "dsv4_hma",
         "connector_id": "simple_cpu_offload",
         "cache_root": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload",
-        "gpu_memory_utilization": "0.33",
+        "gpu_memory_utilization": "0.28",
         "env_root": "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT",
     },
 }

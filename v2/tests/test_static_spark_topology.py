@@ -73,7 +73,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         expected = {
             "qwen27_bf16_pp8": ("lmcache_hma", "lmcache", "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv", 0.25),
             "gemma4_26b_a4b_pp8": ("lmcache_hma", "lmcache", "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv", 0.25),
-            "dsv4_flash_pp8": ("dsv4_hma", "simple_cpu_offload", "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload", 0.33),
+            "dsv4_flash_pp8": ("dsv4_hma", "simple_cpu_offload", "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload", 0.28),
         }
 
         for service_id, (backend, connector_id, cache_root, gpu_cap) in expected.items():

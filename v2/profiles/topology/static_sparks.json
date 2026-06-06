@@ -150,7 +150,7 @@
           "connector_id": "simple_cpu_offload",
           "expected_entry_fraction_per_node": 0.125,
           "external_backend": "dsv4_hma",
-          "gpu_memory_utilization": 0.33,
+          "gpu_memory_utilization": 0.28,
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
