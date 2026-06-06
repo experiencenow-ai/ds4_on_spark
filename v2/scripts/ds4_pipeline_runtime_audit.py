@@ -125,6 +125,8 @@ def _check_qwen_pp8_deployment(errors: list[str], checks: list[str]) -> None:
 
 def _check_qwen_pp8_env(env: dict[str, Any], errors: list[str], checks: list[str]) -> None:
     for key, value in {
+        "CPATH": "/home/{node}/standard-runtimes/python3.12-dev-extract/usr/include:/home/{node}/standard-runtimes/python3.12-dev-extract/usr/include/python3.12:/home/{node}/standard-runtimes/python3.12-dev-extract/usr/include/aarch64-linux-gnu/python3.12",
+        "PATH": "/home/{node}/ds4-vllm-local/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "GLOO_SOCKET_IFNAME": "ds4ring0",
         "TP_SOCKET_IFNAME": "ds4ring0",
         "VLLM_HOST_IP": "{fabric_ip}",

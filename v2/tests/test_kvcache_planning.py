@@ -261,6 +261,8 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertIn("--node-rank 7", rank7)
             self.assertIn("GLOO_SOCKET_IFNAME=ds4ring0", rank0)
             self.assertIn("TP_SOCKET_IFNAME=ds4ring0", rank0)
+            self.assertIn("CPATH=/home/spark0/standard-runtimes/python3.12-dev-extract/usr/include", rank0)
+            self.assertIn("PATH=/home/spark7/ds4-vllm-local/bin", rank7)
             self.assertIn("DS4_PP_TRANSPORT=tcp-staged", rank0)
             self.assertIn("VLLM_DS4_PP_EDGE_RAIL=enp", rank0)
             self.assertIn("VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR=1", rank0)
