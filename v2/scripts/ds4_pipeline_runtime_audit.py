@@ -59,6 +59,7 @@ def _check_dsv4(profile: dict[str, Any], service: dict[str, Any], errors: list[s
     _require_equal(contract["pipeline"].get("tensor_parallel_size"), profile["tensor_parallel_size"], "DSV4 runtime pipeline TP size", errors, checks)
     _require_equal(deployment.get("pipeline_parallel_size"), profile["pipeline_parallel_size"], "DSV4 KV deployment PP size", errors, checks)
     _require_equal(deployment.get("tensor_parallel_size"), profile["tensor_parallel_size"], "DSV4 KV deployment TP size", errors, checks)
+    _require_equal(deployment.get("fabric_topology"), "../transfer/spark_200g.json", "DSV4 KV deployment static 200G fabric topology", errors, checks)
     _require_equal(service.get("layer_partition"), layer_partition, "DSV4 topology source-owned PP8 partition", errors, checks)
     _require_equal(contract["pipeline"].get("layer_partition"), layer_partition, "DSV4 runtime partition", errors, checks)
     _require_equal(deployment.get("layer_partition"), layer_partition, "DSV4 KV deployment partition", errors, checks)
@@ -73,15 +74,35 @@ def _check_dsv4(profile: dict[str, Any], service: dict[str, Any], errors: list[s
     }.items():
         _require_equal(scheduler.get(actual_key), profile[profile_key], f"DSV4 topology scheduler {actual_key}", errors, checks)
     env = deployment.get("extra_env") if isinstance(deployment.get("extra_env"), dict) else {}
-    for key, value in {
-        "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR": "0",
-        "VLLM_DS4_PP_DIRECT_CUDA_TENSOR_DICT": "1",
-        "VLLM_DS4_PP_OVERLAP_SEND": "1",
+    _check_dsv4_env(profile, env, errors, checks)
+
+
+def _check_dsv4_env(profile: dict[str, Any], env: dict[str, Any], errors: list[str], checks: list[str]) -> None:
+    expected = {
+        "GLOO_SOCKET_IFNAME": "ds4ring0",
+        "TP_SOCKET_IFNAME": "ds4ring0",
+        "VLLM_HOST_IP": "{fabric_ip}",
         "DS4_PP_TRANSPORT": str(profile["pp_transport"]),
         "VLLM_DS4_PP_EDGE_RAIL": str(profile["pp_edge_rail"]),
+        "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR": "1",
+        "VLLM_DS4_PP_CPU_STAGED_TENSOR_DICT": "0",
+        "VLLM_DS4_PP_TCP_TENSOR_DICT": "1",
+        "VLLM_DS4_PP_TCP_STRIPES": "16",
+        "VLLM_DS4_PP_TCP_MIN_BYTES": "1",
+        "VLLM_DS4_PP_TCP_BIND_HOST": "{fabric_ip}",
+        "VLLM_DS4_PP_TCP_ADVERTISE_HOST": "{fabric_ip}",
+        "VLLM_DS4_PP_DEVICE_TENSOR_DICT_METADATA": "0",
+        "VLLM_DS4_PP_PYNCCL_TENSOR_DICT": "0",
+        "VLLM_DS4_PP_PYNCCL_PAIR_COMMUNICATORS": "0",
+        "VLLM_DS4_PP_DIRECT_CUDA_TENSOR_DICT": "0",
+        "VLLM_DS4_PP_TORCH_PG_TENSOR_DICT": "0",
+        "VLLM_DS4_PP_TORCH_PAIR_GROUPS": "0",
+        "VLLM_DS4_PP_TORCH_GROUP_WARMUP": "0",
+        "VLLM_DS4_PP_OVERLAP_SEND": "1",
         "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "64",
         "VLLM_DS4_FINAL_ONLY_NONSTREAMING": "1",
-    }.items():
+    }
+    for key, value in expected.items():
         _require_equal(env.get(key), value, f"DSV4 env {key}", errors, checks)
 
 
