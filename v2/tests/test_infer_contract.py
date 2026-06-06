@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from ds4_infer.builders import resolve_model_alias
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.runners import FakeRunner
 from ds4_infer.schemas import InferenceRequest
@@ -34,6 +35,12 @@ class InferenceContractTests(unittest.TestCase):
         self.assertTrue(profile.production_eligible)
         self.assertFalse(profile.routing["requires_profile_pin"])
         self.assertFalse(profile.routing["startup_autoload"])
+
+    def test_first3_model_aliases_resolve_to_resident_services(self) -> None:
+        self.assertEqual(resolve_model_alias("qwen27"), "qwen3_6_27b_bf16_pp8_efficient_v1")
+        self.assertEqual(resolve_model_alias("qwen-bf16"), "qwen3_6_27b_bf16_pp8_efficient_v1")
+        self.assertEqual(resolve_model_alias("gemma"), "gemma4_26b_a4b_it_pp8_peer_v1")
+        self.assertEqual(resolve_model_alias("gemma4"), "gemma4_26b_a4b_it_pp8_peer_v1")
 
     def test_smartest_chat_has_no_implicit_dsv4_route_while_unqualified(self) -> None:
         with self.assertRaisesRegex(ValueError, "no production profile"):

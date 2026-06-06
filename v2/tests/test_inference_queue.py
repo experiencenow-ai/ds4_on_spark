@@ -339,6 +339,31 @@ class InferenceQueueTests(unittest.TestCase):
             self.assertEqual(queue.status(request_id="a")["state"], "failed")
             self.assertIn("spark0 transient transport failure", queue.status(request_id="a")["error"])
 
+    def test_jit_kv_startup_recovery_releases_prefilling_and_prefetch_manifests(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(requests=[req("stuck")], registry=registry, batch_id="job")
+            with queue._connect() as conn:
+                conn.execute("update requests set state='prefilling', lease_id='lost', leased_by='old-worker', updated_at=? where request_id='stuck'", (time.time() - 100,))
+                queue._refresh_batch(conn, "job")
+            shards = [
+                {"node_id": "spark0", "stage_index": 0, "stage_count": 2, "state": "prefetch_inflight"},
+                {"node_id": "spark1", "stage_index": 1, "stage_count": 2, "state": "prefetch_inflight"},
+            ]
+            queue.upsert_external_kv_object(namespace="default", kv_key="prefix", service_id="qwen27_bf16_pp8", state="prefetch_inflight", total_bytes=2, shards=shards)
+
+            recovered = queue.recover_jit_kv_startup(stale_s=0)
+
+            self.assertEqual(recovered["wait_released"], 1)
+            self.assertEqual(recovered["objects_recovered"], 1)
+            self.assertEqual(recovered["shards_recovered"], 2)
+            self.assertEqual(queue.status(request_id="stuck")["state"], "queued")
+            self.assertEqual(queue.status(batch_id="job")["state"], "queued")
+            manifest = queue.external_kv_lookup(namespace="default", kv_key="prefix", service_id="qwen27_bf16_pp8")
+            self.assertEqual(manifest["state"], "declared")
+            self.assertEqual({shard["state"] for shard in manifest["shards"]}, {"declared"})
+
 
 if __name__ == "__main__":
     unittest.main()

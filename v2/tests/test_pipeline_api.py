@@ -9,8 +9,9 @@ import unittest
 from ds4_infer import api as api_module
 from ds4_infer.api import CoordinatorApi, _resolve_profile
 from ds4_infer.api_stream import _drain_completion_stream_events, openai_chat_stream_events, openai_completion_stream_events
+from ds4_infer.jit_kv import JitKvCircuitBreaker
 from ds4_infer.profiles import ProfileRegistry
-from ds4_infer.runners import OpenAICompatibleRunner, PipelineOpenAIRunner, _openai_payload
+from ds4_infer.runners import OpenAICompatibleRunner, PipelineOpenAIRunner, _maybe_prestage_common_kv_prefix, _openai_payload
 from ds4_infer.schemas import InferenceRequest, make_result
 from ds4_infer.topology import SparkTopology
 
@@ -582,6 +583,36 @@ class PipelineApiTests(unittest.TestCase):
             cohort.mark_finished(first.request_id)
             self.assertEqual(api_module._pending_claim_count({object(): cohort}), 1)
 
+    def test_deployment_readiness_is_strict_about_jit_kv_token(self) -> None:
+        old_strict = os.environ.get("DS4_API_DEPLOYMENT_STRICT")
+        old_token = os.environ.get("DS4_API_JIT_KV_PREFETCH_TOKEN")
+        old_api = os.environ.get("DS4_API_JIT_KV_PREFETCH_API")
+        os.environ["DS4_API_DEPLOYMENT_STRICT"] = "1"
+        os.environ["DS4_API_JIT_KV_PREFETCH_API"] = "1"
+        os.environ.pop("DS4_API_JIT_KV_PREFETCH_TOKEN", None)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+                code, payload = api.handle_get("/ds4/deployment/readiness", {})
+        finally:
+            if old_strict is None:
+                os.environ.pop("DS4_API_DEPLOYMENT_STRICT", None)
+            else:
+                os.environ["DS4_API_DEPLOYMENT_STRICT"] = old_strict
+            if old_token is None:
+                os.environ.pop("DS4_API_JIT_KV_PREFETCH_TOKEN", None)
+            else:
+                os.environ["DS4_API_JIT_KV_PREFETCH_TOKEN"] = old_token
+            if old_api is None:
+                os.environ.pop("DS4_API_JIT_KV_PREFETCH_API", None)
+            else:
+                os.environ["DS4_API_JIT_KV_PREFETCH_API"] = old_api
+        self.assertEqual(code, 503)
+        self.assertFalse(payload["ready"])
+        self.assertEqual(payload["active_resident_service_ids"], ["dsv4_flash_pp8", "gemma4_26b_a4b_pp8", "qwen27_bf16_pp8"])
+        failed = {item["name"] for item in payload["checks"] if not item["ok"] and item["severity"] == "error"}
+        self.assertIn("jit_kv_prefetch_token_present", failed)
+
     def test_pipeline_runner_prestages_common_strict_kv_prefix(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
@@ -640,6 +671,56 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(calls[0]["payload"]["extra_body"]["ds4_kv_cache"], plan)
         self.assertEqual(calls[1]["payload"]["prompt"], [f"{prefix}request {idx}" for idx in range(3)])
         self.assertEqual(results["kv-0"]["transport"]["kv_prestage"]["strategy"], "single-prefix-load-before-cohort")
+
+    def test_jit_kv_circuit_breaker_dispatches_cold_after_prefetch_failures(self) -> None:
+        plan = {
+            "format": "ds4-kv-cache-plan-v1",
+            "backend": "simple_cpu_offload",
+            "cache_id": "prefix-a",
+            "load": {"mode": "require", "transport": "local_store", "cache_key": "prefix-a"},
+            "store": {"mode": "skip", "transport": "none"},
+            "miss_policy": "fail",
+            "route_affinity": "required",
+            "model_fingerprint": {},
+            "operation": "load",
+            "batch_key_hash": "sha256:batch",
+        }
+        prefix = "shared prefix " * 100
+        requests = [
+            InferenceRequest.from_json(
+                {
+                    "format": "ds4-inference-request-v1",
+                    "request_id": f"cold-{idx}",
+                    "capability": "efficient",
+                    "chat": False,
+                    "immediate": False,
+                    "job_class": "analysis",
+                    "max_output_tokens": 8,
+                    "thinking_budget_tokens": 0,
+                    "temperature": 0,
+                    "input": {"prompt": f"{prefix}item {idx}"},
+                    "output_contract": {"format": "text"},
+                }
+            )
+            for idx in range(2)
+        ]
+        payload = {"model": "qwen27-bf16-pp8", "prompt": [request.input["prompt"] for request in requests], "extra_body": {"ds4_kv_cache": dict(plan)}, "kv_transfer_params": {"ds4_kv_cache": dict(plan)}}
+        circuit = JitKvCircuitBreaker(enabled=True, min_samples=1, failure_ratio=1.0, cooldown_s=60)
+        runner = OpenAICompatibleRunner(base_url="http://127.0.0.1:9", jit_kv_circuit=circuit)
+
+        def fail_post(endpoint, body, **kwargs):
+            raise RuntimeError("prefetch endpoint down")
+
+        runner._post_json = fail_post  # type: ignore[method-assign]
+        info = _maybe_prestage_common_kv_prefix(runner, payload, requests)
+
+        self.assertIsNotNone(info)
+        assert info is not None
+        self.assertTrue(info["cold_dispatch"])
+        self.assertEqual(info["strategy"], "jit-kv-prefetch-failed-cold-dispatch")
+        self.assertNotIn("kv_transfer_params", payload)
+        self.assertNotIn("extra_body", payload)
+        self.assertTrue(circuit.status()["jit_kv_circuit_open"])
 
 
 if __name__ == "__main__":

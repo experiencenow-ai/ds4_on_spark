@@ -76,6 +76,10 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_API_RENDER_CHAT_WITH_TOKENIZER"], "1")
         self.assertEqual(defaults["DS4_API_REQUIRE_TOKENIZER_CHAT_RENDER"], "1")
         self.assertEqual(defaults["DS4_API_RESIDENT_MULTIMODEL"], "1")
+        self.assertEqual(defaults["DS4_API_RESIDENT_SERVICE_IDS"], "qwen27_bf16_pp8,gemma4_26b_a4b_pp8,dsv4_flash_pp8")
+        self.assertEqual(defaults["DS4_API_DEPLOYMENT_STRICT"], "0")
+        self.assertEqual(defaults["DS4_API_JIT_KV_RECOVER_ON_STARTUP"], "1")
+        self.assertEqual(defaults["DS4_API_JIT_KV_CIRCUIT_BREAKER"], "1")
         self.assertEqual(defaults["DS4_PIPELINE_INTERNAL_STREAM_ALL_COHORTS"], "1")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS"], "1")
         self.assertEqual(json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])[DSV4_PRODUCTION["service_id"]], DSV4_PRODUCTION["max_num_seqs"])
@@ -175,8 +179,10 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         relaunch = load_script(RELAUNCH_SCRIPT)
         old_kv = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")
         old_resident = os.environ.get("DS4_API_RESIDENT_MULTIMODEL")
+        old_services = os.environ.get("DS4_API_RESIDENT_SERVICE_IDS")
         os.environ["DS4_API_DISPATCH_KV_CAPACITY_BYTES"] = "0"
         os.environ["DS4_API_RESIDENT_MULTIMODEL"] = "0"
+        os.environ["DS4_API_RESIDENT_SERVICE_IDS"] = "all-the-things"
         try:
             args = type("Args", (), {"profile": DSV4_PRODUCTION["coordinator_profile"]})()
             env = relaunch._coordinator_env(args, ROOT)
@@ -189,8 +195,13 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
                 os.environ.pop("DS4_API_RESIDENT_MULTIMODEL", None)
             else:
                 os.environ["DS4_API_RESIDENT_MULTIMODEL"] = old_resident
+            if old_services is None:
+                os.environ.pop("DS4_API_RESIDENT_SERVICE_IDS", None)
+            else:
+                os.environ["DS4_API_RESIDENT_SERVICE_IDS"] = old_services
         self.assertEqual(env["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(DSV4_PRODUCTION["coordinator"]["dispatch_kv_capacity_bytes"]))
         self.assertEqual(env["DS4_API_RESIDENT_MULTIMODEL"], "1")
+        self.assertEqual(env["DS4_API_RESIDENT_SERVICE_IDS"], "qwen27_bf16_pp8,gemma4_26b_a4b_pp8,dsv4_flash_pp8")
 
 
 if __name__ == "__main__":

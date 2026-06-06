@@ -10,7 +10,8 @@ from .schemas import InferenceRequest
 MODEL_ALIASES = {
     "ds4v": "dsv4_vllm_mtp_pp8_smartest_v1",
     "dsv4": "dsv4_vllm_mtp_pp8_smartest_v1",
-    "gemma": "gemma4_12b_it_pp8_peer_v1",
+    "gemma": "gemma4_26b_a4b_it_pp8_peer_v1",
+    "gemma4": "gemma4_26b_a4b_it_pp8_peer_v1",
     "gemma12": "gemma4_12b_it_pp8_peer_v1",
     "gemma4-12b": "gemma4_12b_it_pp8_peer_v1",
     "gemma-e2b": "gemma4_e2b_it_pp8_peer_v1",
@@ -19,7 +20,10 @@ MODEL_ALIASES = {
     "gemma-a4b": "gemma4_26b_a4b_it_pp8_peer_v1",
     "gemma31": "gemma4_31b_it_pp8_peer_v1",
     "qwen": "qwen3_6_27b_bf16_pp8_efficient_v1",
+    "qwen16": "qwen3_6_27b_bf16_pp8_efficient_v1",
     "qwen27": "qwen3_6_27b_bf16_pp8_efficient_v1",
+    "qwen-bf16": "qwen3_6_27b_bf16_pp8_efficient_v1",
+    "qwen27-bf16": "qwen3_6_27b_bf16_pp8_efficient_v1",
     "fast": "qwen3_6_35b_a3b_fp8_fastest_v1",
 }
 
