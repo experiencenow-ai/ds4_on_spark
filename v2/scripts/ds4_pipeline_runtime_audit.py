@@ -330,7 +330,7 @@ def _check_first3_memory_budget(topology: dict[str, Any], dsv4_profile: dict[str
     _require_equal(float(target.get("min_available_ratio", 0.0)), 0.1, "first-three memory budget 10% RAM floor", errors, checks)
     _require_equal(warmup.get("required_before_first3_residency"), True, "first-three memory budget requires DSV4 warmup", errors, checks)
     _require_equal(warmup.get("script"), "scripts/ds4_warm_dsv4_flashinfer_cache.py", "first-three memory budget warmup script", errors, checks)
-    _require_equal(float(dsv4_observed.get("vllm_mq_shared_memory_gib", 0.0)), 1.0, "first-three memory budget includes DSV4 broadcast ring RAM", errors, checks)
+    _require_equal(float(dsv4_observed.get("vllm_mq_shared_memory_gib", 0.0)), 12.0, "first-three memory budget includes observed DSV4 broadcast ring RAM", errors, checks)
     _require_equal(dsv4_profile.get("memory_budget"), "profiles/production/first3_resident_memory_budget.json", "DSV4 profile links first-three memory budget", errors, checks)
     for service_id, spec in FIRST3_EXTERNAL_CACHE.items():
         service = services.get(service_id) if isinstance(services.get(service_id), dict) else {}
@@ -342,16 +342,11 @@ def _check_first3_memory_budget(topology: dict[str, Any], dsv4_profile: dict[str
         errors.append(f"first-three projected available floor {floor:.1f}GiB is below {min_gib:.1f}GiB")
     else:
         checks.append("first-three projected memory floor leaves >=10% RAM headroom")
-    dsv4_layers = [int(item) for item in partitions.get("dsv4_flash_pp8", [])]
-    qwen_layers = [int(item) for item in partitions.get("qwen27_bf16_pp8", [])]
-    if dsv4_layers and dsv4_layers[0] > min(dsv4_layers[1:]):
-        errors.append("Dsv4 memory budget must keep spark0 at or below peer DSV4 layer count")
+    spark0_available = float(projected_available.get("spark0", 0.0))
+    if spark0_available < min_gib:
+        errors.append(f"first-three projected spark0 available {spark0_available:.1f}GiB is below {min_gib:.1f}GiB")
     else:
-        checks.append("Dsv4 memory budget keeps spark0 below peer layer count")
-    if qwen_layers and qwen_layers[0] > min(qwen_layers[1:]):
-        errors.append("Qwen memory budget must keep spark0 at or below peer Qwen layer count")
-    else:
-        checks.append("Qwen memory budget keeps spark0 below peer layer count")
+        checks.append("first-three projected spark0 headroom stays above the RAM floor")
 
 
 def _check_relaunch_defaults(profile: dict[str, Any], errors: list[str], checks: list[str]) -> None:

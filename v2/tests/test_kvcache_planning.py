@@ -162,7 +162,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["pipeline_parallel_size"], 8)
         self.assertEqual(plan["tensor_parallel_size"], 1)
         self.assertEqual(plan["cache_sharding"], "pipeline_layers")
-        self.assertEqual(plan["layer_partition"], [7, 7, 7, 9, 9, 9, 9, 7])
+        self.assertEqual(plan["layer_partition"], [8, 8, 8, 9, 8, 8, 8, 7])
         self.assertEqual(len(plan["vllm_nodes"]), 8)
         self.assertEqual(plan["vllm_nodes"][0]["fabric_ip"], "10.10.100.10")
         self.assertEqual(plan["vllm_nodes"][-1]["fabric_ip"], "10.10.100.17")
@@ -194,7 +194,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertIn("--attention-backend", plan["vllm_nodes"][0]["argv"])
         self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--attention-backend") + 1], "TRITON_ATTN")
         self.assertIn("LMCacheConnectorV1", plan["vllm_nodes"][0]["command"])
-        self.assertIn("VLLM_PP_LAYER_PARTITION=7,7,7,9,9,9,9,7", plan["vllm_nodes"][0]["command"])
+        self.assertIn("VLLM_PP_LAYER_PARTITION=8,8,8,9,8,8,8,7", plan["vllm_nodes"][0]["command"])
         self.assertIn("--headless", plan["vllm_nodes"][-1]["argv"])
 
     def test_write_qwen_bf16_pp8_scripts_materialize_lmcache_config(self) -> None:
@@ -220,7 +220,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["openai_base_url"], "http://spark0:8103")
         self.assertEqual(plan["pipeline_parallel_size"], 8)
         self.assertEqual(plan["tensor_parallel_size"], 1)
-        self.assertEqual(plan["layer_partition"], [7, 7, 7, 9, 9, 9, 9, 7])
+        self.assertEqual(plan["layer_partition"], [8, 8, 8, 9, 8, 8, 8, 7])
         self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["path"], "/tmp/lmcache_qwen27_bf16_pp8_bf16kv.yaml")
         self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["data"]["local_disk"], "/home/spark0/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_bf16kv")
         self.assertEqual(plan["vllm_nodes"][-1]["lmcache_config"]["data"]["local_disk"], "/home/spark7/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_bf16kv")

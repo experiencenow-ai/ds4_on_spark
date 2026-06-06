@@ -58,7 +58,7 @@ class PipelineRuntimeAuditTests(unittest.TestCase):
         profile = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 
         self.assertEqual(budget["layer_partitions"]["dsv4_flash_pp8"], profile["layer_partition"])
-        self.assertEqual(budget["layer_partitions"]["qwen27_bf16_pp8"], [7, 7, 7, 9, 9, 9, 9, 7])
+        self.assertEqual(budget["layer_partitions"]["qwen27_bf16_pp8"], [8, 8, 8, 9, 8, 8, 8, 7])
         self.assertEqual(budget["layer_partitions"]["gemma4_26b_a4b_pp8"], [4, 4, 4, 4, 4, 4, 3, 3])
         self.assertEqual(budget["gpu_memory_utilization"]["active_sum"], 0.58)
         self.assertEqual(budget["coordinator"]["dispatch_window"], 128)

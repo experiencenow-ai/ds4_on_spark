@@ -1,7 +1,7 @@
 {
   "format": "ds4-first3-resident-memory-budget-v1",
   "profile_id": "first3_qwen27_gemma26_dsv4_balanced_v1",
-  "source": "live Spark startup telemetry from first-three bring-up on 2026-06-06",
+  "source": "live Spark startup and post-request telemetry from first-three bring-up on 2026-06-06",
   "target": {
     "min_available_ratio": 0.1,
     "min_available_gib": 12.0,
@@ -14,13 +14,13 @@
   ],
   "layer_partitions": {
     "qwen27_bf16_pp8": [
-      7,
-      7,
-      7,
+      8,
+      8,
+      8,
       9,
-      9,
-      9,
-      9,
+      8,
+      8,
+      8,
       7
     ],
     "gemma4_26b_a4b_pp8": [
@@ -34,14 +34,14 @@
       3
     ],
     "dsv4_flash_pp8": [
+      5,
+      6,
+      6,
+      7,
       4,
-      5,
-      5,
-      6,
-      6,
-      6,
-      6,
-      5
+      4,
+      4,
+      7
     ]
   },
   "gpu_memory_utilization": {
@@ -92,24 +92,24 @@
     "dsv4_flash_pp8": {
       "per_layer": 3.33,
       "base_per_rank": 0.3,
-      "vllm_mq_shared_memory_gib": 1.0,
+      "vllm_mq_shared_memory_gib": 12.0,
       "spark0_entry_overhead": 0.9,
       "spark7_final_overhead": 2.0
     }
   },
   "projection": {
     "post_first3_available_gib": {
-      "spark0": 34.4,
-      "spark1": 36.6,
-      "spark2": 33.5,
-      "spark3": 42.7,
-      "spark4": 43.0,
-      "spark5": 44.7,
-      "spark6": 49.2,
-      "spark7": 45.8
+      "spark0": 18.5,
+      "spark1": 23.1,
+      "spark2": 20.8,
+      "spark3": 25.8,
+      "spark4": 12.8,
+      "spark5": 13.6,
+      "spark6": 18.1,
+      "spark7": 29.8
     },
-    "floor_gib": 33.5,
-    "notes": "Projection assumes DSV4 FlashInfer/CUDA native-kernel compile artifacts are already warmed and includes the 64-chunk vLLM multiprocessing broadcast ring. First-run compiler workers can exceed this steady-state model and must run DSV4-only."
+    "floor_gib": 12.8,
+    "notes": "Projection starts from live post-request MemAvailable with all three resident on 2026-06-06, keeps the 64-chunk DSV4 vLLM multiprocessing broadcast ring, shifts Qwen one layer off sparks 4-6, and shifts two DSV4 layers off sparks 4-6. First-run compiler workers can exceed this steady-state model and must run DSV4-only."
   },
   "warmup_policy": {
     "required_before_first3_residency": true,
