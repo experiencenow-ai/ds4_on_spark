@@ -79,6 +79,9 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertIn("gemma4_12b_it_pp8_peer_v1", needles)
         self.assertIn("gemma-4-12B-it", needles)
         self.assertIn("gemma-4-12b-it-pp8", needles)
+        self.assertNotIn("models", needles)
+        self.assertNotIn("google", needles)
+        self.assertNotIn("spark0", needles)
 
     def test_spark_updater_disables_legacy_runtime_config_path(self) -> None:
         script = (ROOT.parent / "scripts" / "ds4_update_spark_nodes.sh").read_text(encoding="utf-8")

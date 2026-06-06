@@ -219,7 +219,15 @@ def _remote_kill(entry: dict[str, object]) -> str:
 def _needles(entry: dict[str, object]) -> list[str]:
     dep = entry["deployment"]
     raw = {str(entry["service_id"]), str(entry["profile_id"]), str(entry["model_id"]), str(dep.get("model_id", "")), str(dep.get("served_model_name", "")), str(dep.get("master_port", ""))}
-    return sorted({part for item in raw for part in str(item).replace("{node}", "").split("/") if len(part) >= 6} | {item for item in raw if len(item) >= 6})
+    needles = set()
+    for item in raw:
+        text = str(item).replace("{node}", "").strip()
+        if len(text) >= 6:
+            needles.add(text)
+        leaf = text.rstrip("/").split("/")[-1]
+        if len(leaf) >= 6:
+            needles.add(leaf)
+    return sorted(needles)
 
 
 def _repo(args: argparse.Namespace) -> str:
