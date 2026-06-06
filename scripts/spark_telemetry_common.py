@@ -19,7 +19,7 @@ TELEMETRY_DIR = "/tmp/ds4_telemetry"
 MAC_TELEMETRY_DIR = os.path.join(TELEMETRY_DIR,"mac")
 NODE_TELEMETRY_CSV = "node_telemetry.csv"
 NODE_TELEMETRY_SUMMARY = "node_telemetry.summary.json"
-QUEUE_RATE_WINDOW_S = float(os.environ.get("DS4_QUEUE_RATE_WINDOW_S","300"))
+QUEUE_RATE_WINDOW_S = float(os.environ.get("DS4_QUEUE_RATE_WINDOW_S","1800"))
 DEFAULT_DS4_API_URL = "http://10.20.0.10:8700"
 
 BASE_GPU_FIELDS = [
