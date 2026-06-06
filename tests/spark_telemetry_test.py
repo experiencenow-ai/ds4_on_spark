@@ -320,6 +320,8 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(q["local_queue_failed"],1)
         self.assertEqual(q["local_queue_ds_service_count"],2)
         self.assertEqual(q["local_queue_ds_model_count"],3)
+        self.assertEqual(q["local_queue_active_service_count"],1)
+        self.assertEqual(q["local_queue_active_services"],"dsv4_flash_pp8")
         self.assertEqual(q["local_queue_last_service"],"dsv4_flash_pp8")
         self.assertEqual(q["local_queue_resident_multimodel"],1)
         self.assertIn("dsv4_flash_pp8", q["local_queue_ds_services"])

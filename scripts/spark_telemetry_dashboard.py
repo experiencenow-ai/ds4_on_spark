@@ -92,7 +92,7 @@ function emaValues(points,key){let out=[],acc=null,alpha=0.34;points.forEach(p=>
 function drawHistory(data){lastHistory=data;let el=document.getElementById("history");if(!data||!data.ok||!data.points.length){el.innerHTML=`<div class="history-head"><div class="history-title">${selectedNode||"spark"}</div>${modeButtons()}</div><div class="empty">no history</div>`;wireModes();return}let metrics=activeMetrics(data);let colors=modeColors[selectedMode]||modeColors.queue;let legend=metrics.map((m,i)=>{let v=metricLast(m,data.points);return `<span><i class="swatch" style="background:${colors[i%colors.length]}"></i>${m.label} <b>${v===null?"n/a":val(v,m.unit)}</b></span>`}).join("");el.innerHTML=`<div class="history-head"><div><div class="history-title">${data.node}</div><div class="label">last hour · ${data.points.length} samples · EMA</div></div>${modeButtons()}</div><div class="legend">${legend}</div><div class="chart-wrap"><canvas id="chart"></canvas></div>`;wireModes();paintChart(data,metrics,colors)}
 function paintChart(data,metrics,colors){let canvas=document.getElementById("chart");if(!canvas)return;metrics=metrics||activeMetrics(data);colors=colors||modeColors[selectedMode]||modeColors.queue;let rect=canvas.getBoundingClientRect();let dpr=window.devicePixelRatio||1;canvas.width=Math.max(1,Math.floor(rect.width*dpr));canvas.height=Math.max(1,Math.floor(rect.height*dpr));let ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);let w=rect.width,h=rect.height,pad=28;ctx.clearRect(0,0,w,h);ctx.strokeStyle="#313943";ctx.lineWidth=1;for(let i=0;i<=4;i++){let y=pad+((h-(pad*2))*i/4);ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(w-pad,y);ctx.stroke()}let points=data.points;metrics.forEach((m,i)=>{let scale=metricScale(m,points);let vals=emaValues(points,m.key);ctx.strokeStyle=colors[i%colors.length];ctx.lineWidth=2.2;ctx.beginPath();vals.forEach((v,idx)=>{let x=pad+((w-(pad*2))*idx/Math.max(1,points.length-1));let y=h-pad-((h-(pad*2))*Math.max(0,Math.min(scale,v))/scale);if(idx===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});ctx.stroke()});ctx.fillStyle="#a8b1bb";ctx.font="12px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif";ctx.fillText("now",w-pad-24,h-8);ctx.fillText("then",pad,h-8)}
 async function refreshHistory(){if(!selectedNode)return;try{let r=await fetch(`/api/history?node=${encodeURIComponent(selectedNode)}`,{cache:"no-store"});drawHistory(await r.json())}catch(e){document.getElementById("history").innerHTML=`<div class="empty">history read failed</div>`}}
-function renderSummary(d){if(!selectedNode&&d.nodes&&d.nodes.length)selectedNode=d.selected_node||d.nodes[0].node;document.getElementById("updated").textContent="updated "+(d.updated_iso||"unknown");document.getElementById("source").textContent=d.summary_path||"";document.getElementById("summary").innerHTML=[metric("Active",`${fmt(d.active_nodes)}/${d.reachable_nodes}`),metric("GPU Avg",d.gpu_known?pct(d.avg_gpu_pct):"n/a"),metric("Run/Wait",`${fmt(d.vllm_running)}/${fmt(d.vllm_waiting)}`),metric("Tok/s In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`),metric("DS Services",d.ds_services_known?`${fmt(d.ds_service_count)} svc`:"n/a"),metric("Queue Depth",fmt(d.queue_depth))].join("");document.getElementById("nodes").innerHTML=d.nodes.map(card).join("");wireCards()}
+function renderSummary(d){if(!selectedNode&&d.nodes&&d.nodes.length)selectedNode=d.selected_node||d.nodes[0].node;document.getElementById("updated").textContent="updated "+(d.updated_iso||"unknown");document.getElementById("source").textContent=d.summary_path||"";document.getElementById("summary").innerHTML=[metric("Active",`${fmt(d.active_nodes)}/${d.reachable_nodes}`),metric("GPU Avg",d.gpu_known?pct(d.avg_gpu_pct):"n/a"),metric("Run/Wait",`${fmt(d.vllm_running)}/${fmt(d.vllm_waiting)}`),metric("Tok/s In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`),metric("Active Svc",d.ds_services_known?`${fmt(d.ds_service_count)} svc`:"n/a"),metric("Queue Depth",fmt(d.queue_depth))].join("");document.getElementById("nodes").innerHTML=d.nodes.map(card).join("");wireCards()}
 async function refreshOnce(){try{let r=await fetch("/api/summary",{cache:"no-store"});let d=await r.json();renderSummary(d);await refreshHistory()}catch(e){document.getElementById("updated").textContent="dashboard read failed: "+e}}
 function startTelemetryStream(){if(telemetryStream)telemetryStream.close();if(!window.EventSource){refreshOnce();return}let node=encodeURIComponent(selectedNode||"");telemetryStream=new EventSource(`/api/stream?node=${node}`);telemetryStream.addEventListener("telemetry",event=>{try{let payload=JSON.parse(event.data);if(payload.summary){renderSummary(payload.summary)}if(payload.history){drawHistory(payload.history)}}catch(e){document.getElementById("updated").textContent="stream parse failed: "+e}});telemetryStream.onerror=()=>{document.getElementById("updated").textContent="stream reconnecting"}}
 window.addEventListener("resize",()=>{if(lastHistory)paintChart(lastHistory)});
@@ -247,6 +247,17 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
     queue = raw.get("queue",{}) if isinstance(raw.get("queue"),dict) else {}
     queue_kv_by_node = node_text_map(queue.get("local_queue_kv_by_node",""))
     stage_service_by_node = node_text_map(queue.get("local_queue_stage_service_by_node",""))
+    pending_by_service = node_metric_map(queue.get("local_queue_pending_by_service",""))
+    derived_active_services = {service for service in list(queue_kv_by_node.values()) + list(stage_service_by_node.values()) if service}
+    for service_id,count in pending_by_service.items():
+        if count > 0.0:
+            derived_active_services.add(service_id)
+    active_ds_services = str(queue.get("local_queue_active_services","")).strip()
+    if active_ds_services == "" and derived_active_services:
+        active_ds_services = ",".join(sorted(derived_active_services))
+    active_ds_service_count = fnum(queue.get("local_queue_active_service_count",0.0))
+    if active_ds_service_count <= 0.0 and active_ds_services != "":
+        active_ds_service_count = len([service for service in active_ds_services.split(",") if service.strip()])
     global_queue_known = str(queue.get("local_queue_source","")) != ""
     summary_id = raw.get("updated_unix") or raw.get("updated_iso","")
     raw_nodes = raw.get("nodes",{}) if isinstance(raw.get("nodes",{}),dict) else {}
@@ -284,7 +295,7 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
     power_nodes = [node for node in reachable if node.get("gpu_power_known")]
     total_gpu_power_w = round(sum(fnum(node.get("gpu_power_w")) for node in power_nodes),2)
     avg_gpu_pct = round(sum(fnum(node.get("gpu_pct")) for node in gpu_nodes) / max(1,len(gpu_nodes)),2)
-    ds_services = str(queue.get("local_queue_ds_services",""))
+    ds_catalog_services = str(queue.get("local_queue_ds_services",""))
     return({
         "ok": True,
         "summary_path": str(path),
@@ -304,9 +315,11 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
         "max_kv_pct": max(known_kv or [0.0]),
         "cache_known": len(known_cache) > 0,
         "max_cache_hit_pct": max(known_cache or [0.0]),
-        "ds_services_known": ds_services != "",
-        "ds_services": ds_services,
-        "ds_service_count": fnum(queue.get("local_queue_ds_service_count",0.0)),
+        "ds_services_known": active_ds_services != "",
+        "ds_services": active_ds_services,
+        "ds_service_count": active_ds_service_count,
+        "ds_catalog_services": ds_catalog_services,
+        "ds_catalog_service_count": fnum(queue.get("local_queue_ds_service_count",0.0)),
         "ds_model_count": fnum(queue.get("local_queue_ds_model_count",0.0)),
         "ds_last_service": str(queue.get("local_queue_last_service","")),
         "ds_kv_shards": fnum(queue.get("local_queue_kv_shards",0.0)),

@@ -261,7 +261,7 @@ def write_combined(out_dir: str, all_rows: Dict[str,List[Dict[str,str]]], errors
             queue.get("local_queue_depth",0),
             queue.get("local_queue_queued",0),
             queue.get("local_queue_running",0),
-            queue.get("local_queue_ds_services",""),
+            queue.get("local_queue_active_services",""),
             queue.get("local_queue_kv_shards",0),
             queue.get("local_queue_source",""),
         ))

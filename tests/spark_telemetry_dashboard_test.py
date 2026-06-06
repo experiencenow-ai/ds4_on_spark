@@ -117,6 +117,8 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
                 "local_queue_ds_services": "dsv4_flash_pp8,qwen27_bf16_pp8",
                 "local_queue_ds_service_count": 2,
                 "local_queue_ds_model_count": 6,
+                "local_queue_active_services": "dsv4_flash_pp8",
+                "local_queue_active_service_count": 1,
                 "local_queue_last_service": "dsv4_flash_pp8",
                 "local_queue_kv_shards": 8,
                 "local_queue_kv_by_node": "spark0:dsv4_flash_pp8",
@@ -137,7 +139,10 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["vllm_waiting"],1.0)
         self.assertEqual(snap["queue_depth"],2.0)
         self.assertTrue(snap["ds_services_known"])
-        self.assertEqual(snap["ds_service_count"],2.0)
+        self.assertEqual(snap["ds_services"],"dsv4_flash_pp8")
+        self.assertEqual(snap["ds_service_count"],1.0)
+        self.assertEqual(snap["ds_catalog_services"],"dsv4_flash_pp8,qwen27_bf16_pp8")
+        self.assertEqual(snap["ds_catalog_service_count"],2.0)
         self.assertEqual(snap["ds_model_count"],6.0)
         self.assertEqual(snap["ds_last_service"],"dsv4_flash_pp8")
         self.assertEqual(snap["ds_kv_shards"],8.0)
@@ -283,7 +288,7 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
     def test_dashboard_summary_combines_tokens_and_omits_power(self):
         self.assertIn('grid-template-columns:repeat(6,minmax(110px,1fr))', dashboard.DASHBOARD_HTML)
         self.assertIn('metric("GPU Avg",d.gpu_known?pct(d.avg_gpu_pct):"n/a")', dashboard.DASHBOARD_HTML)
-        self.assertIn('metric("DS Services",d.ds_services_known?`${fmt(d.ds_service_count)} svc`:"n/a")', dashboard.DASHBOARD_HTML)
+        self.assertIn('metric("Active Svc",d.ds_services_known?`${fmt(d.ds_service_count)} svc`:"n/a")', dashboard.DASHBOARD_HTML)
         self.assertIn('metric("Tok/s In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`)', dashboard.DASHBOARD_HTML)
         self.assertNotIn('metric("Total Power"', dashboard.DASHBOARD_HTML)
         self.assertNotIn('metric("In tok/s"', dashboard.DASHBOARD_HTML)
