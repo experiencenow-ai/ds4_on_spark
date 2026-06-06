@@ -59,6 +59,10 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(capacity[DSV4_PP], DSV4_PRODUCTION["max_num_seqs"])
         self.assertNotIn("qwen3_6_27b_fp8_efficient_v1", capacity)
         self.assertNotIn("dsv4_vllm_mtp_smartest_v1", capacity)
+        self.assertEqual(
+            topology.routing_policy["active_resident_service_ids"],
+            ["qwen27_bf16_pp8", "gemma4_26b_a4b_pp8", "dsv4_flash_pp8"],
+        )
 
     def test_pipeline_services_are_all_spark_and_spark0_ingress(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
@@ -100,6 +104,12 @@ class StaticSparkTopologyTests(unittest.TestCase):
 
         self.assertEqual(env["GLOO_SOCKET_IFNAME"], "ds4ring0")
         self.assertEqual(env["TP_SOCKET_IFNAME"], "ds4ring0")
+        self.assertEqual(env["VLLM_HOST_IP"], "{fabric_ip}")
+        self.assertEqual(env["VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR"], "1")
+        self.assertEqual(env["VLLM_DS4_PP_TCP_TENSOR_DICT"], "1")
+        self.assertEqual(env["VLLM_DS4_PP_DIRECT_CUDA_TENSOR_DICT"], "0")
+        self.assertEqual(env["VLLM_DS4_PP_TCP_BIND_HOST"], "{fabric_ip}")
+        self.assertEqual(env["VLLM_DS4_PP_TCP_ADVERTISE_HOST"], "{fabric_ip}")
         self.assertEqual(env["VLLM_DS4_PP_EDGE_RAIL"], "enp")
         self.assertEqual(DSV4_KV["master_addr"], "10.10.100.10")
 

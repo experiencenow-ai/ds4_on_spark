@@ -26,7 +26,9 @@ from .dispatcher_resident import pending_cohort as _pending_cohort
 from .dispatcher_resident import resident_service_order as _resident_service_order
 from .dispatcher_resident import resident_service_plans as _resident_service_plans
 from .dispatcher_resident import service_target_active as _service_target_active
+from .deployment import deployment_readiness
 from .env_utils import env_bool as _env_bool
+from .jit_kv import JitKvCircuitBreaker
 from .profiles import ModelProfile, ProfileRegistry
 from .kv_cache import KV_CACHE_DIRECTIVE_FORMAT, KV_CACHE_PLAN_FORMAT, normalize_kv_cache_directive
 from .runners import FakeRunner, PipelineOpenAIRunner, Runner
@@ -83,10 +85,21 @@ class CoordinatorApi:
         self.dispatcher_transport_timeout_s = max(1, _env_int("DS4_API_TRANSPORT_TIMEOUT_S", 3600))
         self.dispatcher_transport_max_attempts = max(1, _env_int("DS4_API_TRANSPORT_MAX_ATTEMPTS", 1))
         self.dispatcher_kv_capacity_bytes = max(0, _env_int("DS4_API_DISPATCH_KV_CAPACITY_BYTES", 0))
+        self.jit_kv_circuit = JitKvCircuitBreaker(
+            enabled=_env_bool("DS4_API_JIT_KV_CIRCUIT_BREAKER", True),
+            window_s=_env_float("DS4_API_JIT_KV_CIRCUIT_WINDOW_S", 60.0),
+            min_samples=_env_int("DS4_API_JIT_KV_CIRCUIT_MIN_SAMPLES", 8),
+            failure_ratio=_env_float("DS4_API_JIT_KV_CIRCUIT_FAILURE_RATIO", 0.5),
+            cooldown_s=_env_float("DS4_API_JIT_KV_CIRCUIT_COOLDOWN_S", 120.0),
+        )
+        self.jit_kv_startup_recovery: dict[str, Any] = {"wait_released": 0, "objects_recovered": 0, "shards_recovered": 0}
+        self._jit_kv_last_gate_open_until = 0.0
         self.dispatcher_stop = threading.Event()
         self.dispatcher_thread: threading.Thread | None = None
         self.dispatcher_lock = threading.Lock()
         self.dispatcher_state: dict[str, Any] = self._initial_dispatcher_state()
+        if _env_bool("DS4_API_JIT_KV_RECOVER_ON_STARTUP", True):
+            self.jit_kv_startup_recovery = self.queue.recover_jit_kv_startup(stale_s=_env_float("DS4_API_JIT_KV_RECOVERY_STALE_S", 0.0))
 
     def handle_get(self, path: str, query: dict[str, list[str]]) -> tuple[int, dict[str, Any]]:
         if path in {"/health", "/ds4/health"}:
@@ -95,6 +108,15 @@ class CoordinatorApi:
             return 200, _openai_models(self._registry(), self._topology())
         if path == "/ds4/dispatcher/status":
             return 200, self.dispatcher_status()
+        if path in {"/ds4/deployment/readiness", "/ds4/deploy/readiness"}:
+            payload = deployment_readiness(
+                topology=self._topology(),
+                dispatcher_window=self.dispatcher_window,
+                dispatcher_refill_batch=self.dispatcher_refill_batch,
+                dispatcher_cohort_workers=self.dispatcher_cohort_workers,
+                resident_multimodel=self.dispatcher_resident_multimodel,
+            )
+            return (200 if payload["ready"] else 503), payload
         if path == "/ds4/queue/status":
             return 200, self.queue.status(request_id=_one(query, "request_id"), batch_id=_one(query, "batch_id"), job_id=_one(query, "job_id"), refresh=_query_bool(query, "refresh", False))
         if path == "/ds4/queue/usage":
@@ -414,7 +436,10 @@ class CoordinatorApi:
 
     def dispatcher_status(self) -> dict[str, Any]:
         with self.dispatcher_lock:
-            return dict(self.dispatcher_state)
+            state = dict(self.dispatcher_state)
+        state.update(self.jit_kv_circuit.status())
+        state["jit_kv_startup_recovery"] = dict(self.jit_kv_startup_recovery)
+        return state
 
     def _dispatcher_is_active(self) -> bool:
         return bool(self.dispatcher_enabled and self.dispatcher_thread is not None and self.dispatcher_thread.is_alive())
@@ -451,6 +476,8 @@ class CoordinatorApi:
             "largest_claimed_cohort_size": 0,
             "last_claimed_service_id": None,
             "last_claimed_cohort_by_service": {},
+            "jit_kv_startup_recovery": dict(self.jit_kv_startup_recovery),
+            **self.jit_kv_circuit.status(),
         }
 
     def _dispatcher_note(self, **updates: Any) -> None:
@@ -514,6 +541,7 @@ class CoordinatorApi:
         completed, failed, retried = self._dispatcher_finish_done(runtime.worker, runtime.pending, block=False)
         if completed or failed or retried:
             self._dispatcher_count(completed_count=completed, failed_count=failed, retried_count=retried, requeued_count=retried)
+        self._release_jit_kv_waits_if_circuit_open()
         now = time.time()
         elapsed = max(0.0, now - runtime.last_credit_at)
         for plan in runtime.service_plans.values():
@@ -546,6 +574,20 @@ class CoordinatorApi:
             self._dispatcher_count(completed_count=completed, failed_count=failed, retried_count=retried, requeued_count=retried)
         runtime.executor.shutdown(wait=True, cancel_futures=False)
         self._dispatcher_note(running=False, pending=0, pending_cohorts=0)
+
+    def _release_jit_kv_waits_if_circuit_open(self) -> None:
+        status = self.jit_kv_circuit.status()
+        open_until = status.get("jit_kv_circuit_open_until")
+        if open_until is None:
+            return
+        open_until_f = float(open_until)
+        if open_until_f == self._jit_kv_last_gate_open_until:
+            return
+        released = self.queue.release_jit_kv_waits(reason="jit_kv_circuit_open")
+        count = int(released.get("wait_released") or 0)
+        self.jit_kv_circuit.record_gate_release(count)
+        self._jit_kv_last_gate_open_until = open_until_f
+        self._dispatcher_note(jit_kv_last_gate_release=released)
 
     def _dispatcher_refill(
         self,
@@ -773,7 +815,7 @@ class CoordinatorApi:
     def _runner(self, topology: SparkTopology, *, timeout_s: int) -> Runner:
         if self.runner_kind == "fake":
             return FakeRunner()
-        return PipelineOpenAIRunner(timeout_s=int(timeout_s), base_urls=_pipeline_base_urls(topology))
+        return PipelineOpenAIRunner(timeout_s=int(timeout_s), base_urls=_pipeline_base_urls(topology), jit_kv_circuit=self.jit_kv_circuit)
 
 
 def serve(*, host: str, port: int, queue_dir: str | Path, profiles_dir: str | Path, topology_path: str | Path, runner_kind: str = "pipeline", sync_timeout_s: float | None = None) -> None:
@@ -850,7 +892,9 @@ def _topology_dispatch_cohort_workers(topology_path: Path) -> int:
         topology = SparkTopology.load(topology_path)
     except Exception:
         return 4
-    return max(4, min(32, len(topology.pipeline_services) * 4))
+    active = _active_resident_service_ids(topology)
+    count = sum(1 for service in topology.pipeline_services.values() if active is None or service.service_id in active)
+    return max(4, min(32, count * 4))
 
 
 def _default_sync_timeout_s() -> float:

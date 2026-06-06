@@ -498,6 +498,25 @@ class InferenceQueue:
                 self._refresh_batch(conn, str(row["batch_id"]))
         return {"format": QUEUE_FORMAT, "state": "reaped" if requeued or failed else "idle", "requeued_count": requeued, "failed_count": failed}
 
+    def recover_jit_kv_startup(self, *, stale_s: float = 0.0, now: float | None = None) -> dict[str, Any]:
+        now = time.time() if now is None else now
+        with closing(self._connect()) as conn, conn:
+            wait_released = self._release_prefilling_locked(conn, reason="startup_recovery", stale_s=stale_s, now=now)
+            objects_recovered, shards_recovered = self._recover_prefetch_manifests_locked(conn, stale_s=stale_s, now=now)
+        return {
+            "format": QUEUE_FORMAT,
+            "state": "recovered" if wait_released or objects_recovered or shards_recovered else "idle",
+            "wait_released": wait_released,
+            "objects_recovered": objects_recovered,
+            "shards_recovered": shards_recovered,
+        }
+
+    def release_jit_kv_waits(self, *, reason: str = "jit_kv_circuit_open", now: float | None = None) -> dict[str, Any]:
+        now = time.time() if now is None else now
+        with closing(self._connect()) as conn, conn:
+            wait_released = self._release_prefilling_locked(conn, reason=reason, stale_s=0.0, now=now)
+        return {"format": QUEUE_FORMAT, "state": "released" if wait_released else "idle", "wait_released": wait_released}
+
     def heartbeat(self, *, lease_ids: Iterable[str], lease_ttl_s: int) -> int:
         ids = [str(lease_id) for lease_id in lease_ids if lease_id]
         if not ids:
@@ -1154,6 +1173,52 @@ class InferenceQueue:
         row = conn.execute("select count(*) n from requests where state='running' and compute_lease_id=?", (compute_lease_id,)).fetchone()
         if int(row["n"] if row else 0) == 0:
             conn.execute("delete from compute_leases where compute_lease_id=?", (compute_lease_id,))
+
+    def _release_prefilling_locked(self, conn: sqlite3.Connection, *, reason: str, stale_s: float, now: float) -> int:
+        clauses = ["state='prefilling'"]
+        params: list[Any] = []
+        if stale_s > 0:
+            clauses.append("updated_at<=?")
+            params.append(now - float(stale_s))
+        rows = conn.execute(f"select request_id,batch_id,compute_lease_id from requests where {' and '.join(clauses)} order by updated_at,request_id", tuple(params)).fetchall()
+        if not rows:
+            return 0
+        request_ids = [str(row["request_id"]) for row in rows]
+        placeholders = ",".join("?" for _ in request_ids)
+        conn.execute(
+            f"""
+            update requests set state='queued',
+                selected_node_id=case when selected_service_id is null then null else selected_node_id end,
+                selected_node_ids_json=case when selected_service_id is null then null else selected_node_ids_json end,
+                selected_compute_domain=case when selected_service_id is null then null else selected_compute_domain end,
+                lease_id=null, compute_lease_id=null, leased_by=null, lease_expires_at=null,
+                heartbeat_at=null, ready_at=null, updated_at=?
+            where request_id in ({placeholders})
+            """,
+            tuple([now] + request_ids),
+        )
+        for row in rows:
+            self._event(conn, str(row["request_id"]), "jit_kv_recovered", "queued", {"batch_id": row["batch_id"], "reason": reason})
+            self._release_unused_compute_lease(conn, row["compute_lease_id"])
+        for batch_id in sorted({str(row["batch_id"]) for row in rows}):
+            self._refresh_batch(conn, batch_id)
+        return len(rows)
+
+    def _recover_prefetch_manifests_locked(self, conn: sqlite3.Connection, *, stale_s: float, now: float) -> tuple[int, int]:
+        states = ("prefetch_requested", "prefetch_inflight")
+        placeholders = ",".join("?" for _ in states)
+        stale_clause = ""
+        object_params: list[Any] = list(states)
+        shard_params: list[Any] = list(states)
+        if stale_s > 0:
+            stale_clause = " and updated_at<=?"
+            object_params.append(now - float(stale_s))
+            shard_params.append(now - float(stale_s))
+        object_rows = conn.execute(f"select namespace,kv_key,service_id from kv_memory_objects where state in ({placeholders}){stale_clause}", tuple(object_params)).fetchall()
+        shard_rows = conn.execute(f"select namespace,kv_key,service_id,node_id,stage_index from kv_memory_shards where state in ({placeholders}){stale_clause}", tuple(shard_params)).fetchall()
+        conn.execute(f"update kv_memory_objects set state='declared', updated_at=?, last_used_at=? where state in ({placeholders}){stale_clause}", tuple([now, now] + object_params))
+        conn.execute(f"update kv_memory_shards set state='declared', gpu_resident=0, updated_at=?, last_used_at=? where state in ({placeholders}){stale_clause}", tuple([now, now] + shard_params))
+        return len(object_rows), len(shard_rows)
 
     def _delete_request_kv(self, conn: sqlite3.Connection, request_id: str) -> None:
         conn.execute("delete from kv_entries where request_id=?", (request_id,))

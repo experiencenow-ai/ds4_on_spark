@@ -12,6 +12,7 @@ from urllib import error, request as urlrequest
 
 from .builders import model_batch_payload, request_messages, request_prompt
 from .cohort_safety import coalesced_completion_token_budget, coalesced_failure_should_bisect, mark_coalesced_split, prompt_token_estimate
+from .jit_kv import build_prefetch_payload, disable_strict_kv, run_prefetch
 from .kv_cache import kv_cache_extra_body, kv_cache_vllm_request_fields
 from .profiles import ModelProfile
 from .runner_payloads import merge_payload_extra_body, merge_request_extra_body, requests_need_client_stream
@@ -266,6 +267,7 @@ class OpenAICompatibleRunner:
         chat_endpoint: str = "/v1/chat/completions",
         completion_endpoint: str = "/v1/completions",
         default_extra_body: dict[str, Any] | None = None,
+        jit_kv_circuit: Any | None = None,
     ) -> None:
         self.base_url = (base_url or os.environ.get("DS4_OPENAI_BASE_URL") or "http://127.0.0.1:8000").rstrip("/")
         self.api_key = api_key if api_key is not None else os.environ.get("DS4_OPENAI_API_KEY", "")
@@ -273,6 +275,7 @@ class OpenAICompatibleRunner:
         self.chat_endpoint = chat_endpoint
         self.completion_endpoint = completion_endpoint
         self.default_extra_body = dict(default_extra_body or {})
+        self.jit_kv_circuit = jit_kv_circuit
 
     def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
         started = time.time()
@@ -449,11 +452,12 @@ class OpenAICompatibleRunner:
             result["transport"]["coalesced_batch_size"] = coalesced_batch_size
         return result
 
-    def _post_json(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _post_json(self, endpoint: str, payload: dict[str, Any], *, extra_headers: dict[str, str] | None = None) -> dict[str, Any]:
         body = json.dumps(payload).encode("utf-8")
         headers = {"content-type": "application/json"}
         if self.api_key:
             headers["authorization"] = f"Bearer {self.api_key}"
+        headers.update(extra_headers or {})
         req = urlrequest.Request(self.base_url + endpoint, data=body, headers=headers, method="POST")
         try:
             with urlrequest.urlopen(req, timeout=self.timeout_s) as response:
@@ -504,6 +508,7 @@ class PipelineOpenAIRunner:
         api_key: str | None = None,
         timeout_s: int = 300,
         default_base_url: str | None = None,
+        jit_kv_circuit: Any | None = None,
     ) -> None:
         env_urls = _json_env("DS4_PIPELINE_BASE_URLS_JSON")
         merged = {str(key): str(value).rstrip("/") for key, value in env_urls.items()}
@@ -514,6 +519,7 @@ class PipelineOpenAIRunner:
         self.api_key = api_key if api_key is not None else os.environ.get("DS4_PIPELINE_API_KEY", "")
         self.timeout_s = timeout_s
         self.default_extra_body = _json_env("DS4_PIPELINE_EXTRA_BODY_JSON")
+        self.jit_kv_circuit = jit_kv_circuit
 
     def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
         return self.run_one_on_node(request, profile, None)
@@ -591,6 +597,7 @@ class PipelineOpenAIRunner:
             api_key=self.api_key,
             timeout_s=self.timeout_s,
             default_extra_body=self.default_extra_body,
+            jit_kv_circuit=self.jit_kv_circuit,
         )
 
     def _base_url(self, profile: ModelProfile, node_id: str | None) -> str:
@@ -758,29 +765,20 @@ def _maybe_prestage_common_kv_prefix(runner: OpenAICompatibleRunner, payload: di
         return None
     if not _payload_has_strict_kv_load(payload):
         return None
+    circuit = getattr(runner, "jit_kv_circuit", None)
+    if circuit is not None and not circuit.allow_prefetch():
+        disable_strict_kv(payload)
+        return {
+            "strategy": "jit-kv-circuit-open-cold-dispatch",
+            "cold_dispatch": True,
+        }
     prefix = _common_prompt_prefix(requests)
     min_chars = _env_int("DS4_PIPELINE_PRESTAGE_COMMON_PREFIX_MIN_CHARS", 1024)
     if prefix is None or len(prefix) < max(1, min_chars):
         return None
     max_tokens = max(1, _env_int("DS4_PIPELINE_PRESTAGE_MAX_TOKENS", 1))
-    prefetch_payload: dict[str, Any] = {
-        "model": payload["model"],
-        "prompt": prefix,
-        "max_tokens": max_tokens,
-        "temperature": payload.get("temperature", 0),
-        "stream": False,
-    }
-    extra_body = payload.get("extra_body")
-    if isinstance(extra_body, dict):
-        prefetch_payload["extra_body"] = dict(extra_body)
-    started = time.time()
-    runner._post_json(runner.completion_endpoint, prefetch_payload)
-    return {
-        "common_prefix_chars": len(prefix),
-        "duration_s": round(time.time() - started, 6),
-        "max_tokens": max_tokens,
-        "strategy": "single-prefix-load-before-cohort",
-    }
+    prefetch_payload = build_prefetch_payload(payload, prefix=prefix, max_tokens=max_tokens)
+    return run_prefetch(runner=runner, payload=payload, prefetch_payload=prefetch_payload, prefix_len=len(prefix), max_tokens=max_tokens, started=time.time(), circuit=circuit)
 
 
 def _payload_has_strict_kv_load(payload: dict[str, Any]) -> bool:
