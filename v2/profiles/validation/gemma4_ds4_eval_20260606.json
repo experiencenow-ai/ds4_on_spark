@@ -1,0 +1,312 @@
+{
+  "benchmark": "ds4-eval",
+  "format": "ds4-benchmark-snapshot-v1",
+  "notes": [
+    "All primary runs used DS4 API PP8 pipeline routing, temperature 0, thinking disabled, and max_output_tokens=4096.",
+    "Gemma4 26B-A4B is the fast-slot winner from this snapshot: lower accuracy than dense 31B, but much higher aggregate decode throughput and stronger quality than 12B.",
+    "The 26B-A4B runner saw one transient DS4 API poll refusal after 91 live answers; the final completed request was backfilled from the queue collect endpoint.",
+    "Dense 31B host memory was not sampled in this run; rank0 model and KV figures come from the vLLM launch log."
+  ],
+  "run_date_utc": "2026-06-06",
+  "settings": {
+    "api_path": "DS4 coordinator API",
+    "max_model_len": 8192,
+    "max_output_tokens": 4096,
+    "response_style": "answer_first",
+    "temperature": 0.0,
+    "thinking": false
+  },
+  "results": [
+    {
+      "artifact": "/private/tmp/ds4_bench/gemma12_pp8_dsapi_92_no_thinking_4k_parallel_20260606T070800Z",
+      "capped_outputs": 13,
+      "completion_tokens": 113630,
+      "gpu_memory_utilization": 0.25,
+      "host_memory_sampler": {
+        "artifact": "/private/tmp/ds4_bench/gemma12_pp8_mem_scoped_20260606T072300Z.jsonl",
+        "min_available_gib_by_node": {
+          "spark0": 30.0,
+          "spark1": 36.3,
+          "spark2": 33.2,
+          "spark3": 55.1,
+          "spark4": 52.4,
+          "spark5": 54.3,
+          "spark6": 54.8,
+          "spark7": 53.6
+        },
+        "peak_gemma_rss_gib_by_node": {
+          "spark0": 3.09,
+          "spark1": 3.35,
+          "spark2": 3.22,
+          "spark3": 3.36,
+          "spark4": 3.38,
+          "spark5": 3.47,
+          "spark6": 3.35,
+          "spark7": 3.26
+        },
+        "peak_swap_gib_by_node": {
+          "spark0": 6.0,
+          "spark1": 0.1,
+          "spark2": 0.2,
+          "spark3": 0.4,
+          "spark4": 0.0,
+          "spark5": 0.0,
+          "spark6": 0.0,
+          "spark7": 1.0
+        },
+        "peak_used_gib_by_node": {
+          "spark0": 89.7,
+          "spark1": 85.4,
+          "spark2": 86.5,
+          "spark3": 66.5,
+          "spark4": 67.2,
+          "spark5": 67.4,
+          "spark6": 66.8,
+          "spark7": 66.0
+        },
+        "sample_count": 64
+      },
+      "max_concurrency_8192": 63.92,
+      "max_num_batched_tokens": 32768,
+      "max_num_seqs": 16,
+      "model_id": "google/gemma-4-12B-it",
+      "no_answer_marker": 13,
+      "passed": 63,
+      "per_source": {
+        "AIME2025": {
+          "capped_outputs": 9,
+          "completion_tokens": 57640,
+          "no_answer_marker": 9,
+          "passed": 11,
+          "total": 25
+        },
+        "COMPSEC": {
+          "capped_outputs": 0,
+          "completion_tokens": 5920,
+          "no_answer_marker": 0,
+          "passed": 17,
+          "total": 17
+        },
+        "GPQA Diamond": {
+          "capped_outputs": 3,
+          "completion_tokens": 27648,
+          "no_answer_marker": 3,
+          "passed": 16,
+          "total": 24
+        },
+        "GPQA Diamond (modified)": {
+          "capped_outputs": 0,
+          "completion_tokens": 588,
+          "no_answer_marker": 0,
+          "passed": 1,
+          "total": 1
+        },
+        "SuperGPQA": {
+          "capped_outputs": 1,
+          "completion_tokens": 21834,
+          "no_answer_marker": 1,
+          "passed": 18,
+          "total": 25
+        }
+      },
+      "profile_id": "gemma4_12b_it_pp8_peer_v1",
+      "rank0_available_kv_cache_gib": 21.28,
+      "rank0_gpu_kv_cache_tokens": 523616,
+      "rank0_model_load_gib": 4.76,
+      "run_s": 2160.724222,
+      "served_model_name": "gemma-4-12b-it-pp8",
+      "service_id": "gemma4_12b_pp8",
+      "total": 92,
+      "tok_s": 52.588849
+    },
+    {
+      "artifact": "/private/tmp/ds4_bench/gemma26_a4b_pp8_dsapi_92_no_thinking_4k_parallel_20260606T165000Z",
+      "capped_outputs": 8,
+      "completion_tokens": 103190,
+      "fast_slot_winner": true,
+      "gpu_memory_utilization": 0.25,
+      "host_memory_sampler": {
+        "artifact": "/private/tmp/ds4_bench/gemma26_a4b_pp8_mem_20260606T165000Z.jsonl",
+        "min_available_gib_by_node": {
+          "spark0": 28.6,
+          "spark1": 36.8,
+          "spark2": 33.7,
+          "spark3": 53.9,
+          "spark4": 53.4,
+          "spark5": 54.8,
+          "spark6": 59.5,
+          "spark7": 60.3
+        },
+        "peak_gemma_rss_gib_by_node": {
+          "spark0": 3.09,
+          "spark1": 3.64,
+          "spark2": 3.65,
+          "spark3": 3.62,
+          "spark4": 3.58,
+          "spark5": 3.68,
+          "spark6": 3.57,
+          "spark7": 3.78
+        },
+        "peak_swap_gib_by_node": {
+          "spark0": 5.6,
+          "spark1": 0.1,
+          "spark2": 0.2,
+          "spark3": 0.4,
+          "spark4": 0.0,
+          "spark5": 0.0,
+          "spark6": 0.0,
+          "spark7": 0.7
+        },
+        "peak_used_gib_by_node": {
+          "spark0": 91.1,
+          "spark1": 84.9,
+          "spark2": 86.0,
+          "spark3": 67.8,
+          "spark4": 66.2,
+          "spark5": 66.8,
+          "spark6": 62.2,
+          "spark7": 59.3
+        },
+        "sample_count": 67
+      },
+      "max_concurrency_8192": 69.34,
+      "max_num_batched_tokens": 24576,
+      "max_num_seqs": 16,
+      "model_id": "google/gemma-4-26B-A4B-it",
+      "no_answer_marker": 9,
+      "passed": 69,
+      "per_source": {
+        "AIME2025": {
+          "capped_outputs": 6,
+          "completion_tokens": 53044,
+          "no_answer_marker": 8,
+          "passed": 16,
+          "total": 25
+        },
+        "COMPSEC": {
+          "capped_outputs": 0,
+          "completion_tokens": 7383,
+          "no_answer_marker": 0,
+          "passed": 15,
+          "total": 17
+        },
+        "GPQA Diamond": {
+          "capped_outputs": 2,
+          "completion_tokens": 26157,
+          "no_answer_marker": 1,
+          "passed": 16,
+          "total": 24
+        },
+        "GPQA Diamond (modified)": {
+          "capped_outputs": 0,
+          "completion_tokens": 420,
+          "no_answer_marker": 0,
+          "passed": 1,
+          "total": 1
+        },
+        "SuperGPQA": {
+          "capped_outputs": 0,
+          "completion_tokens": 16186,
+          "no_answer_marker": 0,
+          "passed": 21,
+          "total": 25
+        }
+      },
+      "profile_id": "gemma4_26b_a4b_it_pp8_peer_v1",
+      "rank0_available_kv_cache_gib": 17.34,
+      "rank0_gpu_kv_cache_tokens": 568032,
+      "rank0_model_load_gib": 7.57,
+      "run_s": 1474.153248,
+      "served_model_name": "gemma-4-26b-a4b-it-pp8",
+      "service_id": "gemma4_26b_a4b_pp8",
+      "total": 92,
+      "tok_s": 69.999507
+    },
+    {
+      "artifact": "/private/tmp/ds4_bench/gemma31_pp8_dsapi_92_no_thinking_4k_parallel_20260606T053000Z",
+      "capped_outputs": 5,
+      "completion_tokens": 80745,
+      "gpu_memory_utilization": 0.2,
+      "host_memory_sampler": null,
+      "max_concurrency_8192": 10.59,
+      "max_num_batched_tokens": 16384,
+      "max_num_seqs": 8,
+      "model_id": "google/gemma-4-31B-it",
+      "no_answer_marker": 4,
+      "passed": 72,
+      "per_source": {
+        "AIME2025": {
+          "capped_outputs": 4,
+          "completion_tokens": 44143,
+          "no_answer_marker": 4,
+          "passed": 18,
+          "total": 25
+        },
+        "COMPSEC": {
+          "capped_outputs": 0,
+          "completion_tokens": 2475,
+          "no_answer_marker": 0,
+          "passed": 16,
+          "total": 17
+        },
+        "GPQA Diamond": {
+          "capped_outputs": 1,
+          "completion_tokens": 21565,
+          "no_answer_marker": 0,
+          "passed": 17,
+          "total": 24
+        },
+        "GPQA Diamond (modified)": {
+          "capped_outputs": 0,
+          "completion_tokens": 505,
+          "no_answer_marker": 0,
+          "passed": 1,
+          "total": 1
+        },
+        "SuperGPQA": {
+          "capped_outputs": 0,
+          "completion_tokens": 12057,
+          "no_answer_marker": 0,
+          "passed": 20,
+          "total": 25
+        }
+      },
+      "profile_id": "gemma4_31b_it_pp8_peer_v1",
+      "rank0_available_kv_cache_gib": 10.56,
+      "rank0_gpu_kv_cache_tokens": 86720,
+      "rank0_model_load_gib": 10.28,
+      "run_s": 4504.848258,
+      "served_model_name": "gemma-4-31b-it-pp8",
+      "service_id": "gemma4_31b_pp8",
+      "total": 92,
+      "tok_s": 17.924022
+    }
+  ],
+  "token_budget_comparison": [
+    {
+      "artifact": "/private/tmp/ds4_bench/gemma31_pp8_dsapi_92_no_thinking_parallel_20260606T045000Z",
+      "capped_outputs": 22,
+      "completion_tokens": 52776,
+      "max_output_tokens": 1024,
+      "model_id": "google/gemma-4-31B-it",
+      "no_answer_marker": 21,
+      "passed": 62,
+      "total": 92,
+      "tok_s": 21.96
+    },
+    {
+      "artifact": "/private/tmp/ds4_bench/gemma31_pp8_dsapi_92_no_thinking_4k_parallel_20260606T053000Z",
+      "capped_outputs": 5,
+      "completion_tokens": 80745,
+      "max_output_tokens": 4096,
+      "model_id": "google/gemma-4-31B-it",
+      "net_accuracy_delta_vs_1024": 10,
+      "no_answer_marker": 4,
+      "passed": 72,
+      "recovered_vs_1024": 11,
+      "regressed_vs_1024": 1,
+      "total": 92,
+      "tok_s": 17.924022
+    }
+  ]
+}

@@ -8,16 +8,29 @@
   "format": "ds4-model-profile-v1",
   "model_id": "google/gemma-4-26B-A4B-it",
   "performance": {
+    "aggregate_completion_tok_s": 69.999507,
+    "fast_slot_winner": true,
+    "gpu_memory_utilization": 0.25,
     "latency_rank": 0.85,
+    "max_concurrency_8192": 69.34,
+    "max_num_batched_tokens": 24576,
+    "max_num_seqs": 16,
+    "measurement_notes": "2026-06-06 DS4 API PP8 ds4-eval run with thinking disabled and max_output_tokens=4096. Fast-slot winner among tested Gemma profiles.",
+    "rank0_gpu_kv_cache_tokens": 568032,
+    "rank0_model_load_gib": 7.57,
     "target": "8-stage Gemma4 experimental layer pipeline; active-4B larger peer candidate"
   },
-  "production_eligible": false,
+  "production_eligible": true,
   "profile_id": "gemma4_26b_a4b_it_pp8_peer_v1",
   "quality": {
-    "aime": "10/25 direct single-Spark fair run",
-    "baseline": "63/92 direct single-Spark DS4-eval on 2026-06-05; PP8 DS4-eval pending",
-    "compsec": "15/17 direct single-Spark fair run",
-    "mc": "38/50 direct single-Spark fair run"
+    "aime2025": "16/25 PP8 DS4 API ds4-eval, thinking off, 4k output cap",
+    "compsec": "15/17 PP8 DS4 API ds4-eval, thinking off, 4k output cap",
+    "direct_single_spark_baseline": "63/92 direct single-Spark DS4-eval on 2026-06-05",
+    "ds4_eval_accuracy": 0.75,
+    "ds4_eval_correct": 69,
+    "ds4_eval_total": 92,
+    "gpqa_diamond": "16/24 PP8 DS4 API ds4-eval, thinking off, 4k output cap",
+    "supergpqa": "21/25 PP8 DS4 API ds4-eval, thinking off, 4k output cap"
   },
   "routing": {
     "chat_template_thinking_key": "enable_thinking",
@@ -35,9 +48,13 @@
       "service_id": "gemma4_26b_a4b_pp8"
     },
     "pipeline_service_id": "gemma4_26b_a4b_pp8",
+    "default_for": [
+      "smart"
+    ],
     "rank": 730,
-    "requires_profile_pin": true,
+    "requires_profile_pin": false,
     "served_model_name": "gemma-4-26b-a4b-it-pp8",
+    "startup_autoload": false,
     "tokenizer_path": "/home/spark0/models/hf/google/gemma-4-26B-A4B-it"
   },
   "runtime_contract_id": "gemma4_26b_a4b_it_pp8_v1",

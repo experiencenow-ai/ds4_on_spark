@@ -23,7 +23,7 @@ def startup_plan(*, topology: SparkTopology, registry: ProfileRegistry, node_id:
         if node_id not in service.node_ids:
             continue
         profile = registry.get(service.profile_id)
-        if bool(profile.routing.get("requires_profile_pin", False)) or not profile.production_eligible:
+        if bool(profile.routing.get("requires_profile_pin", False)) or not profile.production_eligible or profile.routing.get("startup_autoload") is False:
             continue
         stage = service.stage_for_node(node_id)
         if node_id == service.entry_node_id:

@@ -62,7 +62,9 @@
   ],
   "extra_env": {
     "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "GLOO_SOCKET_IFNAME": "ds4ring0",
     "PYTHONHASHSEED": "0",
+    "TP_SOCKET_IFNAME": "ds4ring0",
     "VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1",
     "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload",
     "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_STRICT": "1",

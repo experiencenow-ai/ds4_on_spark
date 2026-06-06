@@ -8,13 +8,27 @@
   "format": "ds4-model-profile-v1",
   "model_id": "google/gemma-4-12B-it",
   "performance": {
+    "aggregate_completion_tok_s": 52.588849,
+    "gpu_memory_utilization": 0.25,
     "latency_rank": 0.65,
+    "max_concurrency_8192": 63.92,
+    "max_num_batched_tokens": 32768,
+    "max_num_seqs": 16,
+    "measurement_notes": "2026-06-06 DS4 API PP8 ds4-eval run with thinking disabled and max_output_tokens=4096.",
+    "rank0_gpu_kv_cache_tokens": 523616,
+    "rank0_model_load_gib": 4.76,
     "target": "8-stage Gemma4 experimental layer pipeline; primary small peer candidate expected to be light per Spark"
   },
   "production_eligible": false,
   "profile_id": "gemma4_12b_it_pp8_peer_v1",
   "quality": {
-    "status": "worth pipelining after direct Gemma4 testing, but PP8 DS4-eval is pending"
+    "aime2025": "11/25 PP8 DS4 API ds4-eval, thinking off, 4k output cap",
+    "compsec": "17/17 PP8 DS4 API ds4-eval, thinking off, 4k output cap",
+    "ds4_eval_accuracy": 0.684783,
+    "ds4_eval_correct": 63,
+    "ds4_eval_total": 92,
+    "gpqa_diamond": "16/24 PP8 DS4 API ds4-eval, thinking off, 4k output cap",
+    "supergpqa": "18/25 PP8 DS4 API ds4-eval, thinking off, 4k output cap"
   },
   "routing": {
     "chat_template_thinking_key": "enable_thinking",

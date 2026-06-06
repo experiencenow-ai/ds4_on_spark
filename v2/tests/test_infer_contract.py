@@ -27,9 +27,13 @@ class InferenceContractTests(unittest.TestCase):
         profile = ProfileRegistry.load(PROFILES).resolve(capability="fastest", chat=False, job_class="triage")
         self.assertEqual(profile.profile_id, "qwen3_6_35b_a3b_fp8_fastest_v1")
 
-    def test_smart_completion_has_no_implicit_dsv4_route_while_unqualified(self) -> None:
-        with self.assertRaisesRegex(ValueError, "no production profile"):
-            ProfileRegistry.load(PROFILES).resolve(capability="smart", chat=False, job_class="atom_edit")
+    def test_smart_completion_routes_to_gemma26_fast_slot(self) -> None:
+        profile = ProfileRegistry.load(PROFILES).resolve(capability="smart", chat=False, job_class="atom_edit")
+        self.assertEqual(profile.profile_id, "gemma4_26b_a4b_it_pp8_peer_v1")
+        self.assertEqual(profile.model_id, "google/gemma-4-26B-A4B-it")
+        self.assertTrue(profile.production_eligible)
+        self.assertFalse(profile.routing["requires_profile_pin"])
+        self.assertFalse(profile.routing["startup_autoload"])
 
     def test_smartest_chat_has_no_implicit_dsv4_route_while_unqualified(self) -> None:
         with self.assertRaisesRegex(ValueError, "no production profile"):
