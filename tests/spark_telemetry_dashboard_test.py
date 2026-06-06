@@ -122,6 +122,9 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
                 "local_queue_last_service": "dsv4_flash_pp8",
                 "local_queue_kv_shards": 8,
                 "local_queue_kv_by_node": "spark0:dsv4_flash_pp8",
+                "local_queue_prompt_tok_s": 12.5,
+                "local_queue_completion_tok_s": 44.25,
+                "local_queue_total_tok_s": 56.75,
             },
             "nodes": {"spark0": {"sample_count": 1, "last_gpu_util_pct": 0, "last_vllm_metrics_up": 0}},
         }
@@ -135,6 +138,9 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["nodes"][0]["ds_service_id"],"dsv4_flash_pp8")
         self.assertEqual(snap["nodes"][0]["input_tok_s"],0.0)
         self.assertEqual(snap["nodes"][0]["output_tok_s"],0.0)
+        self.assertEqual(snap["input_tok_s"],12.5)
+        self.assertEqual(snap["output_tok_s"],44.25)
+        self.assertEqual(snap["tok_s"],56.75)
         self.assertEqual(snap["vllm_running"],2.0)
         self.assertEqual(snap["vllm_waiting"],1.0)
         self.assertEqual(snap["queue_depth"],2.0)

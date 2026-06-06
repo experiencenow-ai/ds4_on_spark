@@ -289,7 +289,11 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
     known_cache = [node["cache_hit_pct"] for node in reachable if node.get("vllm_metrics_up")]
     input_tok_s = sum(fnum(node.get("input_tok_s")) for node in reachable)
     output_tok_s = sum(fnum(node.get("output_tok_s")) for node in reachable)
-    tok_s = max(sum(fnum(node.get("tok_s")) for node in reachable),input_tok_s + output_tok_s)
+    queue_input_tok_s = fnum(queue.get("local_queue_prompt_tok_s",0.0))
+    queue_output_tok_s = fnum(queue.get("local_queue_completion_tok_s",0.0))
+    input_tok_s = max(input_tok_s,queue_input_tok_s)
+    output_tok_s = max(output_tok_s,queue_output_tok_s)
+    tok_s = max(sum(fnum(node.get("tok_s")) for node in reachable),input_tok_s + output_tok_s,fnum(queue.get("local_queue_total_tok_s",0.0)))
     running = max(sum(node["vllm_running"] for node in reachable),fnum(queue.get("local_queue_running",0.0)))
     waiting = max(sum(node["vllm_waiting"] for node in reachable),fnum(queue.get("local_queue_queued",0.0)))
     power_nodes = [node for node in reachable if node.get("gpu_power_known")]

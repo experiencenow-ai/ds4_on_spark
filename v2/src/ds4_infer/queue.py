@@ -537,6 +537,50 @@ class InferenceQueue:
             leases = [dict(row) for row in conn.execute("select * from compute_leases order by compute_domain")]
             return {"format": QUEUE_FORMAT, "state_counts": counts, "newest_event_id": int(event["newest"] or 0), "active_compute_leases": leases, "pipeline_status": self._pipeline_status_locked(conn)}
 
+    def usage(self, *, window_s: float = 300.0, now: float | None = None, limit: int = 10000) -> dict[str, Any]:
+        window = max(1.0, min(86400.0, float(window_s)))
+        end_ts = time.time() if now is None else float(now)
+        start_ts = end_ts - window
+        row_limit = max(1, min(100000, int(limit)))
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                """
+                select request_id,result_json,completed_at from requests
+                where state='completed' and completed_at is not null and completed_at>=? and completed_at<=?
+                order by completed_at desc limit ?
+                """,
+                (start_ts,end_ts,row_limit),
+            ).fetchall()
+        prompt = 0
+        completion = 0
+        total = 0
+        usage_count = 0
+        for row in rows:
+            try:
+                result = json.loads(str(row["result_json"])) if row["result_json"] else {}
+            except Exception:
+                result = {}
+            p, c, t = _result_usage_tokens(result if isinstance(result, dict) else {})
+            prompt += p
+            completion += c
+            total += t
+            if p > 0 or c > 0 or t > 0:
+                usage_count += 1
+        return {
+            "format": QUEUE_FORMAT,
+            "window_s": window,
+            "start_ts": start_ts,
+            "end_ts": end_ts,
+            "completed_count": len(rows),
+            "usage_count": usage_count,
+            "prompt_tokens": prompt,
+            "completion_tokens": completion,
+            "total_tokens": total,
+            "prompt_tok_s": round(prompt / window,6),
+            "completion_tok_s": round(completion / window,6),
+            "total_tok_s": round(total / window,6),
+        }
+
     def unfinished_request_count(self, request_ids: Iterable[str]) -> int:
         ids = tuple(str(request_id) for request_id in request_ids)
         if not ids:
@@ -1479,6 +1523,23 @@ def _request_status(row: sqlite3.Row) -> dict[str, Any]:
         "kv_shard_count": int(row["kv_shard_count"] or 0),
         "kv_shard_bytes": int(row["kv_shard_bytes"] or 0),
     }
+
+
+def _usage_int(value: Any) -> int:
+    try:
+        return max(0,int(value or 0))
+    except Exception:
+        return 0
+
+
+def _result_usage_tokens(result: dict[str, Any]) -> tuple[int, int, int]:
+    usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+    prompt = _usage_int(usage.get("input_tokens", usage.get("prompt_tokens", 0)))
+    completion = _usage_int(usage.get("output_tokens", usage.get("completion_tokens", 0)))
+    total = _usage_int(usage.get("total_tokens", 0))
+    if total == 0 and (prompt > 0 or completion > 0):
+        total = prompt + completion
+    return prompt, completion, total
 
 
 def _batch_status(row: sqlite3.Row) -> dict[str, Any]:
