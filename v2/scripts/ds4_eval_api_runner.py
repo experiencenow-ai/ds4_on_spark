@@ -954,6 +954,7 @@ def _answer_record(meta: dict, row: dict, *, elapsed_s: float) -> dict:
         "answer_marker_present": _last_answer_marker(_answer_region(text)) >= 0,
         "completion_tokens": int(usage.get("completion_tokens", 0) or 0),
         "status": str(result.get("status") or request.get("state") or ""),
+        "text": text,
         "text_preview": text[:240],
     }
 

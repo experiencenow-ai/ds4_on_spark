@@ -30,7 +30,7 @@
       "--max-model-len",
       "262144",
       "--max-num-seqs",
-      "12",
+      "64",
       "--max-num-batched-tokens",
       "65536",
       "--gpu-memory-utilization",

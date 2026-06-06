@@ -26,8 +26,6 @@
     "--trust-remote-code",
     "--max-model-len",
     "262144",
-    "--max-num-seqs",
-    "12",
     "--max-num-batched-tokens",
     "65536",
     "--gpu-memory-utilization",
@@ -76,12 +74,13 @@
     "VLLM_DS4_PP_EDGE_RAIL": "enp",
     "VLLM_DS4_PP_OVERLAP_SEND": "1",
     "VLLM_DS4_PP_SEND_BUFFER_SLOTS": "4",
-    "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "32"
+    "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "64"
   },
   "fabric_topology": "../transfer/spark_200g.json",
   "format": "ds4-vllm-kv-cache-deployment-v1",
   "host": "0.0.0.0",
   "http_port": 8101,
+  "max_batch_size": 64,
   "layer_partition": [
     9,
     9,

@@ -192,6 +192,21 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         self.assertEqual(got, "12-13")
         self.assertTrue(ok)
 
+    def test_live_answer_record_includes_full_text(self) -> None:
+        text = "Reasoning that is useful during a live run.\nAnswer: 4"
+        record = self.runner._answer_record(
+            {"index": 2, "source": "AIME2025", "id": "case", "answer": "4"},
+            {
+                "request": {"request_id": "req-1", "state": "completed"},
+                "result": {"output": {"text": text}, "usage": {"completion_tokens": 12}, "status": "completed"},
+            },
+            elapsed_s=1.25,
+        )
+
+        self.assertEqual(record["text"], text)
+        self.assertEqual(record["text_preview"], text[:240])
+        self.assertTrue(record["passed"])
+
     def test_multiple_choice_preserves_loose_answer_fallback(self) -> None:
         got, ok = self.runner._grade_one(
             {"choices": ["A", "B", "C", "D", "E", "F", "G", "H"], "answer": "F"},

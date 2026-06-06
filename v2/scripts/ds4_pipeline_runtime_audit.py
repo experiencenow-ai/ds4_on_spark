@@ -39,7 +39,7 @@ def _check_dsv4(profile: dict[str, Any], service: dict[str, Any], errors: list[s
     scheduler = service.get("scheduler") if isinstance(service.get("scheduler"), dict) else {}
     layer_partition = _as_int_list(profile["layer_partition"])
     compilation_config = json.dumps(profile["compilation_config"], separators=(",", ":"))
-    for name, args in (("runtime contract", contract["launch"]["args"]), ("KV deployment", deployment["extra_args"])):
+    for name, args in (("runtime contract", contract["launch"]["args"]), ("KV deployment", _effective_launch_args(deployment))):
         _require_arg(args, "--max-model-len", str(profile["max_model_len"]), f"DSV4 {name} max model len", errors, checks)
         _require_arg(args, "--max-num-seqs", str(profile["max_num_seqs"]), f"DSV4 {name} max seqs", errors, checks)
         _require_arg(args, "--max-num-batched-tokens", str(profile["max_num_batched_tokens"]), f"DSV4 {name} token budget", errors, checks)
@@ -75,7 +75,7 @@ def _check_dsv4(profile: dict[str, Any], service: dict[str, Any], errors: list[s
         "vllm_max_num_batched_tokens": "max_num_batched_tokens",
         "vllm_max_num_seqs": "max_num_seqs",
     }.items():
-        _require_equal(scheduler.get(actual_key), profile[profile_key], f"DSV4 topology scheduler {actual_key}", errors, checks)
+        _require_equal(_scheduler_value(service, scheduler, actual_key), profile[profile_key], f"DSV4 topology scheduler {actual_key}", errors, checks)
     env = deployment.get("extra_env") if isinstance(deployment.get("extra_env"), dict) else {}
     _check_dsv4_env(profile, env, errors, checks)
 
@@ -241,6 +241,14 @@ def _check_relaunch_defaults(profile: dict[str, Any], errors: list[str], checks:
         checks.append("coordinator relaunch overrides unsafe inherited KV admission env")
 
 
+def _scheduler_value(service: dict[str, Any], scheduler: dict[str, Any], key: str) -> Any:
+    if key in scheduler:
+        return scheduler[key]
+    if key in {"queue_concurrency", "queue_limit", "vllm_max_num_seqs"}:
+        return service.get("max_batch_size")
+    return None
+
+
 def _check_spark_update_scripts(errors: list[str], checks: list[str]) -> None:
     update_script = (ROOT.parent / "scripts" / "ds4_update_spark_nodes.sh").read_text(encoding="utf-8")
     pull_script = (ROOT.parent / "scripts" / "ds4_pull_spark_nodes.sh").read_text(encoding="utf-8")
@@ -267,6 +275,13 @@ def _check_spark_update_scripts(errors: list[str], checks: list[str]) -> None:
         errors.append("Spark pull wrapper must call ds4_update_spark_nodes.sh --code-only")
     else:
         checks.append("Spark pull wrapper calls updater in code-only mode")
+
+
+def _effective_launch_args(data: dict[str, Any]) -> list[Any]:
+    args = list(data.get("extra_args") if isinstance(data.get("extra_args"), list) else data.get("launch", {}).get("args", []))
+    if data.get("max_batch_size") is not None and "--max-num-seqs" not in [str(item) for item in args]:
+        args.extend(["--max-num-seqs", str(data["max_batch_size"])])
+    return args
 
 
 def _require_arg(args: list[Any], flag: str, expected: str, label: str, errors: list[str], checks: list[str]) -> None:

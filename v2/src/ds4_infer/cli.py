@@ -7,6 +7,7 @@ import time
 
 from .profiles import ProfileRegistry
 from .control import trim_spark_memory
+from .pipelines import pipeline_service_batch_limit
 from .queue import InferenceQueue
 from .runners import AntirezRunner, AutoRunner, CommandRunner, FakeRunner, HmaPersistentRunner, PipelineOpenAIRunner, SparkHttpRunner, VllmOpenAIRunner
 from .service import load_requests_jsonl
@@ -309,7 +310,7 @@ def _pipeline_batch_limits(topology_path: str | None) -> dict[str, int]:
     if not topology_path:
         return {}
     topology = SparkTopology.load(topology_path)
-    return {service.service_id: int(service.scheduler.get("queue_limit") or service.max_batch_size) for service in topology.pipeline_services.values()}
+    return {service.service_id: pipeline_service_batch_limit(service) for service in topology.pipeline_services.values()}
 
 
 def _pipeline_refill_low_watermarks(topology_path: str | None) -> dict[str, int]:

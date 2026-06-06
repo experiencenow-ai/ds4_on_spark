@@ -7,6 +7,7 @@ import threading
 import time
 from typing import Any
 
+from .pipelines import pipeline_service_batch_limit
 from .queue import QueueClaim
 from .topology import SparkTopology
 
@@ -113,12 +114,7 @@ def active_resident_service_ids(topology: SparkTopology) -> set[str] | None:
 
 
 def service_target_active(service: Any) -> int:
-    scheduler = getattr(service, "scheduler", {}) or {}
-    for key in ("queue_concurrency", "queue_limit", "vllm_max_num_seqs"):
-        value = scheduler.get(key) if isinstance(scheduler, dict) else None
-        if value is not None:
-            return max(1, int(value))
-    return max(1, int(getattr(service, "max_batch_size", 1) or 1))
+    return pipeline_service_batch_limit(service)
 
 
 def resident_service_order(plans: dict[str, ResidentServicePlan], active_by_service: dict[str, int]) -> list[ResidentServicePlan]:
@@ -162,7 +158,7 @@ def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weigh
     low = int(lows.get(service_id, lows.get(service.profile_id, int(service.scheduler.get("refill_low_watermark") or 0))))
     if low <= 0:
         low = max(1, int(target * 0.75))
-    max_cohort = max(1, int(cohort_sizes.get(service_id, cohort_sizes.get(service.profile_id, int(service.scheduler.get("queue_limit") or service.max_batch_size or target)))))
+    max_cohort = max(1, int(cohort_sizes.get(service_id, cohort_sizes.get(service.profile_id, pipeline_service_batch_limit(service)))))
     service_linger = float(linger.get(service_id, linger.get(service.profile_id, _scheduler_linger(service, default_batch_linger_s))))
     return ResidentServicePlan(
         service_id=service_id,

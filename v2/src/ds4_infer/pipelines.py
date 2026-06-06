@@ -91,6 +91,8 @@ class PipelineService:
         max_batch_size = int(data.get("max_batch_size", data.get("max_num_seqs", 1)))
         if max_batch_size < 1:
             raise ValueError("pipeline service max_batch_size must be positive")
+        scheduler = dict(data.get("scheduler", {}))
+        _apply_scheduler_batch_defaults(scheduler, max_batch_size)
         service_id = str(data["service_id"])
         return PipelineService(
             service_id=service_id,
@@ -108,7 +110,7 @@ class PipelineService:
             dtype=str(data.get("dtype", data.get("precision", "unknown"))),
             max_batch_size=max_batch_size,
             kv_cache=dict(data.get("kv_cache", {})),
-            scheduler=dict(data.get("scheduler", {})),
+            scheduler=scheduler,
             telemetry=dict(data.get("telemetry", {})),
         )
 
@@ -343,6 +345,20 @@ def load_layer_partition_with_source(data: Mapping[str, Any], *, node_ids: tuple
     if not isinstance(raw, list):
         raise ValueError("layer_partition must be a list, object-by-node override, or known preset string")
     return tuple(int(item) for item in raw), "explicit"
+
+
+def _apply_scheduler_batch_defaults(scheduler: dict[str, Any], max_batch_size: int) -> None:
+    for key in ("queue_concurrency", "queue_limit", "vllm_max_num_seqs"):
+        scheduler.setdefault(key, max_batch_size)
+
+
+def pipeline_service_batch_limit(service: Any) -> int:
+    scheduler = getattr(service, "scheduler", {}) or {}
+    if isinstance(scheduler, Mapping):
+        value = scheduler.get("vllm_max_num_seqs")
+        if value is not None:
+            return max(1, int(value))
+    return max(1, int(getattr(service, "max_batch_size", 1) or 1))
 
 
 def _load_layer_partition(data: Mapping[str, Any], *, total_layers: int, stage_count: int) -> tuple[int, ...]:

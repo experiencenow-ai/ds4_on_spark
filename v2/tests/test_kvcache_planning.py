@@ -227,6 +227,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--kv-cache-dtype") + 1], "auto")
         self.assertIn("--gpu-memory-utilization", plan["vllm_nodes"][0]["argv"])
         self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--gpu-memory-utilization") + 1], "0.35")
+        self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--max-num-seqs") + 1], "64")
         self.assertIn("--served-model-name", plan["vllm_nodes"][0]["argv"])
         self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--served-model-name") + 1], "qwen27-bf16-pp8-bf16kv")
 

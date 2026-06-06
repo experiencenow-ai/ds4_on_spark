@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.dispatcher_resident import active_resident_service_ids, resident_service_plans
+from ds4_infer.pipelines import pipeline_service_batch_limit
 from ds4_infer.runners import FakeRunner
 from ds4_infer.schemas import InferenceRequest
 from ds4_infer.service import run_requests
@@ -54,8 +55,8 @@ class StaticSparkTopologyTests(unittest.TestCase):
     def test_capacity_reflects_dual_pipeline_services(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
         capacity = topology.estimate_capacity_by_profile()
-        self.assertEqual(capacity[QWEN_PP], 12)
-        self.assertEqual(capacity[QWEN_BF16KV_PP], 12)
+        self.assertEqual(capacity[QWEN_PP], 64)
+        self.assertEqual(capacity[QWEN_BF16KV_PP], 64)
         self.assertEqual(capacity[DSV4_PP], DSV4_PRODUCTION["max_num_seqs"])
         self.assertNotIn("qwen3_6_27b_fp8_efficient_v1", capacity)
         self.assertNotIn("dsv4_vllm_mtp_smartest_v1", capacity)
@@ -63,6 +64,20 @@ class StaticSparkTopologyTests(unittest.TestCase):
             topology.routing_policy["active_resident_service_ids"],
             ["qwen27_bf16_pp8", "gemma4_26b_a4b_pp8", "dsv4_flash_pp8"],
         )
+
+    def test_pipeline_scheduler_batch_defaults_follow_model_capacity(self) -> None:
+        topology = SparkTopology.load(TOPOLOGY)
+        dsv4 = topology.pipeline_service_by_id("dsv4_flash_pp8")
+
+        for service in topology.pipeline_services.values():
+            self.assertEqual(service.max_batch_size, 64)
+            self.assertEqual(service.scheduler["queue_concurrency"], 64)
+            self.assertEqual(service.scheduler["vllm_max_num_seqs"], 64)
+            self.assertEqual(pipeline_service_batch_limit(service), 64)
+        self.assertEqual(dsv4.max_batch_size, DSV4_PRODUCTION["max_num_seqs"])
+        self.assertEqual(dsv4.scheduler["queue_concurrency"], DSV4_PRODUCTION["max_num_seqs"])
+        self.assertEqual(dsv4.scheduler["vllm_max_num_seqs"], DSV4_PRODUCTION["max_num_seqs"])
+        self.assertEqual(dsv4.scheduler["queue_limit"], 512)
 
     def test_pipeline_services_are_all_spark_and_spark0_ingress(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
@@ -124,7 +139,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(assignment.node_id, "spark0")
         self.assertEqual(assignment.node_ids, ALL_SPARKS)
         self.assertEqual(assignment.service_id, "gemma4_12b_pp8")
-        self.assertEqual(topology.estimate_capacity_by_profile()[GEMMA12_PP], 16)
+        self.assertEqual(topology.estimate_capacity_by_profile()[GEMMA12_PP], 64)
         promoted = registry.resolve(capability="gemma4", chat=True, job_class="analysis")
         self.assertEqual(promoted.profile_id, GEMMA26_PP)
         pinned = registry.resolve(capability=None, chat=True, job_class="analysis", model_pin={"profile_id": GEMMA12_PP})
@@ -144,7 +159,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(assignment.node_id, "spark0")
         self.assertEqual(assignment.node_ids, ALL_SPARKS)
         self.assertEqual(assignment.service_id, "gemma4_26b_a4b_pp8")
-        self.assertEqual(topology.estimate_capacity_by_profile()[GEMMA26_PP], 16)
+        self.assertEqual(topology.estimate_capacity_by_profile()[GEMMA26_PP], 64)
 
     def test_production_chat_profiles_have_authoritative_tokenizer_path(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
