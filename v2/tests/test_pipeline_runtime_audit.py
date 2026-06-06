@@ -10,6 +10,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "ds4_pipeline_runtime_audit.py"
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
+FIRST3_MEMORY_BUDGET = ROOT / "profiles" / "production" / "first3_resident_memory_budget.json"
 
 
 def load_script_module(name: str, path: Path):
@@ -40,6 +41,19 @@ class PipelineRuntimeAuditTests(unittest.TestCase):
         self.assertTrue((ROOT / profile["runtime_contract"]).exists())
         self.assertTrue((ROOT / profile["kv_deployment"]).exists())
         self.assertTrue((ROOT / profile["topology"]).exists())
+        self.assertTrue((ROOT / profile["memory_budget"]).exists())
+        self.assertTrue(profile["warmup"]["required_before_first3_residency"])
+        self.assertEqual(profile["warmup"]["script"], "scripts/ds4_warm_dsv4_flashinfer_cache.py")
+
+    def test_first3_memory_budget_tracks_profile_partitions_and_gpu_caps(self) -> None:
+        budget = json.loads(FIRST3_MEMORY_BUDGET.read_text(encoding="utf-8"))
+        profile = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
+
+        self.assertEqual(budget["layer_partitions"]["dsv4_flash_pp8"], profile["layer_partition"])
+        self.assertEqual(budget["layer_partitions"]["qwen27_bf16_pp8"], [7, 7, 7, 9, 9, 9, 9, 7])
+        self.assertEqual(budget["layer_partitions"]["gemma4_26b_a4b_pp8"], [4, 4, 4, 4, 4, 4, 3, 3])
+        self.assertEqual(budget["gpu_memory_utilization"]["active_sum"], 0.58)
+        self.assertGreaterEqual(budget["projection"]["floor_gib"], budget["target"]["min_available_gib"])
 
     def test_pipeline_runtime_audit_passes_checked_in_profiles(self) -> None:
         self.assertEqual(audit.main(), 0)

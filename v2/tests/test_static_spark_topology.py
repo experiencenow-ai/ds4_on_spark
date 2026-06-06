@@ -119,8 +119,8 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(qwen_bf16kv.compute_domain, "spark-fleet-0")
         self.assertEqual(dsv4.compute_domain, "spark-fleet-0")
         self.assertEqual(gemma31.compute_domain, "spark-fleet-0")
-        self.assertEqual(qwen.layer_partition, (9, 9, 9, 8, 8, 8, 8, 5))
-        self.assertEqual(qwen_bf16kv.layer_partition, (9, 9, 9, 8, 8, 8, 8, 5))
+        self.assertEqual(qwen.layer_partition, (7, 7, 7, 9, 9, 9, 9, 7))
+        self.assertEqual(qwen_bf16kv.layer_partition, (7, 7, 7, 9, 9, 9, 9, 7))
         self.assertEqual(dsv4.layer_partition, tuple(DSV4_PRODUCTION["layer_partition"]))
         self.assertEqual(gemma31.layer_partition, (8, 8, 8, 8, 7, 7, 7, 7))
         self.assertEqual(qwen.stages()[-1].layer_end, 64)
@@ -330,7 +330,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual([item["service_id"] for item in spark0["items"]], ["qwen27_bf16_pp8"])
         self.assertEqual([item["action"] for item in spark4["items"]], ["pipeline_stage"])
         self.assertEqual(spark4["items"][0]["stage_index"], 4)
-        self.assertEqual(spark4["items"][0]["layer_start"], 35)
+        self.assertEqual(spark4["items"][0]["layer_start"], 30)
         self.assertEqual([item["action"] for item in spark7["items"]], ["pipeline_stage"])
 
     def test_startup_warm_posts_only_ingress_items(self) -> None:

@@ -10,14 +10,14 @@
   "pipeline_parallel_size": 8,
   "tensor_parallel_size": 1,
   "layer_partition": [
-    1,
-    2,
-    1,
-    8,
-    8,
-    8,
-    7,
-    8
+    4,
+    5,
+    5,
+    6,
+    6,
+    6,
+    6,
+    5
   ],
   "max_model_len": 262144,
   "max_num_seqs": 2,
@@ -49,5 +49,21 @@
     "completion_chunk_concurrency": 4,
     "dispatch_kv_capacity_bytes": 536870912
   },
-  "notes": "Single source of truth for the bounded DSV4 PP8 resident production envelope. Materialized topology/runtime/KV JSON files must match this file. This profile is first-three co-resident survival mode after live Qwen+Gemma+DSV4 startup at 4 seqs/2048 tokens/1GiB KV loaded successfully but drove spark2 below the 10% available-RAM floor. It caps DSV4 at 2 active sequences, 1024 batched tokens, 512MiB resident/offload KV per rank, 0.08 GPU utilization, and moves layers away from spark0, spark2, and spark6 while keeping the final stage below 8 layers where possible."
+  "warmup": {
+    "required_before_first3_residency": true,
+    "script": "scripts/ds4_warm_dsv4_flashinfer_cache.py",
+    "stop_peer_services": [
+      "qwen27_bf16_pp8",
+      "gemma4_26b_a4b_pp8"
+    ],
+    "compile_env": {
+      "DS4_FLASHINFER_JIT_MAX_JOBS": "1",
+      "MAX_JOBS": "1",
+      "CMAKE_BUILD_PARALLEL_LEVEL": "1",
+      "TORCHINDUCTOR_COMPILE_THREADS": "1",
+      "NVCC_THREADS": "1"
+    }
+  },
+  "memory_budget": "profiles/production/first3_resident_memory_budget.json",
+  "notes": "Single source of truth for the bounded DSV4 PP8 resident production envelope. Materialized topology/runtime/KV JSON files must match this file. This profile is first-three co-resident survival mode after live Qwen+Gemma+DSV4 startup at 4 seqs/2048 tokens/1GiB KV loaded successfully but drove spark2 below the 10% available-RAM floor, and after a 2 seqs/1024 tokens/512MiB KV launch exposed first-run FlashInfer/CUDA compiler RAM pressure on sparks 4-6. It caps DSV4 at 2 active sequences, 1024 batched tokens, 512MiB resident/offload KV per rank, 0.08 GPU utilization, balances DSV4 layers as 4/5/5/6/6/6/6/5, and requires a DSV4-only warmup before all-three residency."
 }

@@ -299,7 +299,7 @@ class PipelineApiTests(unittest.TestCase):
             self.assertEqual(code, 200)
             spark7 = next(shard for shard in status["queue"]["kv_shards"] if shard["service_id"] == "qwen27_bf16_pp8" and shard["node_id"] == "spark7")
             self.assertEqual(spark7["bytes"], 1024)
-            self.assertEqual((spark7["layer_start"], spark7["layer_end"]), (59, 64))
+            self.assertEqual((spark7["layer_start"], spark7["layer_end"]), (57, 64))
 
     def test_telemetry_report_can_be_stage_shorthand_and_is_completed_from_topology(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

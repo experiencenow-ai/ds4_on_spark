@@ -82,14 +82,14 @@
   "http_port": 8103,
   "max_batch_size": 64,
   "layer_partition": [
+    7,
+    7,
+    7,
     9,
     9,
     9,
-    8,
-    8,
-    8,
-    8,
-    5
+    9,
+    7
   ],
   "lmcache_config": {
     "chunk_size": 256,
