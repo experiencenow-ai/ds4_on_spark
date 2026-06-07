@@ -96,7 +96,9 @@ class KvCachePlanningTests(unittest.TestCase):
             start = Path(manifest["scripts"]["start_vllm"])
             self.assertTrue(install.exists())
             self.assertTrue(start.exists())
-            self.assertIn("no connector packages requested", install.read_text())
+            install_text = install.read_text()
+            self.assertIn("no connector packages requested", install_text)
+            self.assertIn("runtime_mods/dsv4_persistent_simple_offload/patch_vllm.py", install_text)
             self.assertIn("SimpleCPUOffloadConnector", start.read_text())
             self.assertIn("--no-disable-hybrid-kv-cache-manager", start.read_text())
             self.assertNotIn("LMCacheConnectorV1Dynamic", start.read_text())
@@ -345,8 +347,10 @@ class KvCachePlanningTests(unittest.TestCase):
         deployment = KvCacheDeployment.load(QWEN_PP_DEPLOYMENT)
         with tempfile.TemporaryDirectory() as tmp:
             manifest = write_launch_scripts(deployment, tmp)
+            install = Path(manifest["scripts"]["install"]).read_text()
             self.assertIn("start_vllm_nodes", manifest["scripts"])
             self.assertEqual(len(manifest["scripts"]["start_vllm_nodes"]), 8)
+            self.assertNotIn("dsv4_persistent_simple_offload", install)
             rank0 = Path(manifest["scripts"]["start_vllm_nodes"]["spark0"]).read_text()
             rank7 = Path(manifest["scripts"]["start_vllm_nodes"]["spark7"]).read_text()
             self.assertIn("--pipeline-parallel-size 8", rank0)
@@ -366,6 +370,16 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertIn("VLLM_HOST_IP=10.10.100.10", rank0)
             self.assertIn("VLLM_HOST_IP=10.10.100.17", rank7)
             self.assertIn("--headless", rank7)
+
+    def test_dsv4_pipeline_install_applies_simple_offload_runtime_mod(self) -> None:
+        deployment = KvCacheDeployment.load(DSV4_PP_DEPLOYMENT)
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = write_launch_scripts(deployment, tmp)
+            install = Path(manifest["scripts"]["install"]).read_text()
+
+            self.assertIn("runtime_mods/dsv4_persistent_simple_offload/patch_vllm.py", install)
+            self.assertIn("/home/spark0/ds4-vllm-local/bin/python runtime_mods/dsv4_persistent_simple_offload/patch_vllm.py", install)
+            self.assertIn("VLLM_SIMPLE_KV_OFFLOAD_PERSIST_RESTORE_ON_STARTUP=0", install)
 
     def test_static_pipeline_cli_write_scripts_requires_lifecycle_runner(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
