@@ -15,6 +15,8 @@
     <string>127.0.0.1</string>
     <string>--port</string>
     <string>8765</string>
+    <string>--repo-root</string>
+    <string>/Users/mac/Documents/New project 4</string>
   </array>
   <key>WorkingDirectory</key>
   <string>/Users/mac/.local/share/ds4_telemetry</string>
