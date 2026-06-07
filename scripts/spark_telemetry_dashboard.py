@@ -619,8 +619,9 @@ def main() -> int:
     args = parse_args()
     REPO_ROOT_OVERRIDE = str(args.repo_root or "")
     MODEL_LAYER_PARTITIONS = None
+    partitions = load_model_layer_partitions()
     server = ReusableThreadingHTTPServer((args.host,args.port),make_handler(args.summary_json,args.nodes_dir))
-    print("serving Spark telemetry dashboard on http://%s:%d" % (args.host,args.port),flush=True)
+    print("serving Spark telemetry dashboard on http://%s:%d repo_root=%s layer_partitions=%d" % (args.host,args.port,repo_root(),len(partitions)),flush=True)
     server.serve_forever()
     return(0)
 
