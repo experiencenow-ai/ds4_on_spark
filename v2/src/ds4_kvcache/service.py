@@ -685,24 +685,9 @@ def _install_context_lines(deployment: KvCacheDeployment, context: InstallContex
         lines.append(_format_env_command(context.env, argv))
     else:
         lines.append("echo '[ds4-kvcache] no connector packages requested'")
-    if _needs_dsv4_simple_offload_runtime_mod(deployment):
-        mod = "runtime_mods/dsv4_persistent_simple_offload/patch_vllm.py"
-        lines.append("test -f " + shlex.quote(mod))
-        lines.append(_format_env_command(context.env, [context.python_bin, mod]))
     for path in context.cache_directories:
         lines.append("mkdir -p " + shlex.quote(path))
     return lines
-
-
-def _needs_dsv4_simple_offload_runtime_mod(deployment: KvCacheDeployment) -> bool:
-    if deployment.connector.connector_id != "simple_cpu_offload":
-        return False
-    markers = (
-        deployment.model_id,
-        deployment.profile_id,
-        deployment.runtime_contract_id or "",
-    )
-    return any("dsv4" in item.lower() or "deepseek-v4-flash" in item.lower() for item in markers)
 
 
 def _resolve_relative_profile_path(value: str, *, base: Path) -> str:
