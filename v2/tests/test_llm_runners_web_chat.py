@@ -145,6 +145,24 @@ class CancellableStreamingBackend(OpenAICompatibleRunner):
         raise AssertionError("streaming cancellation test should not use non-streaming post")
 
 
+class SlowChatBatchBackend(OpenAICompatibleRunner):
+    def __init__(self) -> None:
+        super().__init__(base_url="http://unused")
+        self.calls: list[dict] = []
+
+    def _post_json(self, endpoint: str, payload: dict) -> dict:
+        assert endpoint == self.chat_batch_endpoint
+        self.calls.append(payload)
+        text = json.dumps(payload)
+        if "second target" in text:
+            return {"choices": [{"index": 0, "message": {"role": "assistant", "content": "second done"}}], "usage": {"completion_tokens": 2}}
+        time.sleep(0.03)
+        return {"choices": [{"index": 0, "message": {"role": "assistant", "content": "first done"}}], "usage": {"completion_tokens": 2}}
+
+    def _post_sse_json(self, endpoint: str, payload: dict, **kwargs):
+        raise AssertionError("chat batch incremental test should not use SSE")
+
+
 class StreamingPipelineRunner(PipelineOpenAIRunner):
     def __init__(self) -> None:
         super().__init__(base_urls={"svc": "http://unused"})
@@ -167,6 +185,15 @@ class CancellableStreamingPipelineRunner(PipelineOpenAIRunner):
         self.backend = CancellableStreamingBackend()
 
     def _runner_for(self, profile: ModelProfile, node_id: str | None) -> CancellableStreamingBackend:
+        return self.backend
+
+
+class SlowChatBatchPipelineRunner(PipelineOpenAIRunner):
+    def __init__(self) -> None:
+        super().__init__(base_urls={"svc": "http://unused"})
+        self.backend = SlowChatBatchBackend()
+
+    def _runner_for(self, profile: ModelProfile, node_id: str | None) -> SlowChatBatchBackend:
         return self.backend
 
 
@@ -349,6 +376,45 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(seen, [("r2", "second done"), ("r", "first done")])
         self.assertEqual(results["r"]["transport"]["coalesced_completion_streaming"], True)
         self.assertEqual(results["r2"]["transport"]["coalesced_batch_size"], 2)
+
+    def test_pipeline_runner_publishes_chat_batch_chunks_incrementally(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm_pipeline",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": True,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {"served_model_name": "served-model"},
+            }
+        )
+        first = InferenceRequest.from_json(make_request(chat=True).raw)
+        second_raw = make_request(chat=True).raw
+        second_raw["request_id"] = "r2"
+        second_raw["input"]["suffix"] = "second target"
+        seen = []
+        old = os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MAX")
+        os.environ["DS4_PIPELINE_COMPLETION_COHORT_MAX"] = "1"
+        try:
+            results = SlowChatBatchPipelineRunner().run_many_on_node_incremental(
+                [first, InferenceRequest.from_json(second_raw)],
+                profile,
+                None,
+                concurrency=2,
+                on_result=lambda request_id, result: seen.append((request_id, result["output"]["text"])),
+            )
+        finally:
+            if old is None:
+                os.environ.pop("DS4_PIPELINE_COMPLETION_COHORT_MAX", None)
+            else:
+                os.environ["DS4_PIPELINE_COMPLETION_COHORT_MAX"] = old
+        self.assertEqual(seen, [("r2", "second done"), ("r", "first done")])
+        self.assertEqual(results["r"]["transport"]["coalesced_chat_batch"], True)
+        self.assertEqual(results["r2"]["transport"]["coalesced_chat_planned_split"], True)
+        self.assertEqual(results["r2"]["transport"]["coalesced_chat_chunk_count"], 2)
 
     def test_pipeline_runner_streaming_wall_timeout_fails_only_unfinished_tail(self) -> None:
         profile = ModelProfile.from_json(
