@@ -618,8 +618,8 @@ class PipelineApiTests(unittest.TestCase):
             payload["resident_kv_connectors"],
             {"dsv4_flash_pp8": "simple_cpu_offload", "gemma4_26b_a4b_pp8": "lmcache", "qwen27_bf16_pp8": "lmcache"},
         )
-        self.assertEqual(payload["resident_gpu_memory_utilization"], {"dsv4_flash_pp8": 0.18, "gemma4_26b_a4b_pp8": 0.25, "qwen27_bf16_pp8": 0.25})
-        self.assertAlmostEqual(payload["resident_gpu_memory_utilization_sum"], 0.68)
+        self.assertEqual(payload["resident_gpu_memory_utilization"], {"dsv4_flash_pp8": 0.18, "gemma4_26b_a4b_pp8": 0.30, "qwen27_bf16_pp8": 0.30})
+        self.assertAlmostEqual(payload["resident_gpu_memory_utilization_sum"], 0.78)
         failed = {item["name"] for item in payload["checks"] if not item["ok"] and item["severity"] == "error"}
         self.assertIn("jit_kv_prefetch_token_present", failed)
         self.assertNotIn("first3_gpu_budget_under_hard_cap", failed)
