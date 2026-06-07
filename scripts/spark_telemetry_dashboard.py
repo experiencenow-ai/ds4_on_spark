@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlparse
 DEFAULT_SUMMARY_JSON = "/tmp/ds4_telemetry/mac/cluster_summary.json"
 DEFAULT_NODES_DIR = "/tmp/ds4_telemetry/mac/nodes"
 DEFAULT_HISTORY_LIMIT = 720
+DEFAULT_REPO_ROOT = "/Users/mac/Documents/New project 4"
 NODE_DOWN_ERROR_THRESHOLD = 3
 NODE_ERROR_STREAKS: dict[str,dict[str,Any]] = {}
 MODEL_LAYER_PARTITIONS: dict[str,list[int]] | None = None
@@ -114,7 +115,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--nodes-dir", default=DEFAULT_NODES_DIR)
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
-    p.add_argument("--repo-root", default=os.environ.get("DS4_TELEMETRY_REPO_ROOT",""))
+    p.add_argument("--repo-root", default=os.environ.get("DS4_TELEMETRY_REPO_ROOT",DEFAULT_REPO_ROOT))
     return(p.parse_args())
 
 
