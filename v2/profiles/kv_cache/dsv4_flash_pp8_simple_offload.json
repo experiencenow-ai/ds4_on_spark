@@ -1,6 +1,6 @@
 {
   "cache_directories": [
-    "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload"
+    "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload/p4_5_4_7_5_5_7_6"
   ],
   "cache_sharding": "pipeline_layers",
   "connector": {
@@ -73,7 +73,7 @@
     "VLLM_HOST_IP": "{fabric_ip}",
     "VLLM_MQ_MAX_CHUNKS": "64",
     "VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1",
-    "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload",
+    "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload/p4_5_4_7_5_5_7_6",
     "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_STRICT": "1",
     "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_RESTORE_ON_STARTUP": "0",
     "VLLM_DS4_SIMPLE_KV_STARTUP_RESTORE": "0",

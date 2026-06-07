@@ -1,7 +1,7 @@
 {
   "format": "ds4-first3-resident-memory-budget-v1",
   "profile_id": "first3_qwen27_gemma26_dsv4_rebalanced_v4",
-  "source": "live Spark startup and post-request telemetry from first-three bring-up on 2026-06-06, 2026-06-06 DSV4 16-way steady-state memory probe before layer rebalance, 2026-06-07 first3 startup fit check, and 2026-06-07 all-three resident telemetry showing spark2/spark4/spark5 host RAM pressure",
+  "source": "live Spark startup and post-request telemetry from first-three bring-up on 2026-06-06, 2026-06-06 DSV4 16-way steady-state memory probe before layer rebalance, 2026-06-07 first3 startup fit check, 2026-06-07 all-three resident telemetry showing spark2/spark4/spark5 host RAM pressure, and partition-fingerprinted external cache roots for the rebalance",
   "target": {
     "min_available_ratio": 0.1,
     "min_available_gib": 12.0,

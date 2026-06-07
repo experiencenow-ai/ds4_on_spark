@@ -12,21 +12,21 @@ FIRST3_EXTERNAL_CACHE = {
     "qwen27_bf16_pp8": {
         "external_backend": "lmcache_hma",
         "connector_id": "lmcache",
-        "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv",
+        "cache_root_base": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv",
         "gpu_memory_utilization": "0.30",
         "env_root": "LMCACHE_ROOT",
     },
     "gemma4_26b_a4b_pp8": {
         "external_backend": "lmcache_hma",
         "connector_id": "lmcache",
-        "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv",
+        "cache_root_base": "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv",
         "gpu_memory_utilization": "0.30",
         "env_root": "LMCACHE_ROOT",
     },
     "dsv4_flash_pp8": {
         "external_backend": "dsv4_hma",
         "connector_id": "simple_cpu_offload",
-        "cache_root": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload",
+        "cache_root_base": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload",
         "gpu_memory_utilization": "0.18",
         "env_root": "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT",
     },
@@ -259,23 +259,40 @@ def _check_first3_external_cache_contract(topology: dict[str, Any], errors: list
     _require_equal(active, set(FIRST3_EXTERNAL_CACHE), "first-three active service set", errors, checks)
     for service_id, spec in FIRST3_EXTERNAL_CACHE.items():
         service = services.get(service_id) if isinstance(services.get(service_id), dict) else {}
-        _check_first3_topology_cache(service_id, service, spec, errors, checks)
-        _check_first3_deployment_cache(service_id, service, spec, errors, checks)
+        expected_cache_root = _first3_expected_cache_root(service, spec)
+        _check_first3_topology_cache(service_id, service, spec, expected_cache_root, errors, checks)
+        _check_first3_deployment_cache(service_id, service, spec, expected_cache_root, errors, checks)
     _check_first3_gpu_sum(errors, checks)
 
 
+def _first3_expected_cache_root(service: dict[str, Any], spec: dict[str, str]) -> str:
+    partition = _as_int_list(service.get("layer_partition", []))
+    suffix = "p" + "_".join(str(item) for item in partition)
+    return f"{spec['cache_root_base']}/{suffix}"
+
+
 def _check_first3_topology_cache(
-    service_id: str, service: dict[str, Any], spec: dict[str, str], errors: list[str], checks: list[str]
+    service_id: str,
+    service: dict[str, Any],
+    spec: dict[str, str],
+    expected_cache_root: str,
+    errors: list[str],
+    checks: list[str],
 ) -> None:
     kv_cache = service.get("kv_cache") if isinstance(service.get("kv_cache"), dict) else {}
     _require_equal(kv_cache.get("external_backend"), spec["external_backend"], f"{service_id} semantic external KV backend", errors, checks)
     _require_equal(kv_cache.get("connector_id"), spec["connector_id"], f"{service_id} concrete external KV connector id", errors, checks)
-    _require_equal(kv_cache.get("cache_root"), spec["cache_root"], f"{service_id} topology cache root", errors, checks)
+    _require_equal(kv_cache.get("cache_root"), expected_cache_root, f"{service_id} topology partition-fingerprinted cache root", errors, checks)
     _require_equal(float(kv_cache.get("gpu_memory_utilization")), float(spec["gpu_memory_utilization"]), f"{service_id} topology GPU memory cap", errors, checks)
 
 
 def _check_first3_deployment_cache(
-    service_id: str, service: dict[str, Any], spec: dict[str, str], errors: list[str], checks: list[str]
+    service_id: str,
+    service: dict[str, Any],
+    spec: dict[str, str],
+    expected_cache_root: str,
+    errors: list[str],
+    checks: list[str],
 ) -> None:
     deployment = _first3_deployment_for_service(service_id, service, errors)
     if deployment is None:
@@ -285,8 +302,8 @@ def _check_first3_deployment_cache(
     args = _effective_launch_args(deployment)
     _require_equal(deployment.get("external_backend"), spec["external_backend"], f"{service_id} deployment semantic external KV backend", errors, checks)
     _require_equal(connector.get("connector_id"), spec["connector_id"], f"{service_id} deployment connector id", errors, checks)
-    _require_equal(_first_cache_directory(deployment), spec["cache_root"], f"{service_id} deployment cache root", errors, checks)
-    _require_equal(env.get(str(spec["env_root"])), spec["cache_root"], f"{service_id} deployment env cache root", errors, checks)
+    _require_equal(_first_cache_directory(deployment), expected_cache_root, f"{service_id} deployment partition-fingerprinted cache root", errors, checks)
+    _require_equal(env.get(str(spec["env_root"])), expected_cache_root, f"{service_id} deployment env partition-fingerprinted cache root", errors, checks)
     _require_arg(args, "--gpu-memory-utilization", spec["gpu_memory_utilization"], f"{service_id} deployment GPU memory cap", errors, checks)
     if service_id == "dsv4_flash_pp8":
         _check_dsv4_hma_connector(connector, env, errors, checks)
