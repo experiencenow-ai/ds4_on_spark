@@ -121,7 +121,7 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(payload["chat_template_kwargs"], {"enable_thinking": True})
         self.assertNotIn("extra_body", payload)
 
-    def test_dsv4_openai_payload_defaults_chat_template_thinking_on(self) -> None:
+    def test_dsv4_openai_payload_defaults_chat_template_thinking_off(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
         request = InferenceRequest.from_json(
@@ -140,9 +140,33 @@ class PipelineApiTests(unittest.TestCase):
             }
         )
         payload = _openai_payload(request, profile)
-        self.assertEqual(payload["chat_template_kwargs"], {"thinking": True})
+        self.assertEqual(payload["chat_template_kwargs"], {"thinking": False})
         self.assertNotIn("thinking", payload)
         self.assertNotIn("extra_body", payload)
+
+    def test_dsv4_openai_payload_enables_thinking_with_budget(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
+        request = InferenceRequest.from_json(
+            {
+                "format": "ds4-inference-request-v1",
+                "request_id": "dsv4-thinking-budget",
+                "capability": "smartest",
+                "chat": True,
+                "immediate": False,
+                "job_class": "analysis",
+                "max_output_tokens": 64,
+                "thinking_budget_tokens": 100,
+                "temperature": 0,
+                "input": {"messages": [{"role": "user", "content": "What is 2+2?"}]},
+                "output_contract": {"format": "text"},
+            }
+        )
+        payload = _openai_payload(request, profile)
+        self.assertEqual(payload["max_tokens"], 164)
+        self.assertEqual(payload["chat_template_kwargs"], {"thinking": True})
+        self.assertEqual(payload["thinking"], {"type": "enabled", "budget_tokens": 100})
+        self.assertEqual(payload["thinking_budget_tokens"], 100)
 
     def test_dsv4_chat_request_uses_source_owned_template_renderer(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -165,7 +189,7 @@ class PipelineApiTests(unittest.TestCase):
             request_json = json.loads(str(row["request_json"]))
         self.assertEqual(
             request_json["input"]["rendered_prompt"],
-            "<｜begin▁of▁sentence｜>SYS<｜User｜>USER<｜Assistant｜><think>",
+            "<｜begin▁of▁sentence｜>SYS<｜User｜>USER<｜Assistant｜></think>",
         )
 
     def test_pipeline_rendered_chat_completion_keeps_template_fields_out_of_completion_body(self) -> None:
@@ -618,8 +642,8 @@ class PipelineApiTests(unittest.TestCase):
             payload["resident_kv_connectors"],
             {"dsv4_flash_pp8": "simple_cpu_offload", "gemma4_26b_a4b_pp8": "lmcache", "qwen27_bf16_pp8": "lmcache"},
         )
-        self.assertEqual(payload["resident_gpu_memory_utilization"], {"dsv4_flash_pp8": 0.18, "gemma4_26b_a4b_pp8": 0.30, "qwen27_bf16_pp8": 0.30})
-        self.assertAlmostEqual(payload["resident_gpu_memory_utilization_sum"], 0.78)
+        self.assertEqual(payload["resident_gpu_memory_utilization"], {"dsv4_flash_pp8": 0.18, "gemma4_26b_a4b_pp8": 0.20, "qwen27_bf16_pp8": 0.25})
+        self.assertAlmostEqual(payload["resident_gpu_memory_utilization_sum"], 0.63)
         failed = {item["name"] for item in payload["checks"] if not item["ok"] and item["severity"] == "error"}
         self.assertIn("jit_kv_prefetch_token_present", failed)
         self.assertNotIn("first3_gpu_budget_under_hard_cap", failed)

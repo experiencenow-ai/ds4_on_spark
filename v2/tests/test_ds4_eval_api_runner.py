@@ -58,12 +58,18 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
 
         self.assertEqual([row["request_id"] for row in filtered], ["b"])
 
-    def test_run_defaults_enable_thinking_with_bounded_budget(self) -> None:
+    def test_run_defaults_disable_thinking_for_contract_accuracy(self) -> None:
         parser = self.runner._build_parser()
         args = parser.parse_args(["run", "--out-dir", "/tmp/ds4-eval-test"])
 
-        self.assertTrue(args.enable_thinking)
+        self.assertFalse(args.enable_thinking)
         self.assertEqual(args.thinking_budget_tokens, 1024)
+
+    def test_run_can_enable_thinking_for_diagnostics(self) -> None:
+        parser = self.runner._build_parser()
+        args = parser.parse_args(["run", "--out-dir", "/tmp/ds4-eval-test", "--enable-thinking"])
+
+        self.assertTrue(args.enable_thinking)
 
     def test_run_accepts_source_filter(self) -> None:
         parser = self.runner._build_parser()
