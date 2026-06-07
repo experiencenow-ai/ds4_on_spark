@@ -61,10 +61,11 @@
     "dispatch_refill_batch": 128,
     "completion_cohort_max": 128,
     "completion_token_budget": 32768,
+    "completion_budget_include_output": false,
     "completion_pp_safe_cohort_max": 128,
-    "completion_chunk_concurrency": 1,
+    "completion_chunk_concurrency": 4,
     "dispatch_kv_capacity_bytes": 8589934592,
-    "notes": "First-three resident feed settings keep Qwen/Gemma saturated while DSV4 uses the 64-way short-context service-level batch limit from the DSV4 production profile."
+    "notes": "First-three resident feed settings keep Qwen/Gemma saturated while DSV4 uses the 64-way short-context service-level batch limit from the DSV4 production profile. Cohort token budgeting uses prompt/prefill tokens only; requested output length is a sampler guard, not a resident cohort preallocation proxy. Four chunk workers keep PP-safe splits active instead of serializing them."
   },
   "baseline_with_qwen_gemma_available_gib": {
     "spark0": 48.6,

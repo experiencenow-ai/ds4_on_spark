@@ -208,6 +208,7 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str) -> dict[str, s
                 "dispatch_refill_batch": 256,
                 "completion_cohort_max": 256,
                 "completion_token_budget": 98304,
+                "completion_budget_include_output": False,
                 "completion_pp_safe_cohort_max": 256,
                 "completion_chunk_concurrency": 4,
             }
@@ -218,11 +219,25 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str) -> dict[str, s
         "DS4_API_DISPATCH_BATCH_LINGER_S": "0.05",
         "DS4_PIPELINE_COMPLETION_COHORT_MAX": str(coordinator["completion_cohort_max"]),
         "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": str(coordinator["completion_token_budget"]),
+        "DS4_PIPELINE_COMPLETION_COHORT_BUDGET_INCLUDE_OUTPUT": _env_bool_value(coordinator.get("completion_budget_include_output"), default=False),
         "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": str(coordinator["completion_pp_safe_cohort_max"]),
         "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": str(coordinator["completion_chunk_concurrency"]),
         "DS4_API_DISPATCH_KV_CAPACITY_BYTES": str(coordinator["dispatch_kv_capacity_bytes"]),
         "DS4_API_BATCH_LIMITS_JSON": json.dumps(_pipeline_batch_limits(overrides={str(dsv4["service_id"]): int(dsv4["max_num_seqs"])}), separators=(",", ":")),
     }
+
+
+def _env_bool_value(value: object, *, default: bool) -> str:
+    if value is None:
+        return "1" if default else "0"
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return "1"
+    if text in {"0", "false", "no", "off"}:
+        return "0"
+    return "1" if default else "0"
 
 
 def _load_dsv4_production_profile() -> dict[str, object]:
