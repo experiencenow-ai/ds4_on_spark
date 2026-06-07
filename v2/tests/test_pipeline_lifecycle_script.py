@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
 
@@ -96,6 +97,34 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertIn("export VLLM_DS4_KV_PREFETCH_API=1", script)
         self.assertIn("export VLLM_DS4_KV_PREFETCH_TOKEN=unit-test-token", script)
         self.assertLess(script.index("export VLLM_DS4_KV_PREFETCH_API=1"), script.index('nohup bash "$script"'))
+
+    def test_remote_launch_auto_injects_declared_prefetch_token_file(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        entry = {
+            "service_id": "dsv4_flash_pp8",
+            "deployment_rel": "profiles/kv_cache/dsv4_flash_pp8_simple_offload.json",
+            "deployment": {
+                "extra_env": {
+                    "VLLM_DS4_KV_PREFETCH_API": "1",
+                    "VLLM_DS4_KV_PREFETCH_REQUIRE_TOKEN": "1",
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            token_file = Path(tmp) / "token"
+            token_file.write_text("unit-file-token\n", encoding="utf-8")
+            args = type("Args", (), {
+                "remote_repo": "$HOME/src/ds4_on_spark",
+                "launch_root": "$HOME/.cache/ds4_pipeline_lifecycle",
+                "log_dir": "$HOME/ds4_logs/pipeline_lifecycle",
+                "remote_env": [],
+                "prefetch_token_file": str(token_file),
+            })()
+
+            script = lifecycle._remote_launch(entry, 0, "spark0", args)
+
+        self.assertIn("export VLLM_DS4_KV_PREFETCH_TOKEN=unit-file-token", script)
+        self.assertLess(script.index("export VLLM_DS4_KV_PREFETCH_TOKEN=unit-file-token"), script.index('nohup bash "$script"'))
 
     def test_dsv4_warmup_runner_exports_prefetch_and_compile_caps(self) -> None:
         warm = load_script(WARM_SCRIPT)

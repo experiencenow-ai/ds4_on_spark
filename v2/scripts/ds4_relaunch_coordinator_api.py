@@ -16,6 +16,7 @@ DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_res
 FIRST3_MEMORY_BUDGET = ROOT / "profiles" / "production" / "first3_resident_memory_budget.json"
 STATIC_SPARKS_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 DEFAULT_COORDINATOR_PYTHON = Path("/home/spark0/ds4-vllm-local/bin/python")
+DEFAULT_PREFETCH_TOKEN_FILE = Path("/private/tmp/ds4_jit_kv_token")
 
 
 def main() -> int:
@@ -68,6 +69,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-tests", action="store_true")
     parser.add_argument("--profile", choices=("throughput", "production", "resident128", "resident256"), default="resident128")
     parser.add_argument("--env", action="append", default=[], metavar="KEY=VALUE", help="Extra coordinator environment override; repeatable.")
+    parser.add_argument("--prefetch-token-file", default=os.environ.get("DS4_API_JIT_KV_PREFETCH_TOKEN_FILE", str(DEFAULT_PREFETCH_TOKEN_FILE)), help="Token file used when DS4 JIT KV prefetch API is enabled.")
     parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8700") or "8700"))
     parser.add_argument("--queue-dir", default=os.environ.get("QUEUE_DIR", str(Path.home() / "ds4_queue")))
@@ -116,6 +118,11 @@ def _coordinator_env(args: argparse.Namespace, v2_dir: Path) -> dict[str, str]:
             env.setdefault(key, value)
     for key, value in _parse_env_overrides(getattr(args, "env", []) or []).items():
         env[key] = value
+    if _truthy(env.get("DS4_API_JIT_KV_PREFETCH_API")) and not env.get("DS4_API_JIT_KV_PREFETCH_TOKEN"):
+        token = _load_prefetch_token(getattr(args, "prefetch_token_file", str(DEFAULT_PREFETCH_TOKEN_FILE)))
+        if not token:
+            raise ValueError("DS4_API_JIT_KV_PREFETCH_API=1 requires DS4_API_JIT_KV_PREFETCH_TOKEN, --env DS4_API_JIT_KV_PREFETCH_TOKEN=..., or --prefetch-token-file")
+        env["DS4_API_JIT_KV_PREFETCH_TOKEN"] = token
     return env
 
 
@@ -250,6 +257,19 @@ def _parse_env_overrides(items: list[str]) -> dict[str, str]:
             raise ValueError(f"--env key must not be empty, got {item!r}")
         out[key] = value
     return out
+
+
+def _truthy(value: object) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _load_prefetch_token(raw_path: str) -> str:
+    if not raw_path:
+        return ""
+    path = Path(raw_path).expanduser()
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8").strip()
 
 
 def _log_path(raw: str) -> Path:

@@ -176,6 +176,21 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(env["DS4_API_DISPATCH_WINDOW"], "192")
         self.assertEqual(env["DS4_TEST_FLAG"], "yes")
 
+    def test_relaunch_prefetch_api_loads_token_file(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+        with tempfile.TemporaryDirectory() as tmp:
+            token_file = Path(tmp) / "token"
+            token_file.write_text("unit-file-token\n", encoding="utf-8")
+            args = type("Args", (), {
+                "profile": DSV4_PRODUCTION["coordinator_profile"],
+                "env": ["DS4_API_JIT_KV_PREFETCH_API=1"],
+                "prefetch_token_file": str(token_file),
+            })()
+
+            env = relaunch._coordinator_env(args, ROOT)
+
+        self.assertEqual(env["DS4_API_JIT_KV_PREFETCH_TOKEN"], "unit-file-token")
+
     def test_relaunch_safety_defaults_override_inherited_env(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
         old_kv = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")
