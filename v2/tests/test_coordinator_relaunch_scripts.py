@@ -191,6 +191,21 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
 
         self.assertEqual(env["DS4_API_JIT_KV_PREFETCH_TOKEN"], "unit-file-token")
 
+    def test_relaunch_prefetch_token_loader_falls_back_to_second_default_file(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+        old_files = relaunch.DEFAULT_PREFETCH_TOKEN_FILES
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "missing-token"
+            fallback = Path(tmp) / "fallback-token"
+            fallback.write_text("fallback-value\n", encoding="utf-8")
+            relaunch.DEFAULT_PREFETCH_TOKEN_FILES = (missing, fallback)
+            try:
+                token = relaunch._load_prefetch_token(str(missing))
+            finally:
+                relaunch.DEFAULT_PREFETCH_TOKEN_FILES = old_files
+
+        self.assertEqual(token, "fallback-value")
+
     def test_relaunch_safety_defaults_override_inherited_env(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
         old_kv = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")
