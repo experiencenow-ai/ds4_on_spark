@@ -195,7 +195,14 @@ class CoordinatorApi:
             return 200, self.queue.external_kv_release(lease_id=str(body["lease_id"]))
         if path in {"/ds4/kvcache/prefetch", "/ds4/kv-cache/prefetch"}:
             service_id = str(body["service_id"])
-            manifest = self.queue.external_kv_transition(namespace=str(body.get("namespace") or "default"), kv_key=str(body["kv_key"]), service_id=service_id, state="prefetch_requested", shard_state="prefetch_requested", metadata={"prefetch": dict(body), "execution": "control_plane_only"})
+            metadata = {"prefetch": dict(body), "execution": "control_plane_only"}
+            try:
+                contract = self._topology().pipeline_service_by_id(service_id).kv_cache_contract()
+                metadata.setdefault("kv_cache_contract", contract)
+                metadata.setdefault("layer_partition_fingerprint", contract["fingerprint"])
+            except ValueError:
+                pass
+            manifest = self.queue.external_kv_transition(namespace=str(body.get("namespace") or "default"), kv_key=str(body["kv_key"]), service_id=service_id, state="prefetch_requested", shard_state="prefetch_requested", metadata=metadata)
             manifest["prefetch"] = {"execution": "control_plane_only", "gpu_jit_load": False, "connector_required": True}
             return 202, manifest
         if path in {"/ds4/kvcache/commit", "/ds4/kv-cache/commit"}:
@@ -309,6 +316,10 @@ class CoordinatorApi:
         shards = body.get("shards")
         if shards is None:
             shards = service.external_cache_shards(namespace=namespace, kv_key=kv_key, total_bytes=total_bytes, storage_root=storage_root)
+        metadata = dict(body.get("metadata") or {})
+        contract = service.kv_cache_contract()
+        metadata.setdefault("kv_cache_contract", contract)
+        metadata.setdefault("layer_partition_fingerprint", contract["fingerprint"])
         return self.queue.upsert_external_kv_object(
             namespace=namespace,
             kv_key=kv_key,
@@ -323,7 +334,7 @@ class CoordinatorApi:
             pin_count=int(body.get("pin_count") or (1 if body.get("pinned") else 0)),
             priority=int(body.get("priority") or 100),
             ttl_s=float(body["ttl_s"]) if body.get("ttl_s") is not None else None,
-            metadata=dict(body.get("metadata") or {}),
+            metadata=metadata,
             shards=shards,
         )
 
@@ -342,6 +353,9 @@ class CoordinatorApi:
             metadata["archive_uri"] = str(body["archive_uri"])
         metadata.setdefault("archive_owner_node_id", node_id)
         metadata.setdefault("archive_mode", "node_local_shard")
+        contract = service.kv_cache_contract()
+        metadata.setdefault("kv_cache_contract", contract)
+        metadata.setdefault("layer_partition_fingerprint", contract["fingerprint"])
         update: dict[str, Any] = {
             "node_id": node_id,
             "stage_index": stage_index,
@@ -956,16 +970,16 @@ def _input_with_api_kv(input_payload: dict[str, Any], body: dict[str, Any], prof
     if not isinstance(raw, dict):
         raise ValueError("kv_cache/external_kv must be an object")
     if raw.get("format") == KV_CACHE_PLAN_FORMAT:
-        out["kv_cache_plan"] = dict(raw)
+        out["kv_cache_plan"] = _plan_with_source_provenance(dict(raw), out)
         return out
     if raw.get("format") == KV_CACHE_DIRECTIVE_FORMAT or has_kv_cache:
         directive = dict(raw)
         directive.setdefault("format", KV_CACHE_DIRECTIVE_FORMAT)
         out["kv_cache"] = directive
-        out["kv_cache_plan"] = normalize_kv_cache_directive(directive)
+        out["kv_cache_plan"] = _plan_with_source_provenance(normalize_kv_cache_directive(directive), out)
         return out
     out["external_kv"] = dict(raw)
-    out["kv_cache_plan"] = _external_kv_plan(raw, profile=profile, topology=topology)
+    out["kv_cache_plan"] = _external_kv_plan(raw, profile=profile, topology=topology, source_input=out)
     out["kv_cache_key"] = str(raw["kv_key"])
     if raw.get("total_bytes") is not None or raw.get("bytes") is not None:
         out["kv_bytes_estimate"] = int(raw.get("total_bytes") or raw.get("bytes") or 0)
@@ -997,7 +1011,7 @@ def _prepare_queue_request_json(item: Any) -> dict[str, Any]:
         existing = out.get("kv_cache_plan")
         if existing is not None and existing != plan:
             raise ValueError("input.kv_cache_plan conflicts with input.kv_cache")
-        out["kv_cache_plan"] = plan
+        out["kv_cache_plan"] = _plan_with_source_provenance(plan, out)
         cache_key = plan.get("cache_id") or plan.get("prefix_hash")
         if cache_key and out.get("kv_cache_key") is None:
             out["kv_cache_key"] = str(cache_key)
@@ -1006,19 +1020,32 @@ def _prepare_queue_request_json(item: Any) -> dict[str, Any]:
             if isinstance(endpoint, dict) and endpoint.get("bytes") is not None and out.get("kv_bytes_estimate") is None:
                 out["kv_bytes_estimate"] = int(endpoint.get("bytes") or 0)
                 break
+    elif isinstance(out.get("kv_cache_plan"), dict):
+        out["kv_cache_plan"] = _plan_with_source_provenance(dict(out["kv_cache_plan"]), out)
     raw["input"] = out
     return raw
 
 
-def _external_kv_plan(raw: dict[str, Any], *, profile: ModelProfile, topology: SparkTopology) -> dict[str, Any]:
+def _external_kv_plan(raw: dict[str, Any], *, profile: ModelProfile, topology: SparkTopology, source_input: dict[str, Any] | None = None) -> dict[str, Any]:
     kv_key = str(raw.get("kv_key") or "")
     if not kv_key:
         raise ValueError("external_kv shorthand requires kv_key")
     namespace = str(raw.get("namespace") or "default")
     service_id = _optional_str(raw.get("service_id"))
+    service = None
     if service_id is None:
         service = topology.pipeline_service_for_profile(profile.profile_id)
         service_id = service.service_id if service is not None else None
+    else:
+        try:
+            service = topology.pipeline_service_by_id(service_id)
+        except ValueError:
+            service = None
+    model_fingerprint = dict(raw.get("model_fingerprint") or {})
+    if service is not None:
+        contract = service.kv_cache_contract()
+        model_fingerprint.setdefault("kv_cache_contract", contract)
+        model_fingerprint.setdefault("layer_partition_fingerprint", contract["fingerprint"])
     load = {
         "mode": str(raw.get("mode") or raw.get("load_mode") or "prefer"),
         "transport": "external_manifest",
@@ -1054,11 +1081,44 @@ def _external_kv_plan(raw: dict[str, Any], *, profile: ModelProfile, topology: S
         "store": store,
         "miss_policy": miss_policy,
         "route_affinity": str(raw.get("route_affinity") or "required"),
-        "model_fingerprint": dict(raw.get("model_fingerprint") or {}),
+        "model_fingerprint": model_fingerprint,
         "operation": operation,
     }
     plan["batch_key_hash"] = "sha256:" + hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return _plan_with_source_provenance(plan, source_input)
+
+
+def _plan_with_source_provenance(plan: dict[str, Any], source_input: dict[str, Any] | None) -> dict[str, Any]:
+    source = _kv_source_provenance(source_input or {})
+    if source:
+        out = dict(plan)
+        out["source_provenance"] = source
+        return out
     return plan
+
+
+def _kv_source_provenance(input_payload: dict[str, Any]) -> dict[str, Any]:
+    prompt = input_payload.get("rendered_prompt")
+    if not isinstance(prompt, str) or not prompt:
+        prompt = input_payload.get("prompt")
+    if not isinstance(prompt, str) or not prompt:
+        return {}
+    prompt_bytes = prompt.encode("utf-8")
+    source: dict[str, Any] = {
+        "format": "ds4-kv-source-provenance-v1",
+        "source_type": "rendered_prompt" if input_payload.get("rendered_prompt") == prompt else "prompt",
+        "prompt_sha256": "sha256:" + hashlib.sha256(prompt_bytes).hexdigest(),
+        "prompt_bytes": len(prompt_bytes),
+        "prompt_text": prompt,
+    }
+    if input_payload.get("estimated_prompt_tokens") is not None:
+        source["estimated_prompt_tokens"] = int(input_payload.get("estimated_prompt_tokens") or 0)
+    token_ids = input_payload.get("original_tokens")
+    if isinstance(token_ids, list) and all(isinstance(item, int) for item in token_ids):
+        source["original_tokens"] = list(token_ids)
+        source["original_token_count"] = len(token_ids)
+        source["original_tokens_sha256"] = "sha256:" + hashlib.sha256(json.dumps(token_ids, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return source
 
 
 def _openai_output_contract(body: dict[str, Any]) -> dict[str, Any]:

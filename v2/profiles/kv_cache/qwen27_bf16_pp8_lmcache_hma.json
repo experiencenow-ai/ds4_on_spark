@@ -83,12 +83,12 @@
   "http_port": 8101,
   "max_batch_size": 64,
   "layer_partition": [
+    7,
     8,
     8,
     8,
     9,
-    8,
-    8,
+    9,
     8,
     7
   ],

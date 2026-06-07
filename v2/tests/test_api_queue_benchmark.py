@@ -59,6 +59,9 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         self.assertEqual(plan["load"]["transport"], "external_manifest")
         self.assertEqual(plan["load"]["service_id"], "dsv4_flash_pp8")
         self.assertEqual(plan["miss_policy"], "fail")
+        self.assertEqual(plan["source_provenance"]["source_type"], "prompt")
+        self.assertEqual(plan["source_provenance"]["estimated_prompt_tokens"], 8)
+        self.assertIn("Request 0.", plan["source_provenance"]["prompt_text"])
         self.assertEqual(request["input"]["kv_cache_key"], "prefix-a")
         self.assertEqual(request["input"]["kv_bytes_estimate"], 4096)
 

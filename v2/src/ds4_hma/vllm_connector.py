@@ -72,6 +72,7 @@ class DS4HmaPersistentConnector(KVConnectorBase_V1, SupportsHMA):
         self.store = HmaPersistentStore(root)
         self.tokenizer_hash = str(extra.get("ds4_hma_tokenizer_hash") or os.environ.get("DS4_HMA_TOKENIZER_HASH") or "unknown-tokenizer")
         self.hma_layout = str(extra.get("ds4_hma_layout") or "dsv4_hma_mla_sliding_indexer_compressor_v1")
+        self.layer_partition_fingerprint = str(extra.get("ds4_hma_layer_partition_fingerprint") or os.environ.get("DS4_HMA_LAYER_PARTITION_FINGERPRINT") or "")
         self.hard_fail = str(extra.get("ds4_hma_hard_fail", "True")).lower() in {"1", "true", "yes", "on"}
         self.required_parts = tuple(str(item) for item in extra.get("ds4_hma_required_parts", []))
         self._requests_need_load: dict[str, Dsv4HmaRequestMeta] = {}
@@ -100,7 +101,7 @@ class DS4HmaPersistentConnector(KVConnectorBase_V1, SupportsHMA):
         if not token_ids:
             return 0, False
         try:
-            package = self.store.lookup_by_token_ids(token_ids)
+            package = self.store.lookup_by_token_ids(token_ids, layer_partition_fingerprint=self.layer_partition_fingerprint or None)
         except Exception as exc:
             self._fail_or_log(f"failed to load DSV4/HMA package metadata: {exc}")
             return 0, False
@@ -178,6 +179,7 @@ class DS4HmaPersistentConnector(KVConnectorBase_V1, SupportsHMA):
             "ds4_hma_package_id": package_id,
             "ds4_hma_store_root": str(self.store.root),
             "ds4_hma_layout": self.hma_layout,
+            "ds4_hma_layer_partition_fingerprint": self.layer_partition_fingerprint,
             "ds4_hma_state": "pending_extractor_hook",
         }
         # Return False until the live extractor actually holds blocks and writes asynchronously.
@@ -213,6 +215,7 @@ def _extra_config(kv_transfer_config: Any) -> dict[str, Any]:
             "ds4_hma_store_root",
             "ds4_hma_tokenizer_hash",
             "ds4_hma_layout",
+            "ds4_hma_layer_partition_fingerprint",
             "ds4_hma_hard_fail",
             "ds4_hma_required_parts",
         ]

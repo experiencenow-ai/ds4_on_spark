@@ -119,6 +119,7 @@ def _check_dsv4_env(profile: dict[str, Any], env: dict[str, Any], errors: list[s
         "TP_SOCKET_IFNAME": "ds4ring0",
         "VLLM_HOST_IP": "{fabric_ip}",
         "VLLM_MQ_MAX_CHUNKS": "64",
+        "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_RESTORE_ON_STARTUP": "0",
         "VLLM_DS4_DSV4_SPARSE_MLA_PREFILL_BACKEND": "indexed",
         "VLLM_DEEP_GEMM_WARMUP": "skip",
         "DS4_PP_TRANSPORT": str(profile["pp_transport"]),
@@ -305,6 +306,9 @@ def _check_dsv4_hma_connector(connector: dict[str, Any], env: dict[str, Any], er
     _require_equal(extra.get("spec_name"), "SimpleCPUOffloadingSpec", "Dsv4 HMA SimpleCPUOffload spec", errors, checks)
     _require_equal(extra.get("lazy_offload"), False, "Dsv4 HMA explicit cache-ref eager offload", errors, checks)
     _require_equal(env.get("VLLM_USE_SIMPLE_KV_OFFLOAD"), "1", "Dsv4 HMA simple offload runtime enabled", errors, checks)
+    _require_equal(env.get("VLLM_DS4_KV_PREFETCH_API"), "1", "Dsv4 JIT KV prefetch API enabled", errors, checks)
+    _require_equal(env.get("VLLM_DS4_KV_PREFETCH_REQUIRE_TOKEN"), "1", "Dsv4 JIT KV prefetch requires token", errors, checks)
+    _require_equal(env.get("VLLM_DS4_KV_PREFETCH_MAX_CONCURRENT"), "4", "Dsv4 JIT KV prefetch concurrency cap", errors, checks)
 
 
 def _check_first3_gpu_sum(errors: list[str], checks: list[str]) -> None:

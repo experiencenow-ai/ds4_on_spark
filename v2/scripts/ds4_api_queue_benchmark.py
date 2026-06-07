@@ -484,7 +484,7 @@ def _attach_cache_fields(input_payload: dict[str, Any], args: argparse.Namespace
         input_payload["kv_cache"] = directive
         return
     if external_plan is not None:
-        input_payload["kv_cache_plan"] = external_plan
+        input_payload["kv_cache_plan"] = _plan_with_source_provenance(external_plan, input_payload)
         input_payload["kv_cache_key"] = external_plan["cache_id"]
         total_bytes = int(getattr(args, "external_kv_total_bytes", 0) or 0)
         if total_bytes > 0:
@@ -588,6 +588,26 @@ def _external_kv_plan(args: argparse.Namespace) -> dict[str, Any] | None:
     }
     plan["batch_key_hash"] = "sha256:" + hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     return plan
+
+
+def _plan_with_source_provenance(plan: dict[str, Any], input_payload: dict[str, Any]) -> dict[str, Any]:
+    prompt = input_payload.get("prompt")
+    if not isinstance(prompt, str) or not prompt:
+        return plan
+    prompt_bytes = prompt.encode("utf-8")
+    out = dict(plan)
+    source: dict[str, Any] = {
+        "format": "ds4-kv-source-provenance-v1",
+        "source_type": "prompt",
+        "prompt_sha256": "sha256:" + hashlib.sha256(prompt_bytes).hexdigest(),
+        "prompt_bytes": len(prompt_bytes),
+        "prompt_text": prompt,
+    }
+    shape = input_payload.get("benchmark_shape")
+    if isinstance(shape, dict) and shape.get("input_tokens") is not None:
+        source["estimated_prompt_tokens"] = int(shape.get("input_tokens") or 0)
+    out["source_provenance"] = source
+    return out
 
 
 def _cache_mode(args: argparse.Namespace) -> str:

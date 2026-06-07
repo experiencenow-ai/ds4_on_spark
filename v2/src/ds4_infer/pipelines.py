@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 from math import ceil
 from typing import Any, Mapping
 
 PIPELINE_SERVICE_FORMAT = "ds4-pipeline-service-v1"
+KV_CACHE_CONTRACT_FORMAT = "ds4-pipeline-kv-cache-contract-v1"
 
 
 @dataclass(frozen=True)
@@ -156,10 +159,38 @@ class PipelineService:
             return int(total_bytes)
         return int(ceil(int(total_bytes) / max(1, self.shard_count)))
 
+    def kv_cache_contract(self) -> dict[str, Any]:
+        payload = self._kv_cache_contract_payload()
+        return {
+            "format": KV_CACHE_CONTRACT_FORMAT,
+            **payload,
+            "layer_partition_source": self.layer_partition_source,
+            "fingerprint": _sha256_json(payload),
+        }
+
+    def layer_partition_fingerprint(self) -> str:
+        return self.kv_cache_contract()["fingerprint"]
+
+    def _kv_cache_contract_payload(self) -> dict[str, Any]:
+        return {
+            "service_id": self.service_id,
+            "profile_id": self.profile_id,
+            "model_id": self.model_id,
+            "dtype": self.dtype,
+            "pipeline_parallel_size": self.pipeline_parallel_size,
+            "tensor_parallel_size": self.tensor_parallel_size,
+            "total_layers": self.total_layers,
+            "node_ids": list(self.node_ids),
+            "layer_partition": list(self.layer_partition),
+            "cache_sharding": str(self.kv_cache.get("sharding", "pipeline_layers")),
+            "external_backend": str(self.kv_cache.get("external_backend", self.kv_cache.get("backend", "unknown"))),
+        }
+
     def cache_shards(self, *, request_id: str, kv_key: str, total_bytes: int) -> list[dict[str, Any]]:
         if not kv_key or total_bytes <= 0:
             return []
         shard_bytes = self.estimate_kv_shard_bytes(total_bytes)
+        contract = self.kv_cache_contract()
         return [
             {
                 "profile_id": self.profile_id,
@@ -172,6 +203,10 @@ class PipelineService:
                 "bytes": shard_bytes,
                 "layer_start": stage.layer_start,
                 "layer_end": stage.layer_end,
+                "metadata": {
+                    "kv_cache_contract": contract,
+                    "layer_partition_fingerprint": contract["fingerprint"],
+                },
             }
             for stage in self.stages()
         ]
@@ -182,6 +217,7 @@ class PipelineService:
         shard_bytes = self.estimate_kv_shard_bytes(total_bytes)
         safe_key = _safe_storage_component(kv_key)
         safe_namespace = _safe_storage_component(namespace or "default")
+        contract = self.kv_cache_contract()
         shards: list[dict[str, Any]] = []
         for stage in self.stages():
             storage_uri = None
@@ -210,6 +246,8 @@ class PipelineService:
                     "metadata": {
                         "archive_owner_node_id": stage.node_id,
                         "archive_mode": "node_local_shard",
+                        "kv_cache_contract": contract,
+                        "layer_partition_fingerprint": contract["fingerprint"],
                     },
                 }
             )
@@ -230,6 +268,7 @@ class PipelineService:
             "total_layers": self.total_layers,
             "layer_partition": list(self.layer_partition),
             "layer_partition_source": self.layer_partition_source,
+            "kv_cache_contract": self.kv_cache_contract(),
             "dtype": self.dtype,
             "max_batch_size": self.max_batch_size,
             "kv_cache": self.kv_cache,
@@ -389,6 +428,11 @@ def _node_local_storage_uri(*, storage_root: str, node_id: str, namespace: str, 
 
 def _safe_storage_component(value: str) -> str:
     return "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in str(value))[:160] or "_"
+
+
+def _sha256_json(value: Mapping[str, Any]) -> str:
+    data = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
 PipelineProfile = PipelineService

@@ -747,6 +747,7 @@ class InferenceQueue:
         ttl_expires_at = None if ttl_s is None else now + max(0.0, float(ttl_s))
         shard_list = [dict(shard) for shard in shards]
         validate_external_kv_shards(shard_list, total_bytes=total_bytes)
+        _validate_external_kv_partition_fingerprint(metadata or {}, shard_list)
         with closing(self._connect()) as conn, conn:
             conn.execute(
                 """
@@ -1376,6 +1377,31 @@ def _external_kv_object_rows(conn: sqlite3.Connection, *, namespace: str, kv_key
     if service_id is None:
         return conn.execute("select * from kv_memory_objects where namespace=? and kv_key=? order by service_id", (namespace, kv_key)).fetchall()
     return conn.execute("select * from kv_memory_objects where namespace=? and kv_key=? and service_id=?", (namespace, kv_key, service_id)).fetchall()
+
+
+def _validate_external_kv_partition_fingerprint(metadata: Mapping[str, Any], shards: list[dict[str, Any]]) -> None:
+    expected = _metadata_partition_fingerprint(metadata)
+    if expected is None:
+        return
+    mismatches = []
+    for shard in shards:
+        actual = _metadata_partition_fingerprint(dict(shard.get("metadata") or {}))
+        if actual is not None and actual != expected:
+            mismatches.append({"node_id": shard.get("node_id"), "stage_index": shard.get("stage_index"), "fingerprint": actual})
+    if mismatches:
+        raise ValueError(f"external KV shard layer partition fingerprint mismatch: {mismatches}")
+
+
+def _metadata_partition_fingerprint(metadata: Mapping[str, Any]) -> str | None:
+    value = metadata.get("layer_partition_fingerprint")
+    if isinstance(value, str) and value:
+        return value
+    contract = metadata.get("kv_cache_contract")
+    if isinstance(contract, dict):
+        value = contract.get("fingerprint")
+        if isinstance(value, str) and value:
+            return value
+    return None
 
 
 def _external_kv_object_summary(row: sqlite3.Row) -> dict[str, Any]:

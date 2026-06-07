@@ -54,12 +54,12 @@
     "entry_base_url": "http://127.0.0.1:8103",
     "head_node": "spark0",
     "layer_partition": [
+      7,
       8,
       8,
       8,
       9,
-      8,
-      8,
+      9,
       8,
       7
     ],

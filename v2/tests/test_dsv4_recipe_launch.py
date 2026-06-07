@@ -50,10 +50,13 @@ class Dsv4RecipeLaunchTests(unittest.TestCase):
         self.assertIn("lookup_hashes_to_load", patcher)
         self.assertIn("guard_tokens", patcher)
         self.assertIn("raw_tokens", patcher)
+        self.assertIn("restore_on_startup", patcher)
+        self.assertIn("persistent startup restore disabled", patcher)
         self.assertIn("restore_worker_blocks", store)
         self.assertIn("persist_worker_blocks", store)
         self.assertIn("validate_loaded_blocks", store)
         self.assertIn("VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT", store)
+        self.assertIn("VLLM_SIMPLE_KV_OFFLOAD_PERSIST_RESTORE_ON_STARTUP", store)
         self.assertIn("hashlib.sha256", store)
         self.assertIn("python3 patch_vllm.py", run)
 
