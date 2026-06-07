@@ -123,6 +123,7 @@ def _check_dsv4_env(profile: dict[str, Any], env: dict[str, Any], errors: list[s
         "VLLM_DS4_SIMPLE_KV_STARTUP_RESTORE": "0",
         "VLLM_DS4_SIMPLE_KV_STORE_UNMARKED": "0",
         "VLLM_DS4_SIMPLE_KV_READ_UNMARKED": "0",
+        "VLLM_WORKSPACE_PREALLOC_BYTES": str(profile["workspace_prealloc_bytes"]),
         "VLLM_DS4_DSV4_SPARSE_MLA_PREFILL_BACKEND": "indexed",
         "VLLM_DEEP_GEMM_WARMUP": "skip",
         "DS4_PP_TRANSPORT": str(profile["pp_transport"]),
