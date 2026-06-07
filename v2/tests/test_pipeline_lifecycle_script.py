@@ -10,6 +10,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "ds4_pipeline_lifecycle.py"
+TOKEN_SCRIPT = ROOT / "scripts" / "ds4_prefetch_token.py"
 WARM_SCRIPT = ROOT / "scripts" / "ds4_warm_dsv4_flashinfer_cache.py"
 TOPOLOGY = json.loads((ROOT / "profiles" / "topology" / "static_sparks.json").read_text(encoding="utf-8"))
 
@@ -127,17 +128,17 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertLess(script.index("export VLLM_DS4_KV_PREFETCH_TOKEN=unit-file-token"), script.index('nohup bash "$script"'))
 
     def test_prefetch_token_loader_falls_back_to_second_default_file(self) -> None:
-        lifecycle = load_script(SCRIPT)
-        old_files = lifecycle.DEFAULT_PREFETCH_TOKEN_FILES
+        tokens = load_script(TOKEN_SCRIPT)
+        old_files = tokens.DEFAULT_PREFETCH_TOKEN_FILES
         with tempfile.TemporaryDirectory() as tmp:
             missing = Path(tmp) / "missing-token"
             fallback = Path(tmp) / "fallback-token"
             fallback.write_text("fallback-value\n", encoding="utf-8")
-            lifecycle.DEFAULT_PREFETCH_TOKEN_FILES = (missing, fallback)
+            tokens.DEFAULT_PREFETCH_TOKEN_FILES = (missing, fallback)
             try:
-                token = lifecycle._load_prefetch_token(str(missing))
+                token = tokens.load_prefetch_token(str(missing))
             finally:
-                lifecycle.DEFAULT_PREFETCH_TOKEN_FILES = old_files
+                tokens.DEFAULT_PREFETCH_TOKEN_FILES = old_files
 
         self.assertEqual(token, "fallback-value")
 

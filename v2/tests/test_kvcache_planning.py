@@ -210,7 +210,7 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertIn("cat > /tmp/lmcache_qwen27_bf16_pp8_fp8kv.yaml", rank0)
             self.assertIn("local_disk: \"/home/spark0/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv/p7_8_7_9_9_9_8_7\"", rank0)
             self.assertIn("max_local_disk_size: 64", rank0)
-            self.assertIn("--gpu-memory-utilization 0.30", rank0)
+            self.assertIn("--gpu-memory-utilization 0.25", rank0)
             self.assertIn("local_disk: \"/home/spark7/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv/p7_8_7_9_9_9_8_7\"", rank7)
             self.assertIn("VLLM_DS4_PP_TCP_ADVERTISE_HOST=10.10.100.17", rank7)
 
