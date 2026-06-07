@@ -6,6 +6,7 @@ import shlex
 import subprocess
 import tempfile
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 import unittest
@@ -95,12 +96,33 @@ class StreamingCompletionBackend(OpenAICompatibleRunner):
         raise AssertionError("streaming test should not use non-streaming post")
 
 
+class SlowTailStreamingBackend(OpenAICompatibleRunner):
+    def __init__(self) -> None:
+        super().__init__(base_url="http://unused")
+
+    def _post_sse_json(self, endpoint: str, payload: dict):
+        yield {"choices": [{"index": 0, "text": "first done", "finish_reason": "stop"}]}
+        time.sleep(0.02)
+        yield {"choices": [{"index": 1, "text": "tail", "finish_reason": None}]}
+
+    def _post_json(self, endpoint: str, payload: dict) -> dict:
+        raise AssertionError("streaming timeout test should not use non-streaming post")
+
+
 class StreamingPipelineRunner(PipelineOpenAIRunner):
     def __init__(self) -> None:
         super().__init__(base_urls={"svc": "http://unused"})
 
     def _runner_for(self, profile: ModelProfile, node_id: str | None) -> StreamingCompletionBackend:
         return StreamingCompletionBackend()
+
+
+class SlowTailStreamingPipelineRunner(PipelineOpenAIRunner):
+    def __init__(self) -> None:
+        super().__init__(base_urls={"svc": "http://unused"})
+
+    def _runner_for(self, profile: ModelProfile, node_id: str | None) -> SlowTailStreamingBackend:
+        return SlowTailStreamingBackend()
 
 
 class NonStreamingCoalescedPipelineRunner(PipelineOpenAIRunner):
@@ -268,6 +290,43 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(seen, [("r2", "second done"), ("r", "first done")])
         self.assertEqual(results["r"]["transport"]["coalesced_completion_streaming"], True)
         self.assertEqual(results["r2"]["transport"]["coalesced_batch_size"], 2)
+
+    def test_pipeline_runner_streaming_wall_timeout_fails_only_unfinished_tail(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": False,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {"served_model_name": "served-model"},
+            }
+        )
+        first = InferenceRequest.from_json(make_request(chat=False).raw)
+        second_raw = make_request(chat=False).raw
+        second_raw["request_id"] = "r2"
+        seen = []
+        old = os.environ.get("DS4_PIPELINE_COMPLETION_STREAM_WALL_TIMEOUT_S")
+        os.environ["DS4_PIPELINE_COMPLETION_STREAM_WALL_TIMEOUT_S"] = "0.001"
+        try:
+            results = SlowTailStreamingPipelineRunner().run_many_on_node_incremental(
+                [first, InferenceRequest.from_json(second_raw)],
+                profile,
+                None,
+                concurrency=2,
+                on_result=lambda request_id, result: seen.append((request_id, result["status"])),
+            )
+        finally:
+            if old is None:
+                os.environ.pop("DS4_PIPELINE_COMPLETION_STREAM_WALL_TIMEOUT_S", None)
+            else:
+                os.environ["DS4_PIPELINE_COMPLETION_STREAM_WALL_TIMEOUT_S"] = old
+        self.assertEqual(seen, [("r", "completed"), ("r2", "transport_failed")])
+        self.assertEqual(results["r"]["output"]["text"], "first done")
+        self.assertIn("wall timeout", results["r2"]["transport"]["error"])
 
     def test_pipeline_runner_uses_final_only_for_forced_output_nonstreaming_worker(self) -> None:
         profile = ModelProfile.from_json(
