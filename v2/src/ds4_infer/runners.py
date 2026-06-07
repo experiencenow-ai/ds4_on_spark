@@ -303,6 +303,66 @@ class OpenAICompatibleRunner:
             return result
 
     def run_many_chat(self, requests: list[InferenceRequest], profile: ModelProfile) -> dict[str, dict] | None:
+        plan = self._chat_batch_plan(requests, profile)
+        if plan is None:
+            return None
+        chunks, payloads, max_cohort, concurrency = plan
+        out: dict[str, dict] = {}
+        if concurrency > 1 and len(payloads) > 1:
+            with ThreadPoolExecutor(max_workers=min(concurrency, len(payloads))) as executor:
+                futures = [
+                    executor.submit(self._run_chat_chunk, chunk, profile, payload, original_batch_size=len(chunk))
+                    for chunk, payload in payloads
+                ]
+                for future in as_completed(futures):
+                    out.update(future.result())
+        else:
+            for chunk, payload in payloads:
+                out.update(self._run_chat_chunk(chunk, profile, payload, original_batch_size=len(chunk)))
+        if len(chunks) > 1:
+            _mark_coalesced_chat_planned_split(out, original_batch_size=len(request_list), chunk_count=len(chunks), max_cohort=max_cohort, concurrency=concurrency)
+        return out
+
+    def run_many_chat_incremental(
+        self,
+        requests: list[InferenceRequest],
+        profile: ModelProfile,
+        *,
+        on_result: Callable[[str, dict[str, Any]], None],
+        cancel_event: Event | None = None,
+    ) -> dict[str, dict] | None:
+        plan = self._chat_batch_plan(requests, profile)
+        if plan is None:
+            return None
+        request_list = list(requests)
+        chunks, payloads, max_cohort, concurrency = plan
+        out: dict[str, dict] = {}
+
+        def publish(chunk_out: dict[str, dict]) -> None:
+            if len(chunks) > 1:
+                _mark_coalesced_chat_planned_split(chunk_out, original_batch_size=len(request_list), chunk_count=len(chunks), max_cohort=max_cohort, concurrency=concurrency)
+            out.update(chunk_out)
+            for request_id, result in chunk_out.items():
+                on_result(request_id, result)
+
+        if concurrency > 1 and len(payloads) > 1:
+            with ThreadPoolExecutor(max_workers=min(concurrency, len(payloads))) as executor:
+                futures = [
+                    executor.submit(self._run_chat_chunk, chunk, profile, payload, original_batch_size=len(chunk))
+                    for chunk, payload in payloads
+                ]
+                for future in as_completed(futures):
+                    publish(future.result())
+                    if cancel_event is not None and cancel_event.is_set():
+                        break
+        else:
+            for chunk, payload in payloads:
+                if cancel_event is not None and cancel_event.is_set():
+                    break
+                publish(self._run_chat_chunk(chunk, profile, payload, original_batch_size=len(chunk)))
+        return out
+
+    def _chat_batch_plan(self, requests: list[InferenceRequest], profile: ModelProfile) -> tuple[list[list[InferenceRequest]], list[tuple[list[InferenceRequest], dict[str, Any]]], int, int] | None:
         request_list = list(requests)
         if not request_list or not all(item.chat for item in request_list):
             return None
@@ -318,22 +378,7 @@ class OpenAICompatibleRunner:
             if payload is None:
                 return None
             payloads.append((chunk, payload))
-        out: dict[str, dict] = {}
-        concurrency = _completion_chunk_concurrency(profile)
-        if concurrency > 1 and len(payloads) > 1:
-            with ThreadPoolExecutor(max_workers=min(concurrency, len(payloads))) as executor:
-                futures = [
-                    executor.submit(self._run_chat_chunk, chunk, profile, payload, original_batch_size=len(chunk))
-                    for chunk, payload in payloads
-                ]
-                for future in as_completed(futures):
-                    out.update(future.result())
-        else:
-            for chunk, payload in payloads:
-                out.update(self._run_chat_chunk(chunk, profile, payload, original_batch_size=len(chunk)))
-        if len(chunks) > 1:
-            _mark_coalesced_chat_planned_split(out, original_batch_size=len(request_list), chunk_count=len(chunks), max_cohort=max_cohort, concurrency=concurrency)
-        return out
+        return chunks, payloads, max_cohort, _completion_chunk_concurrency(profile)
 
     def _run_chat_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, original_batch_size: int) -> dict[str, dict]:
         started = time.time()
@@ -640,10 +685,8 @@ class PipelineOpenAIRunner:
         runner = self._runner_for(profile, node_id)
         client_stream = requests_need_client_stream(request_list)
         if not client_stream and _env_bool("DS4_PIPELINE_COHORT_CHAT_BATCH", True):
-            coalesced_chat = runner.run_many_chat(request_list, profile)
+            coalesced_chat = runner.run_many_chat_incremental(request_list, profile, on_result=on_result, cancel_event=cancel_event)
             if coalesced_chat is not None:
-                for request_id, result in coalesced_chat.items():
-                    on_result(request_id, result)
                 return coalesced_chat
         if _env_bool("DS4_PIPELINE_COHORT_COMPLETIONS", True):
             internal_stream = client_stream or _internal_stream_nonclient_cohort(request_list)
