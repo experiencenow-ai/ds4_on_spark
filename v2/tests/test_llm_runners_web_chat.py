@@ -384,8 +384,23 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertTrue(result["r"]["transport"]["chat_as_completion_prompts"])
 
     def test_openai_runner_can_parallelize_rendered_chat_completion_prompts(self) -> None:
-        registry = ProfileRegistry.load(PROFILES)
-        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "rendered-completion-parallel",
+                "model_id": "served-model",
+                "backend": "vllm_pipeline",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["tool_chat"],
+                "supports_chat": True,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {
+                    "chat_cohort_transport": "parallel_completion_prompts",
+                    "parallel_chat_concurrency": 2,
+                    "served_model_name": "served-model",
+                },
+            }
+        )
         first_raw = make_request(chat=True).raw
         first_raw["input"]["rendered_prompt"] = "rendered chat one"
         second_raw = make_request(chat=True).raw
@@ -402,7 +417,7 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertTrue(result["r"]["transport"]["coalesced_chat_parallel_completion"])
         self.assertTrue(result["r2"]["transport"]["chat_as_completion_prompts"])
 
-    def test_openai_runner_single_rendered_chat_uses_completion_prompt(self) -> None:
+    def test_dsv4_profile_uses_native_chat_even_when_rendered_prompt_is_present(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
         raw = make_request(chat=True).raw
@@ -411,10 +426,10 @@ class LlmRunnersWebChatTests(unittest.TestCase):
 
         result = runner.run_one(InferenceRequest.from_json(raw), profile)
 
-        self.assertEqual(runner.calls[0][0], "/v1/completions")
-        self.assertEqual(runner.calls[0][1]["prompt"], "rendered single chat")
-        self.assertEqual(result["output"]["text"], "completion ok")
-        self.assertTrue(result["transport"]["chat_as_completion_prompts"])
+        self.assertEqual(runner.calls[0][0], "/v1/chat/completions")
+        self.assertIsInstance(runner.calls[0][1]["messages"], list)
+        self.assertEqual(result["output"]["text"], "chat ok")
+        self.assertNotIn("chat_as_completion_prompts", result["transport"])
 
     def test_pipeline_runner_streams_coalesced_completion_results_incrementally(self) -> None:
         profile = ModelProfile.from_json(

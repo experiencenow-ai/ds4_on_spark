@@ -19,7 +19,7 @@
     "status": "Profile-pin only while DSV4 PP8 sparse MLA prefill batching and throughput are requalified"
   },
   "routing": {
-    "chat_cohort_transport": "parallel_completion_prompts",
+    "chat_cohort_transport": "parallel_chat_completions",
     "chat_template_thinking_key": "thinking",
     "chat_template_renderer": "deepseek_v4",
     "tokenizer_path": "/home/spark0/models/hf/deepseek-ai/DeepSeek-V4-Flash",
