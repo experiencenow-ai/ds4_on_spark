@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 PROFILES = ROOT / "profiles" / "models"
-DEFAULT_PREFETCH_TOKEN_FILE = Path("/private/tmp/ds4_jit_kv_token")
+DEFAULT_PREFETCH_TOKEN_FILES = (Path("/private/tmp/ds4_jit_kv_token"), Path("/tmp/ds4_jit_kv_token"))
+DEFAULT_PREFETCH_TOKEN_FILE = DEFAULT_PREFETCH_TOKEN_FILES[0]
 SECRET_ASSIGN_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY)[A-Za-z0-9_]*=)(?:'[^']*'|\"[^\"]*\"|[^ \n]+)")
 
 
@@ -48,7 +49,7 @@ def _args() -> argparse.Namespace:
     parser.add_argument("--probe-timeout-s", type=float, default=15.0)
     parser.add_argument("--stagger-s", type=float, default=2.0)
     parser.add_argument("--remote-env", action="append", default=[], metavar="KEY=VALUE", help="export KEY=VALUE before launch scripts on each Spark node")
-    parser.add_argument("--prefetch-token-file", default=str(DEFAULT_PREFETCH_TOKEN_FILE), help="Local token file to inject into token-gated vLLM DS4 KV prefetch services.")
+    parser.add_argument("--prefetch-token-file", default=str(DEFAULT_PREFETCH_TOKEN_FILE), help="Local token file to inject into token-gated vLLM DS4 KV prefetch services; falls back to /tmp on Linux.")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--allow-all-services", action="store_true")
     parser.add_argument("--json", action="store_true")
@@ -270,12 +271,20 @@ def _required_prefetch_token(args: argparse.Namespace, *, service_id: str) -> st
 
 
 def _load_prefetch_token(raw_path: str) -> str:
-    if not raw_path:
-        return ""
-    path = Path(raw_path).expanduser()
-    if not path.exists():
-        return ""
-    return path.read_text(encoding="utf-8").strip()
+    for path in _prefetch_token_candidates(raw_path):
+        if path.exists():
+            token = path.read_text(encoding="utf-8").strip()
+            if token:
+                return token
+    return ""
+
+
+def _prefetch_token_candidates(raw_path: str) -> list[Path]:
+    paths = [Path(raw_path).expanduser()] if raw_path else []
+    for path in DEFAULT_PREFETCH_TOKEN_FILES:
+        if path not in paths:
+            paths.append(path)
+    return paths
 
 
 def _parse_remote_env(items: list[str]) -> list[tuple[str, str]]:

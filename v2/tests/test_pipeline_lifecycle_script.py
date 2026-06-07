@@ -126,6 +126,21 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertIn("export VLLM_DS4_KV_PREFETCH_TOKEN=unit-file-token", script)
         self.assertLess(script.index("export VLLM_DS4_KV_PREFETCH_TOKEN=unit-file-token"), script.index('nohup bash "$script"'))
 
+    def test_prefetch_token_loader_falls_back_to_second_default_file(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        old_files = lifecycle.DEFAULT_PREFETCH_TOKEN_FILES
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "missing-token"
+            fallback = Path(tmp) / "fallback-token"
+            fallback.write_text("fallback-value\n", encoding="utf-8")
+            lifecycle.DEFAULT_PREFETCH_TOKEN_FILES = (missing, fallback)
+            try:
+                token = lifecycle._load_prefetch_token(str(missing))
+            finally:
+                lifecycle.DEFAULT_PREFETCH_TOKEN_FILES = old_files
+
+        self.assertEqual(token, "fallback-value")
+
     def test_dsv4_warmup_runner_exports_prefetch_and_compile_caps(self) -> None:
         warm = load_script(WARM_SCRIPT)
         args = type("Args", (), {"prefetch_max_concurrent": 4})()
