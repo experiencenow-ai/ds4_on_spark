@@ -119,7 +119,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(qwen_bf16kv.compute_domain, "spark-fleet-0")
         self.assertEqual(dsv4.compute_domain, "spark-fleet-0")
         self.assertEqual(gemma31.compute_domain, "spark-fleet-0")
-        self.assertEqual(qwen.layer_partition, (7, 8, 8, 8, 9, 9, 8, 7))
+        self.assertEqual(qwen.layer_partition, (7, 8, 7, 9, 9, 9, 8, 7))
         self.assertEqual(qwen_bf16kv.layer_partition, (7, 8, 8, 8, 9, 9, 8, 7))
         self.assertEqual(dsv4.layer_partition, tuple(DSV4_PRODUCTION["layer_partition"]))
         self.assertEqual(gemma31.layer_partition, (8, 8, 8, 8, 7, 7, 7, 7))

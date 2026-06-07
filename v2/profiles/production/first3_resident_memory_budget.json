@@ -1,7 +1,7 @@
 {
   "format": "ds4-first3-resident-memory-budget-v1",
-  "profile_id": "first3_qwen27_gemma26_dsv4_rebalanced_v3",
-  "source": "live Spark startup and post-request telemetry from first-three bring-up on 2026-06-06, 2026-06-06 DSV4 16-way steady-state memory probe before layer rebalance, and 2026-06-07 first3 startup fit check",
+  "profile_id": "first3_qwen27_gemma26_dsv4_rebalanced_v4",
+  "source": "live Spark startup and post-request telemetry from first-three bring-up on 2026-06-06, 2026-06-06 DSV4 16-way steady-state memory probe before layer rebalance, 2026-06-07 first3 startup fit check, and 2026-06-07 all-three resident telemetry showing spark2/spark4/spark5 host RAM pressure",
   "target": {
     "min_available_ratio": 0.1,
     "min_available_gib": 12.0,
@@ -16,8 +16,8 @@
     "qwen27_bf16_pp8": [
       7,
       8,
-      8,
-      8,
+      7,
+      9,
       9,
       9,
       8,
@@ -28,20 +28,20 @@
       4,
       4,
       4,
+      3,
       4,
       4,
-      4,
-      3
+      4
     ],
     "dsv4_flash_pp8": [
       4,
       5,
-      5,
-      5,
-      6,
-      6,
+      4,
       7,
-      5
+      5,
+      5,
+      7,
+      6
     ]
   },
   "gpu_memory_utilization": {
@@ -95,7 +95,7 @@
       ],
       "retune_layer_memory_gib": 1.5,
       "spark4_to_spark7_layer_shift": true,
-      "notes": "Live all-three coordinator smoke left spark4 at 11.3 GiB available. Moving one Gemma layer from spark4 to spark7 preserves Gemma max stage depth at 4 while restoring the 12 GiB floor."
+      "notes": "Live all-three resident startup left spark4 under the 12 GiB floor. Moving one Gemma layer from spark4 to spark7 preserves Gemma max stage depth at 4 while restoring the 12 GiB floor. Qwen/Gemma LMCache local CPU tiers are capped at 1 GiB per rank so the external cache grows on NVMe, not host RAM."
     },
     "dsv4_flash_pp8": {
       "per_layer": 3.33,
@@ -107,26 +107,26 @@
   },
   "projection": {
     "post_first3_available_gib": {
-      "spark0": 21.3,
-      "spark1": 22.7,
-      "spark2": 20.5,
-      "spark3": 26.0,
-      "spark4": 42.7,
-      "spark5": 37.4,
-      "spark6": 46.1,
-      "spark7": 25.1
+      "spark0": 17.2,
+      "spark1": 12.8,
+      "spark2": 12.4,
+      "spark3": 14.9,
+      "spark4": 16.8,
+      "spark5": 15.7,
+      "spark6": 15.9,
+      "spark7": 18.0
     },
-    "floor_gib": 21.9,
-    "notes": "Conservative floor uses live pre-rebalance steady-state MemAvailable with Qwen27 BF16, Gemma4 26B-A4B, and DSV4 16-way resident. The layer rebalance moves combined stage count from 17/18/18/20/15/16/15/18 to 14/17/17/17/19/19/19/15, shifting work toward spark4/spark5/spark6 while keeping max combined stage count below the previous 20-layer peak. Replace this projection with post-rebalance telemetry after deploy.",
+    "floor_gib": 12.4,
+    "notes": "Conservative floor uses live all-three resident telemetry from 2026-06-07 plus observed DSV4/Qwen/Gemma per-rank load deltas. The layer rebalance moves combined stage count from 14/17/17/17/19/19/19/15 to 14/17/15/20/17/18/19/17, shifting work from spark2/spark4/spark5 toward spark3/spark7 while keeping max combined stage count at the prior 20-layer ceiling. Replace this projection with post-rebalance telemetry after deploy.",
     "planned_layer_delta": {
-      "spark0": -3,
-      "spark1": -1,
-      "spark2": -1,
-      "spark3": -3,
-      "spark4": 4,
-      "spark5": 3,
-      "spark6": 4,
-      "spark7": -3
+      "spark0": 0,
+      "spark1": 0,
+      "spark2": -2,
+      "spark3": 3,
+      "spark4": -2,
+      "spark5": -1,
+      "spark6": 0,
+      "spark7": 2
     }
   },
   "warmup_policy": {

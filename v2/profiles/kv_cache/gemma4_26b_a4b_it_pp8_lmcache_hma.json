@@ -89,15 +89,15 @@
     4,
     4,
     4,
+    3,
     4,
     4,
-    4,
-    3
+    4
   ],
   "lmcache_config": {
     "chunk_size": 256,
     "local_cpu": true,
-    "max_local_cpu_size": 5,
+    "max_local_cpu_size": 1,
     "local_disk": "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv",
     "max_local_disk_size": 64,
     "save_unfull_chunk": false,

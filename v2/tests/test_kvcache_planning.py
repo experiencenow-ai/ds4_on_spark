@@ -164,7 +164,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["pipeline_parallel_size"], 8)
         self.assertEqual(plan["tensor_parallel_size"], 1)
         self.assertEqual(plan["cache_sharding"], "pipeline_layers")
-        self.assertEqual(plan["layer_partition"], [7, 8, 8, 8, 9, 9, 8, 7])
+        self.assertEqual(plan["layer_partition"], [7, 8, 7, 9, 9, 9, 8, 7])
         self.assertEqual(len(plan["vllm_nodes"]), 8)
         self.assertEqual(plan["vllm_nodes"][0]["fabric_ip"], "10.10.100.10")
         self.assertEqual(plan["vllm_nodes"][-1]["fabric_ip"], "10.10.100.17")
@@ -176,6 +176,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["vllm_nodes"][0]["env"]["GLOO_SOCKET_IFNAME"], "ds4ring0")
         self.assertEqual(plan["vllm_nodes"][0]["env"]["TP_SOCKET_IFNAME"], "ds4ring0")
         self.assertEqual(plan["vllm_nodes"][0]["env"]["DS4_PP_TRANSPORT"], "tcp-staged")
+        self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["data"]["max_local_cpu_size"], 1)
         self.assertEqual(plan["vllm_nodes"][0]["env"]["VLLM_DS4_PP_EDGE_RAIL"], "enp")
         self.assertEqual(plan["vllm_nodes"][0]["env"]["VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR"], "1")
         self.assertEqual(plan["vllm_nodes"][0]["env"]["VLLM_DS4_PP_TCP_TENSOR_DICT"], "1")
@@ -196,7 +197,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertIn("--attention-backend", plan["vllm_nodes"][0]["argv"])
         self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--attention-backend") + 1], "TRITON_ATTN")
         self.assertIn("LMCacheConnectorV1", plan["vllm_nodes"][0]["command"])
-        self.assertIn("VLLM_PP_LAYER_PARTITION=7,8,8,8,9,9,8,7", plan["vllm_nodes"][0]["command"])
+        self.assertIn("VLLM_PP_LAYER_PARTITION=7,8,7,9,9,9,8,7", plan["vllm_nodes"][0]["command"])
         self.assertIn("--headless", plan["vllm_nodes"][-1]["argv"])
 
     def test_write_qwen_bf16_pp8_scripts_materialize_lmcache_config(self) -> None:
@@ -255,9 +256,10 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["connector"]["connector_id"], "lmcache")
         self.assertEqual(plan["connector"]["install_packages"], ["lmcache==0.4.5"])
         self.assertEqual(plan["connector"]["kv_transfer_config"]["kv_connector"], "LMCacheConnectorV1")
-        self.assertEqual(plan["layer_partition"], [3, 4, 4, 4, 4, 4, 4, 3])
+        self.assertEqual(plan["layer_partition"], [3, 4, 4, 4, 3, 4, 4, 4])
         self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["path"], "/tmp/lmcache_gemma4_26b_a4b_pp8_bf16kv.yaml")
         self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["data"]["local_disk"], "/home/spark0/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv")
+        self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["data"]["max_local_cpu_size"], 1)
         self.assertEqual(plan["vllm_nodes"][-1]["lmcache_config"]["data"]["local_disk"], "/home/spark7/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv")
         self.assertIn("--kv-transfer-config", plan["vllm_nodes"][0]["argv"])
 
