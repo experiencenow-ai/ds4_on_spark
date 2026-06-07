@@ -303,7 +303,10 @@ class OpenAICompatibleRunner:
             return result
 
     def run_many_chat(self, requests: list[InferenceRequest], profile: ModelProfile) -> dict[str, dict] | None:
-        plan = self._chat_batch_plan(requests, profile)
+        request_list = list(requests)
+        if _chat_cohort_transport(profile) == "parallel_chat_completions":
+            return self._run_many_chat_parallel(request_list, profile)
+        plan = self._chat_batch_plan(request_list, profile)
         if plan is None:
             return None
         chunks, payloads, max_cohort, concurrency = plan
@@ -331,10 +334,17 @@ class OpenAICompatibleRunner:
         on_result: Callable[[str, dict[str, Any]], None],
         cancel_event: Event | None = None,
     ) -> dict[str, dict] | None:
-        plan = self._chat_batch_plan(requests, profile)
+        request_list = list(requests)
+        if _chat_cohort_transport(profile) == "parallel_chat_completions":
+            return self._run_many_chat_parallel(
+                request_list,
+                profile,
+                on_result=on_result,
+                cancel_event=cancel_event,
+            )
+        plan = self._chat_batch_plan(request_list, profile)
         if plan is None:
             return None
-        request_list = list(requests)
         chunks, payloads, max_cohort, concurrency = plan
         out: dict[str, dict] = {}
 
@@ -361,6 +371,85 @@ class OpenAICompatibleRunner:
                     break
                 publish(self._run_chat_chunk(chunk, profile, payload, original_batch_size=len(chunk)))
         return out
+
+    def _run_many_chat_parallel(
+        self,
+        requests: list[InferenceRequest],
+        profile: ModelProfile,
+        *,
+        on_result: Callable[[str, dict[str, Any]], None] | None = None,
+        cancel_event: Event | None = None,
+    ) -> dict[str, dict] | None:
+        request_list = list(requests)
+        if not request_list or not all(item.chat for item in request_list):
+            return None
+        minimum = max(2, int(os.environ.get("DS4_PIPELINE_CHAT_COHORT_MIN", "2") or "2"))
+        if len(request_list) < minimum:
+            return None
+        max_cohort = _completion_effective_max_cohort(profile)
+        token_budget = coalesced_completion_token_budget()
+        chunks = _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget)
+        out: dict[str, dict] = {}
+        for chunk in chunks:
+            if cancel_event is not None and cancel_event.is_set():
+                break
+            started = time.time()
+            workers = _parallel_chat_concurrency(profile, len(chunk), max_cohort)
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {
+                    executor.submit(self._run_one_chat_parallel_member, item, profile, started, len(chunk)): item
+                    for item in chunk
+                }
+                for future in as_completed(futures):
+                    item = futures[future]
+                    if cancel_event is not None and cancel_event.is_set():
+                        break
+                    result = future.result()
+                    out[item.request_id] = result
+                    if on_result is not None:
+                        on_result(item.request_id, result)
+        if len(chunks) > 1:
+            _mark_coalesced_chat_planned_split(
+                out,
+                original_batch_size=len(request_list),
+                chunk_count=len(chunks),
+                max_cohort=max_cohort,
+                concurrency=_parallel_chat_concurrency(profile, max(1, max(len(chunk) for chunk in chunks)), max_cohort),
+            )
+        return out
+
+    def _run_one_chat_parallel_member(
+        self,
+        request: InferenceRequest,
+        profile: ModelProfile,
+        started: float,
+        batch_size: int,
+    ) -> dict:
+        try:
+            payload = _openai_payload(request, profile)
+            _merge_extra_body(payload, self.default_extra_body)
+            data = self._post_json(self.chat_endpoint, payload)
+            text = extract_openai_chat_text(data)
+            result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
+            result["usage"].update(_usage_from_response(data))
+            result["transport"] = {
+                "base_url": self.base_url,
+                "endpoint": self.chat_endpoint,
+                "duration_s": round(time.time() - started, 6),
+                "coalesced_chat_parallel": True,
+                "coalesced_batch_size": batch_size,
+                "batch_size": batch_size,
+            }
+            return result
+        except Exception as exc:
+            return self._transport_failure(
+                request,
+                profile,
+                started,
+                str(exc),
+                endpoint=self.chat_endpoint,
+                coalesced_batch_size=batch_size,
+            )
 
     def _chat_batch_plan(self, requests: list[InferenceRequest], profile: ModelProfile) -> tuple[list[list[InferenceRequest]], list[tuple[list[InferenceRequest], dict[str, Any]]], int, int] | None:
         request_list = list(requests)
@@ -1033,6 +1122,22 @@ def _mark_coalesced_chat_planned_split(out: dict[str, dict], *, original_batch_s
         transport["coalesced_chat_chunk_count"] = chunk_count
         transport["coalesced_chat_effective_max_cohort"] = max_cohort
         transport["coalesced_chat_chunk_concurrency"] = concurrency
+
+
+def _chat_cohort_transport(profile: ModelProfile) -> str:
+    value = profile.routing.get("chat_cohort_transport")
+    return str(value) if value is not None else "batch_endpoint"
+
+
+def _parallel_chat_concurrency(profile: ModelProfile, chunk_size: int, max_cohort: int) -> int:
+    raw = profile.routing.get("parallel_chat_concurrency")
+    if raw is None:
+        raw = os.environ.get("DS4_PIPELINE_CHAT_PARALLEL_CONCURRENCY")
+    try:
+        value = int(raw) if raw is not None else int(max_cohort)
+    except (TypeError, ValueError):
+        value = int(max_cohort)
+    return max(1, min(int(chunk_size), value))
 
 
 def _completion_request_token_estimate(request: InferenceRequest) -> int:
