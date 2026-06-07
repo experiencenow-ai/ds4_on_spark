@@ -71,8 +71,8 @@ class StaticSparkTopologyTests(unittest.TestCase):
     def test_first_three_services_declare_external_cache_backends_and_safe_gpu_caps(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
         expected = {
-            "qwen27_bf16_pp8": ("lmcache_hma", "lmcache", "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv", 0.25),
-            "gemma4_26b_a4b_pp8": ("lmcache_hma", "lmcache", "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv", 0.25),
+            "qwen27_bf16_pp8": ("lmcache_hma", "lmcache", "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv", 0.30),
+            "gemma4_26b_a4b_pp8": ("lmcache_hma", "lmcache", "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv", 0.30),
             "dsv4_flash_pp8": ("dsv4_hma", "simple_cpu_offload", "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload", 0.18),
         }
 

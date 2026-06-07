@@ -13,14 +13,14 @@ FIRST3_EXTERNAL_CACHE = {
         "external_backend": "lmcache_hma",
         "connector_id": "lmcache",
         "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv",
-        "gpu_memory_utilization": "0.25",
+        "gpu_memory_utilization": "0.30",
         "env_root": "LMCACHE_ROOT",
     },
     "gemma4_26b_a4b_pp8": {
         "external_backend": "lmcache_hma",
         "connector_id": "lmcache",
         "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv",
-        "gpu_memory_utilization": "0.25",
+        "gpu_memory_utilization": "0.30",
         "env_root": "LMCACHE_ROOT",
     },
     "dsv4_flash_pp8": {
@@ -154,10 +154,10 @@ def _check_dsv4_env(profile: dict[str, Any], env: dict[str, Any], errors: list[s
 
 def _check_qwen(errors: list[str], checks: list[str]) -> None:
     qwen_launches = {
-        "profiles/runtime_contracts/qwen27_bf16_pp8_v1.json": ("fp8", "0.25"),
+        "profiles/runtime_contracts/qwen27_bf16_pp8_v1.json": ("fp8", "0.30"),
         "profiles/runtime_contracts/qwen27_bf16_pp8_bf16kv_v1.json": ("auto", "0.35"),
         "profiles/runtime_contracts/qwen27_vllm_trim_v1.json": ("fp8", ""),
-        "profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json": ("fp8", "0.25"),
+        "profiles/kv_cache/qwen27_bf16_pp8_lmcache_hma.json": ("fp8", "0.30"),
         "profiles/kv_cache/qwen27_bf16_pp8_bf16kv_lmcache_hma.json": ("auto", "0.35"),
         "profiles/kv_cache/qwen27_lmcache_mp_spark7.json": ("fp8", ""),
     }
@@ -248,7 +248,7 @@ def _check_gemma_co_residency(errors: list[str], checks: list[str]) -> None:
         data = _load(path)
         launch = data.get("launch") if isinstance(data.get("launch"), dict) else {}
         args = launch.get("args") if isinstance(launch.get("args"), list) else []
-        expected_cap = "0.20" if path.name.startswith("gemma4_31b_") else "0.25"
+        expected_cap = "0.20" if path.name.startswith("gemma4_31b_") else "0.30" if path.name.startswith("gemma4_26b_a4b_") else "0.25"
         _require_arg(args, "--gpu-memory-utilization", expected_cap, f"{path.name} co-resident GPU memory cap", errors, checks)
 
 
