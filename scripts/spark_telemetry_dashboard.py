@@ -21,6 +21,7 @@ DEFAULT_HISTORY_LIMIT = 720
 NODE_DOWN_ERROR_THRESHOLD = 3
 NODE_ERROR_STREAKS: dict[str,dict[str,Any]] = {}
 MODEL_LAYER_PARTITIONS: dict[str,list[int]] | None = None
+REPO_ROOT_OVERRIDE = ""
 DISPLAY_CPU_CORES = 20
 DISPLAY_CPU_PCT_MAX = DISPLAY_CPU_CORES * 100
 STREAM_INTERVAL_S = 5.0
@@ -113,6 +114,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--nodes-dir", default=DEFAULT_NODES_DIR)
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--repo-root", default=os.environ.get("DS4_TELEMETRY_REPO_ROOT",""))
     return(p.parse_args())
 
 
@@ -259,6 +261,8 @@ def node_text_list(raw: Any) -> list[str]:
 
 
 def repo_root() -> Path:
+    if REPO_ROOT_OVERRIDE:
+        return(Path(REPO_ROOT_OVERRIDE).expanduser().resolve())
     return(Path(__file__).resolve().parents[1])
 
 
@@ -581,7 +585,10 @@ def make_handler(summary_path: str, nodes_dir: str) -> type[BaseHTTPRequestHandl
 
 
 def main() -> int:
+    global MODEL_LAYER_PARTITIONS,REPO_ROOT_OVERRIDE
     args = parse_args()
+    REPO_ROOT_OVERRIDE = str(args.repo_root or "")
+    MODEL_LAYER_PARTITIONS = None
     server = ThreadingHTTPServer((args.host,args.port),make_handler(args.summary_json,args.nodes_dir))
     print("serving Spark telemetry dashboard on http://%s:%d" % (args.host,args.port),flush=True)
     server.serve_forever()

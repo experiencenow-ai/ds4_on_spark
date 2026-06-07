@@ -9,6 +9,8 @@ from scripts import spark_telemetry_dashboard as dashboard
 class SparkTelemetryDashboardTest(unittest.TestCase):
     def setUp(self):
         dashboard.reset_node_error_streaks()
+        dashboard.MODEL_LAYER_PARTITIONS = None
+        dashboard.REPO_ROOT_OVERRIDE = ""
 
     def test_snapshot_summarizes_busy_and_hot_nodes(self):
         payload = {
@@ -226,6 +228,42 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["nodes"][1]["output_tok_s"],8)
         self.assertEqual(snap["nodes"][0]["vllm_running"],0.875)
         self.assertEqual(snap["nodes"][1]["vllm_running"],1.0)
+
+    def test_snapshot_uses_explicit_repo_root_for_installed_dashboard(self):
+        payload = {
+            "updated_iso": "2026-05-26T00:00:00+00:00",
+            "updated_unix": 1,
+            "nodes": {
+                "spark0": {
+                    "sample_count": 1,
+                    "last_vllm_metrics_up": 1,
+                    "last_vllm_generation_tokens_per_s_by_model": "example-pp8:38",
+                    "last_vllm_requests_running_by_model": "example-pp8:38",
+                    "last_vllm_pipeline_stage_models": "example-pp8",
+                    "last_vllm_pipeline_stage_pp_by_model": "example-pp8:8",
+                    "last_vllm_pipeline_stage_rank_by_model": "example-pp8:0",
+                },
+                "spark1": {
+                    "sample_count": 1,
+                    "last_vllm_pipeline_stage_models": "example-pp8",
+                    "last_vllm_pipeline_stage_pp_by_model": "example-pp8:8",
+                    "last_vllm_pipeline_stage_rank_by_model": "example-pp8:1",
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            summary = Path(tmp) / "installed" / "summary.json"
+            (root / "v2" / "profiles" / "production").mkdir(parents=True)
+            (root / "v2" / "profiles" / "models").mkdir(parents=True)
+            summary.parent.mkdir()
+            (root / "v2" / "profiles" / "production" / "first3_resident_memory_budget.json").write_text(json.dumps({"layer_partitions":{"example_service":[4,5,6,5,5,5,4,4]}}),encoding="utf-8")
+            (root / "v2" / "profiles" / "models" / "example.json").write_text(json.dumps({"routing":{"pipeline":{"served_model_name":"example-pp8","service_id":"example_service"}}}),encoding="utf-8")
+            summary.write_text(json.dumps(payload),encoding="utf-8")
+            dashboard.REPO_ROOT_OVERRIDE = str(root)
+            snap = dashboard.build_snapshot(str(summary))
+        self.assertEqual(snap["nodes"][0]["output_tok_s"],4)
+        self.assertEqual(snap["nodes"][1]["output_tok_s"],5)
 
     def test_snapshot_ignores_ds4_stage_payload_for_node_telemetry(self):
         payload = {
