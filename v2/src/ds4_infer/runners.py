@@ -266,6 +266,7 @@ class OpenAICompatibleRunner:
         api_key: str | None = None,
         timeout_s: int = 300,
         chat_endpoint: str = "/v1/chat/completions",
+        chat_batch_endpoint: str = "/v1/chat/completions/batch",
         completion_endpoint: str = "/v1/completions",
         default_extra_body: dict[str, Any] | None = None,
         jit_kv_circuit: Any | None = None,
@@ -274,6 +275,7 @@ class OpenAICompatibleRunner:
         self.api_key = api_key if api_key is not None else os.environ.get("DS4_OPENAI_API_KEY", "")
         self.timeout_s = timeout_s
         self.chat_endpoint = chat_endpoint
+        self.chat_batch_endpoint = chat_batch_endpoint
         self.completion_endpoint = completion_endpoint
         self.default_extra_body = dict(default_extra_body or {})
         self.jit_kv_circuit = jit_kv_circuit
@@ -299,6 +301,54 @@ class OpenAICompatibleRunner:
             result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": str(exc)}, sort_keys=True), status="transport_failed")
             result["transport"] = {"base_url": self.base_url, "duration_s": round(time.time() - started, 6), "error": str(exc)}
             return result
+
+    def run_many_chat(self, requests: list[InferenceRequest], profile: ModelProfile) -> dict[str, dict] | None:
+        request_list = list(requests)
+        if not request_list or not all(item.chat for item in request_list):
+            return None
+        minimum = max(2, int(os.environ.get("DS4_PIPELINE_CHAT_COHORT_MIN", "2") or "2"))
+        if len(request_list) < minimum:
+            return None
+        max_cohort = _completion_effective_max_cohort(profile)
+        token_budget = coalesced_completion_token_budget()
+        payloads: list[tuple[list[InferenceRequest], dict[str, Any]]] = []
+        chunks = _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget)
+        for chunk in chunks:
+            payload = _coalesced_chat_payload(chunk, profile, self.default_extra_body)
+            if payload is None:
+                return None
+            payloads.append((chunk, payload))
+        out: dict[str, dict] = {}
+        concurrency = _completion_chunk_concurrency(profile)
+        if concurrency > 1 and len(payloads) > 1:
+            with ThreadPoolExecutor(max_workers=min(concurrency, len(payloads))) as executor:
+                futures = [
+                    executor.submit(self._run_chat_chunk, chunk, profile, payload, original_batch_size=len(chunk))
+                    for chunk, payload in payloads
+                ]
+                for future in as_completed(futures):
+                    out.update(future.result())
+        else:
+            for chunk, payload in payloads:
+                out.update(self._run_chat_chunk(chunk, profile, payload, original_batch_size=len(chunk)))
+        if len(chunks) > 1:
+            _mark_coalesced_chat_planned_split(out, original_batch_size=len(request_list), chunk_count=len(chunks), max_cohort=max_cohort, concurrency=concurrency)
+        return out
+
+    def _run_chat_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, original_batch_size: int) -> dict[str, dict]:
+        started = time.time()
+        try:
+            prefetch_info = _maybe_prestage_common_kv_prefix(self, payload, chunk)
+            data = self._post_json(self.chat_batch_endpoint, payload)
+            out = _coalesced_chat_results(chunk, profile, data, base_url=self.base_url, endpoint=self.chat_batch_endpoint, started=started, prefetch_info=prefetch_info)
+            if original_batch_size != len(chunk):
+                mark_coalesced_split(out, original_batch_size=original_batch_size)
+            return out
+        except Exception as exc:
+            return {
+                item.request_id: self._transport_failure(item, profile, started, str(exc), endpoint=self.chat_batch_endpoint, coalesced_batch_size=len(chunk))
+                for item in chunk
+            }
 
     def run_many_completion(self, requests: list[InferenceRequest], profile: ModelProfile) -> dict[str, dict] | None:
         request_list = list(requests)
@@ -551,6 +601,10 @@ class PipelineOpenAIRunner:
             return {}
         worker_count = max(1, min(int(concurrency), len(request_list)))
         runner = self._runner_for(profile, node_id)
+        if _env_bool("DS4_PIPELINE_COHORT_CHAT_BATCH", True):
+            coalesced_chat = runner.run_many_chat(request_list, profile)
+            if coalesced_chat is not None:
+                return coalesced_chat
         if _env_bool("DS4_PIPELINE_COHORT_COMPLETIONS", True):
             coalesced = runner.run_many_completion(request_list, profile)
             if coalesced is not None:
@@ -584,8 +638,14 @@ class PipelineOpenAIRunner:
             return {}
         worker_count = max(1, min(int(concurrency), len(request_list)))
         runner = self._runner_for(profile, node_id)
+        client_stream = requests_need_client_stream(request_list)
+        if not client_stream and _env_bool("DS4_PIPELINE_COHORT_CHAT_BATCH", True):
+            coalesced_chat = runner.run_many_chat(request_list, profile)
+            if coalesced_chat is not None:
+                for request_id, result in coalesced_chat.items():
+                    on_result(request_id, result)
+                return coalesced_chat
         if _env_bool("DS4_PIPELINE_COHORT_COMPLETIONS", True):
-            client_stream = requests_need_client_stream(request_list)
             internal_stream = client_stream or _internal_stream_nonclient_cohort(request_list)
             if internal_stream:
                 coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result, on_delta=on_delta if client_stream else None, cancel_event=cancel_event)
@@ -757,7 +817,7 @@ def _coalesced_completion_payload(requests: list[InferenceRequest], profile: Mod
     prompts: list[str] = []
     shared: dict[str, Any] | None = None
     for item in requests:
-        if item.chat and not _env_bool("DS4_PIPELINE_COHORT_RENDERED_CHAT_COMPLETIONS", True):
+        if item.chat and not _env_bool("DS4_PIPELINE_COHORT_RENDERED_CHAT_COMPLETIONS", False):
             return None
         payload = _openai_payload(item, profile, render_chat_as_completion=item.chat)
         if item.chat and not isinstance(payload.get("prompt"), str):
@@ -777,6 +837,32 @@ def _coalesced_completion_payload(requests: list[InferenceRequest], profile: Mod
         return None
     payload = dict(shared)
     payload["prompt"] = prompts
+    return payload
+
+def _coalesced_chat_payload(requests: list[InferenceRequest], profile: ModelProfile, default_extra_body: dict[str, Any]) -> dict[str, Any] | None:
+    conversations: list[list[dict[str, str]]] = []
+    shared: dict[str, Any] | None = None
+    for item in requests:
+        if not item.chat:
+            return None
+        payload = _openai_payload(item, profile)
+        if payload.get("tools") is not None or payload.get("tool_choice") is not None:
+            return None
+        _merge_extra_body(payload, default_extra_body)
+        messages = payload.get("messages")
+        if not isinstance(messages, list) or not messages:
+            return None
+        comparable = dict(payload)
+        comparable.pop("messages", None)
+        if shared is None:
+            shared = comparable
+        elif comparable != shared:
+            return None
+        conversations.append(messages)
+    if shared is None:
+        return None
+    payload = dict(shared)
+    payload["messages"] = conversations
     return payload
 
 def _maybe_prestage_common_kv_prefix(runner: OpenAICompatibleRunner, payload: dict[str, Any], requests: list[InferenceRequest]) -> dict[str, Any] | None:
@@ -898,6 +984,15 @@ def _mark_coalesced_planned_split(out: dict[str, dict], *, original_batch_size: 
         transport["coalesced_completion_effective_max_cohort"] = max_cohort
         transport["coalesced_completion_chunk_concurrency"] = concurrency
 
+def _mark_coalesced_chat_planned_split(out: dict[str, dict], *, original_batch_size: int, chunk_count: int, max_cohort: int, concurrency: int) -> None:
+    for result in out.values():
+        transport: dict[str, Any] = result.setdefault("transport", {})
+        transport["coalesced_chat_planned_split"] = True
+        transport["original_coalesced_batch_size"] = original_batch_size
+        transport["coalesced_chat_chunk_count"] = chunk_count
+        transport["coalesced_chat_effective_max_cohort"] = max_cohort
+        transport["coalesced_chat_chunk_concurrency"] = concurrency
+
 
 def _completion_request_token_estimate(request: InferenceRequest) -> int:
     prompt_tokens = _completion_prompt_token_hint(request)
@@ -974,6 +1069,44 @@ def _coalesced_completion_results(
         result["transport"] = {"base_url": base_url, "endpoint": endpoint, "duration_s": round(time.time() - started, 6), "coalesced_completion_batch": True, "coalesced_batch_size": len(requests), "batch_size": len(requests)}
         if item.chat:
             result["transport"]["coalesced_rendered_chat_completion_batch"] = True
+        if prefetch_info is not None:
+            result["transport"]["kv_prestage"] = dict(prefetch_info)
+        out[item.request_id] = result
+    return out
+
+def _coalesced_chat_results(
+    requests: list[InferenceRequest],
+    profile: ModelProfile,
+    data: dict[str, Any],
+    *,
+    base_url: str,
+    endpoint: str,
+    started: float,
+    prefetch_info: dict[str, Any] | None = None,
+) -> dict[str, dict]:
+    choices = data.get("choices")
+    if not isinstance(choices, list):
+        return {
+            item.request_id: _coalesced_failure(item, profile, base_url, endpoint, started, len(requests), "coalesced chat response missing choices")
+            for item in requests
+        }
+    by_index: dict[int, dict[str, Any]] = {}
+    for position, choice in enumerate(choices):
+        if not isinstance(choice, dict):
+            continue
+        raw_index = choice.get("index", position)
+        index = int(raw_index) if isinstance(raw_index, (int, float)) else position
+        if 0 <= index < len(requests):
+            by_index[index] = choice
+    out: dict[str, dict] = {}
+    for index, item in enumerate(requests):
+        choice = by_index.get(index)
+        if choice is None:
+            out[item.request_id] = _coalesced_failure(item, profile, base_url, endpoint, started, len(requests), f"coalesced chat response missing choice index {index}")
+            continue
+        result = make_result(request=item, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=extract_openai_chat_text({"choices": [choice]}))
+        result["usage"].update(_coalesced_usage(data, choice, item, len(requests)))
+        result["transport"] = {"base_url": base_url, "endpoint": endpoint, "duration_s": round(time.time() - started, 6), "coalesced_chat_batch": True, "coalesced_batch_size": len(requests), "batch_size": len(requests)}
         if prefetch_info is not None:
             result["transport"]["kv_prestage"] = dict(prefetch_info)
         out[item.request_id] = result
