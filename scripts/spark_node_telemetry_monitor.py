@@ -367,72 +367,181 @@ def prometheus_label(line: str, key: str) -> str:
     return(line[start:end] if end >= start else "")
 
 
-def vllm_metrics_port_from_argv(argv: List[str]) -> Optional[int]:
+def metric_map_text(values: Dict[str,float]) -> str:
+    parts: List[str] = []
+    for key in sorted(values):
+        safe_key = str(key).replace(";","_").replace(":","_").strip()
+        if safe_key:
+            parts.append("%s:%.6f" % (safe_key,float(values[key])))
+    return(";".join(parts)[:480])
+
+
+def parse_metric_map(raw: object) -> Dict[str,float]:
+    out: Dict[str,float] = {}
+    for item in str(raw or "").split(";"):
+        if ":" not in item:
+            continue
+        key,value = item.split(":",1)
+        key = key.strip()
+        try:
+            out[key] = float(value)
+        except Exception:
+            continue
+    return(out)
+
+
+def add_metric_value(values: Dict[str,float], key: str, value: float) -> None:
+    safe_key = str(key or "").strip()
+    if safe_key:
+        values[safe_key] = values.get(safe_key,0.0) + value
+
+
+def prometheus_model(line: str) -> str:
+    return(prometheus_label(line,"model_name") or prometheus_label(line,"model"))
+
+
+def argv_value(argv: List[str], flag: str) -> Optional[str]:
+    for i,arg in enumerate(argv):
+        if arg == flag and (i + 1) < len(argv):
+            return(argv[i + 1])
+        if arg.startswith(flag + "="):
+            return(arg.split("=",1)[1])
+    return(None)
+
+
+def argv_int(argv: List[str], flag: str, default: int) -> int:
+    try:
+        return(int(argv_value(argv,flag) or default))
+    except Exception:
+        return(default)
+
+
+def vllm_metrics_target_from_argv(argv: List[str]) -> Optional[Dict[str,object]]:
     if "serve" not in argv or "--headless" in argv:
         return(None)
     joined = " ".join(argv)
     if "vllm.entrypoints.cli.main" not in joined and os.path.basename(argv[0] if argv else "") != "vllm":
         return(None)
-    for i,arg in enumerate(argv):
-        if arg == "--port" and (i + 1) < len(argv):
-            try:
-                return(int(argv[i + 1]))
-            except Exception:
-                return(None)
-        if arg.startswith("--port="):
-            try:
-                return(int(arg.split("=",1)[1]))
-            except Exception:
-                return(None)
-    return(8000)
+    port = argv_int(argv,"--port",8000)
+    pipeline_parallel_size = argv_int(argv,"--pipeline-parallel-size",1)
+    node_rank = argv_int(argv,"--node-rank",0)
+    return({
+        "url": "http://127.0.0.1:%d/metrics" % port,
+        "scope": "pipeline" if pipeline_parallel_size > 1 else "local",
+        "pipeline_parallel_size": pipeline_parallel_size,
+        "pipeline_node_rank": node_rank,
+    })
 
 
-def discover_vllm_metrics_urls(timeout: float) -> List[str]:
+def vllm_metrics_port_from_argv(argv: List[str]) -> Optional[int]:
+    target = vllm_metrics_target_from_argv(argv)
+    if target is None:
+        return(None)
+    url = str(target.get("url",""))
+    try:
+        return(int(url.rsplit(":",1)[1].split("/",1)[0]))
+    except Exception:
+        return(None)
+
+
+def discover_vllm_metrics_targets(timeout: float) -> List[Dict[str,object]]:
     try:
         p = subprocess.run(["ps","-eo","args"],text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=max(1.0,timeout))
     except Exception:
         return([])
     if p.returncode != 0:
         return([])
-    urls: List[str] = []
+    targets: List[Dict[str,object]] = []
     seen: Dict[str,object] = {}
     for line in p.stdout.splitlines():
         try:
             argv = shlex.split(line)
         except Exception:
             continue
-        port = vllm_metrics_port_from_argv(argv)
-        if port is None:
+        target = vllm_metrics_target_from_argv(argv)
+        if target is None:
             continue
-        url = "http://127.0.0.1:%d/metrics" % port
+        url = str(target.get("url",""))
         if url not in seen:
             seen[url] = True
-            urls.append(url)
+            targets.append(target)
+    return(targets)
+
+
+def discover_vllm_metrics_urls(timeout: float) -> List[str]:
+    urls: List[str] = []
+    for target in discover_vllm_metrics_targets(timeout):
+        urls.append(str(target.get("url","")))
     return(urls)
+
+
+def discover_vllm_pipeline_stage_models(timeout: float) -> Tuple[Dict[str,int],Dict[str,int]]:
+    try:
+        p = subprocess.run(["ps","-eo","args"],text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=max(1.0,timeout))
+    except Exception:
+        return(({},{}))
+    if p.returncode != 0:
+        return(({},{}))
+    models: Dict[str,int] = {}
+    ranks: Dict[str,int] = {}
+    for line in p.stdout.splitlines():
+        try:
+            argv = shlex.split(line)
+        except Exception:
+            continue
+        if "serve" not in argv:
+            continue
+        joined = " ".join(argv)
+        if "vllm.entrypoints.cli.main" not in joined and os.path.basename(argv[0] if argv else "") != "vllm":
+            continue
+        pipeline_parallel_size = argv_int(argv,"--pipeline-parallel-size",1)
+        if pipeline_parallel_size <= 1:
+            continue
+        model = argv_value(argv,"--served-model-name") or ""
+        if model:
+            models[model] = pipeline_parallel_size
+            ranks[model] = argv_int(argv,"--node-rank",0)
+    return((models,ranks))
+
+
+def metrics_targets(raw_urls: str, timeout: float) -> List[Dict[str,object]]:
+    targets: List[Dict[str,object]] = []
+    seen: Dict[str,object] = {}
+    for item in [part.strip() for part in raw_urls.split(",") if part.strip()]:
+        expanded = discover_vllm_metrics_targets(timeout) if item == "auto" else [{"url": item, "scope": "local", "pipeline_parallel_size": 1, "pipeline_node_rank": 0}]
+        for target in expanded:
+            url = str(target.get("url",""))
+            if url not in seen:
+                seen[url] = True
+                targets.append(target)
+            elif str(target.get("scope","local")) == "pipeline":
+                for existing in targets:
+                    if str(existing.get("url","")) == url:
+                        existing.update(target)
+    return(targets)
 
 
 def metrics_urls(raw_urls: str, timeout: float) -> List[str]:
     urls: List[str] = []
-    seen: Dict[str,object] = {}
-    for item in [part.strip() for part in raw_urls.split(",") if part.strip()]:
-        expanded = discover_vllm_metrics_urls(timeout) if item == "auto" else [item]
-        for url in expanded:
-            if url not in seen:
-                seen[url] = True
-                urls.append(url)
+    for target in metrics_targets(raw_urls,timeout):
+        urls.append(str(target.get("url","")))
     return(urls)
 
 
-def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,float]] = None, now: Optional[float] = None) -> Dict[str,object]:
+def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,object]] = None, now: Optional[float] = None) -> Dict[str,object]:
     out: Dict[str,object] = {
         "vllm_metrics_up": 0,
         "vllm_requests_running": 0.0,
         "vllm_requests_waiting": 0.0,
+        "vllm_requests_running_by_model": "",
+        "vllm_requests_waiting_by_model": "",
         "vllm_requests_total": 0.0,
         "vllm_requests_per_s": 0.0,
         "vllm_kv_cache_pct": 0.0,
         "vllm_prompt_tokens_total": 0.0,
         "vllm_generation_tokens_total": 0.0,
+        "vllm_prompt_tokens_total_by_model": "",
+        "vllm_generation_tokens_total_by_model": "",
         "vllm_prompt_tokens_local_compute_total": 0.0,
         "vllm_prompt_tokens_local_cache_hit_total": 0.0,
         "vllm_prompt_tokens_external_kv_transfer_total": 0.0,
@@ -445,6 +554,8 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
         "vllm_tokens_per_s": 0.0,
         "vllm_prompt_tokens_per_s": 0.0,
         "vllm_generation_tokens_per_s": 0.0,
+        "vllm_prompt_tokens_per_s_by_model": "",
+        "vllm_generation_tokens_per_s_by_model": "",
         "vllm_prompt_tokens_cached_per_s": 0.0,
         "vllm_prompt_tokens_local_compute_per_s": 0.0,
         "vllm_prompt_tokens_local_cache_hit_per_s": 0.0,
@@ -453,13 +564,27 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
         "vllm_prefix_cache_hit_pct": 0.0,
         "vllm_external_prefix_cache_hit_pct": 0.0,
         "vllm_metrics_sources": "",
+        "vllm_metrics_scope": "",
+        "vllm_pipeline_parallel_size": 0,
+        "vllm_pipeline_node_rank": 0,
+        "vllm_pipeline_stage_models": "",
+        "vllm_pipeline_stage_pp_by_model": "",
+        "vllm_pipeline_stage_rank_by_model": "",
     }
     sources: List[str] = []
+    source_scopes: List[str] = []
+    pipeline_parallel_size = 0
+    pipeline_node_rank = 0
     kv_vals: List[float] = []
+    running_by_model: Dict[str,float] = {}
+    waiting_by_model: Dict[str,float] = {}
+    prompt_by_model: Dict[str,float] = {}
+    generation_by_model: Dict[str,float] = {}
     source_prompt_total = 0.0
     request_counter_total = 0.0
     http_request_counter_total = 0.0
-    for url in metrics_urls(raw_urls,timeout):
+    for target in metrics_targets(raw_urls,timeout):
+        url = str(target.get("url",""))
         text,error = read_text_url(url,timeout)
         if error != "":
             continue
@@ -467,10 +592,14 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
         for line in text.splitlines():
             name = prometheus_name(line)
             if name == "vllm:num_requests_running":
-                out["vllm_requests_running"] = float(out["vllm_requests_running"]) + prometheus_value(line)
+                value = prometheus_value(line)
+                out["vllm_requests_running"] = float(out["vllm_requests_running"]) + value
+                add_metric_value(running_by_model,prometheus_model(line),value)
                 found = True
             elif name == "vllm:num_requests_waiting":
-                out["vllm_requests_waiting"] = float(out["vllm_requests_waiting"]) + prometheus_value(line)
+                value = prometheus_value(line)
+                out["vllm_requests_waiting"] = float(out["vllm_requests_waiting"]) + value
+                add_metric_value(waiting_by_model,prometheus_model(line),value)
                 found = True
             elif name in ("vllm:request_success_total","vllm:request_failure_total","vllm:requests_total"):
                 request_counter_total += prometheus_value(line)
@@ -486,10 +615,14 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
                 kv_vals.append(value * 100.0 if value <= 1.0 else value)
                 found = True
             elif name in ("vllm:prompt_tokens_total","vllm:prompt_tokens"):
-                out["vllm_prompt_tokens_total"] = float(out["vllm_prompt_tokens_total"]) + prometheus_value(line)
+                value = prometheus_value(line)
+                out["vllm_prompt_tokens_total"] = float(out["vllm_prompt_tokens_total"]) + value
+                add_metric_value(prompt_by_model,prometheus_model(line),value)
                 found = True
             elif name in ("vllm:generation_tokens_total","vllm:generation_tokens"):
-                out["vllm_generation_tokens_total"] = float(out["vllm_generation_tokens_total"]) + prometheus_value(line)
+                value = prometheus_value(line)
+                out["vllm_generation_tokens_total"] = float(out["vllm_generation_tokens_total"]) + value
+                add_metric_value(generation_by_model,prometheus_model(line),value)
                 found = True
             elif name == "vllm:prompt_tokens_cached_total":
                 out["vllm_prompt_tokens_cached_total"] = float(out["vllm_prompt_tokens_cached_total"]) + prometheus_value(line)
@@ -521,7 +654,16 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
                 found = True
         if found:
             sources.append(url)
+            scope = str(target.get("scope","local"))
+            source_scopes.append(scope)
+            if scope == "pipeline":
+                pipeline_parallel_size = max(pipeline_parallel_size,int(target.get("pipeline_parallel_size",0) or 0))
+                pipeline_node_rank = int(target.get("pipeline_node_rank",0) or 0)
     out["vllm_metrics_up"] = 1 if sources else 0
+    out["vllm_requests_running_by_model"] = metric_map_text(running_by_model)
+    out["vllm_requests_waiting_by_model"] = metric_map_text(waiting_by_model)
+    out["vllm_prompt_tokens_total_by_model"] = metric_map_text(prompt_by_model)
+    out["vllm_generation_tokens_total_by_model"] = metric_map_text(generation_by_model)
     out["vllm_requests_total"] = request_counter_total if request_counter_total > 0.0 else http_request_counter_total
     out["vllm_kv_cache_pct"] = round(max(kv_vals),2) if kv_vals else 0.0
     if float(out["vllm_prompt_tokens_total"]) <= 0.0 and source_prompt_total > 0.0:
@@ -548,10 +690,20 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
             prefix_hit_delta = delta("vllm_prefix_cache_hits_total")
             external_query_delta = delta("vllm_external_prefix_cache_queries_total")
             external_hit_delta = delta("vllm_external_prefix_cache_hits_total")
+            prev_prompt_by_model = parse_metric_map(prev.get("vllm_prompt_tokens_total_by_model",""))
+            prev_generation_by_model = parse_metric_map(prev.get("vllm_generation_tokens_total_by_model",""))
+            prompt_rate_by_model: Dict[str,float] = {}
+            generation_rate_by_model: Dict[str,float] = {}
+            for model,total in prompt_by_model.items():
+                prompt_rate_by_model[model] = max(0.0,total - prev_prompt_by_model.get(model,total)) / elapsed
+            for model,total in generation_by_model.items():
+                generation_rate_by_model[model] = max(0.0,total - prev_generation_by_model.get(model,total)) / elapsed
             out["vllm_requests_per_s"] = round(delta("vllm_requests_total") / elapsed,3)
             out["vllm_tokens_per_s"] = round(total_delta / elapsed,3)
             out["vllm_prompt_tokens_per_s"] = round(prompt_delta / elapsed,3)
             out["vllm_generation_tokens_per_s"] = round(gen_delta / elapsed,3)
+            out["vllm_prompt_tokens_per_s_by_model"] = metric_map_text(prompt_rate_by_model)
+            out["vllm_generation_tokens_per_s_by_model"] = metric_map_text(generation_rate_by_model)
             out["vllm_prompt_tokens_cached_per_s"] = round(cached_delta / elapsed,3)
             out["vllm_prompt_tokens_local_compute_per_s"] = round(delta("vllm_prompt_tokens_local_compute_total") / elapsed,3)
             out["vllm_prompt_tokens_local_cache_hit_per_s"] = round(delta("vllm_prompt_tokens_local_cache_hit_total") / elapsed,3)
@@ -563,6 +715,13 @@ def read_vllm_metrics(raw_urls: str, timeout: float, prev: Optional[Dict[str,flo
             if external_query_delta > 0.0:
                 out["vllm_external_prefix_cache_hit_pct"] = pct(external_hit_delta,external_query_delta)
     out["vllm_metrics_sources"] = ";".join(sources)[:240]
+    out["vllm_metrics_scope"] = "pipeline" if "pipeline" in source_scopes else ("local" if sources else "")
+    out["vllm_pipeline_parallel_size"] = pipeline_parallel_size
+    out["vllm_pipeline_node_rank"] = pipeline_node_rank
+    stage_models,stage_ranks = discover_vllm_pipeline_stage_models(timeout)
+    out["vllm_pipeline_stage_models"] = ";".join(sorted(stage_models))[:480]
+    out["vllm_pipeline_stage_pp_by_model"] = metric_map_text({model:float(pp) for model,pp in stage_models.items()})
+    out["vllm_pipeline_stage_rank_by_model"] = metric_map_text({model:float(rank) for model,rank in stage_ranks.items()})
     return(out)
 
 
@@ -639,7 +798,7 @@ def write_summary(path: str, rows: Deque[Dict[str,object]], total_samples: int) 
     telemetry.write_json_atomic(path,out)
 
 
-def build_rows(args: argparse.Namespace, prev_cpu: Optional[Tuple[int,int]], prev_net: Optional[Tuple[int,int]], prev_ts: float, prev_vllm: Optional[Dict[str,float]] = None) -> Tuple[List[Dict[str,object]],Optional[Tuple[int,int]],Tuple[int,int],float,Optional[Dict[str,float]]]:
+def build_rows(args: argparse.Namespace, prev_cpu: Optional[Tuple[int,int]], prev_net: Optional[Tuple[int,int]], prev_ts: float, prev_vllm: Optional[Dict[str,object]] = None) -> Tuple[List[Dict[str,object]],Optional[Tuple[int,int]],Tuple[int,int],float,Optional[Dict[str,object]]]:
     now = time.time()
     iso = dt.datetime.fromtimestamp(now,dt.timezone.utc).isoformat()
     cur_cpu = read_cpu_times()
@@ -656,6 +815,8 @@ def build_rows(args: argparse.Namespace, prev_cpu: Optional[Tuple[int,int]], pre
             "vllm_tokens_total": float(vllm.get("vllm_tokens_total",0.0)),
             "vllm_prompt_tokens_total": float(vllm.get("vllm_prompt_tokens_total",0.0)),
             "vllm_generation_tokens_total": float(vllm.get("vllm_generation_tokens_total",0.0)),
+            "vllm_prompt_tokens_total_by_model": str(vllm.get("vllm_prompt_tokens_total_by_model","")),
+            "vllm_generation_tokens_total_by_model": str(vllm.get("vllm_generation_tokens_total_by_model","")),
             "vllm_prompt_tokens_local_compute_total": float(vllm.get("vllm_prompt_tokens_local_compute_total",0.0)),
             "vllm_prompt_tokens_local_cache_hit_total": float(vllm.get("vllm_prompt_tokens_local_cache_hit_total",0.0)),
             "vllm_prompt_tokens_external_kv_transfer_total": float(vllm.get("vllm_prompt_tokens_external_kv_transfer_total",0.0)),
@@ -734,7 +895,7 @@ def main() -> int:
     prev_cpu = read_cpu_times()
     prev_net = read_netdev()
     prev_ts = time.time()
-    prev_vllm: Optional[Dict[str,float]] = None
+    prev_vllm: Optional[Dict[str,object]] = None
     total_samples = 0
     start = time.time()
     new_file = csv_needs_header(csv_path)

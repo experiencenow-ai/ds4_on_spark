@@ -52,8 +52,8 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual([node["state"] for node in snap["nodes"]], ["busy", "hot", "warn", "warn"])
         self.assertEqual(snap["nodes"][2]["state_label"], "stale")
         self.assertEqual(snap["nodes"][3]["state_label"], "checking")
-        self.assertEqual(snap["nodes"][0]["local_q_depth"], 12)
-        self.assertTrue(snap["nodes"][0]["local_queue_known"])
+        self.assertEqual(snap["nodes"][0]["local_q_depth"], 0)
+        self.assertFalse(snap["nodes"][0]["local_queue_known"])
         self.assertEqual(snap["nodes"][1]["tok_s"], 0)
         self.assertEqual(snap["nodes"][0]["cpu_pct"], 800)
         self.assertEqual(snap["nodes"][0]["gpu_power_w"], 37)
@@ -132,15 +132,15 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
             path = Path(tmp) / "summary.json"
             path.write_text(json.dumps(payload), encoding="utf-8")
             snap = dashboard.build_snapshot(str(path))
-        self.assertTrue(snap["nodes"][0]["local_queue_known"])
+        self.assertFalse(snap["nodes"][0]["local_queue_known"])
         self.assertTrue(snap["nodes"][0]["kv_known"])
         self.assertEqual(snap["nodes"][0]["kv_label"],"api")
         self.assertEqual(snap["nodes"][0]["ds_service_id"],"dsv4_flash_pp8")
         self.assertEqual(snap["nodes"][0]["input_tok_s"],0.0)
         self.assertEqual(snap["nodes"][0]["output_tok_s"],0.0)
-        self.assertEqual(snap["input_tok_s"],12.5)
-        self.assertEqual(snap["output_tok_s"],44.25)
-        self.assertEqual(snap["tok_s"],56.75)
+        self.assertEqual(snap["input_tok_s"],0.0)
+        self.assertEqual(snap["output_tok_s"],0.0)
+        self.assertEqual(snap["tok_s"],0.0)
         self.assertEqual(snap["vllm_running"],2.0)
         self.assertEqual(snap["vllm_waiting"],1.0)
         self.assertEqual(snap["queue_depth"],2.0)
@@ -152,6 +152,80 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["ds_model_count"],6.0)
         self.assertEqual(snap["ds_last_service"],"dsv4_flash_pp8")
         self.assertEqual(snap["ds_kv_shards"],8.0)
+
+    def test_snapshot_labels_pipeline_metrics_as_service_output(self):
+        payload = {
+            "updated_iso": "2026-05-26T00:00:00+00:00",
+            "updated_unix": 1,
+            "nodes": {
+                "spark0": {
+                    "sample_count": 1,
+                    "last_gpu_util_pct": 0,
+                    "last_vllm_metrics_up": 1,
+                    "last_vllm_metrics_scope": "pipeline",
+                    "last_vllm_pipeline_parallel_size": 8,
+                    "last_vllm_pipeline_node_rank": 0,
+                    "last_vllm_requests_running": 90,
+                    "last_vllm_prompt_tokens_per_s": 1.5,
+                    "last_vllm_generation_tokens_per_s": 300,
+                    "last_vllm_tokens_per_s": 301.5,
+                },
+                "spark1": {"sample_count": 1, "last_gpu_util_pct": 80, "last_vllm_metrics_up": 0},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "summary.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            snap = dashboard.build_snapshot(str(path))
+        head = snap["nodes"][0]
+        self.assertEqual(head["token_scope"],"pipeline")
+        self.assertEqual(head["pipeline_parallel_size"],8)
+        self.assertEqual(head["pipeline_node_rank"],0)
+        self.assertEqual(head["output_tok_s"],300)
+        self.assertEqual(snap["output_tok_s"],300)
+        self.assertEqual(snap["tok_s"],301.5)
+        self.assertEqual(snap["nodes"][1]["output_tok_s"],0)
+        self.assertFalse(snap["nodes"][1]["vllm_metrics_up"])
+
+    def test_snapshot_allocates_pipeline_tokens_by_layer_partition(self):
+        payload = {
+            "updated_iso": "2026-05-26T00:00:00+00:00",
+            "updated_unix": 1,
+            "nodes": {
+                "spark0": {
+                    "sample_count": 1,
+                    "last_gpu_util_pct": 10,
+                    "last_vllm_metrics_up": 1,
+                    "last_vllm_prompt_tokens_per_s_by_model": "qwen27-bf16-pp8:0",
+                    "last_vllm_generation_tokens_per_s_by_model": "qwen27-bf16-pp8:64",
+                    "last_vllm_requests_running_by_model": "qwen27-bf16-pp8:8",
+                    "last_vllm_pipeline_stage_models": "qwen27-bf16-pp8",
+                    "last_vllm_pipeline_stage_pp_by_model": "qwen27-bf16-pp8:8",
+                    "last_vllm_pipeline_stage_rank_by_model": "qwen27-bf16-pp8:0",
+                },
+                "spark1": {
+                    "sample_count": 1,
+                    "last_gpu_util_pct": 10,
+                    "last_vllm_metrics_up": 0,
+                    "last_vllm_pipeline_stage_models": "qwen27-bf16-pp8",
+                    "last_vllm_pipeline_stage_pp_by_model": "qwen27-bf16-pp8:8",
+                    "last_vllm_pipeline_stage_rank_by_model": "qwen27-bf16-pp8:1",
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "summary.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            snap = dashboard.build_snapshot(str(path))
+        self.assertEqual(snap["models"][0]["model"],"qwen27-bf16-pp8")
+        self.assertEqual(snap["models"][0]["output_tok_s"],64)
+        self.assertEqual(snap["output_tok_s"],64)
+        self.assertEqual(snap["nodes"][0]["token_scope"],"allocated")
+        self.assertEqual(snap["nodes"][1]["token_scope"],"allocated")
+        self.assertEqual(snap["nodes"][0]["output_tok_s"],7)
+        self.assertEqual(snap["nodes"][1]["output_tok_s"],8)
+        self.assertEqual(snap["nodes"][0]["vllm_running"],0.875)
+        self.assertEqual(snap["nodes"][1]["vllm_running"],1.0)
 
     def test_snapshot_ignores_ds4_stage_payload_for_node_telemetry(self):
         payload = {
@@ -287,15 +361,19 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertIn('Svc <b>${n.ds_service_id||"n/a"}</b>', dashboard.DASHBOARD_HTML)
         self.assertIn('bar("KV",n.kv_pct,"kv",n.kv_known,n.kv_label)', dashboard.DASHBOARD_HTML)
         self.assertIn('function workKnown(n)', dashboard.DASHBOARD_HTML)
-        self.assertIn('n.vllm_metrics_up||n.local_queue_known', dashboard.DASHBOARD_HTML)
+        self.assertIn('n.vllm_metrics_up||Number(n.local_q_depth)>0', dashboard.DASHBOARD_HTML)
         self.assertIn('workKnown(n)?val(n[key],unit):"n/a"', dashboard.DASHBOARD_HTML)
         self.assertIn('n.vllm_metrics_up?pct(n.cache_hit_pct):"n/a"', dashboard.DASHBOARD_HTML)
+        self.assertIn('function tokenScope(n)', dashboard.DASHBOARD_HTML)
+        self.assertIn('n.token_scope==="allocated"', dashboard.DASHBOARD_HTML)
+        self.assertIn('Queue <b>${queueVal(n)}</b>', dashboard.DASHBOARD_HTML)
 
     def test_dashboard_summary_combines_tokens_and_omits_power(self):
         self.assertIn('grid-template-columns:repeat(6,minmax(110px,1fr))', dashboard.DASHBOARD_HTML)
         self.assertIn('metric("GPU Avg",d.gpu_known?pct(d.avg_gpu_pct):"n/a")', dashboard.DASHBOARD_HTML)
         self.assertIn('metric("Active Svc",d.ds_services_known?`${fmt(d.ds_service_count)} svc`:"n/a")', dashboard.DASHBOARD_HTML)
-        self.assertIn('metric("Tok/s In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`)', dashboard.DASHBOARD_HTML)
+        self.assertIn('metric("Live In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`)', dashboard.DASHBOARD_HTML)
+        self.assertIn('function renderModels(d)', dashboard.DASHBOARD_HTML)
         self.assertNotIn('metric("Total Power"', dashboard.DASHBOARD_HTML)
         self.assertNotIn('metric("In tok/s"', dashboard.DASHBOARD_HTML)
         self.assertNotIn('metric("Out tok/s"', dashboard.DASHBOARD_HTML)

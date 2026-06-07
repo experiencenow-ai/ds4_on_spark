@@ -34,11 +34,18 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(collect.telemetry.DEFAULT_NODES, ",".join(expected))
         self.assertEqual(node_mon.CSV_FIELDS, telemetry.CSV_FIELDS)
         self.assertIn("vllm_requests_running", telemetry.CSV_FIELDS)
+        self.assertIn("vllm_requests_running_by_model", telemetry.CSV_FIELDS)
         self.assertIn("vllm_requests_per_s", telemetry.CSV_FIELDS)
         self.assertIn("vllm_tokens_per_s", telemetry.CSV_FIELDS)
         self.assertIn("vllm_prompt_tokens_per_s", telemetry.CSV_FIELDS)
+        self.assertIn("vllm_prompt_tokens_per_s_by_model", telemetry.CSV_FIELDS)
         self.assertIn("vllm_prompt_cache_hit_pct", telemetry.CSV_FIELDS)
         self.assertIn("vllm_external_prefix_cache_hit_pct", telemetry.CSV_FIELDS)
+        self.assertIn("vllm_metrics_scope", telemetry.CSV_FIELDS)
+        self.assertIn("vllm_pipeline_parallel_size", telemetry.CSV_FIELDS)
+        self.assertIn("vllm_pipeline_node_rank", telemetry.CSV_FIELDS)
+        self.assertIn("vllm_pipeline_stage_models", telemetry.CSV_FIELDS)
+        self.assertIn("vllm_pipeline_stage_rank_by_model", telemetry.CSV_FIELDS)
         self.assertIn("power.limit", telemetry.BASE_GPU_FIELDS)
         self.assertIn("gpu_power_known", telemetry.CSV_FIELDS)
         self.assertIn("gpu_power_raw_w", telemetry.CSV_FIELDS)
@@ -234,6 +241,45 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(metrics["vllm_kv_cache_pct"],93.0)
         self.assertEqual(metrics["vllm_generation_tokens_total"],57183.0)
         self.assertEqual(metrics["vllm_metrics_sources"],"http://127.0.0.1:8131/metrics")
+        self.assertEqual(metrics["vllm_metrics_scope"],"local")
+
+    def test_vllm_metrics_marks_pipeline_head_scope(self):
+        ps_text = "\n".join([
+            "ARGS",
+            "/venv/bin/python -m vllm.entrypoints.cli.main serve /models/qwen --port 8101 --pipeline-parallel-size 8 --node-rank 0 --served-model-name qwen-pp8",
+        ])
+        metrics_text = "\n".join([
+            'vllm:num_requests_running{model_name="qwen-pp8"} 90.0',
+            'vllm:generation_tokens_total{model_name="qwen-pp8"} 197050.0',
+        ])
+        class Result:
+            returncode = 0
+            stdout = ps_text
+            stderr = ""
+        def fake_run(cmd, **kwargs):
+            self.assertEqual(cmd,["ps","-eo","args"])
+            return(Result())
+        def fake_read_text(url,timeout):
+            if url == "http://127.0.0.1:8101/metrics":
+                return(metrics_text,"")
+            return("","down")
+        old_read = node_mon.read_text_url
+        try:
+            node_mon.read_text_url = fake_read_text
+            with mock.patch.object(node_mon.subprocess,"run",fake_run):
+                metrics = node_mon.read_vllm_metrics("auto",1.0)
+        finally:
+            node_mon.read_text_url = old_read
+        self.assertEqual(metrics["vllm_metrics_up"],1)
+        self.assertEqual(metrics["vllm_metrics_scope"],"pipeline")
+        self.assertEqual(metrics["vllm_pipeline_parallel_size"],8)
+        self.assertEqual(metrics["vllm_pipeline_node_rank"],0)
+        self.assertEqual(metrics["vllm_requests_running"],90.0)
+        self.assertEqual(metrics["vllm_requests_running_by_model"],"qwen-pp8:90.000000")
+        self.assertEqual(metrics["vllm_generation_tokens_total_by_model"],"qwen-pp8:197050.000000")
+        self.assertEqual(metrics["vllm_pipeline_stage_models"],"qwen-pp8")
+        self.assertEqual(metrics["vllm_pipeline_stage_pp_by_model"],"qwen-pp8:8.000000")
+        self.assertEqual(metrics["vllm_pipeline_stage_rank_by_model"],"qwen-pp8:0.000000")
 
     def test_vllm_metrics_parser_handles_source_tokens_and_rates(self):
         text = "\n".join([
