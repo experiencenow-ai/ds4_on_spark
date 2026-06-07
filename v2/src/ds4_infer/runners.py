@@ -7,6 +7,7 @@ import shlex
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Event
 from typing import Any, Callable, Iterator, Protocol
 from urllib import error, request as urlrequest
 
@@ -362,6 +363,7 @@ class OpenAICompatibleRunner:
         *,
         on_result: Callable[[str, dict[str, Any]], None],
         on_delta: Callable[[str, str, dict[str, Any]], None] | None = None,
+        cancel_event: Event | None = None,
     ) -> dict[str, dict] | None:
         if not _env_bool("DS4_PIPELINE_COHORT_COMPLETION_STREAMING", True):
             return None
@@ -384,19 +386,19 @@ class OpenAICompatibleRunner:
         if concurrency > 1 and len(payloads) > 1:
             with ThreadPoolExecutor(max_workers=min(concurrency, len(payloads))) as executor:
                 futures = [
-                    executor.submit(self._run_completion_stream_chunk, chunk, profile, payload, on_result=on_result, on_delta=on_delta)
+                    executor.submit(self._run_completion_stream_chunk, chunk, profile, payload, on_result=on_result, on_delta=on_delta, cancel_event=cancel_event)
                     for chunk, payload in payloads
                 ]
                 for future in as_completed(futures):
                     out.update(future.result())
         else:
             for chunk, payload in payloads:
-                out.update(self._run_completion_stream_chunk(chunk, profile, payload, on_result=on_result, on_delta=on_delta))
+                out.update(self._run_completion_stream_chunk(chunk, profile, payload, on_result=on_result, on_delta=on_delta, cancel_event=cancel_event))
         if len(chunks) > 1:
             _mark_coalesced_planned_split(out, original_batch_size=len(request_list), chunk_count=len(chunks), max_cohort=max_cohort, concurrency=concurrency)
         return out
 
-    def _run_completion_stream_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, on_result: Callable[[str, dict[str, Any]], None], on_delta: Callable[[str, str, dict[str, Any]], None] | None = None) -> dict[str, dict]:
+    def _run_completion_stream_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, on_result: Callable[[str, dict[str, Any]], None], on_delta: Callable[[str, str, dict[str, Any]], None] | None = None, cancel_event: Event | None = None) -> dict[str, dict]:
         started = time.time()
         stream_timeout_s = _completion_stream_wall_timeout_s()
         stream_deadline = (started + stream_timeout_s) if stream_timeout_s > 0 else 0.0
@@ -407,7 +409,7 @@ class OpenAICompatibleRunner:
         timeout_error = ""
         try:
             prefetch_info = _maybe_prestage_common_kv_prefix(self, payload, chunk)
-            for event in self._post_sse_json(self.completion_endpoint, payload):
+            for event in self._post_sse_json(self.completion_endpoint, payload, cancel_event=cancel_event):
                 choices = event.get("choices")
                 if not isinstance(choices, list):
                     continue
@@ -429,6 +431,9 @@ class OpenAICompatibleRunner:
                     on_result(chunk[index].request_id, result)
                 if stream_deadline > 0 and time.time() >= stream_deadline and len(completed_indexes) < len(chunk):
                     timeout_error = f"coalesced completion stream wall timeout after {stream_timeout_s:.3f}s"
+                    break
+                if cancel_event is not None and cancel_event.is_set() and len(completed_indexes) < len(chunk):
+                    timeout_error = "coalesced completion stream cancelled"
                     break
         except Exception as exc:
             for index, item in enumerate(chunk):
@@ -476,7 +481,7 @@ class OpenAICompatibleRunner:
             raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
         return json.loads(text)
 
-    def _post_sse_json(self, endpoint: str, payload: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    def _post_sse_json(self, endpoint: str, payload: dict[str, Any], *, cancel_event: Event | None = None) -> Iterator[dict[str, Any]]:
         body = json.dumps(payload).encode("utf-8")
         headers = {"content-type": "application/json", "accept": "text/event-stream"}
         if self.api_key:
@@ -490,6 +495,8 @@ class OpenAICompatibleRunner:
         with response:
             event_data: list[str] = []
             for raw_line in response:
+                if cancel_event is not None and cancel_event.is_set():
+                    break
                 line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
                 if line == "":
                     if not event_data:
@@ -503,6 +510,8 @@ class OpenAICompatibleRunner:
                     continue
                 if line.startswith("data:"):
                     event_data.append(line[5:].strip())
+            if cancel_event is not None and cancel_event.is_set():
+                return
             if event_data:
                 text = "\n".join(event_data).strip()
                 if text and text != "[DONE]":
@@ -568,6 +577,7 @@ class PipelineOpenAIRunner:
         concurrency: int = 1,
         on_result: Callable[[str, dict[str, Any]], None],
         on_delta: Callable[[str, str, dict[str, Any]], None] | None = None,
+        cancel_event: Event | None = None,
     ) -> dict[str, dict]:
         request_list = list(requests)
         if not request_list:
@@ -578,7 +588,7 @@ class PipelineOpenAIRunner:
             client_stream = requests_need_client_stream(request_list)
             internal_stream = client_stream or _internal_stream_nonclient_cohort(request_list)
             if internal_stream:
-                coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result, on_delta=on_delta if client_stream else None)
+                coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result, on_delta=on_delta if client_stream else None, cancel_event=cancel_event)
                 if coalesced is not None:
                     return coalesced
             coalesced = runner.run_many_completion(request_list, profile)

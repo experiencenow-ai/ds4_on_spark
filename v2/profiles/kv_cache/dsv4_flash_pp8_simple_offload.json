@@ -44,7 +44,7 @@
     "--enable-logging-iteration-details",
     "--no-disable-hybrid-kv-cache-manager",
     "--compilation-config",
-    "{\"cudagraph_mode\":\"NONE\",\"custom_ops\":[\"all\"]}",
+    "{\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"custom_ops\":[\"all\"],\"cudagraph_capture_sizes\":[1,2,4,8,16],\"max_cudagraph_capture_size\":16,\"cudagraph_copy_inputs\":true}",
     "--tokenizer-mode",
     "deepseek_v4",
     "--tool-call-parser",
@@ -77,6 +77,8 @@
     "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_STRICT": "1",
     "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_RESTORE_ON_STARTUP": "0",
     "VLLM_DS4_SIMPLE_KV_STARTUP_RESTORE": "0",
+    "VLLM_DS4_SIMPLE_KV_STORE_UNMARKED": "0",
+    "VLLM_DS4_SIMPLE_KV_READ_UNMARKED": "0",
     "VLLM_USE_SIMPLE_KV_OFFLOAD": "1",
     "CUDA_HOME": "/usr/local/cuda",
     "TORCH_CUDA_ARCH_LIST": "12.1a",
@@ -158,6 +160,6 @@
   ],
   "working_directory": "/home/{node}/src/ds4_on_spark/v2",
   "performance_mode": "native_blackwell_strict_fastpath",
-  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 16-sequence admission, 8192-token compile range, 1GiB resident/offload KV per rank, lazy startup restore with queue/JIT-directed regeneration, balanced first-three layer placement, token-gated DS4 KV prefetch, a 64-chunk vLLM multiprocessing broadcast ring, and single-job FlashInfer/CUDA compile caps. Warm DSV4 alone before all-three residency so first-run native-kernel compilation populates persistent caches without Qwen/Gemma resident pressure.",
+  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 16-sequence admission, 8192-token compile range, 1GiB resident/offload KV per rank, lazy startup restore with queue/JIT-directed regeneration, balanced first-three layer placement, token-gated DS4 KV prefetch, decode-only CUDA graphs for the single-token decode loop, a 64-chunk vLLM multiprocessing broadcast ring, and single-job FlashInfer/CUDA compile caps. Warm DSV4 alone before all-three residency so first-run native-kernel compilation populates persistent caches without Qwen/Gemma resident pressure.",
   "max_batch_size": 16
 }
