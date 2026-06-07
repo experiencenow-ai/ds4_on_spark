@@ -33,6 +33,7 @@
     "supergpqa": "21/25 PP8 DS4 API ds4-eval, thinking off, 4k output cap"
   },
   "routing": {
+    "chat_cohort_transport": "parallel_chat_completions",
     "chat_template_thinking_key": "enable_thinking",
     "default_chat_template_kwargs": {
       "enable_thinking": false
