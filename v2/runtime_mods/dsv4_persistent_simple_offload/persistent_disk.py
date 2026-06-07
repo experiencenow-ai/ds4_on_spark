@@ -18,6 +18,7 @@ logger = init_logger(__name__)
 ROOT_ENV = "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT"
 STRICT_ENV = "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_STRICT"
 RANK_ENV = "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_RANK"
+RESTORE_ON_STARTUP_ENV = "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_RESTORE_ON_STARTUP"
 FORMAT_VERSION = 1
 
 
@@ -37,6 +38,7 @@ class PersistentSimpleOffloadStore:
         model_key: str,
         num_cpu_blocks: int,
         strict: bool,
+        restore_on_startup: bool,
         tensor_names: list[str] | None = None,
     ) -> None:
         self.root = root
@@ -44,6 +46,7 @@ class PersistentSimpleOffloadStore:
         self.model_key = model_key
         self.num_cpu_blocks = int(num_cpu_blocks)
         self.strict = strict
+        self.restore_on_startup = restore_on_startup
         self.tensor_names = tensor_names or []
         self.worker_dir = self.root / "workers" / self.rank_key
         self.blocks_dir = self.worker_dir / "blocks"
@@ -72,14 +75,16 @@ class PersistentSimpleOffloadStore:
             model_key=_model_key(vllm_config),
             num_cpu_blocks=int(num_cpu_blocks),
             strict=_env_bool(STRICT_ENV, True),
+            restore_on_startup=_env_bool(RESTORE_ON_STARTUP_ENV, False),
             tensor_names=tensor_names,
         )
         logger.info(
-            "DS4 persistent SimpleCPUOffload %s store enabled at %s rank=%s strict=%s",
+            "DS4 persistent SimpleCPUOffload %s store enabled at %s rank=%s strict=%s restore_on_startup=%s",
             role,
             store.root,
             store.rank_key,
             store.strict,
+            store.restore_on_startup,
         )
         return store
 

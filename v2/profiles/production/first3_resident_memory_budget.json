@@ -1,7 +1,7 @@
 {
   "format": "ds4-first3-resident-memory-budget-v1",
-  "profile_id": "first3_qwen27_gemma26_dsv4_balanced_v1",
-  "source": "live Spark startup and post-request telemetry from first-three bring-up on 2026-06-06",
+  "profile_id": "first3_qwen27_gemma26_dsv4_rebalanced_v2",
+  "source": "live Spark startup and post-request telemetry from first-three bring-up on 2026-06-06, plus 2026-06-06 DSV4 16-way steady-state memory probe before layer rebalance",
   "target": {
     "min_available_ratio": 0.1,
     "min_available_gib": 12.0,
@@ -14,34 +14,34 @@
   ],
   "layer_partitions": {
     "qwen27_bf16_pp8": [
+      7,
       8,
       8,
       8,
       9,
-      8,
-      8,
+      9,
       8,
       7
     ],
     "gemma4_26b_a4b_pp8": [
-      4,
-      4,
-      4,
-      4,
       3,
       4,
-      3,
-      4
+      4,
+      4,
+      4,
+      4,
+      4,
+      3
     ],
     "dsv4_flash_pp8": [
+      4,
+      5,
+      5,
       5,
       6,
       6,
       7,
-      4,
-      4,
-      4,
-      7
+      5
     ]
   },
   "gpu_memory_utilization": {
@@ -58,7 +58,7 @@
     "completion_pp_safe_cohort_max": 128,
     "completion_chunk_concurrency": 1,
     "dispatch_kv_capacity_bytes": 8589934592,
-      "notes": "First-three resident feed settings keep Qwen/Gemma saturated while DSV4 uses its service-level batch limit from the DSV4 production profile."
+    "notes": "First-three resident feed settings keep Qwen/Gemma saturated while DSV4 uses its service-level batch limit from the DSV4 production profile."
   },
   "baseline_with_qwen_gemma_available_gib": {
     "spark0": 48.6,
@@ -101,17 +101,27 @@
   },
   "projection": {
     "post_first3_available_gib": {
-      "spark0": 24.3,
-      "spark1": 25.0,
-      "spark2": 21.9,
-      "spark3": 28.3,
-      "spark4": 44.9,
-      "spark5": 39.7,
-      "spark6": 48.4,
-      "spark7": 27.6
+      "spark0": 21.3,
+      "spark1": 22.7,
+      "spark2": 20.5,
+      "spark3": 26.0,
+      "spark4": 42.7,
+      "spark5": 37.4,
+      "spark6": 46.1,
+      "spark7": 25.1
     },
     "floor_gib": 21.9,
-    "notes": "Projection starts from live idle MemAvailable with all three resident on 2026-06-06 after the merged-main COMPSEC warm-cache run, then reserves one additional GiB per rank for the DSV4 capacity step. The step keeps 1GiB resident/offload KV and a 0.18 DSV4 GPU cap, then raises DSV4 active sequences and batched-token compile range without adding resident GPU memory. First-run compiler workers can exceed this steady-state model and must run DSV4-only."
+    "notes": "Conservative floor uses live pre-rebalance steady-state MemAvailable with Qwen27 BF16, Gemma4 26B-A4B, and DSV4 16-way resident. The layer rebalance moves combined stage count from 17/18/18/20/15/16/15/18 to 14/17/17/17/19/19/19/15, shifting work toward spark4/spark5/spark6 while keeping max combined stage count below the previous 20-layer peak. Replace this projection with post-rebalance telemetry after deploy.",
+    "planned_layer_delta": {
+      "spark0": -3,
+      "spark1": -1,
+      "spark2": -1,
+      "spark3": -3,
+      "spark4": 4,
+      "spark5": 3,
+      "spark6": 4,
+      "spark7": -3
+    }
   },
   "warmup_policy": {
     "required_before_first3_residency": true,

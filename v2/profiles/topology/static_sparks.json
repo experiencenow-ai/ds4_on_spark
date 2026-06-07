@@ -154,14 +154,14 @@
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
+          4,
+          5,
+          5,
           5,
           6,
           6,
           7,
-          4,
-          4,
-          4,
-          7
+          5
         ],
         "max_batch_size": 16,
         "model_id": "/home/{node}/models/hf/deepseek-ai/DeepSeek-V4-Flash",
@@ -258,14 +258,14 @@
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
-          4,
-          4,
-          4,
-          4,
           3,
           4,
-          3,
-          4
+          4,
+          4,
+          4,
+          4,
+          4,
+          3
         ],
         "max_batch_size": 64,
         "model_id": "google/gemma-4-26B-A4B-it",
@@ -458,12 +458,12 @@
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
+          7,
           8,
           8,
           8,
           9,
-          8,
-          8,
+          9,
           8,
           7
         ],
@@ -508,12 +508,12 @@
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
+          7,
           8,
           8,
           8,
           9,
-          8,
-          8,
+          9,
           8,
           7
         ],

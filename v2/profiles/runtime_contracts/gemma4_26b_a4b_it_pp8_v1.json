@@ -59,14 +59,14 @@
     "entry_base_url": "http://127.0.0.1:8118",
     "head_node": "spark0",
     "layer_partition": [
-      4,
-      4,
-      4,
-      4,
       3,
       4,
-      3,
-      4
+      4,
+      4,
+      4,
+      4,
+      4,
+      3
     ],
     "pipeline_parallel_size": 8,
     "tensor_parallel_size": 1,

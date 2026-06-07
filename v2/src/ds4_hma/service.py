@@ -25,6 +25,7 @@ class Dsv4HmaDeployment:
     cuda_visible_devices: str | None
     store_root: str
     tokenizer_hash: str
+    layer_partition_fingerprint: str
     hma_layout: str
     kv_load_failure_policy: str
     kv_buffer_device: str
@@ -58,6 +59,7 @@ class Dsv4HmaDeployment:
             cuda_visible_devices=str(data["cuda_visible_devices"]) if data.get("cuda_visible_devices") is not None else None,
             store_root=str(data["store_root"]),
             tokenizer_hash=str(data.get("tokenizer_hash", "unknown-tokenizer")),
+            layer_partition_fingerprint=str(data.get("layer_partition_fingerprint", "")),
             hma_layout=str(data.get("hma_layout", "dsv4_hma_mla_sliding_indexer_compressor_v1")),
             kv_load_failure_policy=str(data.get("kv_load_failure_policy", DEFAULT_KV_LOAD_FAILURE_POLICY)),
             kv_buffer_device=str(data.get("kv_buffer_device", "cuda")),
@@ -84,6 +86,7 @@ def hma_kv_transfer_config(deployment: Dsv4HmaDeployment) -> dict[str, Any]:
             "ds4_hma_store_root": deployment.store_root,
             "ds4_hma_store_format": "ds4-dsv4-hma-state-package-v1",
             "ds4_hma_tokenizer_hash": deployment.tokenizer_hash,
+            "ds4_hma_layer_partition_fingerprint": deployment.layer_partition_fingerprint,
             "ds4_hma_layout": deployment.hma_layout,
             "ds4_hma_hard_fail": "True",
             "ds4_hma_required_parts": [
@@ -103,6 +106,8 @@ def plan_deployment(deployment: Dsv4HmaDeployment) -> dict[str, Any]:
         "DS4_HMA_STORE_ROOT": deployment.store_root,
         "DS4_HMA_TOKENIZER_HASH": deployment.tokenizer_hash,
     }
+    if deployment.layer_partition_fingerprint:
+        env["DS4_HMA_LAYER_PARTITION_FINGERPRINT"] = deployment.layer_partition_fingerprint
     env.update(deployment.env)
     if deployment.cuda_visible_devices is not None:
         env["CUDA_VISIBLE_DEVICES"] = deployment.cuda_visible_devices

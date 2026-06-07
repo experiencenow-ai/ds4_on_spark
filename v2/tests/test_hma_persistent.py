@@ -29,15 +29,36 @@ class HmaPersistentTests(unittest.TestCase):
                 block_size=16,
                 hma_layout="dsv4_hma_mla_sliding_indexer_compressor_v1",
                 state_parts=[part],
+                layer_partition_fingerprint="sha256:partition-a",
                 metadata={"source": "unit"},
             )
             store.write_package(package)
-            loaded = store.lookup_by_token_ids([1, 2, 3, 4])
+            loaded = store.lookup_by_token_ids([1, 2, 3, 4], layer_partition_fingerprint="sha256:partition-a")
 
             self.assertIsNotNone(loaded)
             self.assertEqual(loaded.package_id, package.package_id)
+            self.assertEqual(loaded.token_ids, (1, 2, 3, 4))
+            self.assertEqual(loaded.layer_partition_fingerprint, "sha256:partition-a")
             self.assertEqual(loaded.state_parts[0].kind, "compressor_state")
             self.assertEqual(loaded.state_parts[0].sha256, part.sha256)
+            self.assertIsNone(store.lookup_by_token_ids([1, 2, 3, 4], layer_partition_fingerprint="sha256:partition-b"))
+
+    def test_hma_state_package_keeps_legacy_token_lookup_without_partition(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = HmaPersistentStore(tmp)
+            package = store.create_manifest_package(
+                model_id="deepseek-v4",
+                tokenizer_hash="tok",
+                token_ids=[1, 2],
+                block_size=16,
+                hma_layout="dsv4_hma_mla_sliding_indexer_compressor_v1",
+                state_parts=[],
+            )
+            store.write_package(package)
+            loaded = store.lookup_by_token_ids([1, 2])
+
+            self.assertIsNotNone(loaded)
+            self.assertEqual(loaded.token_ids, (1, 2))
 
     def test_hma_state_package_rejects_path_escape(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -62,6 +83,7 @@ class HmaPersistentTests(unittest.TestCase):
         self.assertEqual(config["kv_connector"], "DS4HmaPersistentConnector")
         self.assertEqual(config["kv_connector_module_path"], "ds4_hma.vllm_connector")
         self.assertEqual(config["kv_connector_extra_config"]["ds4_hma_layout"], "dsv4_hma_mla_sliding_indexer_compressor_v1")
+        self.assertIn("ds4_hma_layer_partition_fingerprint", config["kv_connector_extra_config"])
         self.assertIn("--no-disable-hybrid-kv-cache-manager", plan["argv"])
         self.assertIn("1048576", plan["argv"])
         self.assertIn("compressed/sliding/indexer/compressor", " ".join(plan["notes"]))
@@ -105,6 +127,7 @@ class HmaPersistentTests(unittest.TestCase):
 
         self.assertIsNotNone(params)
         self.assertEqual(params["ds4_hma_state"], "pending_extractor_hook")
+        self.assertEqual(params["ds4_hma_layer_partition_fingerprint"], "sha256:fake-partition")
 
     def test_auto_runner_has_hma_path(self) -> None:
         runner = AutoRunner(timeout_s=1)
@@ -117,6 +140,7 @@ class _FakeTransferConfig:
             "ds4_hma_store_root": tempfile.mkdtemp(),
             "ds4_hma_hard_fail": "False",
             "ds4_hma_tokenizer_hash": "tok",
+            "ds4_hma_layer_partition_fingerprint": "sha256:fake-partition",
         }
 
     def get_from_extra_config(self, key: str, default: object | None = None) -> object | None:

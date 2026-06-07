@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import sqlite3
@@ -108,11 +109,17 @@ class CoordinatorApiKvCacheTests(unittest.TestCase):
             self.assertEqual({shard["bytes"] for shard in declared["shards"]}, {1000})
             self.assertEqual(declared["shards"][0]["layer_start"], 0)
             self.assertEqual(declared["shards"][-1]["layer_end"], 64)
+            contract = declared["metadata"]["kv_cache_contract"]
+            self.assertEqual(contract["format"], "ds4-pipeline-kv-cache-contract-v1")
+            self.assertEqual(contract["layer_partition"], [7, 8, 8, 8, 9, 9, 8, 7])
+            self.assertEqual(declared["metadata"]["layer_partition_fingerprint"], contract["fingerprint"])
+            self.assertEqual({shard["metadata"]["layer_partition_fingerprint"] for shard in declared["shards"]}, {contract["fingerprint"]})
             code, prefetched = api.handle_post(
                 "/ds4/kvcache/prefetch",
                 {"namespace": "centaur.longmem", "kv_key": "doc:abc", "service_id": "qwen27_bf16_pp8"},
             )
             self.assertEqual(code, 202)
+            self.assertEqual(prefetched["metadata"]["layer_partition_fingerprint"], contract["fingerprint"])
             self.assertFalse(prefetched["prefetch"]["gpu_jit_load"])
             self.assertEqual({shard["state"] for shard in prefetched["shards"]}, {"prefetch_requested"})
             code, committed = api.handle_post(
@@ -155,6 +162,23 @@ class CoordinatorApiKvCacheTests(unittest.TestCase):
                     kv_key="bad-aggregate",
                     service_id="qwen27_bf16_pp8",
                     total_bytes=8192,
+                )
+
+    def test_external_kv_rejects_mismatched_layer_partition_fingerprint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            service = api._topology().pipeline_service_by_id("qwen27_bf16_pp8")
+            metadata = {"layer_partition_fingerprint": service.layer_partition_fingerprint()}
+            shards = service.external_cache_shards(namespace="centaur.longmem", kv_key="bad-fingerprint", total_bytes=8192)
+            shards[0]["metadata"]["layer_partition_fingerprint"] = "sha256:" + ("0" * 64)
+            with self.assertRaisesRegex(ValueError, "layer partition fingerprint mismatch"):
+                api.queue.upsert_external_kv_object(
+                    namespace="centaur.longmem",
+                    kv_key="bad-fingerprint",
+                    service_id="qwen27_bf16_pp8",
+                    total_bytes=8192,
+                    metadata=metadata,
+                    shards=shards,
                 )
 
     def test_external_kv_shard_commit_is_node_local_and_object_partial_until_all_ready(self) -> None:
@@ -217,6 +241,10 @@ class CoordinatorApiKvCacheTests(unittest.TestCase):
             self.assertEqual(plan["load"]["transport"], "external_manifest")
             self.assertEqual(plan["load"]["namespace"], "centaur.longmem")
             self.assertEqual(plan["load"]["service_id"], "qwen27_bf16_pp8")
+            self.assertEqual(plan["model_fingerprint"]["layer_partition_fingerprint"], plan["model_fingerprint"]["kv_cache_contract"]["fingerprint"])
+            self.assertEqual(plan["model_fingerprint"]["kv_cache_contract"]["layer_partition"], [7, 8, 8, 8, 9, 9, 8, 7])
+            self.assertEqual(plan["source_provenance"]["prompt_text"], "reuse the prefix")
+            self.assertEqual(plan["source_provenance"]["prompt_sha256"], "sha256:" + hashlib.sha256(b"reuse the prefix").hexdigest())
 
     def test_openai_external_kv_compute_and_store_requests_store(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -248,6 +276,7 @@ class CoordinatorApiKvCacheTests(unittest.TestCase):
             self.assertEqual(plan["store"]["transport"], "external_manifest")
             self.assertEqual(plan["store"]["namespace"], "centaur.longmem")
             self.assertEqual(plan["store"]["service_id"], "qwen27_bf16_pp8")
+            self.assertEqual(plan["source_provenance"]["prompt_text"], "reuse the prefix")
 
     def test_queue_submit_normalizes_kv_cache_directive(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -10,14 +10,14 @@
   "pipeline_parallel_size": 8,
   "tensor_parallel_size": 1,
   "layer_partition": [
+    4,
+    5,
+    5,
     5,
     6,
     6,
     7,
-    4,
-    4,
-    4,
-    7
+    5
   ],
   "max_model_len": 262144,
   "max_num_seqs": 16,
@@ -72,5 +72,5 @@
     }
   },
   "memory_budget": "profiles/production/first3_resident_memory_budget.json",
-  "notes": "Single source of truth for the bounded DSV4 PP8 resident production envelope. Materialized topology/runtime/KV JSON files must match this file. This profile is the first-three DSV4 parallelism step after live Qwen+Gemma+DSV4 startup and warm-cache COMPSEC runs showed stable steady-state RAM headroom. It raises DSV4 to 16 active sequences and 8192 batched tokens while keeping 1GiB resident/offload KV per rank and 0.18 GPU utilization, preserving the 5/6/6/7/4/4/4/7 layer partition, SM121 DeepGEMM warmup skip, indexed sparse MLA prefill, IPv4 socket DSV4 PP sampled-token NCCL broadcasts over ds4ring0, and DSV4-only warmup requirement before all-three residency."
+  "notes": "Single source of truth for the bounded DSV4 PP8 resident production envelope. Materialized topology/runtime/KV JSON files must match this file. This profile is the first-three DSV4 parallelism step after live Qwen+Gemma+DSV4 startup and warm-cache COMPSEC runs showed stable steady-state RAM headroom. It keeps DSV4 at 16 active sequences and 8192 batched tokens while fixing DSV4 JIT KV prefetch exposure and rebalancing layers to 4/5/5/5/6/6/7/5 so spark4/spark5/spark6 absorb headroom and spark0 keeps API margin. It preserves 1GiB resident/offload KV per rank, 0.18 GPU utilization, SM121 DeepGEMM warmup skip, indexed sparse MLA prefill, IPv4 socket DSV4 PP sampled-token NCCL broadcasts over ds4ring0, and the DSV4-only warmup requirement before all-three residency."
 }

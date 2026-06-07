@@ -75,11 +75,13 @@ class HmaStatePackage:
     tokenizer_hash: str
     token_hash: str
     prompt_hash: str
+    token_ids: tuple[int, ...]
     token_count: int
     block_size: int
     hma_layout: str
     state_parts: tuple[HmaStatePart, ...]
     created_unix_s: float
+    layer_partition_fingerprint: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_json(self) -> dict[str, Any]:
@@ -90,10 +92,12 @@ class HmaStatePackage:
             "tokenizer_hash": self.tokenizer_hash,
             "token_hash": self.token_hash,
             "prompt_hash": self.prompt_hash,
+            "token_ids": list(self.token_ids),
             "token_count": self.token_count,
             "block_size": self.block_size,
             "hma_layout": self.hma_layout,
             "created_unix_s": self.created_unix_s,
+            "layer_partition_fingerprint": self.layer_partition_fingerprint,
             "metadata": self.metadata,
             "state_parts": [part.to_json() for part in self.state_parts],
         }
@@ -108,10 +112,12 @@ class HmaStatePackage:
             tokenizer_hash=str(data["tokenizer_hash"]),
             token_hash=str(data["token_hash"]),
             prompt_hash=str(data["prompt_hash"]),
+            token_ids=tuple(int(token) for token in data.get("token_ids", [])),
             token_count=int(data["token_count"]),
             block_size=int(data["block_size"]),
             hma_layout=str(data["hma_layout"]),
             created_unix_s=float(data["created_unix_s"]),
+            layer_partition_fingerprint=str(data["layer_partition_fingerprint"]) if data.get("layer_partition_fingerprint") is not None else None,
             metadata=dict(data.get("metadata", {})),
             state_parts=tuple(HmaStatePart.from_json(part) for part in data.get("state_parts", [])),
         )
@@ -167,6 +173,8 @@ class HmaPersistentStore:
         _atomic_write_json(package_path, package.to_json())
         index = self._read_index()
         index.setdefault("packages_by_token_hash", {})[package.token_hash] = package.package_id
+        if package.layer_partition_fingerprint:
+            index.setdefault("packages_by_token_and_partition", {})[_token_partition_key(package.token_hash, package.layer_partition_fingerprint)] = package.package_id
         self._write_index(index)
         return package_path
 
@@ -179,30 +187,38 @@ class HmaPersistentStore:
         block_size: int,
         hma_layout: str,
         state_parts: list[HmaStatePart] | tuple[HmaStatePart, ...],
+        layer_partition_fingerprint: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> HmaStatePackage:
         thash = token_hash(token_ids)
-        package_id = f"hma_{thash[:24]}"
+        package_id_suffix = _token_partition_key(thash, layer_partition_fingerprint)[:24] if layer_partition_fingerprint else thash[:24]
+        package_id = f"hma_{package_id_suffix}"
         return HmaStatePackage(
             package_id=package_id,
             model_id=model_id,
             tokenizer_hash=tokenizer_hash,
             token_hash=thash,
             prompt_hash=thash,
+            token_ids=tuple(int(token) for token in token_ids),
             token_count=len(token_ids),
             block_size=block_size,
             hma_layout=hma_layout,
             state_parts=tuple(state_parts),
             created_unix_s=time.time(),
+            layer_partition_fingerprint=layer_partition_fingerprint,
             metadata=metadata or {},
         )
 
     def package_path(self, package_id: str) -> Path:
         return self.packages_dir / f"{_safe_name(package_id)}.json"
 
-    def lookup_by_token_ids(self, token_ids: list[int] | tuple[int, ...]) -> HmaStatePackage | None:
+    def lookup_by_token_ids(self, token_ids: list[int] | tuple[int, ...], *, layer_partition_fingerprint: str | None = None) -> HmaStatePackage | None:
         index = self._read_index()
-        package_id = index.get("packages_by_token_hash", {}).get(token_hash(token_ids))
+        thash = token_hash(token_ids)
+        if layer_partition_fingerprint:
+            package_id = index.get("packages_by_token_and_partition", {}).get(_token_partition_key(thash, layer_partition_fingerprint))
+        else:
+            package_id = index.get("packages_by_token_hash", {}).get(thash)
         if not package_id:
             return None
         path = self.package_path(str(package_id))
@@ -210,8 +226,10 @@ class HmaPersistentStore:
             return None
         with path.open("r", encoding="utf-8") as handle:
             package = HmaStatePackage.from_json(json.load(handle))
-        if package.token_hash != token_hash(token_ids):
+        if package.token_hash != thash:
             raise ValueError(f"HMA package token hash mismatch: {package.package_id}")
+        if layer_partition_fingerprint and package.layer_partition_fingerprint != layer_partition_fingerprint:
+            return None
         self.validate_package(package)
         return package
 
@@ -249,6 +267,14 @@ def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
 
 def _safe_name(value: str) -> str:
     return "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in value)[:160]
+
+
+def _token_partition_key(thash: str, layer_partition_fingerprint: str | None) -> str:
+    material = {
+        "token_hash": thash,
+        "layer_partition_fingerprint": layer_partition_fingerprint or "",
+    }
+    return sha256_text(json.dumps(material, sort_keys=True, separators=(",", ":")))
 
 
 def _store_path(root: Path, relative_path: str) -> Path:

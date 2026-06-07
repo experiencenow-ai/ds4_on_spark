@@ -84,7 +84,7 @@ def _patch_manager(path: Path) -> None:
         "            vllm_config=vllm_config,\n"
         "            num_cpu_blocks=self.num_cpu_blocks,\n"
         "        )\n"
-        "        if self._persistent_store is not None:\n"
+        "        if self._persistent_store is not None and self._persistent_store.restore_on_startup:\n"
         "            restored = 0\n"
         "            for entry in self._persistent_store.load_scheduler_entries(self.num_cpu_blocks):\n"
         "                cpu_block = self.cpu_block_pool.blocks[entry.cpu_block_id]\n"
@@ -92,6 +92,8 @@ def _patch_manager(path: Path) -> None:
         "                self.cpu_block_pool.cached_block_hash_to_block.insert(entry.block_hash, cpu_block)\n"
         "                restored += 1\n"
         "            logger.info(\"SimpleCPUOffloadScheduler: restored %d persistent CPU blocks\", restored)\n\n"
+        "        elif self._persistent_store is not None:\n"
+        "            logger.info(\"SimpleCPUOffloadScheduler: persistent startup restore disabled; queue/JIT prefetch will regenerate needed KV\")\n\n"
         "        # GPU block pool reference",
         "manager scheduler restore",
     )
@@ -345,7 +347,7 @@ def _patch_worker(path: Path) -> None:
         "            num_cpu_blocks=self.num_cpu_blocks,\n"
         "            tensor_names=list(self.cpu_kv_caches.keys()),\n"
         "        )\n"
-        "        if self._persistent_store is not None:\n"
+        "        if self._persistent_store is not None and self._persistent_store.restore_on_startup:\n"
         "            self._persistent_known = self._persistent_store.restore_worker_blocks(\n"
         "                self.cpu_kv_caches, self.num_cpu_blocks\n"
         "            )\n"
@@ -353,6 +355,8 @@ def _patch_worker(path: Path) -> None:
         "                \"SimpleCPUOffloadWorker: restored %d persistent CPU blocks\",\n"
         "                len(self._persistent_known),\n"
         "            )\n",
+        "        elif self._persistent_store is not None:\n"
+        "            logger.info(\"SimpleCPUOffloadWorker: persistent startup restore disabled; queue/JIT prefetch will regenerate needed KV\")\n",
         "worker restore after backend",
     )
     text = _replace_once(
