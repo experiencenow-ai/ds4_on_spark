@@ -10,7 +10,7 @@
   "performance": {
     "aggregate_completion_tok_s": 69.999507,
     "fast_slot_winner": true,
-    "gpu_memory_utilization": 0.3,
+    "gpu_memory_utilization": 0.2,
     "latency_rank": 0.85,
     "max_concurrency_8192": 69.34,
     "max_num_batched_tokens": 16384,
