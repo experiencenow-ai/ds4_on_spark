@@ -254,7 +254,7 @@
           "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.125,
           "external_backend": "lmcache_hma",
-          "gpu_memory_utilization": 0.25,
+          "gpu_memory_utilization": 0.3,
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
@@ -285,7 +285,7 @@
           "admission_mode": "single_active_batch_per_compute_domain",
           "batch_linger_s": 0.05,
           "max_running_batches_per_compute_domain": 1,
-          "vllm_max_num_batched_tokens": 24576
+          "vllm_max_num_batched_tokens": 16384
         },
         "served_model_name": "gemma-4-26b-a4b-it-pp8",
         "service_id": "gemma4_26b_a4b_pp8",
@@ -454,7 +454,7 @@
           "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.125,
           "external_backend": "lmcache_hma",
-          "gpu_memory_utilization": 0.25,
+          "gpu_memory_utilization": 0.3,
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
@@ -485,7 +485,7 @@
           "admission_mode": "single_active_batch_per_compute_domain",
           "batch_linger_s": 0.05,
           "max_running_batches_per_compute_domain": 1,
-          "vllm_max_num_batched_tokens": 65536
+          "vllm_max_num_batched_tokens": 32768
         },
         "served_model_name": "qwen27-bf16-pp8",
         "service_id": "qwen27_bf16_pp8",

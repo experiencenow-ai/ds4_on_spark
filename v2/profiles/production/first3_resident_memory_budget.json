@@ -1,7 +1,7 @@
 {
   "format": "ds4-first3-resident-memory-budget-v1",
-  "profile_id": "first3_qwen27_gemma26_dsv4_rebalanced_v2",
-  "source": "live Spark startup and post-request telemetry from first-three bring-up on 2026-06-06, plus 2026-06-06 DSV4 16-way steady-state memory probe before layer rebalance",
+  "profile_id": "first3_qwen27_gemma26_dsv4_rebalanced_v3",
+  "source": "live Spark startup and post-request telemetry from first-three bring-up on 2026-06-06, 2026-06-06 DSV4 16-way steady-state memory probe before layer rebalance, and 2026-06-07 first3 startup fit check",
   "target": {
     "min_available_ratio": 0.1,
     "min_available_gib": 12.0,
@@ -45,10 +45,16 @@
     ]
   },
   "gpu_memory_utilization": {
-    "qwen27_bf16_pp8": 0.25,
-    "gemma4_26b_a4b_pp8": 0.25,
+    "qwen27_bf16_pp8": 0.3,
+    "gemma4_26b_a4b_pp8": 0.3,
     "dsv4_flash_pp8": 0.18,
-    "active_sum": 0.68
+    "active_sum": 0.78
+  },
+  "resident_batch_token_budget": {
+    "qwen27_bf16_pp8": 32768,
+    "gemma4_26b_a4b_pp8": 16384,
+    "dsv4_flash_pp8": 8192,
+    "notes": "Qwen 65536 at 0.25 produced negative KV headroom on all ranks during first3 startup. Gemma 24576 at 0.25 failed cache-block allocation in the triple-resident fit check, with spark6 as the worst observed rank. Keep max_batch_size at 64, but admit long prompts by token budget rather than pretending every 64-way cohort can carry large contexts."
   },
   "coordinator": {
     "dispatch_window": 128,
