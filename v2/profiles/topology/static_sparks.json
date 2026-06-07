@@ -146,7 +146,7 @@
         "dtype": "mixed-fp4-fp8",
         "entry_node_id": "spark0",
         "kv_cache": {
-          "cache_root": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload",
+          "cache_root": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload/p4_5_4_7_5_5_7_6",
           "connector_id": "simple_cpu_offload",
           "expected_entry_fraction_per_node": 0.125,
           "external_backend": "dsv4_hma",
@@ -250,7 +250,7 @@
         "dtype": "bfloat16",
         "entry_node_id": "spark0",
         "kv_cache": {
-          "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv",
+          "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv/p3_4_4_4_3_4_4_4",
           "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.125,
           "external_backend": "lmcache_hma",
@@ -450,7 +450,7 @@
         "dtype": "bfloat16",
         "entry_node_id": "spark0",
         "kv_cache": {
-          "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv",
+          "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv/p7_8_7_9_9_9_8_7",
           "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.125,
           "external_backend": "lmcache_hma",

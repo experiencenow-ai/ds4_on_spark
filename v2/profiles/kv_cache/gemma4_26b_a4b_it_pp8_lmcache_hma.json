@@ -1,6 +1,6 @@
 {
   "cache_directories": [
-    "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv"
+    "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv/p3_4_4_4_3_4_4_4"
   ],
   "cache_sharding": "pipeline_layers",
   "connector": {
@@ -78,7 +78,7 @@
     "VLLM_USE_V1": "1",
     "LMCACHE_CONFIG_FILE": "/tmp/lmcache_gemma4_26b_a4b_pp8_bf16kv.yaml",
     "LMCACHE_LOG_LEVEL": "INFO",
-    "LMCACHE_ROOT": "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv"
+    "LMCACHE_ROOT": "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv/p3_4_4_4_3_4_4_4"
   },
   "fabric_topology": "../transfer/spark_200g.json",
   "format": "ds4-vllm-kv-cache-deployment-v1",
@@ -98,7 +98,7 @@
     "chunk_size": 256,
     "local_cpu": true,
     "max_local_cpu_size": 1,
-    "local_disk": "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv",
+    "local_disk": "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv/p3_4_4_4_3_4_4_4",
     "max_local_disk_size": 64,
     "save_unfull_chunk": false,
     "extra_config": {

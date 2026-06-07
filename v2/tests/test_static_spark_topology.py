@@ -71,9 +71,9 @@ class StaticSparkTopologyTests(unittest.TestCase):
     def test_first_three_services_declare_external_cache_backends_and_safe_gpu_caps(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
         expected = {
-            "qwen27_bf16_pp8": ("lmcache_hma", "lmcache", "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv", 0.30),
-            "gemma4_26b_a4b_pp8": ("lmcache_hma", "lmcache", "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv", 0.30),
-            "dsv4_flash_pp8": ("dsv4_hma", "simple_cpu_offload", "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload", 0.18),
+            "qwen27_bf16_pp8": ("lmcache_hma", "lmcache", "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv/p7_8_7_9_9_9_8_7", 0.30),
+            "gemma4_26b_a4b_pp8": ("lmcache_hma", "lmcache", "/home/{node}/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv/p3_4_4_4_3_4_4_4", 0.30),
+            "dsv4_flash_pp8": ("dsv4_hma", "simple_cpu_offload", "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload/p4_5_4_7_5_5_7_6", 0.18),
         }
 
         for service_id, (backend, connector_id, cache_root, gpu_cap) in expected.items():

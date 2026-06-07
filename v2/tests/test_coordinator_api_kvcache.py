@@ -111,7 +111,7 @@ class CoordinatorApiKvCacheTests(unittest.TestCase):
             self.assertEqual(declared["shards"][-1]["layer_end"], 64)
             contract = declared["metadata"]["kv_cache_contract"]
             self.assertEqual(contract["format"], "ds4-pipeline-kv-cache-contract-v1")
-            self.assertEqual(contract["layer_partition"], [7, 8, 8, 8, 9, 9, 8, 7])
+            self.assertEqual(contract["layer_partition"], [7, 8, 7, 9, 9, 9, 8, 7])
             self.assertEqual(declared["metadata"]["layer_partition_fingerprint"], contract["fingerprint"])
             self.assertEqual({shard["metadata"]["layer_partition_fingerprint"] for shard in declared["shards"]}, {contract["fingerprint"]})
             code, prefetched = api.handle_post(
@@ -242,7 +242,7 @@ class CoordinatorApiKvCacheTests(unittest.TestCase):
             self.assertEqual(plan["load"]["namespace"], "centaur.longmem")
             self.assertEqual(plan["load"]["service_id"], "qwen27_bf16_pp8")
             self.assertEqual(plan["model_fingerprint"]["layer_partition_fingerprint"], plan["model_fingerprint"]["kv_cache_contract"]["fingerprint"])
-            self.assertEqual(plan["model_fingerprint"]["kv_cache_contract"]["layer_partition"], [7, 8, 8, 8, 9, 9, 8, 7])
+            self.assertEqual(plan["model_fingerprint"]["kv_cache_contract"]["layer_partition"], [7, 8, 7, 9, 9, 9, 8, 7])
             self.assertEqual(plan["source_provenance"]["prompt_text"], "reuse the prefix")
             self.assertEqual(plan["source_provenance"]["prompt_sha256"], "sha256:" + hashlib.sha256(b"reuse the prefix").hexdigest())
 
