@@ -283,19 +283,32 @@ class OpenAICompatibleRunner:
     def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
         started = time.time()
         try:
-            if request.chat:
+            if request.chat and _chat_cohort_transport(profile) == "completion_prompts":
+                payload = _openai_completion_prompt_payload(request, profile, prompt=_chat_completion_prompt(request))
+                _merge_extra_body(payload, self.default_extra_body)
+                data = self._post_json(self.completion_endpoint, payload)
+                text = extract_openai_completion_text(data)
+                endpoint = self.completion_endpoint
+                chat_as_completion = True
+            elif request.chat:
                 payload = _openai_payload(request, profile)
                 _merge_extra_body(payload, self.default_extra_body)
                 data = self._post_json(self.chat_endpoint, payload)
                 text = extract_openai_chat_text(data)
+                endpoint = self.chat_endpoint
+                chat_as_completion = False
             else:
                 payload = _openai_payload(request, profile)
                 _merge_extra_body(payload, self.default_extra_body)
                 data = self._post_json(self.completion_endpoint, payload)
                 text = extract_openai_completion_text(data)
+                endpoint = self.completion_endpoint
+                chat_as_completion = False
             result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
             result["usage"].update(_usage_from_response(data))
-            result["transport"] = {"base_url": self.base_url, "duration_s": round(time.time() - started, 6)}
+            result["transport"] = {"base_url": self.base_url, "endpoint": endpoint, "duration_s": round(time.time() - started, 6)}
+            if chat_as_completion:
+                result["transport"]["chat_as_completion_prompts"] = True
             return result
         except Exception as exc:
             result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": str(exc)}, sort_keys=True), status="transport_failed")
@@ -304,6 +317,8 @@ class OpenAICompatibleRunner:
 
     def run_many_chat(self, requests: list[InferenceRequest], profile: ModelProfile) -> dict[str, dict] | None:
         request_list = list(requests)
+        if _chat_cohort_transport(profile) == "completion_prompts":
+            return self._run_many_chat_as_completion(request_list, profile)
         if _chat_cohort_transport(profile) == "parallel_chat_completions":
             return self._run_many_chat_parallel(request_list, profile)
         plan = self._chat_batch_plan(request_list, profile)
@@ -335,6 +350,13 @@ class OpenAICompatibleRunner:
         cancel_event: Event | None = None,
     ) -> dict[str, dict] | None:
         request_list = list(requests)
+        if _chat_cohort_transport(profile) == "completion_prompts":
+            out = self._run_many_chat_as_completion(request_list, profile)
+            if out is None:
+                return None
+            for request_id, result in out.items():
+                on_result(request_id, result)
+            return out
         if _chat_cohort_transport(profile) == "parallel_chat_completions":
             return self._run_many_chat_parallel(
                 request_list,
@@ -370,6 +392,44 @@ class OpenAICompatibleRunner:
                 if cancel_event is not None and cancel_event.is_set():
                     break
                 publish(self._run_chat_chunk(chunk, profile, payload, original_batch_size=len(chunk)))
+        return out
+
+    def _run_many_chat_as_completion(
+        self,
+        requests: list[InferenceRequest],
+        profile: ModelProfile,
+    ) -> dict[str, dict] | None:
+        request_list = list(requests)
+        if not request_list or not all(item.chat for item in request_list):
+            return None
+        minimum = max(2, int(os.environ.get("DS4_PIPELINE_CHAT_COHORT_MIN", "2") or "2"))
+        if len(request_list) < minimum:
+            return None
+        max_cohort = _completion_effective_max_cohort(profile)
+        token_budget = coalesced_completion_token_budget()
+        payloads: list[tuple[list[InferenceRequest], dict[str, Any]]] = []
+        chunks = _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget)
+        for chunk in chunks:
+            payload = _coalesced_chat_completion_payload(chunk, profile, self.default_extra_body)
+            if payload is None:
+                return None
+            payloads.append((chunk, payload))
+        out: dict[str, dict] = {}
+        concurrency = _completion_chunk_concurrency(profile)
+        if concurrency > 1 and len(payloads) > 1:
+            with ThreadPoolExecutor(max_workers=min(concurrency, len(payloads))) as executor:
+                futures = [
+                    executor.submit(self._run_completion_chunk, chunk, profile, payload, original_batch_size=len(chunk))
+                    for chunk, payload in payloads
+                ]
+                for future in as_completed(futures):
+                    out.update(future.result())
+        else:
+            for chunk, payload in payloads:
+                out.update(self._run_completion_chunk(chunk, profile, payload, original_batch_size=len(chunk)))
+        _mark_chat_as_completion(out)
+        if len(chunks) > 1:
+            _mark_coalesced_planned_split(out, original_batch_size=len(request_list), chunk_count=len(chunks), max_cohort=max_cohort, concurrency=concurrency)
         return out
 
     def _run_many_chat_parallel(
@@ -995,6 +1055,32 @@ def _coalesced_chat_payload(requests: list[InferenceRequest], profile: ModelProf
     payload["messages"] = conversations
     return payload
 
+def _coalesced_chat_completion_payload(requests: list[InferenceRequest], profile: ModelProfile, default_extra_body: dict[str, Any]) -> dict[str, Any] | None:
+    prompts: list[str] = []
+    shared: dict[str, Any] | None = None
+    for item in requests:
+        if not item.chat:
+            return None
+        if item.input.get("tools") is not None or item.input.get("tool_choice") is not None:
+            return None
+        prompt = _chat_completion_prompt(item)
+        if not prompt:
+            return None
+        payload = _openai_completion_prompt_payload(item, profile, prompt=prompt)
+        _merge_extra_body(payload, default_extra_body)
+        comparable = dict(payload)
+        comparable.pop("prompt", None)
+        if shared is None:
+            shared = comparable
+        elif comparable != shared:
+            return None
+        prompts.append(prompt)
+    if shared is None:
+        return None
+    payload = dict(shared)
+    payload["prompt"] = prompts
+    return payload
+
 def _maybe_prestage_common_kv_prefix(runner: OpenAICompatibleRunner, payload: dict[str, Any], requests: list[InferenceRequest]) -> dict[str, Any] | None:
     if not _env_bool("DS4_PIPELINE_PRESTAGE_COMMON_KV_PREFIX", True):
         return None
@@ -1122,6 +1208,12 @@ def _mark_coalesced_chat_planned_split(out: dict[str, dict], *, original_batch_s
         transport["coalesced_chat_chunk_count"] = chunk_count
         transport["coalesced_chat_effective_max_cohort"] = max_cohort
         transport["coalesced_chat_chunk_concurrency"] = concurrency
+
+def _mark_chat_as_completion(out: dict[str, dict]) -> None:
+    for result in out.values():
+        transport: dict[str, Any] = result.setdefault("transport", {})
+        transport["chat_as_completion_prompts"] = True
+        transport["coalesced_chat_as_completion"] = True
 
 
 def _chat_cohort_transport(profile: ModelProfile) -> str:
@@ -1416,6 +1508,22 @@ def _openai_payload(request: InferenceRequest, profile: ModelProfile) -> dict[st
             "temperature": request.temperature,
             "max_tokens": max_tokens,
         }
+    _apply_openai_payload_extras(payload, request, profile)
+    return payload
+
+
+def _openai_completion_prompt_payload(request: InferenceRequest, profile: ModelProfile, *, prompt: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "model": _served_model_id(profile),
+        "prompt": prompt,
+        "temperature": request.temperature,
+        "max_tokens": max(1, int(request.max_output_tokens) + int(request.thinking_budget_tokens)),
+    }
+    _apply_openai_payload_extras(payload, request, profile)
+    return payload
+
+
+def _apply_openai_payload_extras(payload: dict[str, Any], request: InferenceRequest, profile: ModelProfile) -> None:
     _merge_openai_request_fields(payload, request)
     sampling = openai_sampling_controls(request.input)
     if sampling:
@@ -1425,7 +1533,17 @@ def _openai_payload(request: InferenceRequest, profile: ModelProfile) -> dict[st
     if extra_body:
         payload.update(kv_cache_vllm_request_fields(request.input))
         payload["extra_body"] = {**dict(payload.get("extra_body") or {}), **extra_body}
-    return payload
+
+
+def _chat_completion_prompt(request: InferenceRequest) -> str:
+    data = request.input
+    metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+    for container in (data, metadata):
+        for key in ("rendered_prompt", "prompt"):
+            value = container.get(key) if isinstance(container, dict) else None
+            if isinstance(value, str) and value:
+                return value
+    return request_prompt(request)
 
 
 def openai_sampling_controls(input_payload: dict[str, Any]) -> dict[str, Any]:
