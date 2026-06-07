@@ -12,6 +12,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 STOP_SCRIPT = ROOT / "scripts" / "ds4_stop_coordinator_api.py"
 RELAUNCH_SCRIPT = ROOT / "scripts" / "ds4_relaunch_coordinator_api.py"
+TOKEN_SCRIPT = ROOT / "scripts" / "ds4_prefetch_token.py"
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 FIRST3_MEMORY_BUDGET_PROFILE = ROOT / "profiles" / "production" / "first3_resident_memory_budget.json"
@@ -192,17 +193,17 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(env["DS4_API_JIT_KV_PREFETCH_TOKEN"], "unit-file-token")
 
     def test_relaunch_prefetch_token_loader_falls_back_to_second_default_file(self) -> None:
-        relaunch = load_script(RELAUNCH_SCRIPT)
-        old_files = relaunch.DEFAULT_PREFETCH_TOKEN_FILES
+        tokens = load_script(TOKEN_SCRIPT)
+        old_files = tokens.DEFAULT_PREFETCH_TOKEN_FILES
         with tempfile.TemporaryDirectory() as tmp:
             missing = Path(tmp) / "missing-token"
             fallback = Path(tmp) / "fallback-token"
             fallback.write_text("fallback-value\n", encoding="utf-8")
-            relaunch.DEFAULT_PREFETCH_TOKEN_FILES = (missing, fallback)
+            tokens.DEFAULT_PREFETCH_TOKEN_FILES = (missing, fallback)
             try:
-                token = relaunch._load_prefetch_token(str(missing))
+                token = tokens.load_prefetch_token(str(missing))
             finally:
-                relaunch.DEFAULT_PREFETCH_TOKEN_FILES = old_files
+                tokens.DEFAULT_PREFETCH_TOKEN_FILES = old_files
 
         self.assertEqual(token, "fallback-value")
 

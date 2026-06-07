@@ -53,8 +53,8 @@
   "resident_batch_token_budget": {
     "qwen27_bf16_pp8": 32768,
     "gemma4_26b_a4b_pp8": 16384,
-    "dsv4_flash_pp8": 8192,
-    "notes": "Qwen 65536 at 0.25 produced negative KV headroom on all ranks during first3 startup, so the Qwen token budget stays at 32768 while using the lower 0.25 resident cap. Gemma 24576 at 0.25 failed cache-block allocation in the triple-resident fit check, and the 2026-06-07 Qwen-last relaunch failed CUDA memory snapshot with Gemma at 0.30, so Gemma returns to the measured 0.20 cap used by the stronger 15/17 COMPSEC validation profile. Keep max_batch_size at 64, but admit long prompts by token budget rather than pretending every 64-way cohort can carry large contexts."
+    "dsv4_flash_pp8": 32768,
+    "notes": "Qwen 65536 at 0.25 produced negative KV headroom on all ranks during first3 startup, so the Qwen token budget stays at 32768 while using the lower 0.25 resident cap. Gemma 24576 at 0.25 failed cache-block allocation in the triple-resident fit check, and the 2026-06-07 Qwen-last relaunch failed CUDA memory snapshot with Gemma at 0.30, so Gemma returns to the measured 0.20 cap used by the stronger 15/17 COMPSEC validation profile. DSV4 now uses the same 32768 short-context token budget as Qwen while retaining its fixed 1GiB KV cap; admit long prompts by token budget rather than pretending every 64-way cohort can carry large contexts."
   },
   "coordinator": {
     "dispatch_window": 128,
@@ -64,7 +64,7 @@
     "completion_pp_safe_cohort_max": 128,
     "completion_chunk_concurrency": 1,
     "dispatch_kv_capacity_bytes": 8589934592,
-    "notes": "First-three resident feed settings keep Qwen/Gemma saturated while DSV4 uses its service-level batch limit from the DSV4 production profile."
+    "notes": "First-three resident feed settings keep Qwen/Gemma saturated while DSV4 uses the 64-way short-context service-level batch limit from the DSV4 production profile."
   },
   "baseline_with_qwen_gemma_available_gib": {
     "spark0": 48.6,

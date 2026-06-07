@@ -22,7 +22,7 @@
     "--max-model-len",
     "262144",
     "--max-num-batched-tokens",
-    "8192",
+    "32768",
     "--kv-cache-memory-bytes",
     "1073741824",
     "--gpu-memory-utilization",
@@ -108,8 +108,9 @@
     "VLLM_DS4_PP_TORCH_GROUP_WARMUP": "0",
     "VLLM_DS4_PP_OVERLAP_SEND": "1",
     "VLLM_DS4_PP_SEND_BUFFER_SLOTS": "4",
-    "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "16",
+    "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "64",
     "VLLM_DS4_FINAL_ONLY_NONSTREAMING": "1",
+    "VLLM_DS4_SM12X_MQA_ROWWISE_MAX_ROWS": "64",
     "VLLM_DS4_SM12X_MQA_TOPK_CUDA_SELECT": "1",
     "VLLM_DS4_KV_PREFETCH_API": "1",
     "VLLM_DS4_KV_PREFETCH_REQUIRE_TOKEN": "1",
@@ -161,6 +162,6 @@
   ],
   "working_directory": "/home/{node}/src/ds4_on_spark/v2",
   "performance_mode": "native_blackwell_strict_fastpath",
-  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 16-sequence admission, 8192-token compile range, 1GiB resident/offload KV per rank, lazy startup restore with queue/JIT-directed regeneration, balanced first-three layer placement, token-gated DS4 KV prefetch, eager decode while DSV4 batch correctness is requalified, a 64-chunk vLLM multiprocessing broadcast ring, and single-job FlashInfer/CUDA compile caps. Warm DSV4 alone before all-three residency so first-run native-kernel compilation populates persistent caches without Qwen/Gemma resident pressure.",
-  "max_batch_size": 16
+  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 64-sequence short-context admission, 32768-token compile range, 1GiB resident/offload KV per rank, lazy startup restore with queue/JIT-directed regeneration, balanced first-three layer placement, token-gated DS4 KV prefetch, SM12x rowwise decode up to 64 rows, eager decode while DSV4 batch correctness is requalified, a 64-chunk vLLM multiprocessing broadcast ring, and single-job FlashInfer/CUDA compile caps. Warm DSV4 alone before all-three residency so first-run native-kernel compilation populates persistent caches without Qwen/Gemma resident pressure.",
+  "max_batch_size": 64
 }

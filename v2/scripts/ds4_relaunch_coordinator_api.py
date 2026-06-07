@@ -10,14 +10,17 @@ import sys
 import time
 from urllib import request
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+from ds4_prefetch_token import DEFAULT_PREFETCH_TOKEN_FILE, load_prefetch_token
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
 FIRST3_MEMORY_BUDGET = ROOT / "profiles" / "production" / "first3_resident_memory_budget.json"
 STATIC_SPARKS_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 DEFAULT_COORDINATOR_PYTHON = Path("/home/spark0/ds4-vllm-local/bin/python")
-DEFAULT_PREFETCH_TOKEN_FILES = (Path("/private/tmp/ds4_jit_kv_token"), Path("/tmp/ds4_jit_kv_token"))
-DEFAULT_PREFETCH_TOKEN_FILE = DEFAULT_PREFETCH_TOKEN_FILES[0]
 
 
 def main() -> int:
@@ -120,7 +123,7 @@ def _coordinator_env(args: argparse.Namespace, v2_dir: Path) -> dict[str, str]:
     for key, value in _parse_env_overrides(getattr(args, "env", []) or []).items():
         env[key] = value
     if _truthy(env.get("DS4_API_JIT_KV_PREFETCH_API")) and not env.get("DS4_API_JIT_KV_PREFETCH_TOKEN"):
-        token = _load_prefetch_token(getattr(args, "prefetch_token_file", str(DEFAULT_PREFETCH_TOKEN_FILE)))
+        token = load_prefetch_token(getattr(args, "prefetch_token_file", str(DEFAULT_PREFETCH_TOKEN_FILE)))
         if not token:
             raise ValueError("DS4_API_JIT_KV_PREFETCH_API=1 requires DS4_API_JIT_KV_PREFETCH_TOKEN, --env DS4_API_JIT_KV_PREFETCH_TOKEN=..., or --prefetch-token-file")
         env["DS4_API_JIT_KV_PREFETCH_TOKEN"] = token
@@ -262,23 +265,6 @@ def _parse_env_overrides(items: list[str]) -> dict[str, str]:
 
 def _truthy(value: object) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _load_prefetch_token(raw_path: str) -> str:
-    for path in _prefetch_token_candidates(raw_path):
-        if path.exists():
-            token = path.read_text(encoding="utf-8").strip()
-            if token:
-                return token
-    return ""
-
-
-def _prefetch_token_candidates(raw_path: str) -> list[Path]:
-    paths = [Path(raw_path).expanduser()] if raw_path else []
-    for path in DEFAULT_PREFETCH_TOKEN_FILES:
-        if path not in paths:
-            paths.append(path)
-    return paths
 
 
 def _log_path(raw: str) -> Path:

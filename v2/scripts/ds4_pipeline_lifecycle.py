@@ -7,16 +7,20 @@ from pathlib import Path
 import re
 import shlex
 import subprocess
+import sys
 import time
 from urllib.parse import urlparse
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+from ds4_prefetch_token import DEFAULT_PREFETCH_TOKEN_FILE, load_prefetch_token
 
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 PROFILES = ROOT / "profiles" / "models"
-DEFAULT_PREFETCH_TOKEN_FILES = (Path("/private/tmp/ds4_jit_kv_token"), Path("/tmp/ds4_jit_kv_token"))
-DEFAULT_PREFETCH_TOKEN_FILE = DEFAULT_PREFETCH_TOKEN_FILES[0]
 SECRET_ASSIGN_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY)[A-Za-z0-9_]*=)(?:'[^']*'|\"[^\"]*\"|[^ \n]+)")
 
 
@@ -264,27 +268,10 @@ def _truthy(value: object) -> bool:
 
 
 def _required_prefetch_token(args: argparse.Namespace, *, service_id: str) -> str:
-    token = _load_prefetch_token(getattr(args, "prefetch_token_file", str(DEFAULT_PREFETCH_TOKEN_FILE)))
+    token = load_prefetch_token(getattr(args, "prefetch_token_file", str(DEFAULT_PREFETCH_TOKEN_FILE)))
     if token:
         return token
     raise ValueError(f"{service_id}: missing vLLM DS4 KV prefetch token; set --prefetch-token-file or --remote-env VLLM_DS4_KV_PREFETCH_TOKEN=...")
-
-
-def _load_prefetch_token(raw_path: str) -> str:
-    for path in _prefetch_token_candidates(raw_path):
-        if path.exists():
-            token = path.read_text(encoding="utf-8").strip()
-            if token:
-                return token
-    return ""
-
-
-def _prefetch_token_candidates(raw_path: str) -> list[Path]:
-    paths = [Path(raw_path).expanduser()] if raw_path else []
-    for path in DEFAULT_PREFETCH_TOKEN_FILES:
-        if path not in paths:
-            paths.append(path)
-    return paths
 
 
 def _parse_remote_env(items: list[str]) -> list[tuple[str, str]]:
