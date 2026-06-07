@@ -6,7 +6,7 @@
   "connector": {
     "connector_id": "simple_cpu_offload",
     "kv_connector_extra_config": {
-      "cpu_bytes_to_use": "2147483648",
+      "cpu_bytes_to_use": "3221225472",
       "eviction_policy": "lru",
       "lazy_offload": false,
       "spec_name": "SimpleCPUOffloadingSpec"
@@ -24,7 +24,7 @@
     "--max-num-batched-tokens",
     "32768",
     "--kv-cache-memory-bytes",
-    "2147483648",
+    "3221225472",
     "--gpu-memory-utilization",
     "0.18",
     "--block-size",
@@ -162,6 +162,6 @@
   ],
   "working_directory": "/home/{node}/src/ds4_on_spark/v2",
   "performance_mode": "native_blackwell_strict_fastpath",
-  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 64-sequence short-context admission, 32768-token compile range, 2GiB resident/offload KV per rank, lazy startup restore with queue/JIT-directed regeneration, balanced first-three layer placement, token-gated DS4 KV prefetch, SM12x rowwise decode up to 64 rows, eager decode while DSV4 batch correctness is requalified, a 64-chunk vLLM multiprocessing broadcast ring, and single-job FlashInfer/CUDA compile caps. Warm DSV4 alone before all-three residency so first-run native-kernel compilation populates persistent caches without Qwen/Gemma resident pressure.",
+  "notes": "No Marlin/emulation fallback. Co-resident PP service uses native DSV4 kernels with bounded 64-sequence short-context admission, 32768-token compile range, 3GiB resident/offload KV per rank, lazy startup restore with queue/JIT-directed regeneration, balanced first-three layer placement, token-gated DS4 KV prefetch, SM12x rowwise decode up to 64 rows, eager decode while DSV4 batch correctness is requalified, a 64-chunk vLLM multiprocessing broadcast ring, and single-job FlashInfer/CUDA compile caps. Warm DSV4 alone before all-three residency so first-run native-kernel compilation populates persistent caches without Qwen/Gemma resident pressure.",
   "max_batch_size": 64
 }

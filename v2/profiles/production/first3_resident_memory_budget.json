@@ -54,7 +54,7 @@
     "qwen27_bf16_pp8": 32768,
     "gemma4_26b_a4b_pp8": 16384,
     "dsv4_flash_pp8": 32768,
-    "notes": "Qwen 65536 at 0.25 produced negative KV headroom on all ranks during first3 startup, so the Qwen token budget stays at 32768 while using the lower 0.25 resident cap. Gemma 24576 at 0.25 failed cache-block allocation in the triple-resident fit check, and the 2026-06-07 Qwen-last relaunch failed CUDA memory snapshot with Gemma at 0.30, so Gemma returns to the measured 0.20 cap used by the stronger 15/17 COMPSEC validation profile. DSV4 now uses the same 32768 short-context token budget as Qwen while retaining a fixed 2GiB KV cap, which is the smallest deployed cap above the observed 1.92GiB requirement for the 262144 max model length startup check; admit long prompts by token budget rather than pretending every 64-way cohort can carry large contexts."
+    "notes": "Qwen 65536 at 0.25 produced negative KV headroom on all ranks during first3 startup, so the Qwen token budget stays at 32768 while using the lower 0.25 resident cap. Gemma 24576 at 0.25 failed cache-block allocation in the triple-resident fit check, and the 2026-06-07 Qwen-last relaunch failed CUDA memory snapshot with Gemma at 0.30, so Gemma returns to the measured 0.20 cap used by the stronger 15/17 COMPSEC validation profile. DSV4 now uses the same 32768 short-context token budget as Qwen while retaining a fixed 3GiB KV cap, which is the smallest deployed cap above the observed 2.56GiB requirement for the 262144 max model length startup check; admit long prompts by token budget rather than pretending every 64-way cohort can carry large contexts."
   },
   "coordinator": {
     "dispatch_window": 128,
