@@ -278,8 +278,20 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(runner.calls, [])
 
     def test_openai_runner_coalesces_chat_batch_with_chat_endpoint(self) -> None:
-        registry = ProfileRegistry.load(PROFILES)
-        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "batch-chat",
+                "model_id": "served-model",
+                "backend": "vllm_pipeline",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["tool_chat"],
+                "supports_chat": True,
+                "supports_completion": True,
+                "supports_thinking": False,
+                "production_eligible": True,
+                "routing": {"served_model_name": "served-model"},
+            }
+        )
         second_raw = make_request(chat=True).raw
         second_raw["request_id"] = "r2"
         runner = CapturingChatBatchRunner()
@@ -295,6 +307,38 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(result["r"]["output"]["text"], "chat one")
         self.assertEqual(result["r2"]["output"]["text"], "chat two")
         self.assertTrue(result["r"]["transport"]["coalesced_chat_batch"])
+
+    def test_openai_runner_can_parallelize_chat_with_standard_endpoint(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "parallel-chat",
+                "model_id": "served-model",
+                "backend": "vllm_pipeline",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["tool_chat"],
+                "supports_chat": True,
+                "supports_completion": True,
+                "supports_thinking": False,
+                "production_eligible": True,
+                "routing": {
+                    "chat_cohort_transport": "parallel_chat_completions",
+                    "parallel_chat_concurrency": 2,
+                    "served_model_name": "served-model",
+                },
+            }
+        )
+        second_raw = make_request(chat=True).raw
+        second_raw["request_id"] = "r2"
+        runner = CapturingRunner()
+
+        result = runner.run_many_chat([make_request(chat=True), InferenceRequest.from_json(second_raw)], profile)
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual([call[0] for call in runner.calls], ["/v1/chat/completions", "/v1/chat/completions"])
+        self.assertTrue(all(isinstance(call[1]["messages"], list) for call in runner.calls))
+        self.assertTrue(result["r"]["transport"]["coalesced_chat_parallel"])
+        self.assertEqual(result["r2"]["transport"]["coalesced_batch_size"], 2)
 
     def test_openai_runner_never_coalesces_chat_as_completion_prompts(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

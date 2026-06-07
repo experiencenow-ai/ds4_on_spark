@@ -575,12 +575,44 @@ def run_direct_vllm_eval(args: argparse.Namespace) -> None:
     print(json.dumps(summary, sort_keys=True))
 
 
+def run_direct_vllm_chat_eval(args: argparse.Namespace) -> None:
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    batch_id = args.batch_id or f"ds4-eval-direct-chat-{uuid.uuid4().hex[:16]}"
+    source_requests, requests_path, requests_payload = _prepare_run_requests(args, out_dir, batch_id)
+    requests_by_id = _request_meta_by_id(requests_payload)
+    collect, response, run_s = _run_direct_vllm_chat_batch(args, requests_payload)
+    _write_json(out_dir / "vllm_response.json", response)
+    _write_json(out_dir / "collect.json", collect)
+    grade_summary = grade_collect(requests_by_id, collect)
+    _write_json(out_dir / "grade.json", grade_summary)
+    answers = _write_direct_answers(out_dir / "answers.jsonl", requests_by_id, collect, run_s)
+    _write_direct_manifest(args, out_dir, batch_id, source_requests, requests_path, requests_payload, run_s)
+    summary = _run_summary(batch_id, requests_payload, answers, len(answers), run_s, 0.0, grade_summary, out_dir)
+    summary.update({"mode": "direct-vllm-chat", "vllm_url": args.vllm_url, "served_model": args.served_model})
+    _write_json(out_dir / "summary.json", summary)
+    print(json.dumps(summary, sort_keys=True))
+
+
 def _run_direct_vllm_batch(args: argparse.Namespace, requests_payload: list[dict]) -> tuple[dict, dict, float]:
     payload = _direct_completion_payload(args, requests_payload)
     started = time.time()
     response = _post_json(args.vllm_url, "/v1/completions", payload, timeout=float(args.vllm_timeout_s))
     run_s = time.time() - started
     return _direct_collect_from_completion(requests_payload, response), response, run_s
+
+
+def _run_direct_vllm_chat_batch(args: argparse.Namespace, requests_payload: list[dict]) -> tuple[dict, dict, float]:
+    started = time.time()
+    responses = []
+    results = []
+    for row in requests_payload:
+        payload = _direct_chat_payload(args, row)
+        response = _post_json(args.vllm_url, "/v1/chat/completions", payload, timeout=float(args.vllm_timeout_s))
+        responses.append(response)
+        results.append(_direct_collect_item_from_chat(row, response))
+    run_s = time.time() - started
+    return {"format": "ds4-eval-direct-vllm-chat-collect-v1", "results": results}, {"responses": responses}, run_s
 
 
 def _direct_completion_payload(args: argparse.Namespace, requests_payload: list[dict]) -> dict:
@@ -597,6 +629,26 @@ def _direct_completion_payload(args: argparse.Namespace, requests_payload: list[
         "temperature": float(args.temperature),
         "stream": False,
     }
+
+
+def _direct_chat_payload(args: argparse.Namespace, row: dict) -> dict:
+    item = row.get("input") if isinstance(row.get("input"), dict) else {}
+    messages = item.get("messages")
+    if not isinstance(messages, list) or not messages:
+        raise ValueError(f"request {row.get('request_id')} is missing input.messages")
+    payload = {
+        "model": args.served_model,
+        "messages": messages,
+        "max_tokens": int(args.max_output_tokens),
+        "temperature": float(args.temperature),
+        "stream": False,
+        "chat_template_kwargs": {
+            str(args.chat_template_thinking_key): bool(args.enable_thinking),
+        },
+    }
+    if bool(args.enable_thinking):
+        payload["thinking_token_budget"] = int(args.thinking_budget_tokens)
+    return payload
 
 
 def _direct_collect_from_completion(requests_payload: list[dict], response: dict) -> dict:
@@ -623,6 +675,25 @@ def _direct_collect_from_completion(requests_payload: list[dict], response: dict
             }
         )
     return {"format": "ds4-eval-direct-vllm-collect-v1", "results": results}
+
+
+def _direct_collect_item_from_chat(row: dict, response: dict) -> dict:
+    choices = response.get("choices")
+    choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
+    message = choice.get("message") if isinstance(choice.get("message"), dict) else {}
+    text = str(message.get("content") or "")
+    usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
+    item_usage = {key: int(value) for key, value in usage.items() if isinstance(value, (int, float))}
+    request_id = str(row.get("request_id") or "")
+    return {
+        "request": {"request_id": request_id, "state": "completed"},
+        "result": {
+            "request_id": request_id,
+            "status": "completed",
+            "output": {"text": text},
+            "usage": item_usage,
+        },
+    }
 
 
 def _choice_index(choice: dict, fallback: int) -> int:
@@ -1030,6 +1101,8 @@ def main() -> None:
         grade(args)
     elif args.cmd == "run-direct-vllm":
         run_direct_vllm_eval(args)
+    elif args.cmd == "run-direct-vllm-chat":
+        run_direct_vllm_chat_eval(args)
     elif args.cmd == "run":
         run_eval(args)
 
@@ -1075,6 +1148,25 @@ def _build_parser() -> argparse.ArgumentParser:
     d.add_argument("--source", action="append", default=[], help="Only include ds4-eval cases with this source; repeat for multiple sources.")
     d.add_argument("--limit", type=int, default=0)
     d.add_argument("--vllm-timeout-s", type=float, default=3600.0)
+    dc = sub.add_parser("run-direct-vllm-chat")
+    dc.add_argument("--requests-jsonl")
+    dc.add_argument("--source-c", default=str(DEFAULT_SOURCE_C))
+    dc.add_argument("--out-dir", required=True)
+    dc.add_argument("--batch-id")
+    dc.add_argument("--preserve-request-ids", action="store_true")
+    dc.add_argument("--vllm-url", default="http://10.20.0.10:8102")
+    dc.add_argument("--served-model", default="deepseek-v4-flash-pp8")
+    dc.add_argument("--model", default="dsv4_vllm_mtp_pp8_smartest_v1")
+    dc.add_argument("--max-output-tokens", type=int, default=512)
+    dc.add_argument("--response-style", choices=("official", "concise", "answer_only", "answer_first"), default="official")
+    dc.add_argument("--enable-thinking", dest="enable_thinking", action="store_true", default=False)
+    dc.add_argument("--disable-thinking", dest="enable_thinking", action="store_false")
+    dc.add_argument("--chat-template-thinking-key", default="thinking")
+    dc.add_argument("--thinking-budget-tokens", type=int, default=1024)
+    dc.add_argument("--temperature", type=float, default=0.0)
+    dc.add_argument("--source", action="append", default=[], help="Only include ds4-eval cases with this source; repeat for multiple sources.")
+    dc.add_argument("--limit", type=int, default=0)
+    dc.add_argument("--vllm-timeout-s", type=float, default=3600.0)
     r = sub.add_parser("run")
     r.add_argument("--base-url", default="http://10.20.0.10:8700")
     r.add_argument("--requests-jsonl")
