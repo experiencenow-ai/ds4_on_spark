@@ -291,6 +291,10 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["connector"]["kv_transfer_config"]["kv_connector"], "SimpleCPUOffloadConnector")
         self.assertEqual(plan["connector"]["kv_transfer_config"]["kv_connector_extra_config"]["spec_name"], "SimpleCPUOffloadingSpec")
         self.assertFalse(plan["connector"]["kv_transfer_config"]["kv_connector_extra_config"]["lazy_offload"])
+        self.assertEqual(
+            plan["connector"]["kv_transfer_config"]["kv_connector_extra_config"]["cpu_bytes_to_use_per_rank"],
+            "3221225472",
+        )
         self.assertEqual(plan["pipeline_parallel_size"], DSV4_PRODUCTION["pipeline_parallel_size"])
         self.assertEqual(plan["cache_sharding"], "pipeline_layers")
         self.assertEqual(plan["layer_partition"], DSV4_PRODUCTION["layer_partition"])
