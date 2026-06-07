@@ -610,12 +610,16 @@ def make_handler(summary_path: str, nodes_dir: str) -> type[BaseHTTPRequestHandl
     return(DashboardHandler)
 
 
+class ReusableThreadingHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+
+
 def main() -> int:
     global MODEL_LAYER_PARTITIONS,REPO_ROOT_OVERRIDE
     args = parse_args()
     REPO_ROOT_OVERRIDE = str(args.repo_root or "")
     MODEL_LAYER_PARTITIONS = None
-    server = ThreadingHTTPServer((args.host,args.port),make_handler(args.summary_json,args.nodes_dir))
+    server = ReusableThreadingHTTPServer((args.host,args.port),make_handler(args.summary_json,args.nodes_dir))
     print("serving Spark telemetry dashboard on http://%s:%d" % (args.host,args.port),flush=True)
     server.serve_forever()
     return(0)
