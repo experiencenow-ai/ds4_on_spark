@@ -83,7 +83,7 @@ class StreamingCompletionBackend(OpenAICompatibleRunner):
     def __init__(self) -> None:
         super().__init__(base_url="http://unused")
 
-    def _post_sse_json(self, endpoint: str, payload: dict):
+    def _post_sse_json(self, endpoint: str, payload: dict, **kwargs):
         assert endpoint == self.completion_endpoint
         assert payload["stream"] is True
         assert len(payload["prompt"]) == 2
@@ -100,13 +100,33 @@ class SlowTailStreamingBackend(OpenAICompatibleRunner):
     def __init__(self) -> None:
         super().__init__(base_url="http://unused")
 
-    def _post_sse_json(self, endpoint: str, payload: dict):
+    def _post_sse_json(self, endpoint: str, payload: dict, **kwargs):
         yield {"choices": [{"index": 0, "text": "first done", "finish_reason": "stop"}]}
         time.sleep(0.02)
         yield {"choices": [{"index": 1, "text": "tail", "finish_reason": None}]}
 
     def _post_json(self, endpoint: str, payload: dict) -> dict:
         raise AssertionError("streaming timeout test should not use non-streaming post")
+
+
+class CancellableStreamingBackend(OpenAICompatibleRunner):
+    def __init__(self) -> None:
+        super().__init__(base_url="http://unused")
+        self.cancel_event_seen = False
+        self.tail_requested = False
+
+    def _post_sse_json(self, endpoint: str, payload: dict, *, cancel_event: threading.Event | None = None):
+        assert endpoint == self.completion_endpoint
+        assert payload["stream"] is True
+        self.cancel_event_seen = cancel_event is not None
+        if cancel_event is not None:
+            cancel_event.set()
+        yield {"choices": [{"index": 0, "text": "first done", "finish_reason": "stop"}]}
+        self.tail_requested = True
+        yield {"choices": [{"index": 1, "text": "tail", "finish_reason": "stop"}]}
+
+    def _post_json(self, endpoint: str, payload: dict) -> dict:
+        raise AssertionError("streaming cancellation test should not use non-streaming post")
 
 
 class StreamingPipelineRunner(PipelineOpenAIRunner):
@@ -123,6 +143,15 @@ class SlowTailStreamingPipelineRunner(PipelineOpenAIRunner):
 
     def _runner_for(self, profile: ModelProfile, node_id: str | None) -> SlowTailStreamingBackend:
         return SlowTailStreamingBackend()
+
+
+class CancellableStreamingPipelineRunner(PipelineOpenAIRunner):
+    def __init__(self) -> None:
+        super().__init__(base_urls={"svc": "http://unused"})
+        self.backend = CancellableStreamingBackend()
+
+    def _runner_for(self, profile: ModelProfile, node_id: str | None) -> CancellableStreamingBackend:
+        return self.backend
 
 
 class NonStreamingCoalescedPipelineRunner(PipelineOpenAIRunner):
@@ -327,6 +356,39 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(seen, [("r", "completed"), ("r2", "transport_failed")])
         self.assertEqual(results["r"]["output"]["text"], "first done")
         self.assertIn("wall timeout", results["r2"]["transport"]["error"])
+
+    def test_pipeline_runner_streaming_cancel_fails_only_unfinished_tail(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": False,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {"served_model_name": "served-model"},
+            }
+        )
+        first = InferenceRequest.from_json(make_request(chat=False).raw)
+        second_raw = make_request(chat=False).raw
+        second_raw["request_id"] = "r2"
+        seen = []
+        runner = CancellableStreamingPipelineRunner()
+        results = runner.run_many_on_node_incremental(
+            [first, InferenceRequest.from_json(second_raw)],
+            profile,
+            None,
+            concurrency=2,
+            on_result=lambda request_id, result: seen.append((request_id, result["status"])),
+            cancel_event=threading.Event(),
+        )
+        self.assertTrue(runner.backend.cancel_event_seen)
+        self.assertFalse(runner.backend.tail_requested)
+        self.assertEqual(seen, [("r", "completed"), ("r2", "transport_failed")])
+        self.assertEqual(results["r"]["output"]["text"], "first done")
+        self.assertIn("cancelled", results["r2"]["transport"]["error"])
 
     def test_pipeline_runner_uses_final_only_for_forced_output_nonstreaming_worker(self) -> None:
         profile = ModelProfile.from_json(

@@ -121,6 +121,8 @@ def _check_dsv4_env(profile: dict[str, Any], env: dict[str, Any], errors: list[s
         "VLLM_MQ_MAX_CHUNKS": "64",
         "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_RESTORE_ON_STARTUP": "0",
         "VLLM_DS4_SIMPLE_KV_STARTUP_RESTORE": "0",
+        "VLLM_DS4_SIMPLE_KV_STORE_UNMARKED": "0",
+        "VLLM_DS4_SIMPLE_KV_READ_UNMARKED": "0",
         "VLLM_DS4_DSV4_SPARSE_MLA_PREFILL_BACKEND": "indexed",
         "VLLM_DEEP_GEMM_WARMUP": "skip",
         "DS4_PP_TRANSPORT": str(profile["pp_transport"]),

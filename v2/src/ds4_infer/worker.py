@@ -3,6 +3,7 @@ from __future__ import annotations
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from queue import Empty, Queue
 import socket
+from threading import Event
 from typing import Any, Callable, Mapping
 
 from .pipeline import PipelineProfile
@@ -133,6 +134,7 @@ class BatchWorker:
         requests = [claim.request for claim in claims if claim.request is not None]
         claim_by_id = {claim.request_id: claim for claim in claims}
         result_queue: Queue[tuple[str, dict[str, Any]]] = Queue()
+        cancel_event = Event()
         finished: set[str] = set()
         completed = failed = retried = 0
 
@@ -158,12 +160,14 @@ class BatchWorker:
 
         try:
             with ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(self.runner.run_many_on_node_incremental, requests, profile, claims[0].selected_node_id, concurrency=concurrency, on_result=push_result, on_delta=lambda request_id, text, payload: _push_stream_delta(self.queue, request_id, text, payload))  # type: ignore[attr-defined]
+                future = pool.submit(self.runner.run_many_on_node_incremental, requests, profile, claims[0].selected_node_id, concurrency=concurrency, on_result=push_result, on_delta=lambda request_id, text, payload: _push_stream_delta(self.queue, request_id, text, payload), cancel_event=cancel_event)  # type: ignore[attr-defined]
                 while not future.done():
                     wait([future], timeout=self.heartbeat_interval_s)
                     drain_results()
                     pending = [claim for claim in claims if claim.request_id not in finished]
                     if pending and not future.done():
+                        if self._cancel_requested(pending):
+                            cancel_event.set()
                         self._heartbeat(pending)
                 drain_results()
                 results = future.result()
@@ -178,6 +182,12 @@ class BatchWorker:
             retried += item_retried
             finished.add(claim.request_id)
         return completed, failed, retried
+
+    def _cancel_requested(self, claims: list[QueueClaim]) -> bool:
+        for claim in claims:
+            if bool(self.queue.status(request_id=claim.request_id, refresh=False).get("cancel_requested")):
+                return True
+        return False
 
     def _run_stream(self, claims: list[QueueClaim], concurrency: int, on_result: FinishHook | None) -> tuple[int, int, int]:
         with ThreadPoolExecutor(max_workers=concurrency) as pool:

@@ -48,7 +48,7 @@
       "--kv-cache-metrics",
       "--enable-logging-iteration-details",
       "--compilation-config",
-      "{\"cudagraph_mode\":\"NONE\",\"custom_ops\":[\"all\"]}"
+      "{\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"custom_ops\":[\"all\"],\"cudagraph_capture_sizes\":[1,2,4,8,16],\"max_cudagraph_capture_size\":16,\"cudagraph_copy_inputs\":true}"
     ],
     "host": "0.0.0.0",
     "master_addr": "spark0",
