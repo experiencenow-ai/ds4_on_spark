@@ -19,10 +19,12 @@ DEFAULT_SUMMARY_JSON = "/tmp/ds4_telemetry/mac/cluster_summary.json"
 DEFAULT_NODES_DIR = "/tmp/ds4_telemetry/mac/nodes"
 DEFAULT_HISTORY_LIMIT = 720
 DEFAULT_REPO_ROOT = "/Users/mac/Documents/New project 4"
+DEFAULT_MODEL_LAYER_PARTITIONS_JSON = "/Users/mac/.local/share/ds4_telemetry/model_layer_partitions.json"
 NODE_DOWN_ERROR_THRESHOLD = 3
 NODE_ERROR_STREAKS: dict[str,dict[str,Any]] = {}
 MODEL_LAYER_PARTITIONS: dict[str,list[int]] | None = None
 REPO_ROOT_OVERRIDE = ""
+MODEL_LAYER_PARTITIONS_JSON_OVERRIDE = ""
 DISPLAY_CPU_CORES = 20
 DISPLAY_CPU_PCT_MAX = DISPLAY_CPU_CORES * 100
 STREAM_INTERVAL_S = 5.0
@@ -118,6 +120,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--repo-root", default=os.environ.get("DS4_TELEMETRY_REPO_ROOT",DEFAULT_REPO_ROOT))
+    p.add_argument("--layer-partitions-json", default=os.environ.get("DS4_TELEMETRY_LAYER_PARTITIONS_JSON",DEFAULT_MODEL_LAYER_PARTITIONS_JSON))
     return(p.parse_args())
 
 
@@ -270,10 +273,32 @@ def repo_root() -> Path:
     return(Path(__file__).resolve().parents[1])
 
 
+def load_installed_model_layer_partitions(path: Path) -> dict[str,list[int]]:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return({})
+    source = raw.get("model_layer_partitions",raw) if isinstance(raw,dict) else {}
+    if not isinstance(source,dict):
+        return({})
+    out: dict[str,list[int]] = {}
+    for model,partition in source.items():
+        if isinstance(partition,list):
+            values = [int(item) for item in partition]
+            if values:
+                out[str(model)] = values
+    return(out)
+
+
 def load_model_layer_partitions() -> dict[str,list[int]]:
     global MODEL_LAYER_PARTITIONS
     if MODEL_LAYER_PARTITIONS is not None:
         return(MODEL_LAYER_PARTITIONS)
+    installed_path = Path(MODEL_LAYER_PARTITIONS_JSON_OVERRIDE or DEFAULT_MODEL_LAYER_PARTITIONS_JSON).expanduser()
+    installed = load_installed_model_layer_partitions(installed_path)
+    if installed:
+        MODEL_LAYER_PARTITIONS = installed
+        return(installed)
     root = repo_root()
     partitions_by_service: dict[str,list[int]] = {}
     budget_path = root / "v2" / "profiles" / "production" / "first3_resident_memory_budget.json"
@@ -615,9 +640,10 @@ class ReusableThreadingHTTPServer(ThreadingHTTPServer):
 
 
 def main() -> int:
-    global MODEL_LAYER_PARTITIONS,REPO_ROOT_OVERRIDE
+    global MODEL_LAYER_PARTITIONS,MODEL_LAYER_PARTITIONS_JSON_OVERRIDE,REPO_ROOT_OVERRIDE
     args = parse_args()
     REPO_ROOT_OVERRIDE = str(args.repo_root or "")
+    MODEL_LAYER_PARTITIONS_JSON_OVERRIDE = str(args.layer_partitions_json or "")
     MODEL_LAYER_PARTITIONS = None
     partitions = load_model_layer_partitions()
     server = ReusableThreadingHTTPServer((args.host,args.port),make_handler(args.summary_json,args.nodes_dir))

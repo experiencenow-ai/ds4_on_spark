@@ -12,6 +12,7 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
     def setUp(self):
         dashboard.reset_node_error_streaks()
         dashboard.MODEL_LAYER_PARTITIONS = None
+        dashboard.MODEL_LAYER_PARTITIONS_JSON_OVERRIDE = "/nonexistent/ds4-dashboard-test-no-layer-partitions.json"
         dashboard.REPO_ROOT_OVERRIDE = ""
 
     def test_snapshot_summarizes_busy_and_hot_nodes(self):
@@ -302,6 +303,41 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
             summary.write_text(json.dumps(payload),encoding="utf-8")
             dashboard.REPO_ROOT_OVERRIDE = str(root)
             snap = dashboard.build_snapshot(str(summary))
+        self.assertEqual(snap["nodes"][0]["output_tok_s"],4)
+        self.assertEqual(snap["nodes"][1]["output_tok_s"],5)
+
+    def test_snapshot_uses_installed_layer_partition_map(self):
+        payload = {
+            "updated_iso": "2026-05-26T00:00:00+00:00",
+            "updated_unix": 1,
+            "nodes": {
+                "spark0": {
+                    "sample_count": 1,
+                    "last_vllm_metrics_up": 1,
+                    "last_vllm_generation_tokens_per_s_by_model": "example-pp8:38",
+                    "last_vllm_requests_running_by_model": "example-pp8:38",
+                    "last_vllm_pipeline_stage_models": "example-pp8",
+                    "last_vllm_pipeline_stage_pp_by_model": "example-pp8:8",
+                    "last_vllm_pipeline_stage_rank_by_model": "example-pp8:0",
+                },
+                "spark1": {
+                    "sample_count": 1,
+                    "last_vllm_pipeline_stage_models": "example-pp8",
+                    "last_vllm_pipeline_stage_pp_by_model": "example-pp8:8",
+                    "last_vllm_pipeline_stage_rank_by_model": "example-pp8:1",
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "summary.json"
+            installed = Path(tmp) / "model_layer_partitions.json"
+            summary.write_text(json.dumps(payload),encoding="utf-8")
+            installed.write_text(json.dumps({"model_layer_partitions":{"example-pp8":[4,5,6,5,5,5,4,4]}}),encoding="utf-8")
+            dashboard.REPO_ROOT_OVERRIDE = str(Path(tmp) / "repo-without-profiles")
+            dashboard.MODEL_LAYER_PARTITIONS_JSON_OVERRIDE = str(installed)
+            dashboard.MODEL_LAYER_PARTITIONS = None
+            snap = dashboard.build_snapshot(str(summary))
+        self.assertEqual(snap["nodes"][0]["token_scope"],"allocated")
         self.assertEqual(snap["nodes"][0]["output_tok_s"],4)
         self.assertEqual(snap["nodes"][1]["output_tok_s"],5)
 
