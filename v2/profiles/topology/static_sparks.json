@@ -156,12 +156,12 @@
         "layer_partition": [
           4,
           5,
-          5,
-          5,
-          6,
-          6,
+          4,
           7,
-          5
+          5,
+          5,
+          7,
+          6
         ],
         "max_batch_size": 16,
         "model_id": "/home/{node}/models/hf/deepseek-ai/DeepSeek-V4-Flash",
@@ -262,10 +262,10 @@
           4,
           4,
           4,
+          3,
           4,
           4,
-          4,
-          3
+          4
         ],
         "max_batch_size": 64,
         "model_id": "google/gemma-4-26B-A4B-it",
@@ -460,8 +460,8 @@
         "layer_partition": [
           7,
           8,
-          8,
-          8,
+          7,
+          9,
           9,
           9,
           8,
