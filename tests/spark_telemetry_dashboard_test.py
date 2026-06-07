@@ -479,6 +479,10 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
     def test_dashboard_http_server_reuses_address_on_restart(self):
         self.assertTrue(dashboard.ReusableThreadingHTTPServer.allow_reuse_address)
 
+    def test_dashboard_startup_reports_layer_partition_count(self):
+        self.assertIn("layer_partitions=%d", Path("scripts/spark_telemetry_dashboard.py").read_text(encoding="utf-8"))
+        self.assertIn("repo_root=%s", Path("scripts/spark_telemetry_dashboard.py").read_text(encoding="utf-8"))
+
     def test_dashboard_cpu_display_uses_twenty_core_range(self):
         self.assertEqual(dashboard.DISPLAY_CPU_PCT_MAX, 2000)
         self.assertEqual(dashboard.display_cpu_pct(40), 800)
