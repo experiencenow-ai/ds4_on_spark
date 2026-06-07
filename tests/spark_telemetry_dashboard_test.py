@@ -228,6 +228,44 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["nodes"][1]["output_tok_s"],8)
         self.assertEqual(snap["nodes"][0]["vllm_running"],0.875)
         self.assertEqual(snap["nodes"][1]["vllm_running"],1.0)
+        self.assertEqual(snap["nodes"][0]["model_allocations"][0]["layers"],7)
+        self.assertEqual(snap["nodes"][0]["model_allocations"][0]["total_layers"],64)
+        self.assertEqual(snap["nodes"][0]["model_allocations"][0]["share_pct"],10.94)
+        self.assertEqual(snap["nodes"][1]["model_allocations"][0]["share_pct"],12.5)
+
+    def test_snapshot_never_falls_back_to_equal_pipeline_shares(self):
+        payload = {
+            "updated_iso": "2026-05-26T00:00:00+00:00",
+            "updated_unix": 1,
+            "nodes": {
+                "spark0": {
+                    "sample_count": 1,
+                    "last_vllm_metrics_up": 1,
+                    "last_vllm_generation_tokens_per_s_by_model": "new-model-pp8:80",
+                    "last_vllm_requests_running_by_model": "new-model-pp8:8",
+                    "last_vllm_pipeline_stage_models": "new-model-pp8",
+                    "last_vllm_pipeline_stage_pp_by_model": "new-model-pp8:8",
+                    "last_vllm_pipeline_stage_rank_by_model": "new-model-pp8:0",
+                },
+                "spark1": {
+                    "sample_count": 1,
+                    "last_vllm_pipeline_stage_models": "new-model-pp8",
+                    "last_vllm_pipeline_stage_pp_by_model": "new-model-pp8:8",
+                    "last_vllm_pipeline_stage_rank_by_model": "new-model-pp8:1",
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "summary.json"
+            path.write_text(json.dumps(payload),encoding="utf-8")
+            dashboard.REPO_ROOT_OVERRIDE = str(Path(tmp) / "empty-repo")
+            snap = dashboard.build_snapshot(str(path))
+        self.assertEqual(snap["models"][0]["output_tok_s"],80)
+        self.assertEqual(snap["output_tok_s"],80)
+        self.assertEqual(snap["nodes"][0]["output_tok_s"],0)
+        self.assertEqual(snap["nodes"][1]["output_tok_s"],0)
+        self.assertNotIn("model_allocations",snap["nodes"][0])
+        self.assertNotEqual(snap["nodes"][0]["output_tok_s"],10)
 
     def test_snapshot_uses_explicit_repo_root_for_installed_dashboard(self):
         payload = {
@@ -404,11 +442,12 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertIn('bar("KV",n.kv_pct,"kv",n.kv_known,n.kv_label)', dashboard.DASHBOARD_HTML)
         self.assertIn('function workKnown(n)', dashboard.DASHBOARD_HTML)
         self.assertIn('n.vllm_metrics_up||Number(n.local_q_depth)>0', dashboard.DASHBOARD_HTML)
-        self.assertIn('workKnown(n)?val(n[key],unit):"n/a"', dashboard.DASHBOARD_HTML)
-        self.assertIn('n.vllm_metrics_up?pct(n.cache_hit_pct):"n/a"', dashboard.DASHBOARD_HTML)
+        self.assertIn('workKnown(n)?rate(n[key])+unit:"n/a"', dashboard.DASHBOARD_HTML)
         self.assertIn('function tokenScope(n)', dashboard.DASHBOARD_HTML)
         self.assertIn('n.token_scope==="allocated"', dashboard.DASHBOARD_HTML)
         self.assertIn('Queue <b>${queueVal(n)}</b>', dashboard.DASHBOARD_HTML)
+        self.assertIn('function modelHint(n)', dashboard.DASHBOARD_HTML)
+        self.assertIn('m.output_tok_s', dashboard.DASHBOARD_HTML)
 
     def test_dashboard_summary_combines_tokens_and_omits_power(self):
         self.assertIn('grid-template-columns:repeat(6,minmax(110px,1fr))', dashboard.DASHBOARD_HTML)
@@ -416,6 +455,10 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertIn('metric("Active Svc",d.ds_services_known?`${fmt(d.ds_service_count)} svc`:"n/a")', dashboard.DASHBOARD_HTML)
         self.assertIn('metric("Live In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`)', dashboard.DASHBOARD_HTML)
         self.assertIn('function renderModels(d)', dashboard.DASHBOARD_HTML)
+        self.assertIn('class="model-table"', dashboard.DASHBOARD_HTML)
+        self.assertIn('<th>Out/s</th>', dashboard.DASHBOARD_HTML)
+        self.assertIn('<th>Total/s</th>', dashboard.DASHBOARD_HTML)
+        self.assertIn('no active model token rate', dashboard.DASHBOARD_HTML)
         self.assertNotIn('metric("Total Power"', dashboard.DASHBOARD_HTML)
         self.assertNotIn('metric("In tok/s"', dashboard.DASHBOARD_HTML)
         self.assertNotIn('metric("Out tok/s"', dashboard.DASHBOARD_HTML)
