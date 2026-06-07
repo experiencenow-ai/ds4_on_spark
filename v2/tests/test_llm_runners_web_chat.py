@@ -351,8 +351,22 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(result["r2"]["transport"]["coalesced_batch_size"], 2)
 
     def test_openai_runner_coalesces_rendered_chat_as_completion_prompts(self) -> None:
-        registry = ProfileRegistry.load(PROFILES)
-        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "completion-prompts",
+                "model_id": "served-model",
+                "backend": "vllm_pipeline",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["tool_chat"],
+                "supports_chat": True,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {
+                    "chat_cohort_transport": "completion_prompts",
+                    "served_model_name": "served-model",
+                },
+            }
+        )
         first_raw = make_request(chat=True).raw
         first_raw["input"]["rendered_prompt"] = "rendered chat one"
         second_raw = make_request(chat=True).raw
@@ -368,6 +382,25 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(runner.calls[0][1]["prompt"], ["rendered chat one", "rendered chat two"])
         self.assertEqual(result["r"]["output"]["text"], "one")
         self.assertTrue(result["r"]["transport"]["chat_as_completion_prompts"])
+
+    def test_openai_runner_can_parallelize_rendered_chat_completion_prompts(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
+        first_raw = make_request(chat=True).raw
+        first_raw["input"]["rendered_prompt"] = "rendered chat one"
+        second_raw = make_request(chat=True).raw
+        second_raw["request_id"] = "r2"
+        second_raw["input"]["rendered_prompt"] = "rendered chat two"
+        runner = CapturingRunner()
+
+        result = runner.run_many_chat([InferenceRequest.from_json(first_raw), InferenceRequest.from_json(second_raw)], profile)
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual([call[0] for call in runner.calls], ["/v1/completions", "/v1/completions"])
+        self.assertEqual({call[1]["prompt"] for call in runner.calls}, {"rendered chat one", "rendered chat two"})
+        self.assertTrue(result["r"]["transport"]["coalesced_chat_parallel_completion"])
+        self.assertTrue(result["r2"]["transport"]["chat_as_completion_prompts"])
 
     def test_openai_runner_single_rendered_chat_uses_completion_prompt(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

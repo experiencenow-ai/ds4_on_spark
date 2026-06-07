@@ -283,7 +283,7 @@ class OpenAICompatibleRunner:
     def run_one(self, request: InferenceRequest, profile: ModelProfile) -> dict:
         started = time.time()
         try:
-            if request.chat and _chat_cohort_transport(profile) == "completion_prompts":
+            if request.chat and _chat_cohort_transport(profile) in {"completion_prompts", "parallel_completion_prompts"}:
                 payload = _openai_completion_prompt_payload(request, profile, prompt=_chat_completion_prompt(request))
                 _merge_extra_body(payload, self.default_extra_body)
                 data = self._post_json(self.completion_endpoint, payload)
@@ -319,6 +319,8 @@ class OpenAICompatibleRunner:
         request_list = list(requests)
         if _chat_cohort_transport(profile) == "completion_prompts":
             return self._run_many_chat_as_completion(request_list, profile)
+        if _chat_cohort_transport(profile) == "parallel_completion_prompts":
+            return self._run_many_chat_completion_parallel(request_list, profile)
         if _chat_cohort_transport(profile) == "parallel_chat_completions":
             return self._run_many_chat_parallel(request_list, profile)
         plan = self._chat_batch_plan(request_list, profile)
@@ -357,6 +359,13 @@ class OpenAICompatibleRunner:
             for request_id, result in out.items():
                 on_result(request_id, result)
             return out
+        if _chat_cohort_transport(profile) == "parallel_completion_prompts":
+            return self._run_many_chat_completion_parallel(
+                request_list,
+                profile,
+                on_result=on_result,
+                cancel_event=cancel_event,
+            )
         if _chat_cohort_transport(profile) == "parallel_chat_completions":
             return self._run_many_chat_parallel(
                 request_list,
@@ -393,6 +402,86 @@ class OpenAICompatibleRunner:
                     break
                 publish(self._run_chat_chunk(chunk, profile, payload, original_batch_size=len(chunk)))
         return out
+
+    def _run_many_chat_completion_parallel(
+        self,
+        requests: list[InferenceRequest],
+        profile: ModelProfile,
+        *,
+        on_result: Callable[[str, dict[str, Any]], None] | None = None,
+        cancel_event: Event | None = None,
+    ) -> dict[str, dict] | None:
+        request_list = list(requests)
+        if not request_list or not all(item.chat for item in request_list):
+            return None
+        minimum = max(2, int(os.environ.get("DS4_PIPELINE_CHAT_COHORT_MIN", "2") or "2"))
+        if len(request_list) < minimum:
+            return None
+        max_cohort = _completion_effective_max_cohort(profile)
+        token_budget = coalesced_completion_token_budget()
+        chunks = _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget)
+        out: dict[str, dict] = {}
+        for chunk in chunks:
+            if cancel_event is not None and cancel_event.is_set():
+                break
+            started = time.time()
+            workers = _parallel_chat_concurrency(profile, len(chunk), max_cohort)
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {
+                    executor.submit(self._run_one_chat_completion_parallel_member, item, profile, started, len(chunk)): item
+                    for item in chunk
+                }
+                for future in as_completed(futures):
+                    item = futures[future]
+                    if cancel_event is not None and cancel_event.is_set():
+                        break
+                    result = future.result()
+                    out[item.request_id] = result
+                    if on_result is not None:
+                        on_result(item.request_id, result)
+        if len(chunks) > 1:
+            _mark_coalesced_planned_split(
+                out,
+                original_batch_size=len(request_list),
+                chunk_count=len(chunks),
+                max_cohort=max_cohort,
+                concurrency=_parallel_chat_concurrency(profile, max(1, max(len(chunk) for chunk in chunks)), max_cohort),
+            )
+        return out
+
+    def _run_one_chat_completion_parallel_member(
+        self,
+        request: InferenceRequest,
+        profile: ModelProfile,
+        started: float,
+        batch_size: int,
+    ) -> dict:
+        try:
+            payload = _openai_completion_prompt_payload(request, profile, prompt=_chat_completion_prompt(request))
+            _merge_extra_body(payload, self.default_extra_body)
+            data = self._post_json(self.completion_endpoint, payload)
+            text = extract_openai_completion_text(data)
+            result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
+            result["usage"].update(_usage_from_response(data))
+            result["transport"] = {
+                "base_url": self.base_url,
+                "endpoint": self.completion_endpoint,
+                "duration_s": round(time.time() - started, 6),
+                "chat_as_completion_prompts": True,
+                "coalesced_chat_parallel_completion": True,
+                "coalesced_batch_size": batch_size,
+                "batch_size": batch_size,
+            }
+            return result
+        except Exception as exc:
+            return self._transport_failure(
+                request,
+                profile,
+                started,
+                str(exc),
+                endpoint=self.completion_endpoint,
+                coalesced_batch_size=batch_size,
+            )
 
     def _run_many_chat_as_completion(
         self,
