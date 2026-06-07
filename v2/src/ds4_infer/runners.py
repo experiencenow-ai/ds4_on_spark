@@ -398,10 +398,13 @@ class OpenAICompatibleRunner:
 
     def _run_completion_stream_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, on_result: Callable[[str, dict[str, Any]], None], on_delta: Callable[[str, str, dict[str, Any]], None] | None = None) -> dict[str, dict]:
         started = time.time()
+        stream_timeout_s = _completion_stream_wall_timeout_s()
+        stream_deadline = (started + stream_timeout_s) if stream_timeout_s > 0 else 0.0
         prefetch_info: dict[str, Any] | None = None
         text_by_index = {idx: "" for idx in range(len(chunk))}
         completed_indexes: set[int] = set()
         out: dict[str, dict] = {}
+        timeout_error = ""
         try:
             prefetch_info = _maybe_prestage_common_kv_prefix(self, payload, chunk)
             for event in self._post_sse_json(self.completion_endpoint, payload):
@@ -424,6 +427,9 @@ class OpenAICompatibleRunner:
                     out[chunk[index].request_id] = result
                     completed_indexes.add(index)
                     on_result(chunk[index].request_id, result)
+                if stream_deadline > 0 and time.time() >= stream_deadline and len(completed_indexes) < len(chunk):
+                    timeout_error = f"coalesced completion stream wall timeout after {stream_timeout_s:.3f}s"
+                    break
         except Exception as exc:
             for index, item in enumerate(chunk):
                 if index in completed_indexes:
@@ -436,8 +442,11 @@ class OpenAICompatibleRunner:
         for index, item in enumerate(chunk):
             if index in completed_indexes:
                 continue
-            text = text_by_index.get(index) or ""
-            result = _coalesced_stream_result(item, profile, text, base_url=self.base_url, endpoint=self.completion_endpoint, started=started, batch_size=len(chunk), prefetch_info=_copy_optional_dict(prefetch_info)) if text else _coalesced_failure(item, profile, self.base_url, self.completion_endpoint, started, len(chunk), "stream ended before this coalesced completion finished")
+            if timeout_error:
+                result = _coalesced_failure(item, profile, self.base_url, self.completion_endpoint, started, len(chunk), timeout_error)
+            else:
+                text = text_by_index.get(index) or ""
+                result = _coalesced_stream_result(item, profile, text, base_url=self.base_url, endpoint=self.completion_endpoint, started=started, batch_size=len(chunk), prefetch_info=_copy_optional_dict(prefetch_info)) if text else _coalesced_failure(item, profile, self.base_url, self.completion_endpoint, started, len(chunk), "stream ended before this coalesced completion finished")
             out[item.request_id] = result
             completed_indexes.add(index)
             on_result(item.request_id, result)
@@ -858,6 +867,10 @@ def _completion_chunk_concurrency(profile: ModelProfile) -> int:
     return max(1, _env_int("DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY", 4))
 
 
+def _completion_stream_wall_timeout_s() -> float:
+    return max(0.0, _env_float("DS4_PIPELINE_COMPLETION_STREAM_WALL_TIMEOUT_S", 0.0))
+
+
 def _profile_uses_pipeline(profile: ModelProfile) -> bool:
     backend = str(profile.backend).lower()
     if "pipeline" in backend:
@@ -1245,6 +1258,16 @@ def _env_int(name: str, default: int) -> int:
         return default
     try:
         return int(value)
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
     except ValueError:
         return default
 
