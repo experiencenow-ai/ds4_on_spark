@@ -24,7 +24,7 @@
       "--max-num-batched-tokens",
       "16384",
       "--gpu-memory-utilization",
-      "0.30",
+      "0.20",
       "--dtype",
       "bfloat16",
       "--enable-prefix-caching",

@@ -254,7 +254,7 @@
           "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.125,
           "external_backend": "lmcache_hma",
-          "gpu_memory_utilization": 0.3,
+          "gpu_memory_utilization": 0.2,
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
@@ -454,7 +454,7 @@
           "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.125,
           "external_backend": "lmcache_hma",
-          "gpu_memory_utilization": 0.3,
+          "gpu_memory_utilization": 0.25,
           "sharding": "pipeline_layers"
         },
         "layer_partition": [

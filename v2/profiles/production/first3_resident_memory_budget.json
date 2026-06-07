@@ -1,7 +1,7 @@
 {
   "format": "ds4-first3-resident-memory-budget-v1",
-  "profile_id": "first3_qwen27_gemma26_dsv4_rebalanced_v4",
-  "source": "live Spark startup and post-request telemetry from first-three bring-up on 2026-06-06, 2026-06-06 DSV4 16-way steady-state memory probe before layer rebalance, 2026-06-07 first3 startup fit check, 2026-06-07 all-three resident telemetry showing spark2/spark4/spark5 host RAM pressure, and partition-fingerprinted external cache roots for the rebalance",
+  "profile_id": "first3_qwen27_gemma26_dsv4_rebalanced_v5",
+  "source": "live Spark startup and post-request telemetry from first-three bring-up on 2026-06-06, 2026-06-06 DSV4 16-way steady-state memory probe before layer rebalance, 2026-06-07 first3 startup fit check, 2026-06-07 all-three resident telemetry showing spark2/spark4/spark5 host RAM pressure, 2026-06-07 Qwen-last startup OOM at the 0.30/0.30/0.18 cap mix, and partition-fingerprinted external cache roots for the rebalance",
   "target": {
     "min_available_ratio": 0.1,
     "min_available_gib": 12.0,
@@ -45,16 +45,16 @@
     ]
   },
   "gpu_memory_utilization": {
-    "qwen27_bf16_pp8": 0.3,
-    "gemma4_26b_a4b_pp8": 0.3,
+    "qwen27_bf16_pp8": 0.25,
+    "gemma4_26b_a4b_pp8": 0.2,
     "dsv4_flash_pp8": 0.18,
-    "active_sum": 0.78
+    "active_sum": 0.63
   },
   "resident_batch_token_budget": {
     "qwen27_bf16_pp8": 32768,
     "gemma4_26b_a4b_pp8": 16384,
     "dsv4_flash_pp8": 8192,
-    "notes": "Qwen 65536 at 0.25 produced negative KV headroom on all ranks during first3 startup. Gemma 24576 at 0.25 failed cache-block allocation in the triple-resident fit check, with spark6 as the worst observed rank. Keep max_batch_size at 64, but admit long prompts by token budget rather than pretending every 64-way cohort can carry large contexts."
+    "notes": "Qwen 65536 at 0.25 produced negative KV headroom on all ranks during first3 startup, so the Qwen token budget stays at 32768 while using the lower 0.25 resident cap. Gemma 24576 at 0.25 failed cache-block allocation in the triple-resident fit check, and the 2026-06-07 Qwen-last relaunch failed CUDA memory snapshot with Gemma at 0.30, so Gemma returns to the measured 0.20 cap used by the stronger 15/17 COMPSEC validation profile. Keep max_batch_size at 64, but admit long prompts by token budget rather than pretending every 64-way cohort can carry large contexts."
   },
   "coordinator": {
     "dispatch_window": 128,
@@ -117,7 +117,7 @@
       "spark7": 18.0
     },
     "floor_gib": 12.4,
-    "notes": "Conservative floor uses live all-three resident telemetry from 2026-06-07 plus observed DSV4/Qwen/Gemma per-rank load deltas. The layer rebalance moves combined stage count from 14/17/17/17/19/19/19/15 to 14/17/15/20/17/18/19/17, shifting work from spark2/spark4/spark5 toward spark3/spark7 while keeping max combined stage count at the prior 20-layer ceiling. Replace this projection with post-rebalance telemetry after deploy.",
+    "notes": "Conservative floor uses live all-three resident telemetry from 2026-06-07 plus observed DSV4/Qwen/Gemma per-rank load deltas. The layer rebalance moves combined stage count from 14/17/17/17/19/19/19/15 to 14/17/15/20/17/18/19/17, shifting work from spark2/spark4/spark5 toward spark3/spark7 while keeping max combined stage count at the prior 20-layer ceiling. The 0.25/0.20/0.18 cap mix is required for Qwen-last startup after DSV4+Gemma residency; replace this projection with post-cap telemetry after deploy.",
     "planned_layer_delta": {
       "spark0": 0,
       "spark1": 0,
