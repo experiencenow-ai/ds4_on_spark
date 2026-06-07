@@ -388,11 +388,13 @@ def _check_relaunch_defaults(profile: dict[str, Any], errors: list[str], checks:
         "DS4_API_DISPATCH_REFILL_BATCH": "dispatch_refill_batch",
         "DS4_PIPELINE_COMPLETION_COHORT_MAX": "completion_cohort_max",
         "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET": "completion_token_budget",
+        "DS4_PIPELINE_COMPLETION_COHORT_BUDGET_INCLUDE_OUTPUT": "completion_budget_include_output",
         "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "completion_pp_safe_cohort_max",
         "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "completion_chunk_concurrency",
         "DS4_API_DISPATCH_KV_CAPACITY_BYTES": "dispatch_kv_capacity_bytes",
     }.items():
-        _require_equal(defaults.get(key), str(coordinator[profile_key]), f"coordinator {profile['coordinator_profile']} {key}", errors, checks)
+        expected = _bool_env_value(coordinator.get(profile_key)) if key == "DS4_PIPELINE_COMPLETION_COHORT_BUDGET_INCLUDE_OUTPUT" else str(coordinator[profile_key])
+        _require_equal(defaults.get(key), expected, f"coordinator {profile['coordinator_profile']} {key}", errors, checks)
     batch_limits = json.loads(defaults.get("DS4_API_BATCH_LIMITS_JSON", "{}"))
     _require_equal(batch_limits.get(str(profile["service_id"])), profile["max_num_seqs"], f"coordinator {profile['coordinator_profile']} DSV4 batch limit", errors, checks)
     _require_equal(set(batch_limits), set(services), f"coordinator {profile['coordinator_profile']} topology batch-limit services", errors, checks)
@@ -414,6 +416,13 @@ def _scheduler_value(service: dict[str, Any], scheduler: dict[str, Any], key: st
     if key in {"queue_concurrency", "queue_limit", "vllm_max_num_seqs"}:
         return service.get("max_batch_size")
     return None
+
+
+def _bool_env_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    text = str(value).strip().lower()
+    return "1" if text in {"1", "true", "yes", "on"} else "0"
 
 
 def _profile_by_id(profile_id: str) -> dict[str, Any]:
