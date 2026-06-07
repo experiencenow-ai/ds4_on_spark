@@ -395,6 +395,7 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
 
     def test_dashboard_default_repo_root_matches_mac_launchd_deploy(self):
         self.assertEqual(dashboard.DEFAULT_REPO_ROOT,"/Users/mac/Documents/New project 4")
+        self.assertEqual(str(dashboard.repo_root()),"/Users/mac/Documents/New project 4")
 
     def test_dashboard_card_omits_power_and_marks_missing_vllm_na(self):
         self.assertNotIn('Pwr <b>', dashboard.DASHBOARD_HTML)

@@ -262,8 +262,9 @@ def node_text_list(raw: Any) -> list[str]:
 
 
 def repo_root() -> Path:
-    if REPO_ROOT_OVERRIDE:
-        return(Path(REPO_ROOT_OVERRIDE).expanduser().resolve())
+    configured = REPO_ROOT_OVERRIDE or DEFAULT_REPO_ROOT
+    if configured:
+        return(Path(configured).expanduser().resolve())
     return(Path(__file__).resolve().parents[1])
 
 
