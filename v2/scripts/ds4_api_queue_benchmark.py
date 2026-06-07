@@ -703,9 +703,9 @@ def _result_timings(results: list[Any], *, run_s: float) -> dict[str, Any]:
 
 def _transport_counts(results: list[Any]) -> dict[str, int]:
     counts = {
+        "coalesced_chat_batch": 0,
         "coalesced_completion_batch": 0,
         "coalesced_completion_streaming": 0,
-        "coalesced_rendered_chat_completion_batch": 0,
         "coalesced_completion_split_retry": 0,
         "transport_failed": 0,
     }

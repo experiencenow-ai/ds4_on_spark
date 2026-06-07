@@ -192,7 +192,7 @@ class PipelineApiTests(unittest.TestCase):
             "<｜begin▁of▁sentence｜>SYS<｜User｜>USER<｜Assistant｜></think>",
         )
 
-    def test_pipeline_rendered_chat_completion_keeps_template_fields_out_of_completion_body(self) -> None:
+    def test_pipeline_chat_payload_keeps_template_fields_on_chat_body(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
         request = InferenceRequest.from_json(
@@ -210,10 +210,11 @@ class PipelineApiTests(unittest.TestCase):
                 "output_contract": {"format": "text"},
             }
         )
-        payload = _openai_payload(request, profile, render_chat_as_completion=True)
-        self.assertEqual(payload["prompt"], "<chat>solve</chat>")
-        self.assertNotIn("chat_template_kwargs", payload)
-        self.assertEqual(payload["extra_body"]["chat_template_kwargs"], {"enable_thinking": False})
+        payload = _openai_payload(request, profile)
+        self.assertNotIn("prompt", payload)
+        self.assertEqual(payload["messages"], [{"role": "user", "content": "solve"}])
+        self.assertEqual(payload["chat_template_kwargs"], {"enable_thinking": False})
+        self.assertNotIn("extra_body", payload)
 
     def test_pipeline_served_model_override_can_key_by_service_id(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

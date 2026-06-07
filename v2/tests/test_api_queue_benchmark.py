@@ -280,14 +280,14 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
     def test_transport_counts_expose_fast_path_evidence(self) -> None:
         results = [
             {"result": {"status": "completed", "transport": {"coalesced_completion_batch": True}}},
-            {"result": {"status": "completed", "transport": {"coalesced_completion_batch": True, "coalesced_rendered_chat_completion_batch": True, "coalesced_completion_split_retry": True}}},
+            {"result": {"status": "completed", "transport": {"coalesced_chat_batch": True, "coalesced_completion_split_retry": True}}},
             {"result": {"status": "transport_failed", "transport": {"error": "boom"}}},
         ]
 
         counts = bench._transport_counts(results)
 
-        self.assertEqual(counts["coalesced_completion_batch"], 2)
-        self.assertEqual(counts["coalesced_rendered_chat_completion_batch"], 1)
+        self.assertEqual(counts["coalesced_completion_batch"], 1)
+        self.assertEqual(counts["coalesced_chat_batch"], 1)
         self.assertEqual(counts["coalesced_completion_split_retry"], 1)
         self.assertEqual(counts["transport_failed"], 1)
 

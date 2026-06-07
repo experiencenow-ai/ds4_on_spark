@@ -817,14 +817,12 @@ def _coalesced_completion_payload(requests: list[InferenceRequest], profile: Mod
     prompts: list[str] = []
     shared: dict[str, Any] | None = None
     for item in requests:
-        if item.chat and not _env_bool("DS4_PIPELINE_COHORT_RENDERED_CHAT_COMPLETIONS", False):
+        if item.chat:
             return None
-        payload = _openai_payload(item, profile, render_chat_as_completion=item.chat)
-        if item.chat and not isinstance(payload.get("prompt"), str):
-            return None
+        payload = _openai_payload(item, profile)
         _merge_extra_body(payload, default_extra_body)
         prompt = payload.get("prompt")
-        if not isinstance(prompt, str) or (item.chat and not prompt):
+        if not isinstance(prompt, str):
             return None
         comparable = dict(payload)
         comparable.pop("prompt", None)
@@ -1067,8 +1065,6 @@ def _coalesced_completion_results(
         result = make_result(request=item, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=extract_openai_completion_text({"choices": [choice]}))
         result["usage"].update(_coalesced_usage(data, choice, item, len(requests)))
         result["transport"] = {"base_url": base_url, "endpoint": endpoint, "duration_s": round(time.time() - started, 6), "coalesced_completion_batch": True, "coalesced_batch_size": len(requests), "batch_size": len(requests)}
-        if item.chat:
-            result["transport"]["coalesced_rendered_chat_completion_batch"] = True
         if prefetch_info is not None:
             result["transport"]["kv_prestage"] = dict(prefetch_info)
         out[item.request_id] = result
@@ -1146,8 +1142,6 @@ def _coalesced_stream_result(
         "coalesced_batch_size": batch_size,
         "batch_size": batch_size,
     }
-    if request.chat:
-        result["transport"]["coalesced_rendered_chat_completion_batch"] = True
     if prefetch_info is not None:
         result["transport"]["kv_prestage"] = dict(prefetch_info)
     return result
@@ -1256,10 +1250,10 @@ def make_runner(kind: str, *, timeout_s: int, pipeline_base_urls: dict[str, str]
     raise ValueError(f"unknown runner: {kind}")
 
 
-def _openai_payload(request: InferenceRequest, profile: ModelProfile, *, render_chat_as_completion: bool = False) -> dict[str, Any]:
+def _openai_payload(request: InferenceRequest, profile: ModelProfile) -> dict[str, Any]:
     model = _served_model_id(profile)
     max_tokens = max(1, int(request.max_output_tokens) + int(request.thinking_budget_tokens))
-    if request.chat and not render_chat_as_completion:
+    if request.chat:
         payload: dict[str, Any] = {
             "model": model,
             "messages": request_messages(request),
@@ -1268,11 +1262,6 @@ def _openai_payload(request: InferenceRequest, profile: ModelProfile, *, render_
         }
     else:
         prompt = request_prompt(request)
-        if request.chat:
-            metadata = request.input.get("metadata")
-            prompt = str(request.input.get("rendered_prompt") or request.input.get("prompt") or "")
-            if not prompt and isinstance(metadata, dict):
-                prompt = str(metadata.get("rendered_prompt") or "")
         payload = {
             "model": model,
             "prompt": prompt,
