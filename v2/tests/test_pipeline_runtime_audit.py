@@ -60,7 +60,7 @@ class PipelineRuntimeAuditTests(unittest.TestCase):
         self.assertEqual(budget["layer_partitions"]["dsv4_flash_pp8"], profile["layer_partition"])
         self.assertEqual(budget["layer_partitions"]["qwen27_bf16_pp8"], [7, 8, 7, 9, 9, 9, 8, 7])
         self.assertEqual(budget["layer_partitions"]["gemma4_26b_a4b_pp8"], [3, 4, 4, 4, 3, 4, 4, 4])
-        self.assertEqual(budget["gpu_memory_utilization"]["active_sum"], 0.78)
+        self.assertEqual(budget["gpu_memory_utilization"]["active_sum"], 0.63)
         self.assertEqual(budget["coordinator"]["dispatch_window"], 128)
         self.assertEqual(budget["coordinator"]["dispatch_refill_batch"], 128)
         self.assertGreaterEqual(budget["projection"]["floor_gib"], budget["target"]["min_available_gib"])

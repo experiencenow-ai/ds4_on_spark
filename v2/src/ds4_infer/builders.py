@@ -247,10 +247,6 @@ def chat_template_thinking_enabled(
         return True
     if default_thinking_enabled is not None:
         return bool(default_thinking_enabled)
-    key = chat_template_thinking_key or default_chat_template_thinking_key(model_id)
-    lowered = model_id.lower()
-    if key == "thinking" and "deepseek" in lowered:
-        return True
     return False
 
 

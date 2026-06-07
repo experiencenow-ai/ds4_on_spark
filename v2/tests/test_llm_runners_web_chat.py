@@ -530,8 +530,8 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertIn("ControlMaster=auto", calls[0]["command"])
         payload = json.loads(calls[0]["input"])
         self.assertEqual(payload["batch_payload"]["model"], "deepseek-ai/DeepSeek-V4-Flash")
-        self.assertEqual(payload["batch_payload"]["items"][0]["thinking"], {"type": "enabled"})
-        self.assertEqual(payload["batch_payload"]["items"][0]["chat_template_kwargs"], {"thinking": True})
+        self.assertEqual(payload["batch_payload"]["items"][0]["thinking"], {"type": "disabled"})
+        self.assertEqual(payload["batch_payload"]["items"][0]["chat_template_kwargs"], {"thinking": False})
         self.assertNotIn("openai_endpoint", payload)
 
     def test_spark_http_runner_batches_multiple_requests_in_one_gateway_call(self) -> None:
