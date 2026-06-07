@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 PROFILES = ROOT / "profiles" / "models"
+DEFAULT_PREFETCH_TOKEN_FILE = Path("/private/tmp/ds4_jit_kv_token")
 SECRET_ASSIGN_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY)[A-Za-z0-9_]*=)(?:'[^']*'|\"[^\"]*\"|[^ \n]+)")
 
 
@@ -47,6 +48,7 @@ def _args() -> argparse.Namespace:
     parser.add_argument("--probe-timeout-s", type=float, default=15.0)
     parser.add_argument("--stagger-s", type=float, default=2.0)
     parser.add_argument("--remote-env", action="append", default=[], metavar="KEY=VALUE", help="export KEY=VALUE before launch scripts on each Spark node")
+    parser.add_argument("--prefetch-token-file", default=str(DEFAULT_PREFETCH_TOKEN_FILE), help="Local token file to inject into token-gated vLLM DS4 KV prefetch services.")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--allow-all-services", action="store_true")
     parser.add_argument("--json", action="store_true")
@@ -233,17 +235,47 @@ def _remote_write(entry: dict[str, object], args: argparse.Namespace) -> str:
 def _remote_launch(entry: dict[str, object], rank: int, node: str, args: argparse.Namespace) -> str:
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     log_dir = _remote_path_assign("log_dir", args.log_dir, str(entry["service_id"]))
-    env_exports = _remote_env_exports(args)
+    env_exports = _remote_env_exports(entry, args)
     if env_exports:
         env_exports = "\n" + env_exports
     return _remote_write(entry, args) + f'\n{log_dir}{env_exports}\ninstall="$launch_dir/00_install_kv_cache_deps.sh"\nscript="$launch_dir/start_vllm_rank{rank}_{node}.sh"\nlog="$log_dir/rank{rank}_{stamp}.log"\nmkdir -p "$log_dir"\ntest -x "$install"\ntest -x "$script"\nDS4_NODE_ID={shlex.quote(node)} bash "$install"\nnohup bash "$script" > "$log" 2>&1 < /dev/null &\nprintf "started {entry["service_id"]} rank={rank} node={node} pid=%s log=%s\\n" "$!" "$log"'
 
 
-def _remote_env_exports(args: argparse.Namespace) -> str:
+def _remote_env_exports(entry: dict[str, object], args: argparse.Namespace) -> str:
     lines = []
-    for key, value in _parse_remote_env(getattr(args, "remote_env", []) or []):
+    pairs = _parse_remote_env(getattr(args, "remote_env", []) or [])
+    keys = {key for key, _value in pairs}
+    if _entry_needs_prefetch_token(entry) and "VLLM_DS4_KV_PREFETCH_TOKEN" not in keys:
+        pairs.append(("VLLM_DS4_KV_PREFETCH_TOKEN", _required_prefetch_token(args, service_id=str(entry["service_id"]))))
+    for key, value in pairs:
         lines.append(f"export {key}={shlex.quote(value)}")
     return "\n".join(lines)
+
+
+def _entry_needs_prefetch_token(entry: dict[str, object]) -> bool:
+    deployment = entry.get("deployment") if isinstance(entry.get("deployment"), dict) else {}
+    extra_env = deployment.get("extra_env") if isinstance(deployment.get("extra_env"), dict) else {}
+    return _truthy(extra_env.get("VLLM_DS4_KV_PREFETCH_API")) and _truthy(extra_env.get("VLLM_DS4_KV_PREFETCH_REQUIRE_TOKEN"))
+
+
+def _truthy(value: object) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _required_prefetch_token(args: argparse.Namespace, *, service_id: str) -> str:
+    token = _load_prefetch_token(getattr(args, "prefetch_token_file", str(DEFAULT_PREFETCH_TOKEN_FILE)))
+    if token:
+        return token
+    raise ValueError(f"{service_id}: missing vLLM DS4 KV prefetch token; set --prefetch-token-file or --remote-env VLLM_DS4_KV_PREFETCH_TOKEN=...")
+
+
+def _load_prefetch_token(raw_path: str) -> str:
+    if not raw_path:
+        return ""
+    path = Path(raw_path).expanduser()
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8").strip()
 
 
 def _parse_remote_env(items: list[str]) -> list[tuple[str, str]]:
