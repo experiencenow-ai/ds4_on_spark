@@ -197,6 +197,25 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertIn("children.setdefault(ppid,[]).append(pid)", script)
         self.assertIn("stack.extend(children.get(pid,[]))", script)
 
+    def test_remote_status_and_kill_only_match_real_vllm_serve_commands(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        entry = {
+            "service_id": "dsv4_flash_pp8",
+            "profile_id": "dsv4_vllm_mtp_pp8_smartest_v1",
+            "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+            "deployment": {"model_id": "/home/{node}/models/hf/deepseek-ai/DeepSeek-V4-Flash", "served_model_name": "deepseek-v4-flash-pp8", "master_port": 29544},
+        }
+
+        status_script = lifecycle._remote_status(entry)
+        kill_script = lifecycle._remote_kill(entry)
+
+        self.assertIn("is_vllm_serve", status_script)
+        self.assertIn("is_vllm_serve", kill_script)
+        self.assertIn("-m vllm.entrypoints.cli.main serve", status_script)
+        self.assertIn(" vllm serve ", kill_script)
+        self.assertNotIn("('vllm' in cmd or '--pipeline-parallel-size' in cmd)", kill_script)
+        self.assertNotIn("('vllm' in p[1] or '--pipeline-parallel-size' in p[1])", status_script)
+
     def test_spark_updater_disables_legacy_runtime_config_path(self) -> None:
         script = (ROOT.parent / "scripts" / "ds4_update_spark_nodes.sh").read_text(encoding="utf-8")
 
