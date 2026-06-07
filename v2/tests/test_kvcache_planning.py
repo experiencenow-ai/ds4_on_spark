@@ -98,7 +98,7 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertTrue(start.exists())
             install_text = install.read_text()
             self.assertIn("no connector packages requested", install_text)
-            self.assertIn("runtime_mods/dsv4_persistent_simple_offload/patch_vllm.py", install_text)
+            self.assertNotIn("runtime_mods/dsv4_persistent_simple_offload/patch_vllm.py", install_text)
             self.assertIn("SimpleCPUOffloadConnector", start.read_text())
             self.assertIn("--no-disable-hybrid-kv-cache-manager", start.read_text())
             self.assertNotIn("LMCacheConnectorV1Dynamic", start.read_text())
@@ -296,6 +296,8 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["vllm_nodes"][0]["env"]["VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT"], "/home/spark0/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload")
         self.assertEqual(plan["vllm_nodes"][-1]["env"]["VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT"], "/home/spark7/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload")
         self.assertEqual(plan["vllm_nodes"][0]["env"]["VLLM_SIMPLE_KV_OFFLOAD_PERSIST_RANK"], "spark0-r0")
+        self.assertEqual(plan["vllm_nodes"][0]["env"]["VLLM_SIMPLE_KV_OFFLOAD_PERSIST_RESTORE_ON_STARTUP"], "0")
+        self.assertEqual(plan["vllm_nodes"][0]["env"]["VLLM_DS4_SIMPLE_KV_STARTUP_RESTORE"], "0")
         self.assertIn("SimpleCPUOffloadConnector", plan["vllm_nodes"][0]["command"])
         self.assertIn("--kv-cache-dtype", plan["vllm_nodes"][0]["argv"])
         self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--kv-cache-dtype") + 1], DSV4_PRODUCTION["kv_cache_dtype"])
@@ -370,16 +372,6 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertIn("VLLM_HOST_IP=10.10.100.10", rank0)
             self.assertIn("VLLM_HOST_IP=10.10.100.17", rank7)
             self.assertIn("--headless", rank7)
-
-    def test_dsv4_pipeline_install_applies_simple_offload_runtime_mod(self) -> None:
-        deployment = KvCacheDeployment.load(DSV4_PP_DEPLOYMENT)
-        with tempfile.TemporaryDirectory() as tmp:
-            manifest = write_launch_scripts(deployment, tmp)
-            install = Path(manifest["scripts"]["install"]).read_text()
-
-            self.assertIn("runtime_mods/dsv4_persistent_simple_offload/patch_vllm.py", install)
-            self.assertIn("/home/spark0/ds4-vllm-local/bin/python runtime_mods/dsv4_persistent_simple_offload/patch_vllm.py", install)
-            self.assertIn("VLLM_SIMPLE_KV_OFFLOAD_PERSIST_RESTORE_ON_STARTUP=0", install)
 
     def test_static_pipeline_cli_write_scripts_requires_lifecycle_runner(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

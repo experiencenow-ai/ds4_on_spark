@@ -76,6 +76,7 @@
     "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_ROOT": "/home/{node}/ds4_nvme/ds4_hma_store/dsv4_flash_pp8/simple_cpu_offload",
     "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_STRICT": "1",
     "VLLM_SIMPLE_KV_OFFLOAD_PERSIST_RESTORE_ON_STARTUP": "0",
+    "VLLM_DS4_SIMPLE_KV_STARTUP_RESTORE": "0",
     "VLLM_USE_SIMPLE_KV_OFFLOAD": "1",
     "CUDA_HOME": "/usr/local/cuda",
     "TORCH_CUDA_ARCH_LIST": "12.1a",
