@@ -578,6 +578,10 @@ class OpenAICompatibleRunner:
         try:
             payload = _openai_payload(request, profile)
             _merge_extra_body(payload, self.default_extra_body)
+            if profile.routing.get("parallel_chat_payload_salt") == "extra_body_request_id":
+                extra_body = dict(payload.get("extra_body") or {})
+                extra_body.setdefault("request_id", request.request_id)
+                payload["extra_body"] = extra_body
             data = self._post_json(self.chat_endpoint, payload)
             text = extract_openai_chat_text(data)
             result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)

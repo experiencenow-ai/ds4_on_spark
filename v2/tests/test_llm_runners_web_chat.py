@@ -350,6 +350,35 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertTrue(result["r"]["transport"]["coalesced_chat_parallel"])
         self.assertEqual(result["r2"]["transport"]["coalesced_batch_size"], 2)
 
+    def test_parallel_chat_can_salt_members_with_request_id_extra_body(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "parallel-chat-salted",
+                "model_id": "served-model",
+                "backend": "vllm_pipeline",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["tool_chat"],
+                "supports_chat": True,
+                "supports_completion": True,
+                "supports_thinking": False,
+                "production_eligible": True,
+                "routing": {
+                    "chat_cohort_transport": "parallel_chat_completions",
+                    "parallel_chat_payload_salt": "extra_body_request_id",
+                    "parallel_chat_concurrency": 2,
+                    "served_model_name": "served-model",
+                },
+            }
+        )
+        second_raw = make_request(chat=True).raw
+        second_raw["request_id"] = "r2"
+        runner = CapturingRunner()
+
+        result = runner.run_many_chat([make_request(chat=True), InferenceRequest.from_json(second_raw)], profile)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(sorted(call[1]["extra_body"]["request_id"] for call in runner.calls), ["r", "r2"])
+
     def test_openai_runner_coalesces_rendered_chat_as_completion_prompts(self) -> None:
         profile = ModelProfile.from_json(
             {
