@@ -32,7 +32,6 @@
     "256",
     "--kv-cache-dtype",
     "fp8",
-    "--enable-prefix-caching",
     "--kv-offloading-size",
     "1.0",
     "--kv-offloading-backend",
