@@ -9,6 +9,7 @@ import time
 import unittest
 
 from ds4_infer.api import CoordinatorApi
+from ds4_infer.dispatcher_resident import resident_service_plans
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.runners import OpenAICompatibleRunner
 from ds4_infer.schemas import InferenceRequest, make_result
@@ -38,6 +39,25 @@ def completion_request(request_id: str, prompt: str = "prompt", *, max_output_to
             "temperature": 0.0,
             "input": input_payload,
             "output_contract": {"format": "text"},
+        }
+    )
+
+
+def dsv4_chat_request(request_id: str) -> InferenceRequest:
+    return InferenceRequest.from_json(
+        {
+            "format": "ds4-inference-request-v1",
+            "request_id": request_id,
+            "capability": "smart",
+            "chat": True,
+            "immediate": False,
+            "job_class": "analysis",
+            "max_output_tokens": 64,
+            "thinking_budget_tokens": 0,
+            "temperature": 0.0,
+            "input": {"messages": [{"role": "user", "content": "find the bug"}]},
+            "output_contract": {"format": "text"},
+            "model_pin": {"profile_id": "dsv4_vllm_mtp_pp8_smartest_v1"},
         }
     )
 
@@ -310,6 +330,54 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
             self.assertEqual((completed, failed, retried), (8, 0, 0))
             self.assertEqual(runner.batch_sizes, [8])
+
+    def test_resident_dispatcher_coalesces_independent_dsv4_app_requests(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            registry = ProfileRegistry.load(PROFILES)
+            topology = SparkTopology.load(TOPOLOGY)
+            plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=api.dispatcher_batch_linger_s)
+            self.assertGreater(plans["dsv4_flash_pp8"].batch_linger_s, 0.0)
+            for index in range(3):
+                api.queue.submit_requests(
+                    requests=[dsv4_chat_request(f"dsv4-agent-{index}")],
+                    registry=registry,
+                    topology=topology,
+                    batch_id=f"agent-{index}",
+                    priority=10,
+                )
+            runner = RecordingBatchRunner()
+            worker = BatchWorker(queue=api.queue, registry=registry, runner=runner, worker_id="test-dispatcher", lease_ttl_s=30, heartbeat_interval_s=1.0)
+            pending = {}
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                submitted = api._dispatcher_refill_resident_multimodel(
+                    worker=worker,
+                    executor=executor,
+                    pending=pending,
+                    entry_node_id="spark0",
+                    node_profile_ids=tuple(topology.pipeline_profiles),
+                    batch_limits_by_service={"dsv4_flash_pp8": 64},
+                    kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                    service_plans=plans,
+                )
+                self.assertEqual(submitted, 0)
+                self.assertEqual(len(pending), 0)
+                time.sleep(plans["dsv4_flash_pp8"].batch_linger_s + 0.02)
+                submitted = api._dispatcher_refill_resident_multimodel(
+                    worker=worker,
+                    executor=executor,
+                    pending=pending,
+                    entry_node_id="spark0",
+                    node_profile_ids=tuple(topology.pipeline_profiles),
+                    batch_limits_by_service={"dsv4_flash_pp8": 64},
+                    kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                    service_plans=plans,
+                )
+                self.assertEqual(submitted, 3)
+                self.assertEqual(len(pending), 1)
+                completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
+            self.assertEqual((completed, failed, retried), (3, 0, 0))
+            self.assertEqual(runner.batch_sizes, [3])
 
     def test_dispatcher_status_reports_kv_admission_bound(self) -> None:
         old = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")
