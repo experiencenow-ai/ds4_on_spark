@@ -25,6 +25,7 @@
       "fp8",
       "--block-size",
       "256",
+      "--no-enable-prefix-caching",
       "--max-model-len",
       "262144",
       "--max-num-seqs",

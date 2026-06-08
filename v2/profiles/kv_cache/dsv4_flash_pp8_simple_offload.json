@@ -30,6 +30,7 @@
     "0.18",
     "--block-size",
     "256",
+    "--no-enable-prefix-caching",
     "--kv-cache-dtype",
     "fp8",
     "--kv-offloading-size",
