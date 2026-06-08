@@ -431,6 +431,57 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(result["output"]["text"], "chat ok")
         self.assertNotIn("chat_as_completion_prompts", result["transport"])
 
+    def test_openai_runner_attaches_auto_kv_cache_ref_for_resident_pipeline(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
+        runner = CapturingRunner()
+
+        with patch.dict(os.environ, {"DS4_PIPELINE_AUTO_KV_CACHE": "1", "DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS": "dsv4_flash_pp8"}):
+            runner.run_one(make_request(chat=True), profile)
+
+        payload = runner.calls[0][1]
+        plan = payload["extra_body"]["ds4_kv_cache"]
+        self.assertEqual(plan["backend"], "dsv4_hma")
+        self.assertEqual(plan["load"]["mode"], "prefer")
+        self.assertEqual(plan["store"]["mode"], "write_back")
+        self.assertEqual(plan["miss_policy"], "compute_and_store")
+        self.assertEqual(payload["kv_transfer_params"]["cache_ref"], plan["cache_id"])
+        self.assertEqual(payload["kv_transfer_params"]["simple_kv_cache_ref"], plan["cache_id"])
+
+    def test_openai_runner_does_not_override_explicit_kv_cache_plan(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "explicit-kv",
+                "model_id": "served-model",
+                "backend": "vllm_pipeline",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["tool_chat"],
+                "supports_chat": True,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {"pipeline": {"service_id": "dsv4_flash_pp8", "served_model_name": "served-model"}},
+            }
+        )
+        raw = make_request(chat=True).raw
+        raw["input"]["kv_cache_plan"] = {
+            "format": "ds4-kv-cache-plan-v1",
+            "backend": "dsv4_hma",
+            "cache_id": "explicit",
+            "load": {"mode": "prefer", "transport": "local_store", "cache_key": "explicit"},
+            "store": {"mode": "skip", "transport": "none"},
+            "miss_policy": "compute",
+            "route_affinity": "preferred",
+            "model_fingerprint": {},
+            "operation": "load",
+            "batch_key_hash": "sha256:explicit",
+        }
+        runner = CapturingRunner()
+
+        with patch.dict(os.environ, {"DS4_PIPELINE_AUTO_KV_CACHE": "1", "DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS": "dsv4_flash_pp8"}):
+            runner.run_one(InferenceRequest.from_json(raw), profile)
+
+        self.assertEqual(runner.calls[0][1]["extra_body"]["ds4_kv_cache"]["cache_id"], "explicit")
+
     def test_pipeline_runner_streams_coalesced_completion_results_incrementally(self) -> None:
         profile = ModelProfile.from_json(
             {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -1619,8 +1620,12 @@ def _apply_openai_payload_extras(payload: dict[str, Any], request: InferenceRequ
         payload.update(sampling)
     merge_request_extra_body(payload, request, profile)
     extra_body = kv_cache_extra_body(request.input)
+    if not extra_body:
+        auto_plan = _auto_kv_cache_plan(payload, request, profile)
+        if auto_plan is not None:
+            extra_body = {"ds4_kv_cache": auto_plan}
     if extra_body:
-        payload.update(kv_cache_vllm_request_fields(request.input))
+        payload.update(kv_cache_vllm_request_fields({"kv_cache_plan": extra_body["ds4_kv_cache"]}))
         payload["extra_body"] = {**dict(payload.get("extra_body") or {}), **extra_body}
 
 
@@ -1638,6 +1643,97 @@ def _chat_completion_prompt(request: InferenceRequest) -> str:
 def openai_sampling_controls(input_payload: dict[str, Any]) -> dict[str, Any]:
     value = input_payload.get("openai_sampling")
     return dict(value) if isinstance(value, dict) else {}
+
+
+def _auto_kv_cache_plan(payload: dict[str, Any], request: InferenceRequest, profile: ModelProfile) -> dict[str, Any] | None:
+    if not _env_bool("DS4_PIPELINE_AUTO_KV_CACHE", False):
+        return None
+    if request.input.get("disable_auto_kv_cache") is True:
+        return None
+    if request.input.get("kv_cache") is not None or request.input.get("kv_cache_plan") is not None:
+        return None
+    if "kv_transfer_params" in payload:
+        return None
+    service_id = _profile_service_id(profile)
+    allowed_services = _env_csv_set("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS")
+    if allowed_services and (service_id or profile.profile_id) not in allowed_services:
+        return None
+    material = _auto_kv_cache_material(payload, request, profile, service_id=service_id)
+    digest = hashlib.sha256(_json_dumps_canonical(material).encode("utf-8")).hexdigest()
+    cache_scope = service_id or profile.profile_id
+    cache_id = f"ds4-auto:{cache_scope}:{digest[:32]}"
+    plan = {
+        "format": "ds4-kv-cache-plan-v1",
+        "backend": _auto_kv_backend(service_id),
+        "cache_id": cache_id,
+        "prefix_hash": "sha256:" + digest,
+        "load": {"mode": "prefer", "transport": "local_store", "cache_key": cache_id},
+        "store": {"mode": "write_back", "transport": "local_store", "cache_key": cache_id, "on_error": "warn"},
+        "miss_policy": "compute_and_store",
+        "route_affinity": "preferred",
+        "model_fingerprint": {
+            "model_id": str(payload.get("model") or profile.model_id),
+            "profile_id": profile.profile_id,
+            "runtime_contract_id": profile.runtime_contract_id,
+            "service_id": service_id,
+        },
+        "operation": "load_store",
+    }
+    plan["batch_key_hash"] = "sha256:" + hashlib.sha256(_json_dumps_canonical(_auto_kv_batch_key_material(plan)).encode("utf-8")).hexdigest()
+    return plan
+
+
+def _auto_kv_cache_material(payload: dict[str, Any], request: InferenceRequest, profile: ModelProfile, *, service_id: str | None) -> dict[str, Any]:
+    return {
+        "format": "ds4-auto-kv-cache-key-v1",
+        "chat": bool(request.chat),
+        "messages": payload.get("messages"),
+        "prompt": payload.get("prompt"),
+        "model": payload.get("model"),
+        "profile_id": profile.profile_id,
+        "runtime_contract_id": profile.runtime_contract_id,
+        "service_id": service_id,
+        "thinking_budget_tokens": request.thinking_budget_tokens,
+        "extra_body": dict(payload.get("extra_body") or {}),
+    }
+
+
+def _auto_kv_batch_key_material(plan: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "backend": plan["backend"],
+        "cache_id": plan["cache_id"],
+        "prefix_hash": plan["prefix_hash"],
+        "load": plan["load"],
+        "store": plan["store"],
+        "miss_policy": plan["miss_policy"],
+        "route_affinity": plan["route_affinity"],
+        "model_fingerprint": plan["model_fingerprint"],
+    }
+
+
+def _profile_service_id(profile: ModelProfile) -> str | None:
+    pipeline = profile.routing.get("pipeline")
+    if isinstance(pipeline, dict) and pipeline.get("service_id"):
+        return str(pipeline["service_id"])
+    value = profile.routing.get("pipeline_service_id") or profile.routing.get("service_id")
+    return str(value) if value else None
+
+
+def _auto_kv_backend(service_id: str | None) -> str:
+    if service_id == "dsv4_flash_pp8":
+        return "dsv4_hma"
+    if service_id in {"qwen27_bf16_pp8", "gemma4_26b_a4b_pp8"}:
+        return "lmcache"
+    return "auto"
+
+
+def _json_dumps_canonical(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _env_csv_set(name: str) -> set[str]:
+    raw = os.environ.get(name, "")
+    return {item.strip() for item in raw.split(",") if item.strip()}
 
 
 def _served_model_id(profile: ModelProfile) -> str:
