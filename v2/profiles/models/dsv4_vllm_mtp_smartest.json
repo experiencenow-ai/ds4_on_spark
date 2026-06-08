@@ -17,6 +17,7 @@
     "requires_profile_pin": true,
     "rank": 50,
     "chat_cohort_transport": "parallel_chat_completions",
+    "parallel_chat_payload_salt": "extra_body_request_id",
     "chat_template_thinking_key": "thinking",
     "chat_template_renderer": "deepseek_v4",
     "tokenizer_path": "/home/spark0/models/hf/deepseek-ai/DeepSeek-V4-Flash",

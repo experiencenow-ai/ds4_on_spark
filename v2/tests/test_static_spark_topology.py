@@ -206,6 +206,13 @@ class StaticSparkTopologyTests(unittest.TestCase):
         ]
         self.assertEqual(missing, [])
 
+    def test_dsv4_parallel_chat_profiles_salt_identical_payloads(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        for profile_id in ("dsv4_vllm_mtp_pp8_smartest_v1", "dsv4_vllm_mtp_smartest_v1"):
+            profile = registry.get(profile_id)
+            self.assertEqual(profile.routing.get("chat_cohort_transport"), "parallel_chat_completions")
+            self.assertEqual(profile.routing.get("parallel_chat_payload_salt"), "extra_body_request_id")
+
     def test_pipeline_node_override_supports_six_sparks(self) -> None:
         with patch.dict("os.environ", {"DS4_PIPELINE_NODES": "spark0,spark1,spark2,spark3,spark4,spark5"}):
             topology = SparkTopology.load(TOPOLOGY)
