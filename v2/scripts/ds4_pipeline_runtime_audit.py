@@ -75,6 +75,11 @@ def _check_dsv4(profile: dict[str, Any], service: dict[str, Any], errors: list[s
         _require_arg(args, "--linear-backend", "auto", f"DSV4 {name} native linear backend auto", errors, checks)
         _require_arg(args, "--moe-backend", "auto", f"DSV4 {name} native MoE backend auto", errors, checks)
         _require_arg(args, "--compilation-config", compilation_config, f"DSV4 {name} compilation config", errors, checks)
+        _require_flag(args, "--no-async-scheduling", f"DSV4 {name} disables unsafe vLLM async PP scheduling", errors, checks)
+        if "--async-scheduling" in [str(item) for item in args]:
+            errors.append(f"DSV4 {name}: PP8 production must not enable vLLM async scheduling")
+        else:
+            checks.append(f"DSV4 {name} does not enable vLLM async scheduling")
         if "--speculative-config" in [str(item) for item in args]:
             errors.append(f"DSV4 {name}: resident production must not enable MTP/speculative decode")
         else:
@@ -484,6 +489,14 @@ def _require_arg(args: list[Any], flag: str, expected: str, label: str, errors: 
     actual = values[index + 1] if index + 1 < len(values) else ""
     if actual != str(expected):
         errors.append(f"{label}: {flag} is {actual!r}, expected {expected!r}")
+        return
+    checks.append(label)
+
+
+def _require_flag(args: list[Any], flag: str, label: str, errors: list[str], checks: list[str]) -> None:
+    values = [str(item) for item in args]
+    if flag not in values:
+        errors.append(f"{label}: missing {flag}")
         return
     checks.append(label)
 
