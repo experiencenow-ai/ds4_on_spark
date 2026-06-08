@@ -192,7 +192,7 @@ def _common_profile_defaults(dsv4: dict[str, object]) -> dict[str, str]:
         "DS4_PIPELINE_COMPLETION_STREAM_WALL_TIMEOUT_S": "600",
         "DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS": "1",
         "DS4_PIPELINE_COMPLETION_TOKEN_ESTIMATE_MODE": "conservative",
-        "DS4_PIPELINE_AUTO_KV_CACHE": "1",
+        "DS4_PIPELINE_AUTO_KV_CACHE": "0",
         "DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS": "qwen27_bf16_pp8,gemma4_26b_a4b_pp8,dsv4_flash_pp8",
         "DS4_COMPUTE_LEASE_QUANTUM_S": "180",
         "DS4_API_TRANSPORT_TIMEOUT_S": "3600",
