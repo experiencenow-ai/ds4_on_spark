@@ -12,9 +12,40 @@ import urllib.request
 from typing import Any, Dict, Iterable, List, Tuple
 
 
-SPARK_NODE_COUNT = 8
-SPARK_NODES = tuple("spark%d" % i for i in range(SPARK_NODE_COUNT))
+SPARK_NODES = (
+    "spark0",
+    "spark1",
+    "spark2",
+    "spark3",
+    "spark4",
+    "spark5",
+    "spark6",
+    "spark7",
+    "spark8",
+    "spark9",
+    "sparka",
+    "sparkb",
+    "sparkc",
+)
+SPARK_NODE_COUNT = len(SPARK_NODES)
 DEFAULT_NODES = ",".join(SPARK_NODES)
+SPARK_10G_TARGETS = {
+    "spark0": "spark0-10g",
+    "spark1": "spark1-10g",
+    "spark2": "spark2-10g",
+    "spark3": "spark3-10g",
+    "spark4": "spark4-10g",
+    "spark5": "spark5-10g",
+    "spark6": "spark6-10g",
+    "spark7": "spark7-10g",
+    "spark8": "spark8@10.20.0.18",
+    "spark9": "spark9@10.20.0.19",
+    "sparka": "sparka@10.20.0.20",
+    "sparkb": "sparkb@10.20.0.21",
+    "sparkc": "sparkc@10.20.0.22",
+}
+DEFAULT_NODE_TARGETS = ",".join("%s=%s" % (node,SPARK_10G_TARGETS[node]) for node in SPARK_NODES)
+LEGACY_EIGHT_NODES = tuple("spark%d" % i for i in range(8))
 TELEMETRY_DIR = "/tmp/ds4_telemetry"
 MAC_TELEMETRY_DIR = os.path.join(TELEMETRY_DIR,"mac")
 NODE_TELEMETRY_CSV = "node_telemetry.csv"
@@ -144,8 +175,11 @@ CSV_FIELDS = [
 
 def parse_nodes(raw: str) -> List[str]:
     text = (raw or "").strip()
-    if text == "" or text.lower() in ("all","8x","spark8","sparks"):
+    lowered = text.lower()
+    if text == "" or lowered in ("all","13x","sparks"):
         return(list(SPARK_NODES))
+    if lowered == "8x":
+        return(list(LEGACY_EIGHT_NODES))
     return([node.strip() for node in text.split(",") if node.strip()])
 
 

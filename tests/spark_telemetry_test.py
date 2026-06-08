@@ -1,9 +1,12 @@
 import unittest
 import os
+import plistlib
 import tempfile
+from pathlib import Path
 from unittest import mock
 
 from scripts import spark_node_telemetry_monitor as node_mon
+from scripts import spark_gpu_usage_monitor as gpu_mon
 from scripts import spark_telemetry_collect as collect
 from scripts import spark_telemetry_common as telemetry
 
@@ -25,13 +28,20 @@ def telemetry_row(**kwargs):
 
 
 class SparkTelemetryTest(unittest.TestCase):
-    def test_default_spark_nodes_are_all_eight(self):
-        expected = tuple("spark%d" % i for i in range(8))
+    def test_default_spark_nodes_are_all_thirteen(self):
+        expected = ("spark0","spark1","spark2","spark3","spark4","spark5","spark6","spark7","spark8","spark9","sparka","sparkb","sparkc")
+        legacy = list("spark%d" % i for i in range(8))
         self.assertEqual(telemetry.SPARK_NODES, expected)
+        self.assertEqual(telemetry.SPARK_NODE_COUNT,13)
         self.assertEqual(telemetry.parse_nodes("all"), list(expected))
+        self.assertEqual(telemetry.parse_nodes("13x"), list(expected))
         self.assertEqual(telemetry.parse_nodes(""), list(expected))
+        self.assertEqual(telemetry.parse_nodes("8x"), legacy)
+        self.assertEqual(telemetry.parse_nodes("spark8"), ["spark8"])
+        self.assertEqual(telemetry.SPARK_10G_TARGETS["sparka"], "sparka@10.20.0.20")
+        self.assertIn("sparkc=sparkc@10.20.0.22", telemetry.DEFAULT_NODE_TARGETS)
         self.assertEqual(telemetry.parse_node_targets("spark4=spark4-10g,spark5"), [("spark4","spark4-10g"), ("spark5","spark5")])
-        self.assertEqual(collect.telemetry.DEFAULT_NODES, ",".join(expected))
+        self.assertEqual(collect.telemetry.DEFAULT_NODE_TARGETS, telemetry.DEFAULT_NODE_TARGETS)
         self.assertEqual(node_mon.CSV_FIELDS, telemetry.CSV_FIELDS)
         self.assertIn("vllm_requests_running", telemetry.CSV_FIELDS)
         self.assertIn("vllm_requests_running_by_model", telemetry.CSV_FIELDS)
@@ -87,6 +97,14 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(args.ssh_control_persist,600)
         self.assertEqual(args.fetch_workers,8)
 
+    def test_launchd_collector_template_targets_thirteen_sparks(self):
+        with Path("deploy/launchd/com.ds4.spark-telemetry-collector.plist").open("rb") as fp:
+            args = plistlib.load(fp)["ProgramArguments"]
+        self.assertIn("spark0=spark0-10g", args[args.index("--nodes") + 1])
+        self.assertIn("sparkc=sparkc@10.20.0.22", args[args.index("--nodes") + 1])
+        self.assertEqual(args[args.index("--ssh-timeout") + 1],"8")
+        self.assertEqual(args[args.index("--fetch-workers") + 1],"13")
+
     def test_fetch_node_uses_control_master_options(self):
         calls = []
         class Result:
@@ -102,6 +120,22 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertIn("ControlMaster=auto", calls[0])
         self.assertIn("ControlPersist=600s", calls[0])
         self.assertIn("ControlPath=%s" % os.path.join(tmp,"t-%C"), calls[0])
+
+    def test_gpu_usage_monitor_uses_node_targets_but_labels_rows(self):
+        calls = []
+        class Result:
+            returncode = 0
+            stdout = "0, NVIDIA GB10, 7 %, 0 %, 1 MiB, 2 MiB, 0 W, 0 W, P8, 44, 0 %, 300 MHz, 405 MHz\n"
+            stderr = ""
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            return(Result())
+        with mock.patch.object(gpu_mon.subprocess,"run",fake_run):
+            node,rows,error = gpu_mon.poll_node_fields("sparka","sparka@10.20.0.20",4,"",telemetry.GPU_FIELDS)
+        self.assertEqual(node,"sparka")
+        self.assertEqual(error,"")
+        self.assertEqual(rows[0]["name"],"NVIDIA GB10")
+        self.assertIn("sparka@10.20.0.20", calls[0])
 
     def test_collect_summary_counts_hot_gpu_samples(self):
         text = "\n".join([

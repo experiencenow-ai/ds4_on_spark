@@ -44,7 +44,7 @@ GPU_CSV_FIELDS = [
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--nodes", default=telemetry.DEFAULT_NODES)
+    p.add_argument("--nodes", default=telemetry.DEFAULT_NODE_TARGETS)
     p.add_argument("--local-node-name", default="")
     p.add_argument("--interval", type=float, default=5.0)
     p.add_argument("--duration", type=float, default=0.0)
@@ -54,10 +54,10 @@ def parse_args() -> argparse.Namespace:
     return(p.parse_args())
 
 
-def poll_node_fields(node: str, timeout: float, local_node_name: str, fields: List[str]) -> Tuple[str,List[Dict[str,str]],str]:
+def poll_node_fields(node: str, target: str, timeout: float, local_node_name: str, fields: List[str]) -> Tuple[str,List[Dict[str,str]],str]:
     query = telemetry.nvidia_smi_query(fields)
-    outnode = local_node_name if node == "local" and local_node_name else node
-    if node == "local":
+    outnode = local_node_name if target == "local" and local_node_name else node
+    if target == "local":
         cmd = query.split(" ")
     else:
         cmd = [
@@ -66,7 +66,7 @@ def poll_node_fields(node: str, timeout: float, local_node_name: str, fields: Li
             "BatchMode=yes",
             "-o",
             "ConnectTimeout=%d" % max(1,int(timeout)),
-            node,
+            target,
             query,
         ]
     try:
@@ -79,12 +79,12 @@ def poll_node_fields(node: str, timeout: float, local_node_name: str, fields: Li
     return(outnode,rows,"")
 
 
-def poll_node(node: str, timeout: float, local_node_name: str) -> Tuple[str,List[Dict[str,str]],str]:
-    last_node = local_node_name if node == "local" and local_node_name else node
+def poll_node(node: str, target: str, timeout: float, local_node_name: str) -> Tuple[str,List[Dict[str,str]],str]:
+    last_node = local_node_name if target == "local" and local_node_name else node
     last_error = ""
     field_sets = [telemetry.GPU_FIELDS,telemetry.BASE_GPU_FIELDS + ["temperature.gpu"],telemetry.BASE_GPU_FIELDS]
     for fields in field_sets:
-        outnode,rows,error = poll_node_fields(node,timeout,local_node_name,fields)
+        outnode,rows,error = poll_node_fields(node,target,timeout,local_node_name,fields)
         last_node = outnode
         if error == "":
             return(outnode,rows,"")
@@ -176,7 +176,7 @@ def error_row(now: float, iso: str, node: str, error: str) -> Dict[str,object]:
 
 def main() -> int:
     args = parse_args()
-    nodes = telemetry.parse_nodes(args.nodes)
+    nodes = telemetry.parse_node_targets(args.nodes)
     if len(nodes) == 0:
         raise SystemExit("no nodes selected")
     os.makedirs(os.path.dirname(os.path.abspath(args.out)),exist_ok=True)
@@ -192,7 +192,7 @@ def main() -> int:
             now = time.time()
             iso = dt.datetime.fromtimestamp(now,dt.timezone.utc).isoformat()
             with concurrent.futures.ThreadPoolExecutor(max_workers=len(nodes)) as pool:
-                futs = [pool.submit(poll_node,node,args.ssh_timeout,args.local_node_name) for node in nodes]
+                futs = [pool.submit(poll_node,node,target,args.ssh_timeout,args.local_node_name) for node,target in nodes]
                 for fut in concurrent.futures.as_completed(futs):
                     node,rows,error = fut.result()
                     if error:

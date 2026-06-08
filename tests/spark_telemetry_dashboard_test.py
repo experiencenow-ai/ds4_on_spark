@@ -64,6 +64,20 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["nodes"][0]["gpu_power_w"], 37)
         self.assertTrue(snap["nodes"][0]["gpu_power_known"])
 
+    def test_snapshot_preserves_all_thirteen_spark_labels(self):
+        labels = ["spark0","spark1","spark2","spark3","spark4","spark5","spark6","spark7","spark8","spark9","sparka","sparkb","sparkc"]
+        payload = {
+            "updated_iso": "2026-05-26T00:00:00+00:00",
+            "updated_unix": 1,
+            "nodes": {label: {"sample_count": 1, "last_gpu_util_pct": 0} for label in labels},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "summary.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            snap = dashboard.build_snapshot(str(path))
+        self.assertEqual([node["node"] for node in snap["nodes"]], labels)
+        self.assertEqual(snap["reachable_nodes"], 13)
+
     def test_snapshot_excludes_untrusted_power_from_total(self):
         payload = {
             "updated_iso": "2026-05-26T00:00:00+00:00",
