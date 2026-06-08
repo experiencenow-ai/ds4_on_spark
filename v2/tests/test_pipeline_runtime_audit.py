@@ -42,6 +42,11 @@ class PipelineRuntimeAuditTests(unittest.TestCase):
         self.assertTrue((ROOT / profile["kv_deployment"]).exists())
         self.assertTrue((ROOT / profile["topology"]).exists())
         self.assertTrue((ROOT / profile["memory_budget"]).exists())
+        contract = json.loads((ROOT / profile["runtime_contract"]).read_text(encoding="utf-8"))
+        deployment = json.loads((ROOT / profile["kv_deployment"]).read_text(encoding="utf-8"))
+        for args in (contract["launch"]["args"], deployment["extra_args"]):
+            self.assertIn("--no-async-scheduling", args)
+            self.assertNotIn("--async-scheduling", args)
         self.assertTrue(profile["warmup"]["required_before_first3_residency"])
         self.assertEqual(profile["warmup"]["script"], "scripts/ds4_warm_dsv4_flashinfer_cache.py")
         self.assertEqual(

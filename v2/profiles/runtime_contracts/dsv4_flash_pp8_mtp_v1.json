@@ -32,6 +32,7 @@
       "64",
       "--max-num-batched-tokens",
       "32768",
+      "--no-async-scheduling",
       "--kv-cache-memory-bytes",
       "3221225472",
       "--gpu-memory-utilization",
