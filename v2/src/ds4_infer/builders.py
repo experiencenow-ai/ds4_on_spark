@@ -228,7 +228,7 @@ def apply_thinking_fields_for_model(
         item["thinking_token_budget"] = thinking_budget_tokens
     elif thinking_enabled:
         item["thinking"] = {"type": "enabled"}
-    else:
+    elif not omit_disabled_thinking_field(model_id=model_id, chat_template_thinking_key=chat_template_thinking_key):
         item["thinking"] = {"type": "disabled"}
     if chat:
         key = chat_template_thinking_key or default_chat_template_thinking_key(model_id)
@@ -252,6 +252,11 @@ def chat_template_thinking_enabled(
 
 def default_chat_template_thinking_key(model_id: str) -> str | None:
     return "enable_thinking" if "qwen" in model_id.lower() else None
+
+
+def omit_disabled_thinking_field(*, model_id: str, chat_template_thinking_key: str | None = None) -> bool:
+    lowered = model_id.lower()
+    return "deepseek-v4" in lowered or "deepseek_v4" in lowered or chat_template_thinking_key == "thinking"
 
 
 def model_batch_item(request: InferenceRequest, profile: ModelProfile) -> dict[str, Any]:
