@@ -48,6 +48,7 @@ class PipelineRuntimeAuditTests(unittest.TestCase):
             profile["warmup"]["compile_env"]["VLLM_DS4_DSV4_SPARSE_MLA_PREFILL_BACKEND"],
             "indexed",
         )
+        self.assertEqual(profile["warmup"]["compile_env"]["VLLM_DS4_DSV4_PP_FLUSH_HC_BOUNDARY"], "1")
         self.assertEqual(profile["warmup"]["compile_env"]["VLLM_DEEP_GEMM_WARMUP"], "skip")
         self.assertEqual(profile["warmup"]["compile_env"]["NCCL_IB_DISABLE"], "1")
         self.assertEqual(profile["warmup"]["compile_env"]["NCCL_SOCKET_IFNAME"], "ds4ring0")

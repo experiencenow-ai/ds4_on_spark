@@ -87,6 +87,7 @@
     "TORCH_CUDA_ARCH_LIST": "12.1a",
     "VLLM_TRITON_MLA_SPARSE": "1",
     "VLLM_DS4_DSV4_SPARSE_MLA_PREFILL_BACKEND": "indexed",
+    "VLLM_DS4_DSV4_PP_FLUSH_HC_BOUNDARY": "1",
     "VLLM_DISABLED_KERNELS": "MarlinNvFp4LinearKernel,EmulationNvFp4LinearKernel,MarlinMxFp4LinearKernel,MarlinMxfp8LinearKernel,EmulationMxfp8LinearKernel,MarlinFP8ScaledMMLinearKernel",
     "VLLM_MXFP4_USE_MARLIN": "0",
     "VLLM_TEST_FORCE_FP8_MARLIN": "0",

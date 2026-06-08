@@ -158,6 +158,7 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertEqual(env["TORCHINDUCTOR_COMPILE_THREADS"], "1")
         self.assertEqual(env["NVCC_THREADS"], "1")
         self.assertEqual(env["VLLM_DS4_DSV4_SPARSE_MLA_PREFILL_BACKEND"], "indexed")
+        self.assertEqual(env["VLLM_DS4_DSV4_PP_FLUSH_HC_BOUNDARY"], "1")
         self.assertEqual(env["VLLM_DEEP_GEMM_WARMUP"], "skip")
         self.assertEqual(env["NCCL_IB_DISABLE"], "1")
         self.assertEqual(env["NCCL_SOCKET_IFNAME"], "ds4ring0")
