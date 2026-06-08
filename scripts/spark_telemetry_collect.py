@@ -21,7 +21,7 @@ except ImportError:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--nodes", default=telemetry.DEFAULT_NODES)
+    p.add_argument("--nodes", default=telemetry.DEFAULT_NODE_TARGETS)
     p.add_argument("--remote-dir", default=telemetry.TELEMETRY_DIR)
     p.add_argument("--out-dir", default=telemetry.MAC_TELEMETRY_DIR)
     p.add_argument("--tail-lines", type=int, default=17280)
