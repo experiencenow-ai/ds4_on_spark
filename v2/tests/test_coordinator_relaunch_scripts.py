@@ -172,7 +172,14 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
 
     def test_relaunch_env_overrides_apply_after_profile_defaults(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
-        args = type("Args", (), {"profile": "resident256", "env": ["DS4_API_DISPATCH_WINDOW=192", "DS4_TEST_FLAG=yes"]})()
+        args = type("Args", (), {
+            "profile": "resident256",
+            "env": [
+                "DS4_API_DISPATCH_WINDOW=192",
+                "DS4_TEST_FLAG=yes",
+                "DS4_API_JIT_KV_PREFETCH_TOKEN=unit-test-token",
+            ],
+        })()
 
         env = relaunch._coordinator_env(args, ROOT)
 
@@ -218,7 +225,10 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         os.environ["DS4_API_RESIDENT_MULTIMODEL"] = "0"
         os.environ["DS4_API_RESIDENT_SERVICE_IDS"] = "all-the-things"
         try:
-            args = type("Args", (), {"profile": DSV4_PRODUCTION["coordinator_profile"]})()
+            args = type("Args", (), {
+                "profile": DSV4_PRODUCTION["coordinator_profile"],
+                "env": ["DS4_API_JIT_KV_PREFETCH_TOKEN=unit-test-token"],
+            })()
             env = relaunch._coordinator_env(args, ROOT)
         finally:
             if old_kv is None:
