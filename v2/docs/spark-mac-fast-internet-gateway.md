@@ -89,3 +89,7 @@ The Mac may rediscover the fiber path correctly after a reboot, but treat that
 as a lab-side test. A Mac route through a Spark that then routes through the Mac
 is intentionally not part of this design.
 
+The macOS Network Settings UI can report an Ethernet service as disconnected
+even when the underlying interface still has link, addresses, and working
+routes. Trust `route -n get 1.1.1.1`, `ifconfig en0`, and a public speed test
+more than the UI label when diagnosing this path.

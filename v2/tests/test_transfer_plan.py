@@ -29,6 +29,26 @@ class TransferPlanTests(unittest.TestCase):
         self.assertIn("ds4_transfer.fast_copy", plan["argv"])
         self.assertIn("--jobs-per-edge", plan["argv"])
         self.assertEqual(plan["destination_fabric_ip"], "10.10.100.14")
+        self.assertEqual(plan["configured_rails"], 0)
+
+    def test_adjacent_transfer_plan_uses_configured_dual_rails(self) -> None:
+        topology = TransferTopology.load(TOPOLOGY)
+        request = TransferRequest.from_json(
+            {
+                "format": "ds4-transfer-request-v1",
+                "request_id": "t-rails",
+                "source_node": "spark0",
+                "source_path": "/mnt/data/batch/",
+                "destination_node": "spark1",
+                "destination_path": "/mnt/data/batch/",
+            }
+        )
+        plan = plan_transfer(topology, request)
+        self.assertEqual(plan["configured_rails"], 2)
+        rails = topology.get_fabric_rails("spark0", "spark1")
+        self.assertEqual([(rail.source_ip, rail.destination_ip) for rail in rails], [("10.10.1.1", "10.10.1.2"), ("10.10.2.1", "10.10.2.2")])
+        reverse = topology.get_fabric_rails("spark1", "spark0")
+        self.assertEqual([(rail.source_ip, rail.destination_ip) for rail in reverse], [("10.10.1.2", "10.10.1.1"), ("10.10.2.2", "10.10.2.1")])
 
     def test_transfer_rejects_disallowed_paths(self) -> None:
         topology = TransferTopology.load(TOPOLOGY)

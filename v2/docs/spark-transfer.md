@@ -112,6 +112,31 @@ A 2026-06-09 run reported `1295.7 Gbit/s` summed sender throughput across all
 current observed behavior is about `100 Gbit/s` combined per adjacent edge, not
 `100 Gbit/s` in each direction at the same time.
 
+Run a same-direction dual-rail check on every adjacent edge:
+
+```bash
+scripts/ds4_dual_rail_iperf_ring.sh
+```
+
+This is the benchmark that matches the DGX Spark 200G model: one physical link
+has two logical halves. A 2026-06-09 run after assigning the missing tail rail
+addresses reported `1897.2 Gbit/s` summed sender throughput across 26 rails;
+the repo-driven validation script later measured `1961.7 Gbit/s` in a shorter
+run.
+The first seven edges mostly reached `157-188 Gbit/s` per adjacent pair. The
+newly-addressed tail rails were reachable but weaker under TCP load; for
+example, `spark9 -> sparka` measured about `98 Gbit/s` on `10.10.20/30` and
+about `21.5 Gbit/s` on `10.10.19/30` when spot-checked. Treat `1.9 Tbit/s` as
+the current measured ring ceiling until the tail cabling/port family is tuned.
+
+The tail rail addresses can be printed, or applied on systems with suitable
+sudo policy, with:
+
+```bash
+scripts/ds4_dual_rail_tail_addresses.sh
+APPLY=1 scripts/ds4_dual_rail_tail_addresses.sh
+```
+
 Run first-byte pipeline latency around the full ring:
 
 ```bash
@@ -130,6 +155,9 @@ the pipeline is full; compute time and payload transfer size should dominate.
 
 - Do not use the office/control-plane hostname for model payload bytes.
 - Do not serialize cluster replication from one seed to twelve destinations.
+- Do not use `scp`, `sftp`, or `rsync` for model payload replication unless the
+  transfer is intentionally small or administrative. They encrypt, serialize,
+  or checksum in ways that leave most of the Spark fabric idle.
 - Do not add compressed or encrypted payload paths to the 200G transfer docs.
 - Keep `sparkN-200g` resolver entries in sync with `10.10.100.N`.
 - For file trees produced by Hugging Face downloads, the copier excludes
