@@ -1,9 +1,10 @@
 # Spark 200G Transfer
 
 Bulk model payloads must use the Spark fabric, not the office/control-plane
-network. Plain `sparkN` names are for control commands. Bulk data targets are
-`sparkN-200g`, which must resolve to `10.10.100.N`, or the explicit
-`10.10.100.N` address from `profiles/transfer/spark_200g.json`.
+network. Plain `sparkN` names are for control commands and fast internet
+gateway checks. Bulk data targets are `sparkN-200g`, which must resolve to
+`10.10.100.N`, or the explicit `10.10.100.N` address from
+`profiles/transfer/spark_200g.json`.
 
 The canonical copy method is `parallel_nc_fanout_200g_v1`:
 
@@ -57,7 +58,9 @@ The default fan-out for a spark3 seed is:
 stage 1: spark3 -> spark2, spark3 -> spark4
 stage 2: spark2 -> spark1, spark4 -> spark5
 stage 3: spark1 -> spark0, spark5 -> spark6
-stage 4: spark6 -> spark7
+stage 4: spark0 -> sparkc, spark6 -> spark7
+stage 5: sparkc -> sparkb, spark7 -> spark8
+stage 6: sparkb -> sparka, spark8 -> spark9
 ```
 
 Run:
@@ -75,10 +78,58 @@ PYTHONPATH=src python3 -m ds4_transfer.fast_copy \
 
 Use `--dry-run` first to print the stage plan without opening data streams.
 
+## 13-Node Ring Tests
+
+The 13-node ring is:
+
+```text
+spark0 -> spark1 -> spark2 -> spark3 -> spark4 -> spark5 -> spark6
+spark6 -> spark7 -> spark8 -> spark9 -> sparka -> sparkb -> sparkc -> spark0
+```
+
+Run a simultaneous one-transfer-per-edge health check:
+
+```bash
+scripts/ds4_parallel_iperf_ring.sh
+```
+
+A 2026-06-09 run using `iperf3 -P 8 -Z -t 8` on every adjacent edge at once
+reported `1286.6 Gbit/s` summed sender throughput. The slowest edge was
+`88.4 Gbit/s`; the fastest was `106.0 Gbit/s`.
+
+Run a simultaneous bidirectional check on every adjacent edge:
+
+```bash
+scripts/ds4_bidirectional_iperf_ring.sh
+```
+
+This launches both directions across every physical edge at the same time and
+sums all 26 sender directions. Use this to distinguish a one-direction
+`100 Gbit/s` ceiling from full-duplex `200 Gbit/s` class behavior.
+
+A 2026-06-09 run reported `1295.7 Gbit/s` summed sender throughput across all
+26 directions. Individual directions were `41.5-57.8 Gbit/s`, which means the
+current observed behavior is about `100 Gbit/s` combined per adjacent edge, not
+`100 Gbit/s` in each direction at the same time.
+
+Run first-byte pipeline latency around the full ring:
+
+```bash
+scripts/ds4_pipeline_ring_latency.sh
+```
+
+The pipeline test starts a receiver on `spark0`, reverse-starts forwarders from
+`sparkc` back to `spark1`, then sends one byte from `spark0` to `spark1`. Each
+node forwards as soon as it receives data. A 2026-06-09 five-run sample measured
+`9.634 ms` min, `11.362 ms` median, `12.968 ms` max, and `11.452 ms` mean for
+first-byte latency around all 13 hops. That first-byte overhead is not expected
+to be a meaningful performance limiter for a 13-stage inference pipeline once
+the pipeline is full; compute time and payload transfer size should dominate.
+
 ## Policy
 
 - Do not use the office/control-plane hostname for model payload bytes.
-- Do not serialize cluster replication from one seed to seven destinations.
+- Do not serialize cluster replication from one seed to twelve destinations.
 - Do not add compressed or encrypted payload paths to the 200G transfer docs.
 - Keep `sparkN-200g` resolver entries in sync with `10.10.100.N`.
 - For file trees produced by Hugging Face downloads, the copier excludes

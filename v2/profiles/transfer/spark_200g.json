@@ -19,7 +19,16 @@
       {"source_node": "spark5", "destination_node": "spark6"}
     ],
     [
+      {"source_node": "spark0", "destination_node": "sparkc"},
       {"source_node": "spark6", "destination_node": "spark7"}
+    ],
+    [
+      {"source_node": "sparkc", "destination_node": "sparkb"},
+      {"source_node": "spark7", "destination_node": "spark8"}
+    ],
+    [
+      {"source_node": "sparkb", "destination_node": "sparka"},
+      {"source_node": "spark8", "destination_node": "spark9"}
     ]
   ],
   "ssh_options": [
@@ -36,6 +45,11 @@
     {"node_id": "spark4", "host": "spark4", "fabric_host": "spark4-200g", "fabric_ip": "10.10.100.14", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark4/models"]},
     {"node_id": "spark5", "host": "spark5", "fabric_host": "spark5-200g", "fabric_ip": "10.10.100.15", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark5/models"]},
     {"node_id": "spark6", "host": "spark6", "fabric_host": "spark6-200g", "fabric_ip": "10.10.100.16", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark6/models"]},
-    {"node_id": "spark7", "host": "spark7", "fabric_host": "spark7-200g", "fabric_ip": "10.10.100.17", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark7/models"]}
+    {"node_id": "spark7", "host": "spark7", "fabric_host": "spark7-200g", "fabric_ip": "10.10.100.17", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark7/models"]},
+    {"node_id": "spark8", "host": "spark8", "fabric_host": "spark8-200g", "fabric_ip": "10.10.100.18", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark8/models"]},
+    {"node_id": "spark9", "host": "spark9", "fabric_host": "spark9-200g", "fabric_ip": "10.10.100.19", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark9/models"]},
+    {"node_id": "sparka", "host": "sparka", "fabric_host": "sparka-200g", "fabric_ip": "10.10.100.20", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/sparka/models"]},
+    {"node_id": "sparkb", "host": "sparkb", "fabric_host": "sparkb-200g", "fabric_ip": "10.10.100.21", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/sparkb/models"]},
+    {"node_id": "sparkc", "host": "sparkc", "fabric_host": "sparkc-200g", "fabric_ip": "10.10.100.22", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/sparkc/models"]}
   ]
 }
