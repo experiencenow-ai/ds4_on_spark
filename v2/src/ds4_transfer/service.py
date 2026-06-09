@@ -43,6 +43,25 @@ class TransferNode:
 
 
 @dataclass(frozen=True)
+class TransferFabricRail:
+    name: str
+    source_ip: str
+    destination_ip: str
+
+    @staticmethod
+    def from_json(data: dict[str, Any]) -> "TransferFabricRail":
+        required = ["source_ip", "destination_ip"]
+        missing = [key for key in required if key not in data]
+        if missing:
+            raise ValueError(f"transfer fabric rail missing fields: {missing}")
+        return TransferFabricRail(
+            name=str(data.get("name", "")),
+            source_ip=str(data["source_ip"]),
+            destination_ip=str(data["destination_ip"]),
+        )
+
+
+@dataclass(frozen=True)
 class TransferTopology:
     fabric_id: str
     fabric_hint: str
@@ -51,6 +70,7 @@ class TransferTopology:
     default_jobs_per_edge: int
     port_base: int
     fanout_stages: tuple[tuple[tuple[str, str], ...], ...]
+    fabric_edges: dict[tuple[str, str], tuple[TransferFabricRail, ...]]
     ssh_options: tuple[str, ...]
 
     @staticmethod
@@ -70,6 +90,7 @@ class TransferTopology:
             default_jobs_per_edge=int(data.get("default_jobs_per_edge", 16)),
             port_base=int(data.get("port_base", 49300)),
             fanout_stages=_load_fanout_stages(data.get("fanout_stages", [])),
+            fabric_edges=_load_fabric_edges(data.get("fabric_edges", [])),
             ssh_options=tuple(str(item) for item in data.get("ssh_options", _default_ssh_options())),
         )
 
@@ -78,6 +99,9 @@ class TransferTopology:
             return self.nodes[node_id]
         except KeyError as exc:
             raise ValueError(f"unknown transfer node_id: {node_id}") from exc
+
+    def get_fabric_rails(self, source_node: str, destination_node: str) -> tuple[TransferFabricRail, ...]:
+        return self.fabric_edges.get((source_node, destination_node), ())
 
 
 @dataclass(frozen=True)
@@ -122,6 +146,7 @@ def plan_transfer(topology: TransferTopology, request: TransferRequest) -> dict[
     _validate_allowed_path(destination, request.destination_path)
 
     argv = _fast_copy_argv(topology, request)
+    rails = topology.get_fabric_rails(request.source_node, request.destination_node)
     return {
         "format": TRANSFER_PLAN_FORMAT,
         "request_id": request.request_id,
@@ -135,6 +160,7 @@ def plan_transfer(topology: TransferTopology, request: TransferRequest) -> dict[
         "source_fabric": source.fabric_host,
         "destination_fabric": destination.fabric_host,
         "destination_fabric_ip": destination.fabric_ip,
+        "configured_rails": len(rails),
         "source_path": request.source_path,
         "destination_path": request.destination_path,
         "direct_data_path": f"{source.fabric_host} -> {destination.fabric_host}",
@@ -211,7 +237,7 @@ def _fast_copy_argv(topology: TransferTopology, request: TransferRequest) -> lis
 def _fast_copy_notes() -> list[str]:
     return [
         "Use the sparkN-200g / 10.10.100.N fabric for bulk payloads; plain sparkN names are control-plane only.",
-        "The copier discovers both ring next-hops and binds parallel unencrypted streams per rail.",
+        "The copier uses configured per-edge rails before falling back to route discovery.",
         "Large single files are striped over multiple TCP sockets so one KV blob is not limited by one slow stream.",
         "The Mac Studio starts and monitors the job only; model bytes flow Spark-to-Spark.",
     ]
@@ -241,3 +267,18 @@ def _load_fanout_stages(raw: Any) -> tuple[tuple[tuple[str, str], ...], ...]:
             edges.append((str(edge["source_node"]), str(edge["destination_node"])))
         stages.append(tuple(edges))
     return tuple(stages)
+
+
+def _load_fabric_edges(raw: Any) -> dict[tuple[str, str], tuple[TransferFabricRail, ...]]:
+    edges: dict[tuple[str, str], tuple[TransferFabricRail, ...]] = {}
+    for edge in raw:
+        source = str(edge["source_node"])
+        destination = str(edge["destination_node"])
+        rails = tuple(TransferFabricRail.from_json(item) for item in edge.get("rails", []))
+        if not rails:
+            raise ValueError(f"fabric edge {source}->{destination} requires at least one rail")
+        key = (source, destination)
+        if key in edges:
+            raise ValueError(f"duplicate fabric edge: {source}->{destination}")
+        edges[key] = rails
+    return edges

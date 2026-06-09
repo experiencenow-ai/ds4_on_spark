@@ -31,6 +31,86 @@
       {"source_node": "spark8", "destination_node": "spark9"}
     ]
   ],
+  "fabric_edges": [
+    {"source_node": "spark0", "destination_node": "spark1", "rails": [
+      {"name": "r0", "source_ip": "10.10.1.1", "destination_ip": "10.10.1.2"},
+      {"name": "r1", "source_ip": "10.10.2.1", "destination_ip": "10.10.2.2"}]},
+    {"source_node": "spark1", "destination_node": "spark0", "rails": [
+      {"name": "r0", "source_ip": "10.10.1.2", "destination_ip": "10.10.1.1"},
+      {"name": "r1", "source_ip": "10.10.2.2", "destination_ip": "10.10.2.1"}]},
+    {"source_node": "spark1", "destination_node": "spark2", "rails": [
+      {"name": "r0", "source_ip": "10.10.3.1", "destination_ip": "10.10.3.2"},
+      {"name": "r1", "source_ip": "10.10.4.1", "destination_ip": "10.10.4.2"}]},
+    {"source_node": "spark2", "destination_node": "spark1", "rails": [
+      {"name": "r0", "source_ip": "10.10.3.2", "destination_ip": "10.10.3.1"},
+      {"name": "r1", "source_ip": "10.10.4.2", "destination_ip": "10.10.4.1"}]},
+    {"source_node": "spark2", "destination_node": "spark3", "rails": [
+      {"name": "r0", "source_ip": "10.10.5.1", "destination_ip": "10.10.5.2"},
+      {"name": "r1", "source_ip": "10.10.6.1", "destination_ip": "10.10.6.2"}]},
+    {"source_node": "spark3", "destination_node": "spark2", "rails": [
+      {"name": "r0", "source_ip": "10.10.5.2", "destination_ip": "10.10.5.1"},
+      {"name": "r1", "source_ip": "10.10.6.2", "destination_ip": "10.10.6.1"}]},
+    {"source_node": "spark3", "destination_node": "spark4", "rails": [
+      {"name": "r0", "source_ip": "10.10.7.1", "destination_ip": "10.10.7.2"},
+      {"name": "r1", "source_ip": "10.10.8.1", "destination_ip": "10.10.8.2"}]},
+    {"source_node": "spark4", "destination_node": "spark3", "rails": [
+      {"name": "r0", "source_ip": "10.10.7.2", "destination_ip": "10.10.7.1"},
+      {"name": "r1", "source_ip": "10.10.8.2", "destination_ip": "10.10.8.1"}]},
+    {"source_node": "spark4", "destination_node": "spark5", "rails": [
+      {"name": "r0", "source_ip": "10.10.9.1", "destination_ip": "10.10.9.2"},
+      {"name": "r1", "source_ip": "10.10.10.1", "destination_ip": "10.10.10.2"}]},
+    {"source_node": "spark5", "destination_node": "spark4", "rails": [
+      {"name": "r0", "source_ip": "10.10.9.2", "destination_ip": "10.10.9.1"},
+      {"name": "r1", "source_ip": "10.10.10.2", "destination_ip": "10.10.10.1"}]},
+    {"source_node": "spark5", "destination_node": "spark6", "rails": [
+      {"name": "r0", "source_ip": "10.10.11.1", "destination_ip": "10.10.11.2"},
+      {"name": "r1", "source_ip": "10.10.12.1", "destination_ip": "10.10.12.2"}]},
+    {"source_node": "spark6", "destination_node": "spark5", "rails": [
+      {"name": "r0", "source_ip": "10.10.11.2", "destination_ip": "10.10.11.1"},
+      {"name": "r1", "source_ip": "10.10.12.2", "destination_ip": "10.10.12.1"}]},
+    {"source_node": "spark6", "destination_node": "spark7", "rails": [
+      {"name": "r0", "source_ip": "10.10.13.1", "destination_ip": "10.10.13.2"},
+      {"name": "r1", "source_ip": "10.10.14.1", "destination_ip": "10.10.14.2"}]},
+    {"source_node": "spark7", "destination_node": "spark6", "rails": [
+      {"name": "r0", "source_ip": "10.10.13.2", "destination_ip": "10.10.13.1"},
+      {"name": "r1", "source_ip": "10.10.14.2", "destination_ip": "10.10.14.1"}]},
+    {"source_node": "spark7", "destination_node": "spark8", "rails": [
+      {"name": "r0", "source_ip": "10.10.15.1", "destination_ip": "10.10.15.2"},
+      {"name": "r1", "source_ip": "10.10.16.1", "destination_ip": "10.10.16.2"}]},
+    {"source_node": "spark8", "destination_node": "spark7", "rails": [
+      {"name": "r0", "source_ip": "10.10.15.2", "destination_ip": "10.10.15.1"},
+      {"name": "r1", "source_ip": "10.10.16.2", "destination_ip": "10.10.16.1"}]},
+    {"source_node": "spark8", "destination_node": "spark9", "rails": [
+      {"name": "r0", "source_ip": "10.10.17.1", "destination_ip": "10.10.17.2"},
+      {"name": "r1", "source_ip": "10.10.18.1", "destination_ip": "10.10.18.2"}]},
+    {"source_node": "spark9", "destination_node": "spark8", "rails": [
+      {"name": "r0", "source_ip": "10.10.17.2", "destination_ip": "10.10.17.1"},
+      {"name": "r1", "source_ip": "10.10.18.2", "destination_ip": "10.10.18.1"}]},
+    {"source_node": "spark9", "destination_node": "sparka", "rails": [
+      {"name": "r0", "source_ip": "10.10.19.1", "destination_ip": "10.10.19.2"},
+      {"name": "r1", "source_ip": "10.10.20.1", "destination_ip": "10.10.20.2"}]},
+    {"source_node": "sparka", "destination_node": "spark9", "rails": [
+      {"name": "r0", "source_ip": "10.10.19.2", "destination_ip": "10.10.19.1"},
+      {"name": "r1", "source_ip": "10.10.20.2", "destination_ip": "10.10.20.1"}]},
+    {"source_node": "sparka", "destination_node": "sparkb", "rails": [
+      {"name": "r0", "source_ip": "10.10.21.1", "destination_ip": "10.10.21.2"},
+      {"name": "r1", "source_ip": "10.10.22.1", "destination_ip": "10.10.22.2"}]},
+    {"source_node": "sparkb", "destination_node": "sparka", "rails": [
+      {"name": "r0", "source_ip": "10.10.21.2", "destination_ip": "10.10.21.1"},
+      {"name": "r1", "source_ip": "10.10.22.2", "destination_ip": "10.10.22.1"}]},
+    {"source_node": "sparkb", "destination_node": "sparkc", "rails": [
+      {"name": "r0", "source_ip": "10.10.23.1", "destination_ip": "10.10.23.2"},
+      {"name": "r1", "source_ip": "10.10.24.1", "destination_ip": "10.10.24.2"}]},
+    {"source_node": "sparkc", "destination_node": "sparkb", "rails": [
+      {"name": "r0", "source_ip": "10.10.23.2", "destination_ip": "10.10.23.1"},
+      {"name": "r1", "source_ip": "10.10.24.2", "destination_ip": "10.10.24.1"}]},
+    {"source_node": "sparkc", "destination_node": "spark0", "rails": [
+      {"name": "r0", "source_ip": "10.10.25.1", "destination_ip": "10.10.25.2"},
+      {"name": "r1", "source_ip": "10.10.26.1", "destination_ip": "10.10.26.2"}]},
+    {"source_node": "spark0", "destination_node": "sparkc", "rails": [
+      {"name": "r0", "source_ip": "10.10.25.2", "destination_ip": "10.10.25.1"},
+      {"name": "r1", "source_ip": "10.10.26.2", "destination_ip": "10.10.26.1"}]}
+  ],
   "ssh_options": [
     "-T",
     "-o", "Compression=no",

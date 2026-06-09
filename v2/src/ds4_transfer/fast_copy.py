@@ -279,6 +279,12 @@ def _list_files(topology: TransferTopology, source_node: str, source_path: str, 
 
 
 def _discover_rails(topology: TransferTopology, source_node: str, destination_node: str, timeout_s: int) -> list[Rail]:
+    configured = topology.get_fabric_rails(source_node, destination_node)
+    if configured:
+        return [
+            Rail(source_ip=rail.source_ip, destination_ip=rail.destination_ip, dev=rail.name or "configured")
+            for rail in configured
+        ]
     destination = topology.get_node(destination_node)
     target = destination.fabric_ip or destination.fabric_host
     route = _run_ssh(topology, source_node, f"ip route show {shlex.quote(target)}", timeout_s)
