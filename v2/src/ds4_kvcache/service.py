@@ -95,6 +95,7 @@ class KvCacheDeployment:
     spark_node: str
     worker_nodes: tuple[str, ...]
     model_id: str
+    model_id_by_rank: dict[int, str]
     served_model_name: str | None
     host: str
     http_port: int
@@ -107,6 +108,8 @@ class KvCacheDeployment:
     total_layers: int | None
     node_rank: int | None
     vllm_bin: str
+    vllm_source_root: str | None
+    vllm_runner: str | None
     python_bin: str
     working_directory: str | None
     pythonpath: str | None
@@ -146,6 +149,7 @@ class KvCacheDeployment:
             spark_node=str(data["spark_node"]),
             worker_nodes=worker_nodes,
             model_id=str(data["model_id"]),
+            model_id_by_rank={int(key): str(value) for key, value in dict(data.get("model_id_by_rank", {})).items()},
             served_model_name=str(data["served_model_name"]) if data.get("served_model_name") else None,
             host=str(data.get("host", "0.0.0.0")),
             http_port=http_port,
@@ -158,6 +162,8 @@ class KvCacheDeployment:
             total_layers=total_layers,
             node_rank=int(data["node_rank"]) if data.get("node_rank") is not None else None,
             vllm_bin=str(data.get("vllm_bin", "vllm")),
+            vllm_source_root=str(data["vllm_source_root"]) if data.get("vllm_source_root") else None,
+            vllm_runner=str(data["vllm_runner"]) if data.get("vllm_runner") else None,
             python_bin=str(data.get("python_bin", _default_python_bin(str(data.get("vllm_bin", "vllm"))))),
             working_directory=str(data["working_directory"]) if data.get("working_directory") else None,
             pythonpath=str(data["pythonpath"]) if data.get("pythonpath") else None,
@@ -378,8 +384,9 @@ def _expand_rank_data(data: Any, *, spark_node: str, node_rank: int, fabric_node
 def _vllm_argv(deployment: KvCacheDeployment, connector: KvCacheConnector, *, node_rank: int = 0, spark_node: str | None = None, fabric_node: TransferNode | None = None) -> list[str]:
     spark_node = spark_node or deployment.spark_node
     vllm_bin = _expand_rank_template(deployment.vllm_bin, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node)
-    model_id = _expand_rank_template(deployment.model_id, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node)
-    argv = _vllm_serve_prefix(vllm_bin) + [model_id]
+    model_id_template = deployment.model_id_by_rank.get(node_rank, deployment.model_id)
+    model_id = _expand_rank_template(model_id_template, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node)
+    argv = _vllm_serve_prefix(deployment, vllm_bin, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node) + [model_id]
     if not deployment.is_pipeline or node_rank == 0:
         argv.extend(["--host", deployment.host, "--port", str(deployment.http_port)])
     argv.extend([
@@ -415,7 +422,13 @@ def _vllm_argv(deployment: KvCacheDeployment, connector: KvCacheConnector, *, no
     return argv
 
 
-def _vllm_serve_prefix(vllm_bin: str) -> list[str]:
+def _vllm_serve_prefix(deployment: KvCacheDeployment, vllm_bin: str, *, spark_node: str, node_rank: int, fabric_node: TransferNode | None = None) -> list[str]:
+    if deployment.vllm_runner:
+        if not deployment.vllm_source_root:
+            raise ValueError("vllm_runner requires vllm_source_root")
+        runner = _expand_rank_template(deployment.vllm_runner, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node)
+        source_root = _expand_rank_template(deployment.vllm_source_root, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node)
+        return [vllm_bin, runner, "--source-root", source_root, "--module", "vllm.entrypoints.cli.main", "--", "serve"]
     name = Path(vllm_bin).name
     if name.startswith("python"):
         return [vllm_bin, "-m", "vllm.entrypoints.cli.main", "serve"]

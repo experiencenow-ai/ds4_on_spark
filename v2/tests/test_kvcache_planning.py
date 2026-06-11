@@ -21,6 +21,7 @@ QWEN_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_lmcache_mp_spark7.jso
 QWEN_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_lmcache_hma.json"
 QWEN_BF16KV_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_bf16kv_lmcache_hma.json"
 GEMMA26_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_26b_a4b_it_pp8_lmcache_hma.json"
+KIMI_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "kimi26_pp13_lmcache_hma.json"
 DSV4_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "dsv4_flash_pp8_simple_offload.json"
 GEMMA31_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_31b_it_pp8_plain.json"
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
@@ -199,6 +200,27 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertIn("LMCacheConnectorV1", plan["vllm_nodes"][0]["command"])
         self.assertIn("VLLM_PP_LAYER_PARTITION=7,8,7,9,9,9,8,7", plan["vllm_nodes"][0]["command"])
         self.assertIn("--headless", plan["vllm_nodes"][-1]["argv"])
+
+    def test_kimi_pp13_lmcache_plan_uses_rank0_view_and_source_guard(self) -> None:
+        deployment = KvCacheDeployment.load(KIMI_PP13_DEPLOYMENT)
+        plan = plan_deployment(deployment)
+
+        self.assertEqual(plan["profile_id"], "kimi26_pp13_smart_v1")
+        self.assertEqual(plan["pipeline_parallel_size"], 13)
+        self.assertEqual(plan["layer_partition"], [4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4])
+        self.assertEqual(len(plan["vllm_nodes"]), 13)
+        rank0 = plan["vllm_nodes"][0]
+        rank12 = plan["vllm_nodes"][-1]
+        self.assertEqual(rank0["argv"][1], "/home/spark0/src/vllm/tools/ds4_run_vllm_from_source.py")
+        self.assertEqual(rank0["argv"][3], "/home/spark0/src/vllm")
+        self.assertEqual(rank0["argv"][8], "/home/spark0/models/hf/moonshotai/Kimi-K2.6-pp13-view")
+        self.assertEqual(rank12["argv"][8], "/home/sparkc/models/hf/moonshotai/Kimi-K2.6")
+        self.assertIn("--kv-cache-memory-bytes", rank0["argv"])
+        self.assertEqual(rank0["argv"][rank0["argv"].index("--kv-cache-memory-bytes") + 1], "8589934592")
+        self.assertIn("LMCacheConnectorV1", rank0["command"])
+        self.assertEqual(rank0["lmcache_config"]["data"]["local_disk"], "/home/spark0/ds4_nvme/ds4_lmcache/kimi26_pp13_fp8kv/p4_4_4_5_5_5_5_5_5_5_5_5_4")
+        self.assertEqual(rank12["lmcache_config"]["data"]["local_disk"], "/home/sparkc/ds4_nvme/ds4_lmcache/kimi26_pp13_fp8kv/p4_4_4_5_5_5_5_5_5_5_5_5_4")
+        self.assertIn("--headless", rank12["argv"])
 
     def test_write_qwen_bf16_pp8_scripts_materialize_lmcache_config(self) -> None:
         deployment = KvCacheDeployment.load(QWEN_PP_DEPLOYMENT)
