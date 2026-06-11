@@ -18,6 +18,7 @@ from ds4_infer.topology import SparkTopology
 ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
+KIMI_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_gemma_pp13.json"
 VALIDATION_TASKS = ROOT / "profiles" / "validation" / "xhigh_live_validation_tasks.json"
 ALL_SPARKS = tuple(f"spark{index}" for index in range(8))
 QWEN_PP = "qwen3_6_27b_bf16_pp8_efficient_v1"
@@ -26,6 +27,9 @@ DSV4_PP = "dsv4_vllm_mtp_pp8_smartest_v1"
 GEMMA12_PP = "gemma4_12b_it_pp8_peer_v1"
 GEMMA26_PP = "gemma4_26b_a4b_it_pp8_peer_v1"
 GEMMA31_PP = "gemma4_31b_it_pp8_peer_v1"
+KIMI_PP13 = "kimi26_pp13_smart_v1"
+QWEN_PP13 = "qwen3_6_27b_bf16_pp13_efficient_v1"
+GEMMA26_PP13 = "gemma4_26b_a4b_it_pp13_peer_v1"
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
 DSV4_KV_PROFILE = ROOT / "profiles" / "kv_cache" / "dsv4_flash_pp8_simple_offload.json"
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
@@ -52,6 +56,52 @@ def make_request(request_id: str, *, capability: str, job_class: str, chat: bool
 
 
 class StaticSparkTopologyTests(unittest.TestCase):
+    def test_kimi_qwen_gemma_pp13_topology_uses_all_thirteen_sparks(self) -> None:
+        topology = SparkTopology.load(KIMI_TOPOLOGY)
+        capacity = topology.estimate_capacity_by_profile()
+
+        self.assertEqual(len(topology.nodes), 13)
+        self.assertEqual(capacity[KIMI_PP13], 16)
+        self.assertEqual(capacity[QWEN_PP13], 32)
+        self.assertEqual(capacity[GEMMA26_PP13], 16)
+        self.assertEqual(
+            topology.routing_policy["active_resident_service_ids"],
+            ["kimi26_pp13", "qwen27_bf16_pp13", "gemma4_26b_a4b_pp13"],
+        )
+        kimi = topology.pipeline_service_by_id("kimi26_pp13")
+        qwen = topology.pipeline_service_by_id("qwen27_bf16_pp13")
+        gemma = topology.pipeline_service_by_id("gemma4_26b_a4b_pp13")
+        self.assertEqual(kimi.layer_partition, (4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4))
+        self.assertEqual(qwen.layer_partition, (5, 5, 5, 5, 5, 5, 5, 4, 5, 5, 5, 5, 5))
+        self.assertEqual(gemma.layer_partition, (2, 2, 3, 3, 2, 3, 2, 2, 2, 2, 3, 2, 2))
+        for service in (kimi, qwen, gemma):
+            self.assertEqual(service.entry_node_id, "spark0")
+            self.assertEqual(service.node_ids, ("spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7", "spark8", "spark9", "sparka", "sparkb", "sparkc"))
+            self.assertEqual(service.kv_cache["connector_id"], "lmcache")
+            self.assertEqual(service.kv_cache["external_backend"], "lmcache_hma")
+            self.assertEqual(service.kv_cache["expected_entry_fraction_per_node"], 1.0 / 13.0)
+            self.assertGreater(int(service.kv_cache["kv_cache_memory_bytes"]), 0)
+
+    def test_topology_filter_keeps_candidate_pp13_profiles_out_of_old_defaults(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        old_topology = SparkTopology.load(TOPOLOGY)
+        new_topology = SparkTopology.load(KIMI_TOPOLOGY)
+
+        old_profile = registry.resolve(
+            capability="smart",
+            chat=True,
+            job_class="analysis",
+            allowed_profile_ids=set(old_topology.pipeline_profiles),
+        )
+        with self.assertRaises(ValueError):
+            registry.resolve(
+                capability="smart",
+                chat=True,
+                job_class="analysis",
+                allowed_profile_ids=set(new_topology.pipeline_profiles),
+            )
+        self.assertEqual(old_profile.profile_id, GEMMA26_PP)
+
     def test_capacity_reflects_dual_pipeline_services(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
         capacity = topology.estimate_capacity_by_profile()

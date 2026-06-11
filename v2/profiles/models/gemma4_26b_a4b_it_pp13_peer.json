@@ -1,0 +1,59 @@
+{
+  "backend": "vllm_pipeline",
+  "capability_classes": [
+    "gemma4",
+    "peer",
+    "smart"
+  ],
+  "format": "ds4-model-profile-v1",
+  "model_id": "google/gemma-4-26B-A4B-it",
+  "performance": {
+    "latency_rank": 0.9,
+    "max_num_batched_tokens": 16384,
+    "max_num_seqs": 16,
+    "measurement_notes": "PP13 co-resident candidate derived from the stable Gemma4 26B-A4B PP8 profile; batch limit reduced for initial power-safe three-pipeline residency.",
+    "target": "13-stage Gemma4 26B-A4B peer pipeline with LMCache HMA."
+  },
+  "production_eligible": false,
+  "profile_id": "gemma4_26b_a4b_it_pp13_peer_v1",
+  "quality": {
+    "baseline": "Derived from gemma4_26b_a4b_it_pp8_peer_v1, which measured 69/92 ds4-eval and 15/17 COMPSEC under PP8."
+  },
+  "routing": {
+    "chat_cohort_transport": "parallel_chat_completions",
+    "chat_template_thinking_key": "enable_thinking",
+    "default_chat_template_kwargs": {
+      "enable_thinking": false
+    },
+    "default_for": [],
+    "optional_kv_cache_deployments": [
+      "profiles/kv_cache/gemma4_26b_a4b_it_pp13_lmcache_hma.json"
+    ],
+    "pipeline": {
+      "api_base_url": "http://127.0.0.1:8118",
+      "compute_domain": "spark-fleet-0",
+      "entry_node_id": "spark0",
+      "served_model_name": "gemma-4-26b-a4b-it-pp13",
+      "service_id": "gemma4_26b_a4b_pp13"
+    },
+    "pipeline_service_id": "gemma4_26b_a4b_pp13",
+    "rank": 735,
+    "requires_profile_pin": false,
+    "served_model_name": "gemma-4-26b-a4b-it-pp13",
+    "startup_autoload": false,
+    "tokenizer_path": "/home/spark0/models/hf/google/gemma-4-26B-A4B-it"
+  },
+  "runtime_contract_id": "gemma4_26b_a4b_it_pp13_v1",
+  "supported_job_classes": [
+    "analysis",
+    "atom_edit",
+    "debug",
+    "json_repair",
+    "summary",
+    "tool_chat",
+    "triage"
+  ],
+  "supports_chat": true,
+  "supports_completion": true,
+  "supports_thinking": true
+}

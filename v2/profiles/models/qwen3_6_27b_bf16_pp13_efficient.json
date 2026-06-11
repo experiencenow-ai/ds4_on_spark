@@ -1,0 +1,51 @@
+{
+  "backend": "vllm_pipeline",
+  "capability_classes": [
+    "efficient",
+    "world_model"
+  ],
+  "format": "ds4-model-profile-v1",
+  "model_id": "Qwen/Qwen3.6-27B",
+  "performance": {
+    "latency_rank": 0.85,
+    "max_num_batched_tokens": 32768,
+    "max_num_seqs": 32,
+    "measurement_notes": "PP13 co-resident candidate derived from the stable Qwen27 BF16 PP8 profile; batch limit reduced for initial power-safe three-pipeline residency.",
+    "target": "13-stage Qwen27 BF16 efficient pipeline with FP8 KV and LMCache HMA."
+  },
+  "production_eligible": false,
+  "profile_id": "qwen3_6_27b_bf16_pp13_efficient_v1",
+  "quality": {
+    "baseline": "Derived from qwen3_6_27b_bf16_pp8_efficient_v1; PP13 must be remeasured before production promotion."
+  },
+  "routing": {
+    "chat_cohort_transport": "parallel_chat_completions",
+    "chat_template_thinking_key": "enable_thinking",
+    "default_for": [],
+    "optional_kv_cache_deployments": [
+      "profiles/kv_cache/qwen27_bf16_pp13_lmcache_hma.json"
+    ],
+    "pipeline": {
+      "api_base_url": "http://127.0.0.1:8101",
+      "compute_domain": "spark-fleet-0",
+      "entry_node_id": "spark0",
+      "served_model_name": "qwen27-bf16-pp13",
+      "service_id": "qwen27_bf16_pp13"
+    },
+    "rank": 75,
+    "tokenizer_path": "/home/spark0/models/hf/Qwen/Qwen3.6-27B"
+  },
+  "runtime_contract_id": "qwen27_bf16_pp13_v1",
+  "supported_job_classes": [
+    "analysis",
+    "atom_edit",
+    "event_extract",
+    "json_repair",
+    "summary",
+    "triage",
+    "world_model_extract"
+  ],
+  "supports_chat": true,
+  "supports_completion": true,
+  "supports_thinking": true
+}
