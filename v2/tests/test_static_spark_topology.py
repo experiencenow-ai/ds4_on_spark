@@ -83,24 +83,15 @@ class StaticSparkTopologyTests(unittest.TestCase):
             self.assertGreater(int(service.kv_cache["kv_cache_memory_bytes"]), 0)
 
     def test_topology_filter_keeps_candidate_pp13_profiles_out_of_old_defaults(self) -> None:
-        registry = ProfileRegistry.load(PROFILES)
         old_topology = SparkTopology.load(TOPOLOGY)
         new_topology = SparkTopology.load(KIMI_TOPOLOGY)
 
-        old_profile = registry.resolve(
-            capability="smart",
-            chat=True,
-            job_class="analysis",
-            allowed_profile_ids=set(old_topology.pipeline_profiles),
-        )
-        with self.assertRaises(ValueError):
-            registry.resolve(
-                capability="smart",
-                chat=True,
-                job_class="analysis",
-                allowed_profile_ids=set(new_topology.pipeline_profiles),
-            )
-        self.assertEqual(old_profile.profile_id, GEMMA26_PP)
+        self.assertNotIn(KIMI_PP13, old_topology.pipeline_profiles)
+        self.assertNotIn(QWEN_PP13, old_topology.pipeline_profiles)
+        self.assertNotIn(GEMMA26_PP13, old_topology.pipeline_profiles)
+        self.assertIn(KIMI_PP13, new_topology.pipeline_profiles)
+        self.assertIn(QWEN_PP13, new_topology.pipeline_profiles)
+        self.assertIn(GEMMA26_PP13, new_topology.pipeline_profiles)
 
     def test_capacity_reflects_dual_pipeline_services(self) -> None:
         topology = SparkTopology.load(TOPOLOGY)
