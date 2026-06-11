@@ -1,0 +1,144 @@
+{
+  "format": "ds4-first3-resident-memory-budget-v2",
+  "profile_id": "first3_kimi26_qwen27_gemma26_pp13_candidate_v1",
+  "source": "Kimi K2.6 PP13 live startup telemetry on 2026-06-11 plus first-three PP8 Qwen/Gemma measured per-layer memory from profiles/production/first3_resident_memory_budget.json.",
+  "target": {
+    "min_available_ratio": 0.1,
+    "min_available_gib": 12.0,
+    "power_safe_initial": true,
+    "spark0_extra_headroom": true
+  },
+  "active_services": [
+    "kimi26_pp13",
+    "qwen27_bf16_pp13",
+    "gemma4_26b_a4b_pp13"
+  ],
+  "topology": "profiles/topology/static_sparks_kimi_qwen_gemma_pp13.json",
+  "layer_partitions": {
+    "kimi26_pp13": [
+      4,
+      4,
+      4,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      4
+    ],
+    "qwen27_bf16_pp13": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      4,
+      5,
+      5,
+      5,
+      5,
+      5
+    ],
+    "gemma4_26b_a4b_pp13": [
+      2,
+      2,
+      3,
+      3,
+      2,
+      3,
+      2,
+      2,
+      2,
+      2,
+      3,
+      2,
+      2
+    ]
+  },
+  "fixed_kv_cache_memory_bytes": {
+    "kimi26_pp13": 8589934592,
+    "qwen27_bf16_pp13": 8589934592,
+    "gemma4_26b_a4b_pp13": 6442450944
+  },
+  "resident_batch_token_budget": {
+    "kimi26_pp13": 32768,
+    "qwen27_bf16_pp13": 32768,
+    "gemma4_26b_a4b_pp13": 16384,
+    "notes": "Kimi is raised from the boot-safe batch-4/8192-token profile to batch 16 with a 32768-token scheduler gate. This allows 16 active requests without permitting 16 fully-prefilling 8192-token requests in one step. Raise again only after live throughput and power telemetry prove office power margin."
+  },
+  "resident_batch_size": {
+    "kimi26_pp13": 16,
+    "qwen27_bf16_pp13": 32,
+    "gemma4_26b_a4b_pp13": 16
+  },
+  "kimi_batch16_fit_estimate": {
+    "basis": "Live Kimi-only startup reported roughly 48.14 GiB available GPU KV memory and 11905328 GPU KV tokens on rank0 at gpu_memory_utilization=0.70. The resident profile fixes Kimi KV to 8 GiB, roughly 16.6% of that allocation.",
+    "rough_fixed_8gib_token_capacity": 1978027,
+    "batch16_8192_context_tokens": 131072,
+    "estimated_capacity_margin": 15.09,
+    "notes": "This is an order-of-magnitude fit check, not a substitute for a relaunch. It says max_num_seqs=16 should fit comfortably with the fixed 8 GiB Kimi KV cap; the practical constraints are power and scheduler workspace."
+  },
+  "observed_kimi_pp13_available_gib_before_small_overlay": {
+    "spark0": 39.3,
+    "spark1": 34.4,
+    "spark2": 33.2,
+    "spark3": 31.7,
+    "spark4": 29.7,
+    "spark5": 31.7,
+    "spark6": 31.0,
+    "spark7": 28.9,
+    "spark8": 30.6,
+    "spark9": 30.9,
+    "sparka": 32.8,
+    "sparkb": 30.9,
+    "sparkc": 44.1
+  },
+  "observed_layer_memory_fit_gib": {
+    "qwen27_bf16": {
+      "per_layer": 0.71,
+      "spark0_embedding_head_overhead": 2.4,
+      "tail_overhead": 0.2
+    },
+    "gemma4_26b_a4b": {
+      "per_layer": 1.5
+    },
+    "local_lmcache_cpu_allowance_per_node": 2.0
+  },
+  "projection": {
+    "post_kimi_plus_qwen_gemma_available_gib": {
+      "spark0": 28.35,
+      "spark1": 25.35,
+      "spark2": 23.15,
+      "spark3": 21.65,
+      "spark4": 21.15,
+      "spark5": 21.65,
+      "spark6": 22.45,
+      "spark7": 21.06,
+      "spark8": 22.05,
+      "spark9": 22.35,
+      "sparka": 22.75,
+      "sparkb": 22.35,
+      "sparkc": 35.35
+    },
+    "floor_gib": 21.06,
+    "notes": "Projection subtracts Qwen and Gemma model-layer estimates plus 2 GiB/node local CPU LMCache allowance from live Kimi-only MemAvailable. It does not count GPU-power margin; enforce power first through batch limits and service concurrency until a hardware power cap is proven."
+  },
+  "power_policy": {
+    "hardware_power_limit_status": "No reliable per-Spark 150W NVML/powercap limit was exposed by nvidia-smi or /sys/class/powercap during the 2026-06-11 probe.",
+    "initial_control": "Use DSAPI service batch limits, token budgets, and one-running-batch-per-compute-domain admission until a hardware power cap is proven. Kimi batch 16 is a throughput target, not permission to saturate all three resident services at once.",
+    "target_watts_per_spark": 150
+  },
+  "promotion_gates": [
+    "Kimi 92-question COMPSEC run scores high enough to replace DSV4 as smart model.",
+    "Kimi PP13 relaunch with fixed KV cap handles COMPSEC17.",
+    "Kimi LMCache canary proves cache load/store does not change answers.",
+    "Qwen and Gemma PP13 candidate launches pass smoke and fit telemetry.",
+    "DSAPI readiness passes with profiles/topology/static_sparks_kimi_qwen_gemma_pp13.json."
+  ]
+}

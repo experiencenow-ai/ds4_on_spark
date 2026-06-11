@@ -1,0 +1,62 @@
+{
+  "backend": "vllm_pipeline",
+  "capability_classes": [
+    "smart",
+    "smartest",
+    "world_model_deep",
+    "peer"
+  ],
+  "format": "ds4-model-profile-v1",
+  "model_id": "moonshotai/Kimi-K2.6",
+  "performance": {
+    "aggregate_completion_tok_s": 12.856426,
+    "latency_rank": 1.8,
+    "max_num_batched_tokens": 32768,
+    "max_num_seqs": 16,
+    "measurement_notes": "2026-06-11 direct vLLM PP13 92-question run scored 64/92 with compsec_strict prompt style, thinking disabled, max_output_tokens=2048. Next launch target enables Kimi reasoning/tool parsers, prefix caching, and batch 16.",
+    "target": "13-stage Kimi K2.6 smart-model pipeline, capability-correct batch-16 launch with power telemetry gate."
+  },
+  "production_eligible": false,
+  "profile_id": "kimi26_pp13_smart_v1",
+  "quality": {
+    "compsec17": "17/17 direct vLLM PP13 via spark0:8137, compsec_strict, thinking disabled, 2048 output cap",
+    "ds4_eval_status": "Full 92-question direct vLLM run scored 64/92 overall with thinking disabled: COMPSEC 16/17, GPQA Diamond 20/25, SuperGPQA 19/25, AIME2025 9/25."
+  },
+  "routing": {
+    "chat_cohort_transport": "parallel_chat_completions",
+    "chat_template_thinking_key": "enable_thinking",
+    "default_for": [],
+    "optional_kv_cache_deployments": [
+      "profiles/kv_cache/kimi26_pp13_lmcache_hma.json"
+    ],
+    "pipeline": {
+      "api_base_url": "http://127.0.0.1:8137",
+      "compute_domain": "spark-fleet-0",
+      "entry_node_id": "spark0",
+      "served_model_name": "kimi26-pp13",
+      "service_id": "kimi26_pp13"
+    },
+    "pipeline_service_id": "kimi26_pp13",
+    "rank": 15,
+    "requires_profile_pin": false,
+    "served_model_name": "kimi26-pp13",
+    "startup_autoload": false,
+    "tokenizer_path": "/home/spark0/models/hf/moonshotai/Kimi-K2.6-pp13-view"
+  },
+  "runtime_contract_id": "kimi26_pp13_v1",
+  "supported_job_classes": [
+    "analysis",
+    "atom_edit",
+    "cluster_synthesis",
+    "debug",
+    "json_repair",
+    "longmem",
+    "summary",
+    "tool_chat",
+    "triage",
+    "world_model_extract"
+  ],
+  "supports_chat": true,
+  "supports_completion": true,
+  "supports_thinking": true
+}

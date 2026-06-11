@@ -1,0 +1,101 @@
+{
+  "contract_id": "kimi26_pp13_v1",
+  "description": "Kimi K2.6 13-stage vLLM layer-pipeline runtime. spark0 is the API ingress and uses a copied pp13 view of the model files; nonzero ranks use their node-local full model directories.",
+  "format": "ds4-runtime-contract-v1",
+  "kv_cache": {
+    "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/kimi26_pp13_fp8kv/p4_4_4_5_5_5_5_5_5_5_5_5_4",
+    "connector": "LMCacheConnectorV1",
+    "deployment": "profiles/kv_cache/kimi26_pp13_lmcache_hma.json",
+    "dtype": "fp8",
+    "external_backend": "lmcache_hma",
+    "expected_node_fraction": "1/13",
+    "fixed_kv_cache_memory_bytes": 8589934592,
+    "sharding": "pipeline_layers"
+  },
+  "admission": {
+    "max_num_batched_tokens": 32768,
+    "max_num_seqs": 16,
+    "power_policy": "one active Kimi batch per compute domain; raise further only after per-Spark power telemetry remains inside the 150W target"
+  },
+  "launch": {
+    "api_base_url": "http://127.0.0.1:8137",
+    "host": "0.0.0.0",
+    "master_addr": "10.10.100.10",
+    "master_port": 29626,
+    "port": 8137,
+    "socket_ifname": "ds4ring0"
+  },
+  "serving_capabilities": {
+    "auto_tool_choice": true,
+    "default_chat_template_kwargs": {
+      "enable_thinking": true
+    },
+    "prefix_caching": true,
+    "reasoning_parser": "kimi_k2",
+    "tool_call_parser": "kimi_k2"
+  },
+  "model": {
+    "model_id": "moonshotai/Kimi-K2.6",
+    "rank0_model_path": "/home/{node}/models/hf/moonshotai/Kimi-K2.6-pp13-view",
+    "served_model_name": "kimi26-pp13",
+    "worker_model_path": "/home/{node}/models/hf/moonshotai/Kimi-K2.6"
+  },
+  "pipeline": {
+    "entry_base_url": "http://127.0.0.1:8137",
+    "head_node": "spark0",
+    "layer_partition": [
+      4,
+      4,
+      4,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      4
+    ],
+    "pipeline_parallel_size": 13,
+    "tensor_parallel_size": 1,
+    "total_layers": 61,
+    "worker_nodes": [
+      "spark1",
+      "spark2",
+      "spark3",
+      "spark4",
+      "spark5",
+      "spark6",
+      "spark7",
+      "spark8",
+      "spark9",
+      "sparka",
+      "sparkb",
+      "sparkc"
+    ]
+  },
+  "profile_ids": [
+    "kimi26_pp13_smart_v1"
+  ],
+  "required_nodes": [
+    "spark0",
+    "spark1",
+    "spark2",
+    "spark3",
+    "spark4",
+    "spark5",
+    "spark6",
+    "spark7",
+    "spark8",
+    "spark9",
+    "sparka",
+    "sparkb",
+    "sparkc"
+  ],
+  "vllm": {
+    "required_source": "local vLLM source tree with Kimi K2.6 support and ds4_run_vllm_from_source.py guard",
+    "required_source_root": "/home/{node}/src/vllm"
+  }
+}
