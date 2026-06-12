@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -140,6 +141,24 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertIn("export VLLM_DS4_KV_PREFETCH_TOKEN=unit-file-token", script)
         self.assertLess(script.index("export VLLM_DS4_KV_PREFETCH_TOKEN=unit-file-token"), script.index('nohup bash "$script"'))
 
+    def test_remote_vllm_matcher_does_not_match_its_own_python_source(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        code = lifecycle._remote_vllm_process_code(include_ppid=False)
+        scope = {}
+        old_n = os.environ.get("N")
+        os.environ["N"] = "[]"
+        try:
+            exec(code.split("\nfor l in", 1)[0], scope)
+        finally:
+            if old_n is None:
+                os.environ.pop("N", None)
+            else:
+                os.environ["N"] = old_n
+
+        self.assertFalse(scope["is_vllm_serve"]("python3 -c \"return (' -m vllm.entrypoints.cli.main serve ' in cmd)\""))
+        self.assertTrue(scope["is_vllm_serve"]("/opt/venv/bin/python -m vllm.entrypoints.cli.main serve google/gemma-4-26B-A4B-it"))
+        self.assertTrue(scope["is_vllm_serve"]("/opt/venv/bin/vllm serve google/gemma-4-26B-A4B-it"))
+
     def test_prefetch_token_loader_falls_back_to_second_default_file(self) -> None:
         tokens = load_script(TOKEN_SCRIPT)
         old_files = tokens.DEFAULT_PREFETCH_TOKEN_FILES
@@ -270,8 +289,10 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
 
         self.assertIn("is_vllm_serve", status_script)
         self.assertIn("is_vllm_serve", kill_script)
-        self.assertIn("-m vllm.entrypoints.cli.main serve", status_script)
-        self.assertIn(" vllm serve ", kill_script)
+        self.assertIn("shlex.split(cmd)", status_script)
+        self.assertIn("argv[1]==", status_script)
+        self.assertIn("vllm.entrypoints.cli.main", status_script)
+        self.assertIn("endswith", kill_script)
         self.assertNotIn("('vllm' in cmd or '--pipeline-parallel-size' in cmd)", kill_script)
         self.assertNotIn("('vllm' in p[1] or '--pipeline-parallel-size' in p[1])", status_script)
 
