@@ -91,8 +91,8 @@ class StaticSparkTopologyTests(unittest.TestCase):
         capacity = topology.estimate_capacity_by_profile()
 
         self.assertEqual(len(topology.nodes), 12)
-        self.assertEqual(capacity[QWEN_PP12], 64)
-        self.assertEqual(capacity[GEMMA26_PP12], 32)
+        self.assertEqual(capacity[QWEN_PP12], 128)
+        self.assertEqual(capacity[GEMMA26_PP12], 64)
         self.assertEqual(
             topology.routing_policy["active_resident_service_ids"],
             ["qwen27_bf16_pp12", "gemma4_26b_a4b_pp12"],
@@ -106,8 +106,14 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(gemma.pipeline_parallel_size, 12)
         self.assertEqual(qwen.kv_cache["expected_entry_fraction_per_node"], 1.0 / 12.0)
         self.assertEqual(gemma.kv_cache["expected_entry_fraction_per_node"], 1.0 / 12.0)
-        self.assertEqual(qwen.scheduler["vllm_max_num_seqs"], 64)
-        self.assertEqual(gemma.scheduler["vllm_max_num_seqs"], 32)
+        self.assertEqual(qwen.scheduler["vllm_max_num_seqs"], 128)
+        self.assertEqual(gemma.scheduler["vllm_max_num_seqs"], 64)
+        self.assertEqual(qwen.scheduler["refill_low_watermark"], 96)
+        self.assertEqual(gemma.scheduler["refill_low_watermark"], 48)
+        self.assertEqual(
+            topology.routing_policy["resident_coordinator_defaults"]["dispatch_window"],
+            192,
+        )
         self.assertEqual(float(qwen.kv_cache["gpu_memory_utilization"]) + float(gemma.kv_cache["gpu_memory_utilization"]), 0.75)
 
     def test_openai_aliases_follow_active_pp12_topology_and_reject_absent_dsv4(self) -> None:

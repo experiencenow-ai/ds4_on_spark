@@ -114,7 +114,7 @@ def _build(repo_dir: Path, v2_dir: Path, *, skip_tests: bool) -> None:
 def _coordinator_env(args: argparse.Namespace, v2_dir: Path) -> dict[str, str]:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(v2_dir / "src") if not env.get("PYTHONPATH") else f"{v2_dir / 'src'}:{env['PYTHONPATH']}"
-    defaults = _profile_defaults(args.profile)
+    defaults = _profile_defaults(args.profile, topology_path=_resolve_topology_path(getattr(args, "topology", ""), v2_dir))
     for key, value in defaults.items():
         if key in _SAFETY_PROFILE_DEFAULTS:
             env[key] = value
@@ -170,11 +170,11 @@ _SAFETY_PROFILE_DEFAULTS = {
 }
 
 
-def _profile_defaults(profile: str) -> dict[str, str]:
+def _profile_defaults(profile: str, *, topology_path: Path = STATIC_SPARKS_TOPOLOGY) -> dict[str, str]:
     dsv4 = _load_dsv4_production_profile()
     common = _common_profile_defaults(dsv4)
     if profile in {"throughput", "production", "resident128", "resident256"}:
-        common.update(_dsv4_profile_defaults(dsv4, profile))
+        common.update(_dsv4_profile_defaults(dsv4, profile, topology_path=topology_path))
     return common
 
 
@@ -225,7 +225,7 @@ def _common_profile_defaults(dsv4: dict[str, object]) -> dict[str, str]:
     }
 
 
-def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str) -> dict[str, str]:
+def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str, *, topology_path: Path = STATIC_SPARKS_TOPOLOGY) -> dict[str, str]:
     coordinator = dict(_load_first3_memory_budget().get("coordinator") or {})
     if profile == "resident256":
         coordinator.update(
@@ -239,7 +239,13 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str) -> dict[str, s
                 "completion_chunk_concurrency": 4,
             }
         )
+    coordinator.update(_topology_coordinator_defaults(topology_path))
+    topology_services = _topology_active_services(topology_path)
+    batch_limits = _pipeline_batch_limits(topology_path=topology_path)
+    if str(dsv4["service_id"]) in batch_limits:
+        batch_limits[str(dsv4["service_id"])] = int(dsv4["max_num_seqs"])
     return {
+        "DS4_API_RESIDENT_SERVICE_IDS": ",".join(topology_services) if topology_services else "qwen27_bf16_pp8,gemma4_26b_a4b_pp8,dsv4_flash_pp8",
         "DS4_API_DISPATCH_WINDOW": str(coordinator["dispatch_window"]),
         "DS4_API_DISPATCH_REFILL_BATCH": str(coordinator["dispatch_refill_batch"]),
         "DS4_API_DISPATCH_BATCH_LINGER_S": "0.05",
@@ -249,7 +255,7 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str) -> dict[str, s
         "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": str(coordinator["completion_pp_safe_cohort_max"]),
         "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": str(coordinator["completion_chunk_concurrency"]),
         "DS4_API_DISPATCH_KV_CAPACITY_BYTES": str(coordinator["dispatch_kv_capacity_bytes"]),
-        "DS4_API_BATCH_LIMITS_JSON": json.dumps(_pipeline_batch_limits(overrides={str(dsv4["service_id"]): int(dsv4["max_num_seqs"])}), separators=(",", ":")),
+        "DS4_API_BATCH_LIMITS_JSON": json.dumps(batch_limits, separators=(",", ":")),
     }
 
 
@@ -274,8 +280,38 @@ def _load_first3_memory_budget() -> dict[str, object]:
     return json.loads(FIRST3_MEMORY_BUDGET.read_text(encoding="utf-8"))
 
 
+def _resolve_topology_path(raw: str, v2_dir: Path) -> Path:
+    text = str(raw or "").strip()
+    path = Path(text or os.environ.get("TOPOLOGY", "profiles/topology/static_sparks.json"))
+    if path.is_absolute():
+        return path
+    return v2_dir / path
+
+
+def _topology_coordinator_defaults(topology_path: Path) -> dict[str, object]:
+    topology = _load_topology(topology_path)
+    routing = topology.get("routing_policy") if isinstance(topology.get("routing_policy"), dict) else {}
+    raw = routing.get("resident_coordinator_defaults")
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def _topology_active_services(topology_path: Path) -> list[str]:
+    topology = _load_topology(topology_path)
+    routing = topology.get("routing_policy") if isinstance(topology.get("routing_policy"), dict) else {}
+    raw = routing.get("active_resident_service_ids")
+    if isinstance(raw, list):
+        return [str(item) for item in raw if str(item)]
+    if isinstance(raw, str):
+        return [item.strip() for item in raw.replace(";", ",").split(",") if item.strip()]
+    return []
+
+
+def _load_topology(topology_path: Path) -> dict[str, object]:
+    return json.loads(Path(topology_path).read_text(encoding="utf-8"))
+
+
 def _pipeline_batch_limits(*, topology_path: Path = STATIC_SPARKS_TOPOLOGY, overrides: dict[str, int] | None = None) -> dict[str, int]:
-    topology = json.loads(topology_path.read_text(encoding="utf-8"))
+    topology = _load_topology(topology_path)
     routing = topology.get("routing_policy") if isinstance(topology.get("routing_policy"), dict) else {}
     services = routing.get("pipeline_services") if isinstance(routing.get("pipeline_services"), dict) else {}
     limits: dict[str, int] = {}

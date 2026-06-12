@@ -49,11 +49,11 @@
   "resident_batch_token_budget": {
     "qwen27_bf16_pp12": 65536,
     "gemma4_26b_a4b_pp12": 32768,
-    "notes": "Qwen keeps 262K model context and raises batch target to 64; Gemma is raised to its config-advertised 262K context with batch target 32. Live launch must prove actual KV capacity before production promotion."
+    "notes": "Qwen keeps 262K model context and raises batch target to 128; Gemma is raised to its config-advertised 262K context with batch target 64. Live launch must prove actual KV capacity before production promotion."
   },
   "resident_batch_size": {
-    "qwen27_bf16_pp12": 64,
-    "gemma4_26b_a4b_pp12": 32
+    "qwen27_bf16_pp12": 128,
+    "gemma4_26b_a4b_pp12": 64
   },
   "estimated_model_layer_memory_gib": {
     "qwen27_bf16_per_layer": 0.71,
@@ -69,11 +69,22 @@
     "combined": 0.75,
     "stress_result": "13-node stress reached 96 pct GPU util on every node for 180s, peak raw GPU draw 1191.33 W, hottest node 87 C."
   },
+  "coordinator": {
+    "dispatch_window": 192,
+    "dispatch_refill_batch": 192,
+    "completion_cohort_max": 192,
+    "completion_token_budget": 65536,
+    "completion_budget_include_output": false,
+    "completion_pp_safe_cohort_max": 192,
+    "completion_chunk_concurrency": 4,
+    "dispatch_kv_capacity_bytes": 8589934592,
+    "notes": "Post-92x DSAPI telemetry showed Qwen64+Gemma32 kept average GPU utilization near 15 pct while both queues were full. This first throughput candidate raises sequence admission only; fixed KV bytes and GPU utilization caps stay unchanged until the 128/64 run proves memory headroom."
+  },
   "promotion_gates": [
     "Launch Qwen PP12 and Gemma PP12 from pulled main only.",
     "DSAPI readiness passes with profiles/topology/static_sparks_qwen_gemma_pp12.json.",
     "Qwen and Gemma COMPSEC17 pass with >=2048 output token budget.",
-    "Run queue saturation at batch 16,32,64 for Qwen and 16,32 for Gemma while watching memory and power.",
+    "Run queue saturation at batch 64,128 for Qwen and 32,64 for Gemma while watching memory and power.",
     "LMCache canary proves repeated prompts preserve answers and improve prefill behavior."
   ]
 }

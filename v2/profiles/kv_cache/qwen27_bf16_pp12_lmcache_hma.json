@@ -76,7 +76,7 @@
     "VLLM_DS4_PP_TORCH_GROUP_WARMUP": "0",
     "VLLM_DS4_PP_TORCH_PAIR_GROUPS": "0",
     "VLLM_DS4_PP_TORCH_PG_TENSOR_DICT": "0",
-    "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "64",
+    "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "128",
     "VLLM_HOST_IP": "{fabric_ip}"
   },
   "fabric_topology": "../transfer/spark_200g.json",
@@ -110,7 +110,7 @@
   },
   "master_addr": "10.10.100.10",
   "master_port": 29527,
-  "max_batch_size": 64,
+  "max_batch_size": 128,
   "model_id": "/home/{node}/models/hf/Qwen/Qwen3.6-27B",
   "pipeline_nodes": [
     "spark0",
