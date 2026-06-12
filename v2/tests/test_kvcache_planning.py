@@ -22,6 +22,8 @@ QWEN_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_lmcache_h
 QWEN_BF16KV_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_bf16kv_lmcache_hma.json"
 GEMMA26_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_26b_a4b_it_pp8_lmcache_hma.json"
 KIMI_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "kimi26_pp13_lmcache_hma.json"
+QWEN_PP12_PLAIN_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp12_plain.json"
+GEMMA26_PP12_PLAIN_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_26b_a4b_it_pp12_plain.json"
 DSV4_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "dsv4_flash_pp8_simple_offload.json"
 GEMMA31_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_31b_it_pp8_plain.json"
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
@@ -400,6 +402,23 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertIn("VLLM_HOST_IP=10.10.100.10", rank0)
             self.assertIn("VLLM_HOST_IP=10.10.100.17", rank7)
             self.assertIn("--headless", rank7)
+
+    def test_qwen_gemma_pp12_plain_plans_omit_external_kv_connector(self) -> None:
+        for deployment_path, expected_profile, expected_batch in (
+            (QWEN_PP12_PLAIN_DEPLOYMENT, "qwen3_6_27b_bf16_pp12_plain_efficient_v1", "128"),
+            (GEMMA26_PP12_PLAIN_DEPLOYMENT, "gemma4_26b_a4b_it_pp12_plain_peer_v1", "64"),
+        ):
+            deployment = KvCacheDeployment.load(deployment_path)
+            plan = plan_deployment(deployment)
+            rank0 = plan["vllm_nodes"][0]
+
+            self.assertEqual(plan["profile_id"], expected_profile)
+            self.assertEqual(plan["connector"]["kv_transfer_config"], {})
+            self.assertNotIn("--kv-transfer-config", rank0["argv"])
+            self.assertNotIn("LMCacheConnectorV1", rank0["command"])
+            self.assertNotIn("LMCACHE_ROOT", rank0["env"])
+            self.assertIn("--enable-prefix-caching", rank0["argv"])
+            self.assertEqual(rank0["argv"][rank0["argv"].index("--max-num-seqs") + 1], expected_batch)
 
     def test_static_pipeline_cli_write_scripts_requires_lifecycle_runner(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
