@@ -109,11 +109,11 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         limits = json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])
 
         self.assertEqual(defaults["DS4_API_RESIDENT_SERVICE_IDS"], "qwen27_bf16_pp12,gemma4_26b_a4b_pp12")
-        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "192")
-        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "192")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "192")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "65536")
-        self.assertEqual(limits, {"gemma4_26b_a4b_pp12": 64, "qwen27_bf16_pp12": 128})
+        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "256")
+        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "256")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "256")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "131072")
+        self.assertEqual(limits, {"gemma4_26b_a4b_pp12": 128, "qwen27_bf16_pp12": 128})
 
     def test_relaunch_resident256_profile_widens_feed_without_kv_bloat(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)

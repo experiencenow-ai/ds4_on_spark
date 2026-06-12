@@ -145,6 +145,42 @@ class CancellableStreamingBackend(OpenAICompatibleRunner):
         raise AssertionError("streaming cancellation test should not use non-streaming post")
 
 
+class StreamingChatBackend(OpenAICompatibleRunner):
+    def __init__(self) -> None:
+        super().__init__(base_url="http://unused")
+        self.payloads: list[dict] = []
+
+    def _post_sse_json(self, endpoint: str, payload: dict, **kwargs):
+        assert endpoint == self.chat_endpoint
+        assert payload["stream"] is True
+        self.payloads.append(payload)
+        yield {"choices": [{"delta": {"content": "chat"}, "finish_reason": None}]}
+        yield {"choices": [{"delta": {"content": " done"}, "finish_reason": "stop"}]}
+
+    def _post_json(self, endpoint: str, payload: dict) -> dict:
+        raise AssertionError("parallel chat streaming test should not use non-streaming post")
+
+
+class CancellableStreamingChatBackend(OpenAICompatibleRunner):
+    def __init__(self) -> None:
+        super().__init__(base_url="http://unused")
+        self.cancel_event_seen = False
+        self.tail_requested = False
+
+    def _post_sse_json(self, endpoint: str, payload: dict, *, cancel_event: threading.Event | None = None):
+        assert endpoint == self.chat_endpoint
+        assert payload["stream"] is True
+        self.cancel_event_seen = cancel_event is not None
+        if cancel_event is not None:
+            cancel_event.set()
+        yield {"choices": [{"delta": {"content": "partial"}, "finish_reason": None}]}
+        self.tail_requested = True
+        yield {"choices": [{"delta": {"content": " tail"}, "finish_reason": "stop"}]}
+
+    def _post_json(self, endpoint: str, payload: dict) -> dict:
+        raise AssertionError("parallel chat cancellation test should not use non-streaming post")
+
+
 class SlowChatBatchBackend(OpenAICompatibleRunner):
     def __init__(self) -> None:
         super().__init__(base_url="http://unused")
@@ -185,6 +221,24 @@ class CancellableStreamingPipelineRunner(PipelineOpenAIRunner):
         self.backend = CancellableStreamingBackend()
 
     def _runner_for(self, profile: ModelProfile, node_id: str | None) -> CancellableStreamingBackend:
+        return self.backend
+
+
+class StreamingChatPipelineRunner(PipelineOpenAIRunner):
+    def __init__(self) -> None:
+        super().__init__(base_urls={"svc": "http://unused"})
+        self.backend = StreamingChatBackend()
+
+    def _runner_for(self, profile: ModelProfile, node_id: str | None) -> StreamingChatBackend:
+        return self.backend
+
+
+class CancellableStreamingChatPipelineRunner(PipelineOpenAIRunner):
+    def __init__(self) -> None:
+        super().__init__(base_urls={"svc": "http://unused"})
+        self.backend = CancellableStreamingChatBackend()
+
+    def _runner_for(self, profile: ModelProfile, node_id: str | None) -> CancellableStreamingChatBackend:
         return self.backend
 
 
@@ -615,6 +669,74 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(results["r"]["transport"]["coalesced_chat_batch"], True)
         self.assertEqual(results["r2"]["transport"]["coalesced_chat_planned_split"], True)
         self.assertEqual(results["r2"]["transport"]["coalesced_chat_chunk_count"], 2)
+
+    def test_pipeline_runner_streams_parallel_chat_incremental_members(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm_pipeline",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": True,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {
+                    "chat_cohort_transport": "parallel_chat_completions",
+                    "parallel_chat_concurrency": 2,
+                    "served_model_name": "served-model",
+                },
+            }
+        )
+        first = InferenceRequest.from_json(make_request(chat=True).raw)
+        second_raw = make_request(chat=True).raw
+        second_raw["request_id"] = "r2"
+        seen = []
+        results = StreamingChatPipelineRunner().run_many_on_node_incremental(
+            [first, InferenceRequest.from_json(second_raw)],
+            profile,
+            None,
+            concurrency=2,
+            on_result=lambda request_id, result: seen.append((request_id, result["output"]["text"])),
+            cancel_event=threading.Event(),
+        )
+        self.assertEqual(sorted(seen), [("r", "chat done"), ("r2", "chat done")])
+        self.assertTrue(results["r"]["transport"]["coalesced_chat_parallel_streaming"])
+
+    def test_pipeline_runner_parallel_chat_cancel_closes_internal_stream(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm_pipeline",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": True,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {
+                    "chat_cohort_transport": "parallel_chat_completions",
+                    "parallel_chat_concurrency": 1,
+                    "served_model_name": "served-model",
+                },
+            }
+        )
+        first = InferenceRequest.from_json(make_request(chat=True).raw)
+        second_raw = make_request(chat=True).raw
+        second_raw["request_id"] = "r2"
+        runner = CancellableStreamingChatPipelineRunner()
+        results = runner.run_many_on_node_incremental(
+            [first, InferenceRequest.from_json(second_raw)],
+            profile,
+            None,
+            concurrency=2,
+            on_result=lambda _request_id, _result: None,
+            cancel_event=threading.Event(),
+        )
+        self.assertTrue(runner.backend.cancel_event_seen)
+        self.assertFalse(runner.backend.tail_requested)
+        self.assertEqual(results["r"]["status"], "transport_failed")
+        self.assertIn("cancelled", results["r"]["transport"]["error"])
 
     def test_pipeline_runner_streaming_wall_timeout_fails_only_unfinished_tail(self) -> None:
         profile = ModelProfile.from_json(

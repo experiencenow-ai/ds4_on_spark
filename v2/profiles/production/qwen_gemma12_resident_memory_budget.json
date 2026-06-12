@@ -44,16 +44,16 @@
   },
   "fixed_kv_cache_memory_bytes": {
     "qwen27_bf16_pp12": 17179869184,
-    "gemma4_26b_a4b_pp12": 12884901888
+    "gemma4_26b_a4b_pp12": 17179869184
   },
   "resident_batch_token_budget": {
     "qwen27_bf16_pp12": 65536,
-    "gemma4_26b_a4b_pp12": 32768,
-    "notes": "Qwen keeps 262K model context and raises batch target to 128; Gemma is raised to its config-advertised 262K context with batch target 64. Live launch must prove actual KV capacity before production promotion."
+    "gemma4_26b_a4b_pp12": 65536,
+    "notes": "Qwen keeps 262K model context and batch target 128; Gemma is raised to its config-advertised 262K context with batch target 128 after live PP12 telemetry showed batch-64 left GPUs far below saturation. Live launch must prove actual KV capacity before production promotion."
   },
   "resident_batch_size": {
     "qwen27_bf16_pp12": 128,
-    "gemma4_26b_a4b_pp12": 64
+    "gemma4_26b_a4b_pp12": 128
   },
   "estimated_model_layer_memory_gib": {
     "qwen27_bf16_per_layer": 0.71,
@@ -65,26 +65,26 @@
   },
   "gpu_budget": {
     "qwen27_bf16_pp12": 0.42,
-    "gemma4_26b_a4b_pp12": 0.33,
-    "combined": 0.75,
+    "gemma4_26b_a4b_pp12": 0.38,
+    "combined": 0.8,
     "stress_result": "13-node stress reached 96 pct GPU util on every node for 180s, peak raw GPU draw 1191.33 W, hottest node 87 C."
   },
   "coordinator": {
-    "dispatch_window": 192,
-    "dispatch_refill_batch": 192,
-    "completion_cohort_max": 192,
-    "completion_token_budget": 65536,
+    "dispatch_window": 256,
+    "dispatch_refill_batch": 256,
+    "completion_cohort_max": 256,
+    "completion_token_budget": 131072,
     "completion_budget_include_output": false,
-    "completion_pp_safe_cohort_max": 192,
+    "completion_pp_safe_cohort_max": 256,
     "completion_chunk_concurrency": 4,
     "dispatch_kv_capacity_bytes": 8589934592,
-    "notes": "Post-92x DSAPI telemetry showed Qwen64+Gemma32 kept average GPU utilization near 15 pct while both queues were full. This first throughput candidate raises sequence admission only; fixed KV bytes and GPU utilization caps stay unchanged until the 128/64 run proves memory headroom."
+    "notes": "Post-92x DSAPI telemetry showed Qwen128+Gemma64 kept average GPU utilization near 15 pct while both queues were full. This throughput candidate raises Gemma to 128 and the global resident window to 256 while keeping combined GPU memory utilization below the 0.85 topology hard cap."
   },
   "promotion_gates": [
     "Launch Qwen PP12 and Gemma PP12 from pulled main only.",
     "DSAPI readiness passes with profiles/topology/static_sparks_qwen_gemma_pp12.json.",
     "Qwen and Gemma COMPSEC17 pass with >=2048 output token budget.",
-    "Run queue saturation at batch 64,128 for Qwen and 32,64 for Gemma while watching memory and power.",
+    "Run queue saturation at batch 128 for Qwen and 128 for Gemma while watching memory and power.",
     "LMCache canary proves repeated prompts preserve answers and improve prefill behavior."
   ]
 }
