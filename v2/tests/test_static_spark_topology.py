@@ -21,6 +21,7 @@ PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 KIMI_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_gemma_pp13.json"
 QWEN_GEMMA_PP12_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_qwen_gemma_pp12.json"
+QWEN_GEMMA_PP12_PLAIN_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_qwen_gemma_pp12_plain.json"
 VALIDATION_TASKS = ROOT / "profiles" / "validation" / "xhigh_live_validation_tasks.json"
 ALL_SPARKS = tuple(f"spark{index}" for index in range(8))
 QWEN_PP = "qwen3_6_27b_bf16_pp8_efficient_v1"
@@ -34,6 +35,8 @@ QWEN_PP13 = "qwen3_6_27b_bf16_pp13_efficient_v1"
 GEMMA26_PP13 = "gemma4_26b_a4b_it_pp13_peer_v1"
 QWEN_PP12 = "qwen3_6_27b_bf16_pp12_efficient_v1"
 GEMMA26_PP12 = "gemma4_26b_a4b_it_pp12_peer_v1"
+QWEN_PP12_PLAIN = "qwen3_6_27b_bf16_pp12_plain_efficient_v1"
+GEMMA26_PP12_PLAIN = "gemma4_26b_a4b_it_pp12_plain_peer_v1"
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
 DSV4_KV_PROFILE = ROOT / "profiles" / "kv_cache" / "dsv4_flash_pp8_simple_offload.json"
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
@@ -118,6 +121,28 @@ class StaticSparkTopologyTests(unittest.TestCase):
         )
         self.assertEqual(float(qwen.kv_cache["gpu_memory_utilization"]) + float(gemma.kv_cache["gpu_memory_utilization"]), 0.75)
 
+    def test_qwen_gemma_pp12_plain_topology_disables_external_lmcache(self) -> None:
+        topology = SparkTopology.load(QWEN_GEMMA_PP12_PLAIN_TOPOLOGY)
+        capacity = topology.estimate_capacity_by_profile()
+
+        self.assertEqual(len(topology.nodes), 12)
+        self.assertEqual(capacity[QWEN_PP12_PLAIN], 128)
+        self.assertEqual(capacity[GEMMA26_PP12_PLAIN], 64)
+        self.assertEqual(
+            topology.routing_policy["active_resident_service_ids"],
+            ["qwen27_bf16_pp12", "gemma4_26b_a4b_pp12"],
+        )
+        qwen = topology.pipeline_service_by_id("qwen27_bf16_pp12")
+        gemma = topology.pipeline_service_by_id("gemma4_26b_a4b_pp12")
+        self.assertEqual(qwen.profile_id, QWEN_PP12_PLAIN)
+        self.assertEqual(gemma.profile_id, GEMMA26_PP12_PLAIN)
+        self.assertEqual(qwen.kv_cache["connector_id"], "none")
+        self.assertEqual(gemma.kv_cache["connector_id"], "none")
+        self.assertEqual(qwen.kv_cache["external_backend"], "apc_prefix")
+        self.assertEqual(gemma.kv_cache["external_backend"], "apc_prefix")
+        self.assertEqual(qwen.scheduler["admission_mode"], "resident_multimodel_rolling_refill")
+        self.assertEqual(gemma.scheduler["admission_mode"], "resident_multimodel_rolling_refill")
+
     def test_openai_aliases_follow_active_pp12_topology_and_reject_absent_dsv4(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         topology = SparkTopology.load(QWEN_GEMMA_PP12_TOPOLOGY)
@@ -130,6 +155,19 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(default.service_id, "qwen27_bf16_pp12")
         with self.assertRaisesRegex(ValueError, "not a configured pipeline service"):
             _resolve_pipeline_service(topology, registry, {"model": "dsv4"})
+
+    def test_openai_aliases_follow_active_pp12_plain_topology(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        topology = SparkTopology.load(QWEN_GEMMA_PP12_PLAIN_TOPOLOGY)
+
+        qwen = _resolve_pipeline_service(topology, registry, {"model": "qwen"})
+        gemma = _resolve_pipeline_service(topology, registry, {"model": "gemma"})
+        default = _resolve_pipeline_service(topology, registry, {})
+        self.assertEqual(qwen.service_id, "qwen27_bf16_pp12")
+        self.assertEqual(gemma.service_id, "gemma4_26b_a4b_pp12")
+        self.assertEqual(default.service_id, "qwen27_bf16_pp12")
+        self.assertEqual(qwen.profile_id, QWEN_PP12_PLAIN)
+        self.assertEqual(gemma.profile_id, GEMMA26_PP12_PLAIN)
 
     def test_topology_filter_keeps_candidate_pp13_profiles_out_of_old_defaults(self) -> None:
         old_topology = SparkTopology.load(TOPOLOGY)

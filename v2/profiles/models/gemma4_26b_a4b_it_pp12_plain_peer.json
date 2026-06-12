@@ -1,0 +1,60 @@
+{
+  "backend": "vllm_pipeline",
+  "capability_classes": [
+    "gemma4",
+    "peer",
+    "smart"
+  ],
+  "format": "ds4-model-profile-v1",
+  "model_id": "google/gemma-4-26B-A4B-it",
+  "performance": {
+    "latency_rank": 0.89,
+    "max_num_batched_tokens": 32768,
+    "max_num_seqs": 64,
+    "measurement_notes": "12-stage Gemma4 26B-A4B PP12 plain baseline with vLLM prefix cache, no external LMCache connector, batch-64 admission, and 262K context cap.",
+    "target": "12-stage Gemma4 26B-A4B peer pipeline with LMCache HMA, batch-64 admission, and 262K context cap."
+  },
+  "production_eligible": false,
+  "profile_id": "gemma4_26b_a4b_it_pp12_plain_peer_v1",
+  "quality": {
+    "baseline": "Derived from gemma4_26b_a4b_it_pp13_peer_v1 and PP8 Gemma4 26B-A4B path that measured 69/92 ds4-eval and 15/17 COMPSEC. PP12 must be remeasured before production promotion.",
+    "deployment_note": "Plain PP12 baseline: vLLM prefix cache only, external LMCache connector disabled for scheduler/performance isolation."
+  },
+  "routing": {
+    "chat_cohort_transport": "parallel_chat_completions",
+    "chat_template_thinking_key": "enable_thinking",
+    "default_chat_template_kwargs": {
+      "enable_thinking": false
+    },
+    "optional_kv_cache_deployments": [
+      "profiles/kv_cache/gemma4_26b_a4b_it_pp12_plain.json"
+    ],
+    "pipeline": {
+      "api_base_url": "http://127.0.0.1:8118",
+      "compute_domain": "spark-fleet-0",
+      "entry_node_id": "spark0",
+      "served_model_name": "gemma-4-26b-a4b-it-pp12",
+      "service_id": "gemma4_26b_a4b_pp12"
+    },
+    "pipeline_service_id": "gemma4_26b_a4b_pp12",
+    "rank": 835,
+    "requires_profile_pin": true,
+    "served_model_name": "gemma-4-26b-a4b-it-pp12",
+    "startup_autoload": false,
+    "tokenizer_path": "/home/spark0/models/hf/google/gemma-4-26B-A4B-it"
+  },
+  "runtime_contract_id": "gemma4_26b_a4b_it_pp12_v1",
+  "supported_job_classes": [
+    "analysis",
+    "atom_edit",
+    "debug",
+    "json_repair",
+    "summary",
+    "tool_chat",
+    "triage"
+  ],
+  "supports_chat": true,
+  "supports_completion": true,
+  "supports_thinking": true,
+  "target": "12-stage Gemma4 26B-A4B PP12 plain baseline with vLLM prefix cache, no external LMCache connector, batch-64 admission, and 262K context cap."
+}
