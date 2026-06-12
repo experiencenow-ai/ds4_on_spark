@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 
 RAIL_DEVS = {
@@ -15,6 +18,16 @@ RAIL_DEVS = {
     "enP2p1s0f1np1",
 }
 CONTROL_IFACE = "ds4ring0"
+DEFAULT_TOPOLOGY = Path(__file__).resolve().parents[1] / "profiles" / "transfer" / "spark_200g.json"
+SSH_OPTIONS: list[str] = []
+
+
+@dataclass(frozen=True)
+class NodeInfo:
+    rank: int
+    node_id: str
+    host: str
+    fabric_ip: str
 
 
 @dataclass(frozen=True)
@@ -25,10 +38,15 @@ class RouteSpec:
     via: str
     dev: str
     source_ip: str
+    source_node: str = ""
+    target_node: str = ""
+    source_host: str = ""
 
     @property
     def label(self) -> str:
-        return f"spark{self.source_rank}->spark{self.target_rank}"
+        source = self.source_node or f"spark{self.source_rank}"
+        target = self.target_node or f"spark{self.target_rank}"
+        return f"{source}->{target}"
 
     def ip_cmd(self, sudo: bool) -> str:
         argv = [
@@ -52,10 +70,12 @@ class RouteSpec:
 class ControlIfaceSpec:
     rank: int
     ip: str
+    node_id: str = ""
+    host: str = ""
 
     @property
     def label(self) -> str:
-        return f"spark{self.rank}"
+        return self.node_id or f"spark{self.rank}"
 
     def ip_cmds(self, sudo: bool, *, remove_loopback: bool) -> list[str]:
         prefix = ["sudo"] if sudo else []
@@ -73,6 +93,56 @@ def fabric_ip(rank: int) -> str:
     return f"10.10.100.{rank + 10}"
 
 
+def fallback_nodes(count: int) -> list[NodeInfo]:
+    return [
+        NodeInfo(
+            rank=rank,
+            node_id=f"spark{rank}",
+            host=f"spark{rank}",
+            fabric_ip=fabric_ip(rank),
+        )
+        for rank in range(count)
+    ]
+
+
+def load_nodes(topology_path: str, count: int) -> list[NodeInfo]:
+    path = Path(topology_path).expanduser()
+    if str(path) == ".":
+        path = DEFAULT_TOPOLOGY
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            topology = json.load(handle)
+        nodes = [
+            NodeInfo(
+                rank=rank,
+                node_id=str(node["node_id"]),
+                host=str(node.get("host") or node["node_id"]),
+                fabric_ip=str(node.get("fabric_ip") or fabric_ip(rank)),
+            )
+            for rank, node in enumerate(topology.get("nodes", []))
+            if "node_id" in node
+        ]
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        nodes = []
+    if count > 0:
+        nodes = nodes[:count]
+    if nodes:
+        return nodes
+    return fallback_nodes(count if count > 0 else 8)
+
+
+def load_ssh_options(topology_path: str) -> list[str]:
+    path = Path(topology_path).expanduser()
+    if str(path) == ".":
+        path = DEFAULT_TOPOLOGY
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            topology = json.load(handle)
+        return [str(item) for item in topology.get("ssh_options", [])]
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return []
+
+
 def line_next_hop(source_rank: int, target_rank: int) -> tuple[str, str]:
     if source_rank == target_rank:
         raise ValueError("self route does not need a next hop")
@@ -83,10 +153,12 @@ def line_next_hop(source_rank: int, target_rank: int) -> tuple[str, str]:
     return (f"10.10.{subnet}.1", "enP2p1s0f0np0")
 
 
-def build_specs(nodes: int, *, adjacent_only: bool, head_only: bool) -> list[RouteSpec]:
+def build_specs(nodes: list[NodeInfo], *, adjacent_only: bool, head_only: bool) -> list[RouteSpec]:
     specs: list[RouteSpec] = []
-    for source_rank in range(nodes):
-        for target_rank in range(nodes):
+    for source in nodes:
+        for target in nodes:
+            source_rank = source.rank
+            target_rank = target.rank
             if source_rank == target_rank:
                 continue
             if adjacent_only and abs(source_rank - target_rank) != 1:
@@ -98,22 +170,30 @@ def build_specs(nodes: int, *, adjacent_only: bool, head_only: bool) -> list[Rou
                 RouteSpec(
                     source_rank=source_rank,
                     target_rank=target_rank,
-                    target_ip=fabric_ip(target_rank),
+                    target_ip=target.fabric_ip,
                     via=via,
                     dev=dev,
-                    source_ip=fabric_ip(source_rank),
+                    source_ip=source.fabric_ip,
+                    source_node=source.node_id,
+                    target_node=target.node_id,
+                    source_host=source.host,
                 )
             )
     return specs
 
 
-def build_control_iface_specs(ranks: list[int]) -> list[ControlIfaceSpec]:
-    return [ControlIfaceSpec(rank=rank, ip=fabric_ip(rank)) for rank in ranks]
+def build_control_iface_specs(nodes: list[NodeInfo], ranks: list[int]) -> list[ControlIfaceSpec]:
+    by_rank = {node.rank: node for node in nodes}
+    specs: list[ControlIfaceSpec] = []
+    for rank in ranks:
+        node = by_rank[rank]
+        specs.append(ControlIfaceSpec(rank=rank, ip=node.fabric_ip, node_id=node.node_id, host=node.host))
+    return specs
 
 
 def run_ssh(host: str, command: str, timeout_s: int) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["ssh", host, command],
+        ["ssh", *SSH_OPTIONS, host, command],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -124,7 +204,7 @@ def run_ssh(host: str, command: str, timeout_s: int) -> subprocess.CompletedProc
 
 def route_get(spec: RouteSpec, timeout_s: int, *, strict_next_hop: bool) -> tuple[bool, str]:
     completed = run_ssh(
-        f"spark{spec.source_rank}",
+        spec.source_host or f"spark{spec.source_rank}",
         "ip route get " + shlex.quote(spec.target_ip),
         timeout_s,
     )
@@ -135,7 +215,7 @@ def route_get(spec: RouteSpec, timeout_s: int, *, strict_next_hop: bool) -> tupl
     dev = _extract_field(first, "dev")
     via = _extract_field(first, "via")
     has_dev = dev in RAIL_DEVS
-    dev_up = _dev_is_up(spec.source_rank, dev, timeout_s) if has_dev and dev is not None else False
+    dev_up = _dev_is_up(spec.source_host or f"spark{spec.source_rank}", dev, timeout_s) if has_dev and dev is not None else False
     has_via = via is not None
     has_src = f" src {spec.source_ip} " in f" {first} "
     has_expected_next_hop = (dev == spec.dev and via == spec.via)
@@ -149,7 +229,7 @@ def route_get(spec: RouteSpec, timeout_s: int, *, strict_next_hop: bool) -> tupl
 
 def control_iface_get(spec: ControlIfaceSpec, timeout_s: int) -> tuple[bool, str]:
     completed = run_ssh(
-        f"spark{spec.rank}",
+        spec.host or f"spark{spec.rank}",
         f"ip -o -4 addr show dev {CONTROL_IFACE} && ip -d link show {CONTROL_IFACE}",
         timeout_s,
     )
@@ -170,12 +250,14 @@ def apply_specs(specs: list[RouteSpec], sudo: bool, timeout_s: int) -> int:
     for source_rank in sorted(by_source):
         commands = [spec.ip_cmd(sudo=sudo) for spec in by_source[source_rank]]
         remote_command = " && ".join(commands)
-        completed = run_ssh(f"spark{source_rank}", remote_command, timeout_s)
+        host = by_source[source_rank][0].source_host or f"spark{source_rank}"
+        label = by_source[source_rank][0].source_node or f"spark{source_rank}"
+        completed = run_ssh(host, remote_command, timeout_s)
         if completed.returncode != 0:
             failures += 1
-            print(f"FAIL apply spark{source_rank}: {completed.stderr.strip() or completed.stdout.strip()}")
+            print(f"FAIL apply {label}: {completed.stderr.strip() or completed.stdout.strip()}")
         else:
-            print(f"PASS apply spark{source_rank}: {len(commands)} routes")
+            print(f"PASS apply {label}: {len(commands)} routes")
     return failures
 
 
@@ -183,7 +265,7 @@ def apply_control_iface_specs(specs: list[ControlIfaceSpec], sudo: bool, timeout
     failures = 0
     for spec in specs:
         remote_command = " && ".join(spec.ip_cmds(sudo=sudo, remove_loopback=remove_loopback))
-        completed = run_ssh(f"spark{spec.rank}", remote_command, timeout_s)
+        completed = run_ssh(spec.host or f"spark{spec.rank}", remote_command, timeout_s)
         if completed.returncode != 0:
             failures += 1
             print(f"FAIL apply {spec.label} {CONTROL_IFACE}: {completed.stderr.strip() or completed.stdout.strip()}")
@@ -198,13 +280,14 @@ def print_repairs(specs: list[RouteSpec], sudo: bool) -> None:
         by_source.setdefault(spec.source_rank, []).append(spec)
     for source_rank in sorted(by_source):
         commands = [spec.ip_cmd(sudo=sudo) for spec in by_source[source_rank]]
-        print(f"ssh spark{source_rank} {shlex.quote('; '.join(commands))}")
+        host = by_source[source_rank][0].source_host or f"spark{source_rank}"
+        print(f"ssh {shlex.quote(host)} {shlex.quote('; '.join(commands))}")
 
 
 def print_control_iface_repairs(specs: list[ControlIfaceSpec], sudo: bool, *, remove_loopback: bool) -> None:
     for spec in specs:
         commands = spec.ip_cmds(sudo=sudo, remove_loopback=remove_loopback)
-        print(f"ssh spark{spec.rank} {shlex.quote('; '.join(commands))}")
+        print(f"ssh {shlex.quote(spec.host or f'spark{spec.rank}')} {shlex.quote('; '.join(commands))}")
 
 
 def _extract_field(route: str, field: str) -> str | None:
@@ -219,27 +302,37 @@ def _shell_cmd(argv: list[str]) -> str:
     return " ".join(shlex.quote(item) for item in argv)
 
 
-def _parse_rank_filter(raw: str | None, nodes: int) -> list[int]:
+def _parse_rank_filter(raw: str | None, nodes: int | list[NodeInfo]) -> list[int]:
+    if isinstance(nodes, int):
+        node_count = nodes
+        node_ranks = {f"spark{rank}": rank for rank in range(nodes)}
+    else:
+        node_count = len(nodes)
+        node_ranks = {node.node_id: node.rank for node in nodes}
     if raw is None or raw.strip() == "":
-        return list(range(nodes))
+        return list(range(node_count))
     ranks: list[int] = []
     for item in raw.split(","):
         value = item.strip()
-        if value.startswith("spark"):
+        if value in node_ranks:
+            rank = node_ranks[value]
+        elif value.startswith("spark"):
             value = value[5:]
-        rank = int(value)
-        if rank < 0 or rank >= nodes:
-            raise ValueError(f"rank {rank} outside 0..{nodes - 1}")
+            rank = int(value)
+        else:
+            rank = int(value)
+        if rank < 0 or rank >= node_count:
+            raise ValueError(f"rank {rank} outside 0..{node_count - 1}")
         if rank not in ranks:
             ranks.append(rank)
     return ranks
 
 
-def _dev_is_up(source_rank: int, dev: str | None, timeout_s: int) -> bool:
+def _dev_is_up(host: str, dev: str | None, timeout_s: int) -> bool:
     if dev is None:
         return False
     completed = run_ssh(
-        f"spark{source_rank}",
+        host,
         "cat " + shlex.quote(f"/sys/class/net/{dev}/operstate"),
         timeout_s,
     )
@@ -278,9 +371,12 @@ def check_control_iface_specs(specs: list[ControlIfaceSpec], sudo: bool, timeout
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Check or repair Spark 200G loopback host routes for the 0-7 line fabric.",
+        description="Check or repair Spark 200G loopback host routes for the canonical Spark fleet.",
     )
-    parser.add_argument("--nodes", type=int, default=8)
+    parser.add_argument("--topology", default=os.environ.get("DS4_SPARK_FLEET_TOPOLOGY", str(DEFAULT_TOPOLOGY)))
+    parser.add_argument("--nodes", type=int, default=0, help="Optional number of topology nodes to check; defaults to all nodes in the topology.")
+    parser.add_argument("--ssh-option", action="append", default=[], help="Extra ssh option, for example '-o UserKnownHostsFile=/tmp/kh'.")
+    parser.add_argument("--ssh-known-hosts", default="", help="Known-hosts file to use with StrictHostKeyChecking=accept-new.")
     parser.add_argument("--only-ranks", default="", help="Comma-separated source ranks or spark names, for example 4,6 or spark4,spark6.")
     parser.add_argument("--adjacent-only", action="store_true")
     parser.add_argument("--head-only", action="store_true")
@@ -295,9 +391,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def selected_route_specs(args: argparse.Namespace, source_ranks: list[int]) -> list[RouteSpec]:
+def selected_route_specs(args: argparse.Namespace, nodes: list[NodeInfo], source_ranks: list[int]) -> list[RouteSpec]:
     specs = build_specs(
-        args.nodes,
+        nodes,
         adjacent_only=bool(args.adjacent_only),
         head_only=bool(args.head_only),
     )
@@ -343,16 +439,21 @@ def handle_routes(args: argparse.Namespace, specs: list[RouteSpec], sudo: bool) 
 
 
 def main(argv: list[str]) -> int:
+    global SSH_OPTIONS
     args = parse_args(argv)
-    if args.nodes < 2:
-        raise SystemExit("--nodes must be at least 2")
+    nodes = load_nodes(args.topology, args.nodes)
+    SSH_OPTIONS = load_ssh_options(args.topology) + list(args.ssh_option)
+    if args.ssh_known_hosts:
+        SSH_OPTIONS.extend(["-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={args.ssh_known_hosts}"])
+    if len(nodes) < 2:
+        raise SystemExit("need at least 2 nodes")
     try:
-        source_ranks = _parse_rank_filter(args.only_ranks, args.nodes)
+        source_ranks = _parse_rank_filter(args.only_ranks, nodes)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     sudo = not bool(args.no_sudo)
-    specs = selected_route_specs(args, source_ranks)
-    iface_specs = build_control_iface_specs(source_ranks)
+    specs = selected_route_specs(args, nodes, source_ranks)
+    iface_specs = build_control_iface_specs(nodes, source_ranks)
     failures = handle_control_iface(args, iface_specs, sudo)
     if args.control_only:
         if failures:
