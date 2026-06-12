@@ -18,6 +18,7 @@ REQUEST_FORMAT = "ds4-inference-request-v1"
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE_C = ROOT / "fixtures" / "ds4_eval" / "ds4_eval.c"
 TERMINAL = {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled", "failed"}
+RESPONSE_STYLES = ("official", "concise", "answer_only", "answer_first", "compsec_strict")
 
 
 def _post_json(base_url: str, endpoint: str, payload: dict, *, timeout: float = 120) -> dict:
@@ -235,6 +236,24 @@ def _answer_instruction(response_style: str, answer_type: str) -> str:
     if response_style == "answer_only":
         return (
             "\nSolve the problem silently. Output exactly one line and nothing else:\n"
+            f"Answer: <{answer_type}>"
+        )
+    if response_style == "compsec_strict":
+        if "line number" in answer_type:
+            return (
+                "\nSolve the problem carefully. For line-number answers, prefer the "
+                "exact executable line or smallest adjacent set of lines where the "
+                "unsafe access, unchecked copy/write/read, invalid state transition, "
+                "or missing validation becomes concrete. Do not include earlier setup "
+                "or loop-control lines unless those lines themselves perform the "
+                "invalid operation. If a later use is required to make the bug real, "
+                "include that use. Keep visible reasoning to at most three short "
+                "sentences. End with exactly one final line and nothing after it:\n"
+                f"Answer: <{answer_type}>"
+            )
+        return (
+            "\nSolve the problem carefully. Keep visible reasoning to at most three "
+            "short sentences. End with exactly one final line and nothing after it:\n"
             f"Answer: <{answer_type}>"
         )
     raise ValueError(f"unsupported response style: {response_style}")
@@ -1133,7 +1152,7 @@ def _build_parser() -> argparse.ArgumentParser:
     w.add_argument("--served-model", default="deepseek-v4-flash-pp8")
     w.add_argument("--model", default="dsv4_vllm_mtp_pp8_smartest_v1")
     w.add_argument("--max-output-tokens", type=int, default=512)
-    w.add_argument("--response-style", choices=("official", "concise", "answer_only", "answer_first"), default="official")
+    w.add_argument("--response-style", choices=RESPONSE_STYLES, default="official")
     w.add_argument("--enable-thinking", dest="enable_thinking", action="store_true", default=False)
     w.add_argument("--disable-thinking", dest="enable_thinking", action="store_false")
     w.add_argument("--chat-template-thinking-key", default="thinking")
@@ -1155,7 +1174,7 @@ def _build_parser() -> argparse.ArgumentParser:
     d.add_argument("--served-model", default="deepseek-v4-flash-pp8")
     d.add_argument("--model", default="dsv4_vllm_mtp_pp8_smartest_v1")
     d.add_argument("--max-output-tokens", type=int, default=512)
-    d.add_argument("--response-style", choices=("official", "concise", "answer_only", "answer_first"), default="official")
+    d.add_argument("--response-style", choices=RESPONSE_STYLES, default="official")
     d.add_argument("--enable-thinking", dest="enable_thinking", action="store_true", default=False)
     d.add_argument("--disable-thinking", dest="enable_thinking", action="store_false")
     d.add_argument("--chat-template-thinking-key", default="thinking")
@@ -1174,7 +1193,7 @@ def _build_parser() -> argparse.ArgumentParser:
     dc.add_argument("--served-model", default="deepseek-v4-flash-pp8")
     dc.add_argument("--model", default="dsv4_vllm_mtp_pp8_smartest_v1")
     dc.add_argument("--max-output-tokens", type=int, default=512)
-    dc.add_argument("--response-style", choices=("official", "concise", "answer_only", "answer_first"), default="official")
+    dc.add_argument("--response-style", choices=RESPONSE_STYLES, default="official")
     dc.add_argument("--enable-thinking", dest="enable_thinking", action="store_true", default=False)
     dc.add_argument("--disable-thinking", dest="enable_thinking", action="store_false")
     dc.add_argument("--chat-template-thinking-key", default="thinking")
@@ -1195,7 +1214,7 @@ def _build_parser() -> argparse.ArgumentParser:
     r.add_argument("--served-model", default="deepseek-v4-flash-pp8")
     r.add_argument("--model", default="dsv4_vllm_mtp_pp8_smartest_v1")
     r.add_argument("--max-output-tokens", type=int, default=512)
-    r.add_argument("--response-style", choices=("official", "concise", "answer_only", "answer_first"), default="official")
+    r.add_argument("--response-style", choices=RESPONSE_STYLES, default="official")
     r.add_argument("--enable-thinking", dest="enable_thinking", action="store_true", default=False)
     r.add_argument("--disable-thinking", dest="enable_thinking", action="store_false")
     r.add_argument("--chat-template-thinking-key", default="thinking")

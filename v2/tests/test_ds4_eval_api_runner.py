@@ -96,6 +96,12 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
 
         self.assertEqual(args.chat_concurrency, 16)
 
+    def test_direct_vllm_chat_accepts_compsec_strict(self) -> None:
+        parser = self.runner._build_parser()
+        args = parser.parse_args(["run-direct-vllm-chat", "--out-dir", "/tmp/ds4-eval-test", "--response-style", "compsec_strict"])
+
+        self.assertEqual(args.response_style, "compsec_strict")
+
     def test_disabled_thinking_zeros_request_budget(self) -> None:
         args = argparse.Namespace(
             vllm_url="http://vllm",
@@ -181,6 +187,16 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
 
         self.assertIn("Output exactly one line", prompt)
         self.assertIn("Answer: <letter>", prompt)
+
+    def test_compsec_strict_prompt_focuses_on_executable_bug_lines(self) -> None:
+        prompt = self.runner.build_question_prompt(
+            {"question": "Find line.", "choices": [], "source": "COMPSEC"},
+            response_style="compsec_strict",
+        )
+
+        self.assertIn("exact executable line", prompt)
+        self.assertIn("smallest adjacent set of lines", prompt)
+        self.assertIn("Answer: <line number or comma-separated line numbers>", prompt)
 
     def test_official_eval_prompt_keeps_legacy_end_marker_contract(self) -> None:
         prompt = self.runner.build_question_prompt(
