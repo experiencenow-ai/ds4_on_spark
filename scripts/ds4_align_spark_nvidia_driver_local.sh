@@ -96,14 +96,29 @@ mark_installed_manual()
 disable_workbench_apt()
 {
     src="/etc/apt/sources.list.d/ai-workbench-desktop.sources"
-    dst="${src}.disabled-by-ds4"
+    old_dst="${src}.disabled-by-ds4"
+    disabled_dir="/etc/apt/sources.list.d.disabled"
+    dst="${disabled_dir}/ai-workbench-desktop.sources.disabled-by-ds4"
+    moved=0
+    mkdir -p "$disabled_dir"
+    if [ -e "$old_dst" ]; then
+        old_target="$dst"
+        if [ -e "$old_target" ]; then
+            old_target="${old_target}.$(date +%Y%m%d%H%M%S)"
+        fi
+        mv "$old_dst" "$old_target"
+        echo "moved_legacy_workbench_apt_source=${old_target}"
+        moved=1
+    fi
     if [ -e "$src" ]; then
         if [ -e "$dst" ]; then
             dst="${dst}.$(date +%Y%m%d%H%M%S)"
         fi
         mv "$src" "$dst"
         echo "disabled_workbench_apt_source=${dst}"
-    else
+        moved=1
+    fi
+    if [ "$moved" -eq 0 ]; then
         echo "disabled_workbench_apt_source=absent"
     fi
 }
@@ -240,7 +255,7 @@ if [ "$APPLY" -eq 0 ]; then
     fi
     if [ "$DISABLE_WORKBENCH_APT" -ne 0 ]; then
         echo "workbench apt source disable command:"
-        echo "  mv /etc/apt/sources.list.d/ai-workbench-desktop.sources /etc/apt/sources.list.d/ai-workbench-desktop.sources.disabled-by-ds4"
+        echo "  mv /etc/apt/sources.list.d/ai-workbench-desktop.sources /etc/apt/sources.list.d.disabled/ai-workbench-desktop.sources.disabled-by-ds4"
     fi
     exit 0
 fi
