@@ -98,6 +98,25 @@ class DiffusionGemmaGgufEvalTests(unittest.TestCase):
         self.assertEqual(text, "Reasoning\nAnswer: 20")
         self.assertEqual(tokens, 9)
 
+    def test_openai_server_accepts_raw_server_args(self) -> None:
+        dg = load_script()
+        args = dg.build_parser().parse_args([
+            "run-openai-server",
+            "--server-bin",
+            "/tmp/server",
+            "--model",
+            "/tmp/model.gguf",
+            "--requests-jsonl",
+            "/tmp/requests.jsonl",
+            "--out-dir",
+            "/tmp/out",
+            "--server-arg=--top-k",
+            "--server-arg",
+            "256",
+            "--server-arg=--no-diffusion-device-denoise-loop",
+        ])
+        self.assertEqual(args.server_arg, ["--top-k", "256", "--no-diffusion-device-denoise-loop"])
+
 
 if __name__ == "__main__":
     unittest.main()
