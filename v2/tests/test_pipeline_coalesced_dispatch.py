@@ -667,6 +667,53 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             else:
                 os.environ["DS4_API_DISPATCH_KV_CAPACITY_BYTES"] = old
 
+    def test_dispatcher_status_reports_live_queue_counts_by_service(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            registry = ProfileRegistry.load(PROFILES)
+            topology = SparkTopology.load(TOPOLOGY)
+            api.queue.submit_requests(
+                requests=[dsv4_chat_request("live-0"), dsv4_chat_request("live-1")],
+                registry=registry,
+                topology=topology,
+                batch_id="live-counts",
+                priority=10,
+            )
+            api.queue.prepare_ready(
+                node_id="spark0",
+                eligible_profile_ids=tuple(topology.pipeline_profiles),
+                batch_id="live-counts",
+                limit=2,
+                leased_by="worker",
+                lease_ttl_s=30,
+                selected_service_id="dsv4_flash_pp8",
+                share_compute_domain=True,
+            )
+            claims = api.queue.claim_ready_batch(
+                node_id="spark0",
+                batch_id="live-counts",
+                limit=2,
+                leased_by="worker",
+                lease_ttl_s=30,
+                selected_service_id="dsv4_flash_pp8",
+                share_compute_domain=True,
+            )
+            self.assertEqual(len(claims), 2)
+            api.queue.finish_request(
+                request_id=claims[0].request_id,
+                lease_id=claims[0].lease_id,
+                state="completed",
+                result=make_result(request=claims[0].request, profile_id=claims[0].selected_profile_id, model_id="test", backend="fake", text="done"),
+            )
+
+            status = api.dispatcher_status()
+
+            service_counts = status["queue_state_counts_by_service"]["dsv4_flash_pp8"]
+            self.assertEqual(service_counts["completed"], 1)
+            self.assertEqual(service_counts["running"], 1)
+            self.assertEqual(status["queue_unfinished_by_service"]["dsv4_flash_pp8"], 1)
+            self.assertEqual(status["queue_running_by_service"]["dsv4_flash_pp8"], 1)
+
     def test_resource_governor_hot_sample_delays_dispatcher_refill(self) -> None:
         old_values = {
             "DS4_API_RESOURCE_GOVERNOR": os.environ.get("DS4_API_RESOURCE_GOVERNOR"),

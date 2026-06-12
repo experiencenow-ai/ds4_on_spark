@@ -459,6 +459,16 @@ class CoordinatorApi:
     def dispatcher_status(self) -> dict[str, Any]:
         with self.dispatcher_lock:
             state = dict(self.dispatcher_state)
+        try:
+            queue_status = self.queue.status(refresh=False)
+            service_counts = self.queue.service_state_counts()
+            state["queue_state_counts"] = dict(queue_status.get("state_counts") or {})
+            state["queue_state_counts_by_service"] = dict(service_counts.get("state_counts_by_service") or {})
+            state["queue_unfinished_by_service"] = dict(service_counts.get("unfinished_by_service") or {})
+            state["queue_running_by_service"] = dict(service_counts.get("running_by_service") or {})
+            state["queue_status_newest_event_id"] = int(queue_status.get("newest_event_id") or 0)
+        except Exception as exc:
+            state["queue_status_error"] = str(exc)
         state.update(self.jit_kv_circuit.status())
         state["jit_kv_startup_recovery"] = dict(self.jit_kv_startup_recovery)
         return state

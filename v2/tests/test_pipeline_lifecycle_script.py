@@ -296,6 +296,16 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertNotIn("('vllm' in cmd or '--pipeline-parallel-size' in cmd)", kill_script)
         self.assertNotIn("('vllm' in p[1] or '--pipeline-parallel-size' in p[1])", status_script)
 
+    def test_probe_code_polls_until_timeout_deadline(self) -> None:
+        lifecycle = load_script(SCRIPT)
+
+        code = lifecycle._remote_probe_code()
+
+        self.assertIn("deadline=time.time()+max", code)
+        self.assertIn("while True:", code)
+        self.assertIn("urllib.request.urlopen(u,timeout=max(0.2,min(2.0,remaining)))", code)
+        self.assertIn("raise SystemExit(1)", code)
+
     def test_spark_updater_disables_legacy_runtime_config_path(self) -> None:
         script = (ROOT.parent / "scripts" / "ds4_update_spark_nodes.sh").read_text(encoding="utf-8")
 
