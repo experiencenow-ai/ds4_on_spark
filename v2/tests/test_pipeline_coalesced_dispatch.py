@@ -176,6 +176,30 @@ class CancellingPerRequestRunner(RecordingPerRequestRunner):
         return super().run_one_on_node(request, profile, node_id)
 
 
+class BlockingPerRequestRunner(RecordingPerRequestRunner):
+    def __init__(self) -> None:
+        super().__init__()
+        self.condition = threading.Condition()
+        self.release = threading.Event()
+
+    def run_one_on_node(self, request, profile, node_id):
+        with self.condition:
+            self.calls.append(request.request_id)
+            self.condition.notify_all()
+        self.release.wait(5.0)
+        return make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=f"single-{request.request_id}")
+
+    def wait_started(self, count: int, timeout_s: float = 1.0) -> bool:
+        deadline = time.time() + timeout_s
+        with self.condition:
+            while len(self.calls) < count:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    return False
+                self.condition.wait(remaining)
+            return True
+
+
 class PipelineCoalescedDispatchTests(unittest.TestCase):
     def test_runner_sends_one_openai_completion_request_for_compatible_completion_cohort(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
@@ -591,6 +615,39 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual((failed, retried), (0, 0))
             self.assertLessEqual(len(runner.calls), 2)
             self.assertEqual(api.queue.status(batch_id="roll-cancel")["state"], "cancelled")
+            self.assertEqual(api.dispatcher_status()["last_summary"]["dispatch_mode"], "rolling_refill")
+            self.assertEqual(api.dispatcher_status()["last_summary"]["claimed"], 2)
+
+    def test_worker_force_cancel_releases_rolling_refill_without_runner_tail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            registry = ProfileRegistry.load(PROFILES)
+            topology = SparkTopology.load(TOPOLOGY)
+            plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+            plan = plans["dsv4_flash_pp8"]
+            plan.admission_mode = "resident_multimodel_rolling_refill"
+            plan.target_active = 2
+            plan.low_watermark = 2
+            plan.max_cohort_size = 2
+            plan.batch_linger_s = 0.0
+            api.queue.submit_requests(requests=[dsv4_chat_request(f"dsv4-force-cancel-{index}") for index in range(2)], registry=registry, topology=topology, batch_id="roll-force-cancel", priority=10)
+            runner = BlockingPerRequestRunner()
+            worker = BatchWorker(queue=api.queue, registry=registry, runner=runner, worker_id="test-dispatcher", lease_ttl_s=30, heartbeat_interval_s=0.01)
+            pending = {}
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                submitted = api._dispatcher_refill_resident_multimodel(worker=worker, executor=executor, pending=pending, entry_node_id="spark0", node_profile_ids=tuple(topology.pipeline_profiles), batch_limits_by_service={"dsv4_flash_pp8": 2}, kv_shard_layouts_by_profile=dict(topology.pipeline_profiles), service_plans={"dsv4_flash_pp8": plan})
+                self.assertEqual(submitted, 2)
+                self.assertTrue(runner.wait_started(2))
+                api.queue.cancel(batch_id="roll-force-cancel", reason="operator cancel", force_running=True)
+                started = time.time()
+                try:
+                    completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
+                    self.assertLess(time.time() - started, 0.5)
+                finally:
+                    runner.release.set()
+            self.assertEqual((completed, failed, retried), (0, 0, 0))
+            self.assertEqual(pending, {})
+            self.assertEqual(api.queue.status(batch_id="roll-force-cancel")["state"], "cancelled")
             self.assertEqual(api.dispatcher_status()["last_summary"]["dispatch_mode"], "rolling_refill")
             self.assertEqual(api.dispatcher_status()["last_summary"]["claimed"], 2)
 
