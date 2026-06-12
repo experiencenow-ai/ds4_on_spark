@@ -47,6 +47,19 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
             if service_kv.get("cache_root"):
                 self.assertEqual(deployment["cache_directories"][0], service_kv["cache_root"])
 
+    def test_pp12_deployment_batch_caps_match_topology(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        entries = lifecycle._load_entries(str(ROOT / "profiles" / "topology" / "static_sparks_qwen_gemma_pp12.json"), str(ROOT / "profiles" / "models"))
+
+        caps = {entry["service_id"]: int(entry["service"]["max_batch_size"]) for entry in entries}
+
+        self.assertEqual(caps, {"gemma4_26b_a4b_pp12": 64, "qwen27_bf16_pp12": 128})
+        for entry in entries:
+            expected = str(entry["service"]["max_batch_size"])
+            deployment = entry["deployment"]
+            self.assertEqual(int(deployment["max_batch_size"]), int(expected))
+            self.assertEqual(deployment["extra_env"]["VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP"], expected)
+
     def test_selector_accepts_service_profile_and_model_ids(self) -> None:
         lifecycle = load_script(SCRIPT)
         entry = {"service_id": "gemma4_12b_pp8", "profile_id": "gemma4_12b_it_pp8_peer_v1", "model_id": "google/gemma-4-12B-it"}

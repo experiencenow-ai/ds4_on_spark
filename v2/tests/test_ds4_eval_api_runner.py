@@ -102,6 +102,42 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
 
         self.assertEqual(args.response_style, "compsec_strict")
 
+    def test_run_accepts_cache_metric_snapshots(self) -> None:
+        parser = self.runner._build_parser()
+        args = parser.parse_args(["run", "--out-dir", "/tmp/ds4-eval-test", "--cache-metrics", "--cache-metrics-timeout-s", "1.5"])
+
+        self.assertTrue(args.cache_metrics)
+        self.assertEqual(args.cache_metrics_timeout_s, 1.5)
+
+    def test_cache_metric_report_deltas_selected_prometheus_series(self) -> None:
+        text0 = "\n".join(
+            [
+                "# HELP vllm:prefix_cache_hit_total hits",
+                "vllm:prefix_cache_hit_total{model_name=\"qwen\"} 2",
+                "vllm:prompt_tokens_total{source=\"local_cache_hit\"} 3",
+                "vllm:generation_tokens_total 99",
+            ]
+        )
+        text1 = "\n".join(
+            [
+                "vllm:prefix_cache_hit_total{model_name=\"qwen\"} 7",
+                "vllm:prompt_tokens_total{source=\"local_cache_hit\"} 11",
+                "vllm:generation_tokens_total 101",
+            ]
+        )
+        before = {"enabled": True, "ok": True, "metrics": self.runner._selected_cache_metrics(text0)}
+        after = {"enabled": True, "ok": True, "metrics": self.runner._selected_cache_metrics(text1)}
+
+        report = self.runner._cache_metrics_report(before, after)
+
+        self.assertEqual(
+            report["changed_delta"],
+            {
+                "vllm:prefix_cache_hit_total{model_name=\"qwen\"}": 5.0,
+                "vllm:prompt_tokens_total{source=\"local_cache_hit\"}": 8.0,
+            },
+        )
+
     def test_disabled_thinking_zeros_request_budget(self) -> None:
         args = argparse.Namespace(
             vllm_url="http://vllm",

@@ -41,6 +41,11 @@ def _get_json(base_url: str, endpoint: str, query: dict[str, object] | None = No
         return json.loads(response.read().decode("utf-8"))
 
 
+def _get_text(base_url: str, endpoint: str, *, timeout: float = 120.0) -> str:
+    with request.urlopen(base_url.rstrip("/") + endpoint, timeout=timeout) as response:
+        return response.read().decode("utf-8", "replace")
+
+
 def _find_matching_brace(text: str, start: int) -> int:
     depth = 0
     in_string = False
@@ -582,15 +587,19 @@ def run_direct_vllm_eval(args: argparse.Namespace) -> None:
     batch_id = args.batch_id or f"ds4-eval-direct-{uuid.uuid4().hex[:16]}"
     source_requests, requests_path, requests_payload = _prepare_run_requests(args, out_dir, batch_id)
     requests_by_id = _request_meta_by_id(requests_payload)
+    cache_before = _cache_metrics_snapshot(args)
     collect, response, run_s = _run_direct_vllm_batch(args, requests_payload)
+    cache_metrics = _cache_metrics_report(cache_before, _cache_metrics_snapshot(args))
     _write_json(out_dir / "vllm_response.json", response)
     _write_json(out_dir / "collect.json", collect)
+    _write_json(out_dir / "cache_metrics.json", cache_metrics)
     grade_summary = grade_collect(requests_by_id, collect)
     _write_json(out_dir / "grade.json", grade_summary)
     answers = _write_direct_answers(out_dir / "answers.jsonl", requests_by_id, collect, run_s)
     _write_direct_manifest(args, out_dir, batch_id, source_requests, requests_path, requests_payload, run_s)
     summary = _run_summary(batch_id, requests_payload, answers, len(answers), run_s, 0.0, grade_summary, out_dir)
     summary.update({"mode": "direct-vllm", "vllm_url": args.vllm_url, "served_model": args.served_model})
+    summary["cache_metrics"] = cache_metrics
     _write_json(out_dir / "summary.json", summary)
     print(json.dumps(summary, sort_keys=True))
 
@@ -601,15 +610,19 @@ def run_direct_vllm_chat_eval(args: argparse.Namespace) -> None:
     batch_id = args.batch_id or f"ds4-eval-direct-chat-{uuid.uuid4().hex[:16]}"
     source_requests, requests_path, requests_payload = _prepare_run_requests(args, out_dir, batch_id)
     requests_by_id = _request_meta_by_id(requests_payload)
+    cache_before = _cache_metrics_snapshot(args)
     collect, response, run_s = _run_direct_vllm_chat_batch(args, requests_payload)
+    cache_metrics = _cache_metrics_report(cache_before, _cache_metrics_snapshot(args))
     _write_json(out_dir / "vllm_response.json", response)
     _write_json(out_dir / "collect.json", collect)
+    _write_json(out_dir / "cache_metrics.json", cache_metrics)
     grade_summary = grade_collect(requests_by_id, collect)
     _write_json(out_dir / "grade.json", grade_summary)
     answers = _write_direct_answers(out_dir / "answers.jsonl", requests_by_id, collect, run_s)
     _write_direct_manifest(args, out_dir, batch_id, source_requests, requests_path, requests_payload, run_s)
     summary = _run_summary(batch_id, requests_payload, answers, len(answers), run_s, 0.0, grade_summary, out_dir)
     summary.update({"mode": "direct-vllm-chat", "vllm_url": args.vllm_url, "served_model": args.served_model})
+    summary["cache_metrics"] = cache_metrics
     _write_json(out_dir / "summary.json", summary)
     print(json.dumps(summary, sort_keys=True))
 
@@ -795,6 +808,7 @@ def run_eval(args: argparse.Namespace) -> None:
     batch_id = args.batch_id or f"ds4-eval-{uuid.uuid4().hex[:16]}"
     source_requests, requests_path, requests_payload = _prepare_run_requests(args, out_dir, batch_id)
     requests_by_id = _request_meta_by_id(requests_payload)
+    cache_before = _cache_metrics_snapshot(args)
     after_event_id, submit_s = _submit_eval_batch(args, out_dir, batch_id, source_requests, requests_path, requests_payload)
     run_started = time.time()
     answers, answered_ids = _poll_live_answers(args, batch_id, requests_by_id, out_dir / "answers.jsonl", after_event_id, run_started)
@@ -802,12 +816,15 @@ def run_eval(args: argparse.Namespace) -> None:
     live_answer_count = len(answers)
     status = _get_json(args.base_url, "/ds4/queue/status", {"batch_id": batch_id, "refresh": 0})
     collect = _get_json(args.base_url, "/ds4/queue/collect", {"batch_id": batch_id})
+    cache_metrics = _cache_metrics_report(cache_before, _cache_metrics_snapshot(args))
     answers = _backfill_answers(collect, requests_by_id, out_dir / "answers.jsonl", run_started, answers, answered_ids)
     _write_json(out_dir / "status.json", status)
     _write_json(out_dir / "collect.json", collect)
+    _write_json(out_dir / "cache_metrics.json", cache_metrics)
     grade_summary = grade_collect(requests_by_id, collect)
     _write_json(out_dir / "grade.json", grade_summary)
     summary = _run_summary(batch_id, requests_payload, answers, live_answer_count, run_s, submit_s, grade_summary, out_dir)
+    summary["cache_metrics"] = cache_metrics
     _write_json(out_dir / "summary.json", summary)
     print(json.dumps(summary, sort_keys=True))
 
@@ -1025,6 +1042,73 @@ def _write_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _cache_metrics_snapshot(args: argparse.Namespace) -> dict:
+    if not bool(getattr(args, "cache_metrics", False)):
+        return {"format": "ds4-eval-cache-metrics-snapshot-v1", "enabled": False}
+    vllm_url = str(getattr(args, "vllm_url", "") or "")
+    try:
+        text = _get_text(vllm_url, "/metrics", timeout=float(getattr(args, "cache_metrics_timeout_s", 10.0) or 10.0))
+    except Exception as exc:
+        return {
+            "format": "ds4-eval-cache-metrics-snapshot-v1",
+            "enabled": True,
+            "ok": False,
+            "vllm_url": vllm_url,
+            "error": str(exc),
+        }
+    metrics = _selected_cache_metrics(text)
+    return {
+        "format": "ds4-eval-cache-metrics-snapshot-v1",
+        "enabled": True,
+        "ok": True,
+        "vllm_url": vllm_url,
+        "selected_metric_count": len(metrics),
+        "metrics": metrics,
+    }
+
+
+def _cache_metrics_report(before: dict, after: dict) -> dict:
+    if not before.get("enabled") and not after.get("enabled"):
+        return {"format": "ds4-eval-cache-metrics-report-v1", "enabled": False}
+    report = {
+        "format": "ds4-eval-cache-metrics-report-v1",
+        "enabled": True,
+        "before": before,
+        "after": after,
+        "delta": {},
+        "changed_delta": {},
+    }
+    if not before.get("ok") or not after.get("ok"):
+        return report
+    before_metrics = before.get("metrics") if isinstance(before.get("metrics"), dict) else {}
+    after_metrics = after.get("metrics") if isinstance(after.get("metrics"), dict) else {}
+    keys = sorted(set(before_metrics) | set(after_metrics))
+    delta = {key: round(float(after_metrics.get(key, 0.0)) - float(before_metrics.get(key, 0.0)), 6) for key in keys}
+    report["delta"] = delta
+    report["changed_delta"] = {key: value for key, value in delta.items() if value != 0}
+    return report
+
+
+def _selected_cache_metrics(text: str) -> dict[str, float]:
+    out: dict[str, float] = {}
+    needles = ("cache", "prefix", "kv", "prompt")
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.rsplit(None, 1)
+        if len(parts) != 2:
+            continue
+        series, value = parts
+        if not any(needle in series.lower() for needle in needles):
+            continue
+        try:
+            out[series] = float(value)
+        except ValueError:
+            continue
+    return out
+
+
 def _remap_request_ids(rows: list[dict], batch_id: str) -> list[dict]:
     out = []
     for idx, item in enumerate(rows):
@@ -1183,6 +1267,7 @@ def _build_parser() -> argparse.ArgumentParser:
     d.add_argument("--source", action="append", default=[], help="Only include ds4-eval cases with this source; repeat for multiple sources.")
     d.add_argument("--limit", type=int, default=0)
     d.add_argument("--vllm-timeout-s", type=float, default=3600.0)
+    _add_cache_metric_args(d)
     dc = sub.add_parser("run-direct-vllm-chat")
     dc.add_argument("--requests-jsonl")
     dc.add_argument("--source-c", default=str(DEFAULT_SOURCE_C))
@@ -1203,6 +1288,7 @@ def _build_parser() -> argparse.ArgumentParser:
     dc.add_argument("--source", action="append", default=[], help="Only include ds4-eval cases with this source; repeat for multiple sources.")
     dc.add_argument("--limit", type=int, default=0)
     dc.add_argument("--vllm-timeout-s", type=float, default=3600.0)
+    _add_cache_metric_args(dc)
     r = sub.add_parser("run")
     r.add_argument("--base-url", default="http://10.20.0.10:8700")
     r.add_argument("--requests-jsonl")
@@ -1231,7 +1317,13 @@ def _build_parser() -> argparse.ArgumentParser:
     r.add_argument("--cancel-on-timeout", dest="cancel_on_timeout", action="store_true", default=True)
     r.add_argument("--no-cancel-on-timeout", dest="cancel_on_timeout", action="store_false")
     r.add_argument("--show-deltas", action="store_true")
+    _add_cache_metric_args(r)
     return parser
+
+
+def _add_cache_metric_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--cache-metrics", action="store_true", help="Snapshot selected vLLM /metrics cache counters before and after the eval run.")
+    parser.add_argument("--cache-metrics-timeout-s", type=float, default=10.0)
 
 
 if __name__ == "__main__":

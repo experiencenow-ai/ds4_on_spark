@@ -19,6 +19,7 @@ FIRST3_MEMORY_BUDGET_PROFILE = ROOT / "profiles" / "production" / "first3_reside
 FIRST3_MEMORY_BUDGET = json.loads(FIRST3_MEMORY_BUDGET_PROFILE.read_text(encoding="utf-8"))
 STATIC_SPARKS_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 STATIC_TOPOLOGY = json.loads(STATIC_SPARKS_TOPOLOGY.read_text(encoding="utf-8"))
+QWEN_GEMMA_PP12_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_qwen_gemma_pp12.json"
 
 
 def load_script(path: Path):
@@ -100,6 +101,19 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
             expected = int(scheduler.get("vllm_max_num_seqs") or service["max_batch_size"])
             self.assertEqual(limits[service_id], expected)
         self.assertNotIn("qwen27_nvfp4_pp8", limits)
+
+    def test_relaunch_pp12_topology_sets_active_services_and_wider_feed(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+
+        defaults = relaunch._profile_defaults(DSV4_PRODUCTION["coordinator_profile"], topology_path=QWEN_GEMMA_PP12_TOPOLOGY)
+        limits = json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])
+
+        self.assertEqual(defaults["DS4_API_RESIDENT_SERVICE_IDS"], "qwen27_bf16_pp12,gemma4_26b_a4b_pp12")
+        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "192")
+        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "192")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "192")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "65536")
+        self.assertEqual(limits, {"gemma4_26b_a4b_pp12": 64, "qwen27_bf16_pp12": 128})
 
     def test_relaunch_resident256_profile_widens_feed_without_kv_bloat(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)

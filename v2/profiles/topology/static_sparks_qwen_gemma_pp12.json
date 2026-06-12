@@ -233,7 +233,7 @@
           5,
           5
         ],
-        "max_batch_size": 64,
+        "max_batch_size": 128,
         "model_id": "Qwen/Qwen3.6-27B",
         "node_ids": [
           "spark0",
@@ -255,11 +255,11 @@
           "admission_mode": "resident_multimodel_weighted_deficit",
           "batch_linger_s": 0.03,
           "max_running_batches_per_compute_domain": 2,
-          "queue_limit": 256,
-          "refill_low_watermark": 32,
+          "queue_limit": 512,
+          "refill_low_watermark": 96,
           "resident_weight": 1.2,
           "vllm_max_num_batched_tokens": 65536,
-          "vllm_max_num_seqs": 64
+          "vllm_max_num_seqs": 128
         },
         "served_model_name": "qwen27-bf16-pp12",
         "service_id": "qwen27_bf16_pp12",
@@ -299,7 +299,7 @@
           2,
           2
         ],
-        "max_batch_size": 32,
+        "max_batch_size": 64,
         "model_id": "google/gemma-4-26B-A4B-it",
         "node_ids": [
           "spark0",
@@ -321,11 +321,11 @@
           "admission_mode": "resident_multimodel_weighted_deficit",
           "batch_linger_s": 0.03,
           "max_running_batches_per_compute_domain": 2,
-          "queue_limit": 128,
-          "refill_low_watermark": 16,
+          "queue_limit": 256,
+          "refill_low_watermark": 48,
           "resident_weight": 1.0,
           "vllm_max_num_batched_tokens": 32768,
-          "vllm_max_num_seqs": 32
+          "vllm_max_num_seqs": 64
         },
         "served_model_name": "gemma-4-26b-a4b-it-pp12",
         "service_id": "gemma4_26b_a4b_pp12",
@@ -337,6 +337,16 @@
         "tensor_parallel_size": 1,
         "total_layers": 30
       }
+    },
+    "resident_coordinator_defaults": {
+      "completion_budget_include_output": false,
+      "completion_chunk_concurrency": 4,
+      "completion_cohort_max": 192,
+      "completion_pp_safe_cohort_max": 192,
+      "completion_token_budget": 65536,
+      "dispatch_kv_capacity_bytes": 8589934592,
+      "dispatch_refill_batch": 192,
+      "dispatch_window": 192
     }
   },
   "topology_id": "static_sparks_qwen_gemma_pp12"
