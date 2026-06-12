@@ -72,6 +72,32 @@ class DiffusionGemmaGgufEvalTests(unittest.TestCase):
         self.assertEqual(summary["total"], 1)
         self.assertEqual(summary["rows"][0]["got"], "20")
 
+    def test_prepare_accepts_pr24427_build_targets(self) -> None:
+        dg = load_script()
+        args = dg.build_parser().parse_args([
+            "prepare-llama",
+            "--source-root",
+            "/tmp/llama",
+            "--ref",
+            "pull/24427/head",
+            "--commit",
+            "201052a16a5adaede13175a16bf6218a49904550",
+            "--build-target",
+            "llama-diffusion-gemma-cli",
+            "--build-target",
+            "llama-diffusion-gemma-server",
+        ])
+        self.assertEqual(args.build_target, ["llama-diffusion-gemma-cli", "llama-diffusion-gemma-server"])
+
+    def test_openai_text_and_tokens_accepts_chat_response(self) -> None:
+        dg = load_script()
+        text, tokens = dg._openai_text_and_tokens({
+            "choices": [{"message": {"content": "Reasoning\nAnswer: 20"}}],
+            "usage": {"completion_tokens": 9},
+        })
+        self.assertEqual(text, "Reasoning\nAnswer: 20")
+        self.assertEqual(tokens, 9)
+
 
 if __name__ == "__main__":
     unittest.main()

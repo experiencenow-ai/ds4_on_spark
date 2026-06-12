@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import importlib.util
 import json
 import os
@@ -18,6 +19,11 @@ DEFAULT_LLAMA_REPO = "https://github.com/ggml-org/llama.cpp.git"
 DEFAULT_LLAMA_REF = "pull/24423/head"
 DEFAULT_LLAMA_COMMIT = "10a2613aa0b2686f7d0608520c4f0ea05219df03"
 DEFAULT_CUDA_COMPILER = "/usr/local/cuda-13.0/bin/nvcc"
+DEFAULT_LLAMA_TARGETS = [
+    "llama-diffusion-cli",
+    "llama-diffusion-gemma-visual-server",
+    "llama-diffusion-gemma-server",
+]
 GGUF_REPO = "unsloth/diffusiongemma-26B-A4B-it-GGUF"
 GGUF_FILES = {
     "q4": "diffusiongemma-26B-A4B-it-Q4_K_M.gguf",
@@ -101,14 +107,13 @@ def cmd_prepare_llama(args: argparse.Namespace) -> None:
         f"-DCMAKE_CUDA_ARCHITECTURES={args.cuda_arch}",
         "-DCMAKE_BUILD_TYPE=Release",
     ], cwd=source_root)
+    targets = args.build_target or DEFAULT_LLAMA_TARGETS
     _run([
         "cmake",
         "--build",
         args.build_dir,
         "--target",
-        "llama-diffusion-cli",
-        "llama-diffusion-gemma-visual-server",
-        "llama-diffusion-gemma-server",
+        *targets,
         "-j",
         str(args.jobs),
     ], cwd=source_root)
@@ -239,6 +244,50 @@ def _run_case(proc: subprocess.Popen[str], out_dir: Path, row: dict, seed: int, 
     }
 
 
+def _http_json(host: str, port: int, method: str, path: str, payload: dict | None = None, timeout: float = 10.0) -> dict:
+    body = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"Content-Type": "application/json"} if payload is not None else {}
+    conn = http.client.HTTPConnection(host, port, timeout=timeout)
+    try:
+        conn.request(method, path, body=body, headers=headers)
+        resp = conn.getresponse()
+        raw = resp.read().decode("utf-8", errors="replace")
+    finally:
+        conn.close()
+    if resp.status >= 400:
+        raise RuntimeError(f"{method} {path} returned {resp.status}: {raw[:400]}")
+    if raw.strip() == "":
+        return {}
+    return json.loads(raw)
+
+
+def _wait_for_http_server(host: str, port: int, timeout_s: float, stderr_path: Path) -> None:
+    deadline = time.time() + timeout_s
+    last_err = ""
+    while time.time() < deadline:
+        try:
+            _http_json(host, port, "GET", "/health", timeout=2.0)
+            return
+        except Exception as exc:
+            last_err = str(exc)
+            time.sleep(1.0)
+    raise RuntimeError(f"server did not become healthy: {last_err}; stderr={stderr_path}")
+
+
+def _openai_text_and_tokens(reply: dict) -> tuple[str, int]:
+    choices = reply.get("choices") or []
+    choice = choices[0] if choices else {}
+    message = choice.get("message") or {}
+    text = message.get("content")
+    if text is None:
+        text = choice.get("text", "")
+    usage = reply.get("usage") or {}
+    completion_tokens = usage.get("completion_tokens")
+    if not isinstance(completion_tokens, int):
+        completion_tokens = len(str(text).split())
+    return str(text), completion_tokens
+
+
 def cmd_run_gguf(args: argparse.Namespace) -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -300,6 +349,87 @@ def cmd_run_gguf(args: argparse.Namespace) -> None:
         print(json.dumps({"out_dir": str(out_dir), "count": len(results), "run_s": collect["run_s"]}, sort_keys=True))
 
 
+def cmd_run_openai_server(args: argparse.Namespace) -> None:
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows = _load_jsonl(Path(args.requests_jsonl))
+    if args.limit:
+        rows = rows[: args.limit]
+    cmd = [
+        args.server_bin,
+        "-m",
+        args.model,
+        "--host",
+        args.host,
+        "--port",
+        str(args.port),
+        "-c",
+        str(args.ctx_size),
+        "-ngl",
+        str(args.ngl),
+        "--diffusion-steps",
+        str(args.diffusion_steps),
+        "--diffusion-cuda-mmq-max-x",
+        str(args.diffusion_cuda_mmq_max_x),
+    ]
+    if args.metrics:
+        cmd.append("--metrics")
+    if args.slots:
+        cmd.append("--slots")
+    stderr_path = out_dir / "server.stderr.log"
+    stdout_path = out_dir / "server.stdout.log"
+    with stderr_path.open("w", encoding="utf-8") as serr, stdout_path.open("w", encoding="utf-8") as sout:
+        proc = subprocess.Popen(cmd, stdout=sout, stderr=serr, text=True)
+        try:
+            _wait_for_http_server(args.host, args.port, args.startup_timeout_s, stderr_path)
+            results: list[dict] = []
+            started = time.time()
+            for idx, row in enumerate(rows):
+                request_id = str(row["request_id"])
+                print(f"[{idx + 1}/{len(rows)}] {request_id}", file=sys.stderr)
+                max_tokens = int(row.get("max_output_tokens") or args.max_tokens)
+                payload = {
+                    "model": args.model_name,
+                    "messages": row["input"]["messages"],
+                    "max_tokens": max_tokens,
+                    "temperature": float(row.get("temperature", 0.0)),
+                }
+                t0 = time.time()
+                reply = _http_json(args.host, args.port, "POST", "/v1/chat/completions", payload, timeout=args.request_timeout_s)
+                text, completion_tokens = _openai_text_and_tokens(reply)
+                results.append({
+                    "request": {"request_id": request_id},
+                    "result": {
+                        "request_id": request_id,
+                        "output": {"text": text},
+                        "usage": {"completion_tokens": completion_tokens},
+                        "diffusion": {"elapsed_s": round(time.time() - t0, 6), "server": "openai"},
+                    },
+                })
+                _write_json(out_dir / "collect.partial.json", {"format": "diffusiongemma-collect-v1", "results": results})
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+    collect = {
+        "format": "diffusiongemma-collect-v1",
+        "model": args.model,
+        "server_bin": args.server_bin,
+        "requests_jsonl": args.requests_jsonl,
+        "run_s": round(time.time() - started, 6) if "started" in locals() else 0.0,
+        "runner": "openai-server",
+        "ctx_size": args.ctx_size,
+        "ngl": args.ngl,
+        "diffusion_steps": args.diffusion_steps,
+        "diffusion_cuda_mmq_max_x": args.diffusion_cuda_mmq_max_x,
+        "results": results if "results" in locals() else [],
+    }
+    _write_json(out_dir / "collect.json", collect)
+    print(json.dumps({"out_dir": str(out_dir), "count": len(collect["results"]), "run_s": collect["run_s"]}, sort_keys=True))
+
+
 def cmd_grade(args: argparse.Namespace) -> None:
     runner = _load_runner(Path(args.eval_runner))
     requests_by_id = runner._request_meta_by_id(_load_jsonl(Path(args.requests_jsonl)))
@@ -322,6 +452,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--cuda-compiler", default=DEFAULT_CUDA_COMPILER)
     p.add_argument("--cuda-arch", default="121a-real")
     p.add_argument("--jobs", type=int, default=8)
+    p.add_argument("--build-target", action="append", help="CMake target to build; repeat for multiple targets.")
     p.set_defaults(func=cmd_prepare_llama)
     d = sub.add_parser("download")
     d.add_argument("--models-root", required=True)
@@ -351,6 +482,25 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--flash-attn", action=argparse.BooleanOptionalAction, default=True)
     r.add_argument("--limit", type=int, default=0)
     r.set_defaults(func=cmd_run_gguf)
+    o = sub.add_parser("run-openai-server")
+    o.add_argument("--server-bin", required=True)
+    o.add_argument("--model", required=True)
+    o.add_argument("--model-name", default="diffusion-gemma")
+    o.add_argument("--requests-jsonl", required=True)
+    o.add_argument("--out-dir", required=True)
+    o.add_argument("--host", default="127.0.0.1")
+    o.add_argument("--port", type=int, default=18081)
+    o.add_argument("--ctx-size", type=int, default=8096)
+    o.add_argument("--ngl", default="999")
+    o.add_argument("--diffusion-steps", type=int, default=48)
+    o.add_argument("--diffusion-cuda-mmq-max-x", type=int, default=64)
+    o.add_argument("--max-tokens", type=int, default=1024)
+    o.add_argument("--startup-timeout-s", type=float, default=300.0)
+    o.add_argument("--request-timeout-s", type=float, default=600.0)
+    o.add_argument("--metrics", action=argparse.BooleanOptionalAction, default=True)
+    o.add_argument("--slots", action=argparse.BooleanOptionalAction, default=True)
+    o.add_argument("--limit", type=int, default=0)
+    o.set_defaults(func=cmd_run_openai_server)
     g = sub.add_parser("grade")
     g.add_argument("--eval-runner", default=str(DEFAULT_EVAL_RUNNER))
     g.add_argument("--requests-jsonl", required=True)
