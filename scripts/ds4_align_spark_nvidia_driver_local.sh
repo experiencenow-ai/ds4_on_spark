@@ -157,7 +157,6 @@ fi
 if [ "$PRUNE_STATION_APPS" -ne 0 ]; then
     apt-get purge -y "${station_pkgs[@]}"
 fi
-apt-get autoremove -y
 
 echo "post_install_driver=$(current_driver)"
 echo "reboot_required=1"
