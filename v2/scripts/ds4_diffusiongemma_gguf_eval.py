@@ -376,6 +376,7 @@ def cmd_run_openai_server(args: argparse.Namespace) -> None:
         cmd.append("--metrics")
     if args.slots:
         cmd.append("--slots")
+    cmd.extend(args.server_arg or [])
     stderr_path = out_dir / "server.stderr.log"
     stdout_path = out_dir / "server.stdout.log"
     with stderr_path.open("w", encoding="utf-8") as serr, stdout_path.open("w", encoding="utf-8") as sout:
@@ -424,6 +425,7 @@ def cmd_run_openai_server(args: argparse.Namespace) -> None:
         "ngl": args.ngl,
         "diffusion_steps": args.diffusion_steps,
         "diffusion_cuda_mmq_max_x": args.diffusion_cuda_mmq_max_x,
+        "server_args": args.server_arg or [],
         "results": results if "results" in locals() else [],
     }
     _write_json(out_dir / "collect.json", collect)
@@ -499,6 +501,7 @@ def build_parser() -> argparse.ArgumentParser:
     o.add_argument("--request-timeout-s", type=float, default=600.0)
     o.add_argument("--metrics", action=argparse.BooleanOptionalAction, default=True)
     o.add_argument("--slots", action=argparse.BooleanOptionalAction, default=True)
+    o.add_argument("--server-arg", action="append", help="Additional raw argument for the optimized server; repeat as needed.")
     o.add_argument("--limit", type=int, default=0)
     o.set_defaults(func=cmd_run_openai_server)
     g = sub.add_parser("grade")
