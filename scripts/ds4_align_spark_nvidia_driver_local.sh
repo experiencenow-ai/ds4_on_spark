@@ -108,6 +108,11 @@ echo "kernel=$(uname -r)"
 echo "current_driver=$(current_driver)"
 echo "target_driver_package_version=${TARGET_VERSION}"
 
+if [ "$APPLY" -ne 0 ]; then
+    require_root
+    apt-get update
+fi
+
 for pkg in "${driver_pkgs[@]}"; do
     if pkg_has_version "$pkg"; then
         install_specs+=("${pkg}=${TARGET_VERSION}")
@@ -145,8 +150,6 @@ if [ "$APPLY" -eq 0 ]; then
     exit 0
 fi
 
-require_root
-apt-get update
 apt-get install -y "${install_specs[@]}"
 if [ "$PRUNE_VISUAL" -ne 0 ]; then
     apt-get purge -y "${visual_pkgs[@]}"
