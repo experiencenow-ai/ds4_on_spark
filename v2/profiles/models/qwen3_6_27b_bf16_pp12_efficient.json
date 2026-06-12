@@ -9,9 +9,9 @@
   "performance": {
     "latency_rank": 0.86,
     "max_num_batched_tokens": 65536,
-    "max_num_seqs": 64,
+    "max_num_seqs": 128,
     "measurement_notes": "PP12 no-DeepSeek candidate for 12 Spark resident deployment after 13-node full-GPU stress passed; leaves sparkc free for qualification. Qwen config advertises 262144 max_position_embeddings under text_config.",
-    "target": "12-stage Qwen27 BF16 efficient pipeline with FP8 KV, LMCache HMA, batch-64 admission, and 262K context cap."
+    "target": "12-stage Qwen27 BF16 efficient pipeline with FP8 KV, LMCache HMA, batch-128 admission, and 262K context cap."
   },
   "production_eligible": false,
   "profile_id": "qwen3_6_27b_bf16_pp12_efficient_v1",

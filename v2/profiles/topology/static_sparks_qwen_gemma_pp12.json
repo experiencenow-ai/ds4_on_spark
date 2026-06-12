@@ -252,7 +252,7 @@
         "pipeline_parallel_size": 12,
         "profile_id": "qwen3_6_27b_bf16_pp12_efficient_v1",
         "scheduler": {
-          "admission_mode": "resident_multimodel_weighted_deficit",
+          "admission_mode": "resident_multimodel_rolling_refill",
           "batch_linger_s": 0.03,
           "max_running_batches_per_compute_domain": 2,
           "queue_limit": 512,
@@ -318,7 +318,7 @@
         "pipeline_parallel_size": 12,
         "profile_id": "gemma4_26b_a4b_it_pp12_peer_v1",
         "scheduler": {
-          "admission_mode": "resident_multimodel_weighted_deficit",
+          "admission_mode": "resident_multimodel_rolling_refill",
           "batch_linger_s": 0.03,
           "max_running_batches_per_compute_domain": 2,
           "queue_limit": 256,

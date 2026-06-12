@@ -108,6 +108,8 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(gemma.kv_cache["expected_entry_fraction_per_node"], 1.0 / 12.0)
         self.assertEqual(qwen.scheduler["vllm_max_num_seqs"], 128)
         self.assertEqual(gemma.scheduler["vllm_max_num_seqs"], 64)
+        self.assertEqual(qwen.scheduler["admission_mode"], "resident_multimodel_rolling_refill")
+        self.assertEqual(gemma.scheduler["admission_mode"], "resident_multimodel_rolling_refill")
         self.assertEqual(qwen.scheduler["refill_low_watermark"], 96)
         self.assertEqual(gemma.scheduler["refill_low_watermark"], 48)
         self.assertEqual(
