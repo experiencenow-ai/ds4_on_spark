@@ -10,7 +10,7 @@ import time
 import unittest
 
 from ds4_infer.api import CoordinatorApi
-from ds4_infer.dispatcher_resident import resident_service_plans
+from ds4_infer.dispatcher_resident import ResidentServicePlan, resident_service_plans
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.runners import OpenAICompatibleRunner
 from ds4_infer.schemas import InferenceRequest, make_result
@@ -379,6 +379,23 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
             self.assertEqual((completed, failed, retried), (3, 0, 0))
             self.assertEqual(runner.batch_sizes, [3])
+
+    def test_resident_refill_waits_for_low_watermark_then_restores_target(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            plan = ResidentServicePlan(
+                service_id="qwen27_bf16_pp12",
+                profile_id="qwen27_bf16_pp12",
+                compute_domain="qwen27_bf16_pp12",
+                target_active=128,
+                low_watermark=96,
+                max_cohort_size=128,
+                batch_linger_s=0.0,
+            )
+            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 127}, 0, 192), 0)
+            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 96}, 0, 192), 0)
+            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 95}, 0, 192), 33)
+            self.assertEqual(api._resident_refill_limit(plan, {}, 0, 192), 128)
 
     def test_dispatcher_status_reports_kv_admission_bound(self) -> None:
         old = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")
