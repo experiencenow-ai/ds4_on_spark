@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import json
 import os
 import tempfile
 import threading
@@ -394,6 +395,51 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 os.environ.pop("DS4_API_DISPATCH_KV_CAPACITY_BYTES", None)
             else:
                 os.environ["DS4_API_DISPATCH_KV_CAPACITY_BYTES"] = old
+
+    def test_resource_governor_hot_sample_delays_dispatcher_refill(self) -> None:
+        old_values = {
+            "DS4_API_RESOURCE_GOVERNOR": os.environ.get("DS4_API_RESOURCE_GOVERNOR"),
+            "DS4_API_RESOURCE_SAMPLE_JSON": os.environ.get("DS4_API_RESOURCE_SAMPLE_JSON"),
+            "DS4_API_RESOURCE_TEMP_SOFT_C": os.environ.get("DS4_API_RESOURCE_TEMP_SOFT_C"),
+            "DS4_API_RESOURCE_TEMP_HARD_C": os.environ.get("DS4_API_RESOURCE_TEMP_HARD_C"),
+            "DS4_API_RESOURCE_THROTTLE_STEP_S": os.environ.get("DS4_API_RESOURCE_THROTTLE_STEP_S"),
+        }
+        os.environ["DS4_API_RESOURCE_GOVERNOR"] = "1"
+        os.environ["DS4_API_RESOURCE_SAMPLE_JSON"] = json.dumps({"nodes": {"spark0": {"temperature_c": 91, "power_w": 95, "utilization_pct": 96}}})
+        os.environ["DS4_API_RESOURCE_TEMP_SOFT_C"] = "86"
+        os.environ["DS4_API_RESOURCE_TEMP_HARD_C"] = "88"
+        os.environ["DS4_API_RESOURCE_THROTTLE_STEP_S"] = "0.1"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+                registry = ProfileRegistry.load(PROFILES)
+                topology = SparkTopology.load(TOPOLOGY)
+                requests = [completion_request("hot0")]
+                api.queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id="hot", priority=10)
+                worker = BatchWorker(queue=api.queue, registry=registry, runner=RecordingBatchRunner(), worker_id="test-dispatcher", lease_ttl_s=30, heartbeat_interval_s=1.0)
+                pending = {}
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    submitted = api._dispatcher_refill(
+                        worker=worker,
+                        executor=executor,
+                        pending=pending,
+                        entry_node_id="spark0",
+                        node_profile_ids=tuple(topology.pipeline_profiles),
+                        batch_limits_by_service={"qwen27_bf16_pp8": 64, "dsv4_flash_pp8": 64},
+                        kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                    )
+                status = api.dispatcher_status()
+                self.assertEqual(submitted, 0)
+                self.assertEqual(len(pending), 0)
+                self.assertTrue(status["resource_governor"]["throttle_active"])
+                self.assertIn("temp_hard", status["resource_governor"]["throttle_reasons"])
+                self.assertEqual(status["resource_governor_throttle_count"], 1)
+        finally:
+            for key, value in old_values.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
     def test_completion_prompt_array_is_submitted_as_one_ds4_batch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

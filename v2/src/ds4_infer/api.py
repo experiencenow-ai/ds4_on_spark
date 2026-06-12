@@ -32,6 +32,7 @@ from .jit_kv import JitKvCircuitBreaker
 from .pipelines import pipeline_service_batch_limit
 from .profiles import ModelProfile, ProfileRegistry
 from .kv_cache import KV_CACHE_DIRECTIVE_FORMAT, KV_CACHE_PLAN_FORMAT, normalize_kv_cache_directive
+from .resource_governor import GpuResourceGovernor, topology_governor_nodes
 from .runners import FakeRunner, PipelineOpenAIRunner, Runner
 from .queue import InferenceQueue, QueueClaim
 from .schemas import InferenceRequest, REQUEST_FORMAT
@@ -86,6 +87,10 @@ class CoordinatorApi:
         self.dispatcher_transport_timeout_s = max(1, _env_int("DS4_API_TRANSPORT_TIMEOUT_S", 3600))
         self.dispatcher_transport_max_attempts = max(1, _env_int("DS4_API_TRANSPORT_MAX_ATTEMPTS", 1))
         self.dispatcher_kv_capacity_bytes = max(0, _env_int("DS4_API_DISPATCH_KV_CAPACITY_BYTES", 0))
+        topology = self._topology()
+        active_service_ids = _active_resident_service_ids(topology)
+        entry_node_id = str(topology.routing_policy.get("queue_entry_node_id") or "spark0")
+        self.dispatcher_resource_governor = GpuResourceGovernor.from_env(nodes=topology_governor_nodes(topology, active_service_ids=active_service_ids), local_node_id=entry_node_id)
         self.jit_kv_circuit = JitKvCircuitBreaker(
             enabled=_env_bool("DS4_API_JIT_KV_CIRCUIT_BREAKER", True),
             window_s=_env_float("DS4_API_JIT_KV_CIRCUIT_WINDOW_S", 60.0),
@@ -481,11 +486,13 @@ class CoordinatorApi:
             "retried_count": 0,
             "requeued_count": 0,
             "idle_count": 0,
+            "resource_governor_throttle_count": 0,
             "transport_timeout_s": self.dispatcher_transport_timeout_s,
             "transport_max_attempts": self.dispatcher_transport_max_attempts,
             "kv_capacity_bytes": self.dispatcher_kv_capacity_bytes,
             "kv_admission_unlimited": self.dispatcher_kv_capacity_bytes <= 0,
             "kv_admission_warning": "unlimited_kv_admission" if self.dispatcher_kv_capacity_bytes <= 0 else None,
+            "resource_governor": self.dispatcher_resource_governor.status(),
             "last_summary": None,
             "last_claimed_cohort_size": 0,
             "largest_claimed_cohort_size": 0,
@@ -512,13 +519,14 @@ class CoordinatorApi:
                 progressed = self._dispatcher_tick(runtime)
                 if progressed:
                     continue
+                wait_s = self._dispatcher_wait_s()
                 if runtime.pending:
-                    done, _ = wait(list(runtime.pending.keys()), timeout=self.dispatcher_idle_sleep_s, return_when=FIRST_COMPLETED)
+                    done, _ = wait(list(runtime.pending.keys()), timeout=wait_s, return_when=FIRST_COMPLETED)
                     if done:
                         continue
                 else:
                     self._dispatcher_count(idle_count=1)
-                    self.dispatcher_stop.wait(self.dispatcher_idle_sleep_s)
+                    self.dispatcher_stop.wait(wait_s)
         except Exception as exc:
             self._dispatcher_note(last_error=str(exc))
             raise
@@ -616,6 +624,8 @@ class CoordinatorApi:
         kv_shard_layouts_by_profile: dict[str, Any],
         service_plans: dict[str, ResidentServicePlan] | None = None,
     ) -> int:
+        if not self._dispatcher_resource_allows_refill():
+            return 0
         service_plans = service_plans or {}
         if self.dispatcher_resident_multimodel and service_plans:
             return self._dispatcher_refill_resident_multimodel(
@@ -637,6 +647,20 @@ class CoordinatorApi:
             batch_limits_by_service=batch_limits_by_service,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
         )
+
+    def _dispatcher_resource_allows_refill(self) -> bool:
+        decision = self.dispatcher_resource_governor.before_refill()
+        self._dispatcher_note(resource_governor=decision.status)
+        if decision.allow_refill:
+            return True
+        self._dispatcher_count(resource_governor_throttle_count=1)
+        return False
+
+    def _dispatcher_wait_s(self) -> float:
+        remaining = self.dispatcher_resource_governor.cooldown_remaining_s()
+        if remaining <= 0.0:
+            return self.dispatcher_idle_sleep_s
+        return max(self.dispatcher_idle_sleep_s, min(remaining, max(self.dispatcher_idle_sleep_s, 1.0)))
 
     def _dispatcher_refill_exclusive(
         self,
