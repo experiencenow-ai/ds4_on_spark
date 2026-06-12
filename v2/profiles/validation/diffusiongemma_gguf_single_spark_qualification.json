@@ -1,0 +1,57 @@
+{
+  "format": "ds4-diffusiongemma-gguf-qualification-v1",
+  "model_family": "DiffusionGemma",
+  "source": {
+    "llama_cpp_repo": "https://github.com/ggml-org/llama.cpp.git",
+    "llama_cpp_ref": "pull/24423/head",
+    "llama_cpp_commit": "10a2613aa0b2686f7d0608520c4f0ea05219df03",
+    "gguf_repo": "unsloth/diffusiongemma-26B-A4B-it-GGUF"
+  },
+  "qualification": {
+    "first_gate": "COMPSEC17",
+    "promotion_gate": "full ds4-eval 92x only if COMPSEC17 is competitive",
+    "max_output_tokens": 2048,
+    "prompt_modes": ["standard", "thinking"],
+    "response_style": "compsec_strict",
+    "server": "llama-diffusion-gemma-visual-server",
+    "context_tokens": 4096,
+    "blocks": 8,
+    "flash_attention": true
+  },
+  "single_spark_variant_plan": [
+    {
+      "node": "spark8",
+      "variant": "q4",
+      "filename": "diffusiongemma-26B-A4B-it-Q4_K_M.gguf"
+    },
+    {
+      "node": "spark9",
+      "variant": "q5",
+      "filename": "diffusiongemma-26B-A4B-it-Q5_K_M.gguf"
+    },
+    {
+      "node": "sparka",
+      "variant": "q6",
+      "filename": "diffusiongemma-26B-A4B-it-Q6_K.gguf"
+    },
+    {
+      "node": "sparkb",
+      "variant": "q8",
+      "filename": "diffusiongemma-26B-A4B-it-Q8_0.gguf"
+    },
+    {
+      "node": "sparkc",
+      "variant": "bf16",
+      "filename": "diffusiongemma-26B-A4B-it-BF16.gguf"
+    }
+  ],
+  "procedure": [
+    "Merge this profile and helper script through PR.",
+    "Pull main on each target Spark checkout.",
+    "Run v2/scripts/ds4_diffusiongemma_gguf_eval.py prepare-llama from the pulled checkout on each target node.",
+    "Use v2/scripts/ds4_diffusiongemma_gguf_eval.py download or a repo-owned transfer step to place only the assigned GGUF on each node.",
+    "Run write-requests once per prompt mode from the pulled checkout.",
+    "Run run-gguf from the pulled checkout on each target node.",
+    "Run grade from the pulled checkout and archive collect.json, grade.json, command line, commit hash, node, and model path."
+  ]
+}
