@@ -280,7 +280,10 @@ class BatchWorker:
         prefilled = 0
         completed = failed = retried = 0
         refill_cancelled = False
-        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        finished: set[str] = set()
+        pool = ThreadPoolExecutor(max_workers=concurrency)
+        wait_for_workers = True
+        try:
             futures = {pool.submit(self._run_one, claim): claim for claim in claims}
             pending = set(futures)
             while pending:
@@ -291,9 +294,17 @@ class BatchWorker:
                     completed += item_completed
                     failed += item_failed
                     retried += item_retried
+                    finished.add(claim.request_id)
                     _notify_item_finished(on_item_finished, claim.request_id)
                 if pending and self._cancel_requested([futures[future] for future in pending]):
                     refill_cancelled = True
+                    item_completed, item_failed, item_retried, pending = _finish_cancelled_pending_futures(self, futures, pending, finished, on_result, on_item_finished)
+                    completed += item_completed
+                    failed += item_failed
+                    retried += item_retried
+                    if not pending:
+                        wait_for_workers = False
+                        break
                 if not refill_cancelled and len(pending) < low_watermark:
                     fill = max(0, int(concurrency) - len(pending))
                     if fill > 0:
@@ -321,6 +332,8 @@ class BatchWorker:
                             pending.add(next_future)
                 if pending:
                     self._heartbeat([futures[future] for future in pending])
+        finally:
+            pool.shutdown(wait=wait_for_workers, cancel_futures=not wait_for_workers)
         return completed, failed, retried, claimed, prefilled
 
     def _claim_refill(
@@ -472,6 +485,18 @@ def _finish_cancelled_or_terminal_pending(worker: BatchWorker, claims: list[Queu
         finished.add(claim.request_id)
         _notify_item_finished(on_item_finished, claim.request_id)
     return completed, failed, retried
+
+
+def _finish_cancelled_pending_futures(worker: BatchWorker, futures: Mapping[Any, QueueClaim], pending: set[Any], finished: set[str], on_result: FinishHook | None, on_item_finished: Callable[[str], None] | None) -> tuple[int, int, int, set[Any]]:
+    claims = []
+    for future in pending:
+        claim = futures[future]
+        state = str(worker.queue.status(request_id=claim.request_id, refresh=False).get("state") or "")
+        if state in _TERMINAL_STATES:
+            claims.append(claim)
+    completed, failed, retried = _finish_cancelled_or_terminal_pending(worker, claims, finished, on_result, on_item_finished)
+    pending = {future for future in pending if futures[future].request_id not in finished}
+    return completed, failed, retried, pending
 
 
 def _service_refill_low_watermark(service_id: str | None, values: Mapping[str, int]) -> int:
