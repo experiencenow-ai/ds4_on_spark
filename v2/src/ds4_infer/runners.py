@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import socket
 from pathlib import Path
 import shlex
 import subprocess
@@ -523,14 +524,7 @@ class OpenAICompatibleRunner:
             _mark_coalesced_planned_split(out, original_batch_size=len(request_list), chunk_count=len(chunks), max_cohort=max_cohort, concurrency=concurrency)
         return out
 
-    def _run_many_chat_parallel(
-        self,
-        requests: list[InferenceRequest],
-        profile: ModelProfile,
-        *,
-        on_result: Callable[[str, dict[str, Any]], None] | None = None,
-        cancel_event: Event | None = None,
-    ) -> dict[str, dict] | None:
+    def _run_many_chat_parallel(self, requests: list[InferenceRequest], profile: ModelProfile, *, on_result: Callable[[str, dict[str, Any]], None] | None = None, cancel_event: Event | None = None) -> dict[str, dict] | None:
         request_list = list(requests)
         if not request_list or not all(item.chat for item in request_list):
             return None
@@ -546,7 +540,9 @@ class OpenAICompatibleRunner:
                 break
             started = time.time()
             workers = _parallel_chat_concurrency(profile, len(chunk), max_cohort)
-            with ThreadPoolExecutor(max_workers=workers) as executor:
+            executor = ThreadPoolExecutor(max_workers=workers)
+            wait_for_workers = True
+            try:
                 futures = {
                     executor.submit(self._run_one_chat_parallel_member, item, profile, started, len(chunk), cancel_event=cancel_event): item
                     for item in chunk
@@ -558,15 +554,21 @@ class OpenAICompatibleRunner:
                     if on_result is not None:
                         on_result(item.request_id, result)
                     if cancel_event is not None and cancel_event.is_set():
+                        wait_for_workers = False
                         break
+                if cancel_event is not None and cancel_event.is_set():
+                    for item in chunk:
+                        if item.request_id in out:
+                            continue
+                        result = self._transport_failure(item, profile, started, "parallel chat stream cancelled", endpoint=self.chat_endpoint, coalesced_batch_size=len(chunk))
+                        out[item.request_id] = result
+                        if on_result is not None: on_result(item.request_id, result)
+                    break
+            finally:
+                executor.shutdown(wait=wait_for_workers, cancel_futures=not wait_for_workers)
         if len(chunks) > 1:
-            _mark_coalesced_chat_planned_split(
-                out,
-                original_batch_size=len(request_list),
-                chunk_count=len(chunks),
-                max_cohort=max_cohort,
-                concurrency=_parallel_chat_concurrency(profile, max(1, max(len(chunk) for chunk in chunks)), max_cohort),
-            )
+            concurrency = _parallel_chat_concurrency(profile, max(1, max(len(chunk) for chunk in chunks)), max_cohort)
+            _mark_coalesced_chat_planned_split(out, original_batch_size=len(request_list), chunk_count=len(chunks), max_cohort=max_cohort, concurrency=concurrency)
         return out
 
     def _run_one_chat_parallel_member(
@@ -840,10 +842,24 @@ class OpenAICompatibleRunner:
             detail = exc.read().decode("utf-8", errors="replace")[-4000:]
             raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
         with response:
+            if cancel_event is not None:
+                fp = getattr(response, "fp", None)
+                raw = getattr(fp, "raw", None)
+                inner = getattr(raw, "_fp", None)
+                for item in (response, fp, raw, inner):
+                    settimeout = getattr(getattr(item, "_sock", None), "settimeout", None)
+                    if settimeout is not None:
+                        settimeout(max(0.05, _env_float("DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S", 1.0)))
+                        break
             event_data: list[str] = []
-            for raw_line in response:
-                if cancel_event is not None and cancel_event.is_set():
-                    break
+            while True:
+                if cancel_event is not None and cancel_event.is_set(): break
+                try:
+                    raw_line = response.readline()
+                except (TimeoutError, socket.timeout):
+                    if cancel_event is not None and cancel_event.is_set(): break
+                    continue
+                if not raw_line: break
                 line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
                 if line == "":
                     if not event_data:
@@ -855,10 +871,8 @@ class OpenAICompatibleRunner:
                     if text:
                         yield json.loads(text)
                     continue
-                if line.startswith("data:"):
-                    event_data.append(line[5:].strip())
-            if cancel_event is not None and cancel_event.is_set():
-                return
+                if line.startswith("data:"): event_data.append(line[5:].strip())
+            if cancel_event is not None and cancel_event.is_set(): return
             if event_data:
                 text = "\n".join(event_data).strip()
                 if text and text != "[DONE]":

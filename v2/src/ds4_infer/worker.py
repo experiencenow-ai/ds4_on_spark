@@ -166,21 +166,33 @@ class BatchWorker:
                 finished.add(request_id)
                 _notify_item_finished(on_item_finished, request_id)
 
+        pool = ThreadPoolExecutor(max_workers=1)
+        wait_for_runner = True
         try:
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(self.runner.run_many_on_node_incremental, requests, profile, claims[0].selected_node_id, concurrency=concurrency, on_result=push_result, on_delta=lambda request_id, text, payload: _push_stream_delta(self.queue, request_id, text, payload), cancel_event=cancel_event)  # type: ignore[attr-defined]
-                while not future.done():
-                    wait([future], timeout=self.heartbeat_interval_s)
-                    drain_results()
-                    pending = [claim for claim in claims if claim.request_id not in finished]
-                    if pending and not future.done():
-                        if self._cancel_requested(pending):
-                            cancel_event.set()
-                        self._heartbeat(pending)
+            future = pool.submit(self.runner.run_many_on_node_incremental, requests, profile, claims[0].selected_node_id, concurrency=concurrency, on_result=push_result, on_delta=lambda request_id, text, payload: _push_stream_delta(self.queue, request_id, text, payload), cancel_event=cancel_event)  # type: ignore[attr-defined]
+            while not future.done():
+                wait([future], timeout=self.heartbeat_interval_s)
                 drain_results()
-                results = future.result()
+                pending = [claim for claim in claims if claim.request_id not in finished]
+                if pending and not future.done():
+                    if self._cancel_requested(pending):
+                        cancel_event.set()
+                        item_completed, item_failed, item_retried = _finish_cancelled_or_terminal_pending(self, claims, finished, on_result, on_item_finished)
+                        completed += item_completed
+                        failed += item_failed
+                        retried += item_retried
+                        pending = [claim for claim in claims if claim.request_id not in finished]
+                        if not pending:
+                            wait_for_runner = False
+                            return completed, failed, retried
+                    if pending:
+                        self._heartbeat(pending)
+            drain_results()
+            results = future.result()
         except Exception as exc:
             results = {claim.request_id: _failure(claim, str(exc)) for claim in claims if claim.request_id not in finished}
+        finally:
+            pool.shutdown(wait=wait_for_runner, cancel_futures=not wait_for_runner)
         for claim in claims:
             if claim.request_id in finished:
                 continue
@@ -442,6 +454,24 @@ def _push_stream_delta(queue: Any, request_id: str, text: str, payload: dict[str
 def _notify_item_finished(callback: Callable[[str], None] | None, request_id: str) -> None:
     if callback is not None:
         callback(request_id)
+
+
+def _finish_cancelled_or_terminal_pending(worker: BatchWorker, claims: list[QueueClaim], finished: set[str], on_result: FinishHook | None, on_item_finished: Callable[[str], None] | None) -> tuple[int, int, int]:
+    completed = failed = retried = 0
+    for claim in claims:
+        if claim.request_id in finished:
+            continue
+        status = worker.queue.status(request_id=claim.request_id, refresh=False)
+        state = str(status.get("state") or "")
+        if not bool(status.get("cancel_requested")) and state not in _TERMINAL_STATES:
+            continue
+        item_completed, item_failed, item_retried = worker._finish_pair(claim, _cancelled(claim), on_result)
+        completed += item_completed
+        failed += item_failed
+        retried += item_retried
+        finished.add(claim.request_id)
+        _notify_item_finished(on_item_finished, claim.request_id)
+    return completed, failed, retried
 
 
 def _service_refill_low_watermark(service_id: str | None, values: Mapping[str, int]) -> int:

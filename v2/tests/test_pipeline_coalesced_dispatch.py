@@ -127,6 +127,24 @@ class RecordingBatchRunner:
         raise AssertionError("dispatcher should not use per-request run_one_on_node for a compatible cohort")
 
 
+class BlockingIncrementalBatchRunner:
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.cancel_seen = threading.Event()
+        self.release = threading.Event()
+
+    def run_many_on_node(self, requests, profile, node_id, *, concurrency=1):
+        raise AssertionError("test requires incremental batch path")
+
+    def run_many_on_node_incremental(self, requests, profile, node_id, *, concurrency=1, on_result, on_delta=None, cancel_event=None):
+        self.started.set()
+        while cancel_event is None or not cancel_event.is_set():
+            time.sleep(0.005)
+        self.cancel_seen.set()
+        self.release.wait(5.0)
+        return {}
+
+
 class RecordingPerRequestRunner:
     def __init__(self) -> None:
         self.calls: list[str] = []
@@ -451,6 +469,42 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
         self.assertEqual(cohort.active_count(), 2)
         self.assertEqual(cohort.status()["initial_unfinished_count"], 0)
         self.assertEqual(cohort.status()["active_count"], 2)
+
+    def test_worker_force_cancel_releases_incremental_batch_without_runner_tail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            registry = ProfileRegistry.load(PROFILES)
+            topology = SparkTopology.load(TOPOLOGY)
+            requests = [completion_request(f"q{index}", f"prompt-{index}") for index in range(2)]
+            api.queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id="cancel-tail", priority=10)
+            runner = BlockingIncrementalBatchRunner()
+            worker = BatchWorker(queue=api.queue, registry=registry, runner=runner, worker_id="test-dispatcher", lease_ttl_s=30, heartbeat_interval_s=0.01)
+            notices: list[str] = []
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(
+                    worker.run_once,
+                    node_id="spark0",
+                    batch_id="cancel-tail",
+                    limit=2,
+                    concurrency=2,
+                    node_profile_ids=tuple(topology.pipeline_profiles),
+                    kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                    on_result=lambda claim, _result: notices.append(claim.request_id),
+                )
+                try:
+                    self.assertTrue(runner.started.wait(1.0))
+                    api.queue.cancel(batch_id="cancel-tail", reason="operator cancel", force_running=True)
+                    started = time.time()
+                    summary = future.result(timeout=1.0)
+                    self.assertLess(time.time() - started, 0.5)
+                    self.assertTrue(runner.cancel_seen.wait(1.0))
+                finally:
+                    runner.release.set()
+            self.assertEqual(summary["claimed_count"], 2)
+            self.assertEqual(api.queue.status(batch_id="cancel-tail")["state"], "cancelled")
+            self.assertEqual(api.queue.status(request_id="q0")["state"], "cancelled")
+            self.assertEqual(api.queue.status(request_id="q1")["state"], "cancelled")
+            self.assertEqual(notices, [])
 
     def test_resident_rolling_admission_refills_until_service_queue_drains(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
