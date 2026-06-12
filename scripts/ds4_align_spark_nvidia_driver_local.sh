@@ -2,29 +2,37 @@
 set -euo pipefail
 
 TARGET_VERSION="${DS4_NVIDIA_DRIVER_VERSION:-580.159.03-0ubuntu0.24.04.1}"
+TARGET_KERNEL_FLAVOR="${DS4_NVIDIA_KERNEL_FLAVOR:-6.17.0-1021-nvidia}"
+TARGET_KERNEL_VERSION="${DS4_NVIDIA_KERNEL_VERSION:-6.17.0-1021.21}"
 APPLY=0
 PRUNE_VISUAL=0
 PRUNE_STATION_APPS=0
 DISABLE_WORKBENCH_APT=0
+ALIGN_KERNEL=0
 REBOOT=0
 
 usage()
 {
     cat <<USAGE
-usage: $0 [--check] [--apply] [--prune-visual-tools] [--prune-station-apps] [--disable-workbench-apt] [--reboot]
+usage: $0 [--check] [--apply] [--prune-visual-tools] [--prune-station-apps] [--disable-workbench-apt] [--align-kernel] [--reboot]
 
 Align this Spark node to the DS4 NVIDIA driver baseline:
   ${TARGET_VERSION}
+and, when --align-kernel is set, the signed NVIDIA kernel baseline:
+  ${TARGET_KERNEL_FLAVOR} ${TARGET_KERNEL_VERSION}
 
 Default mode is --check. Use --apply under sudo to install the pinned driver
 package family. Use --prune-visual-tools to remove CUDA visual/profiling tools
 that are not needed for inference. Use --prune-station-apps only if this node
 does not need desktop station apps. Use --disable-workbench-apt to disable the
 AI Workbench desktop apt source before apt-get update; it is not needed for DS4
-inference and has a separate signing key from the CUDA/driver repos.
+inference and has a separate signing key from the CUDA/driver repos. Use
+--align-kernel to install the pinned signed NVIDIA kernel image/modules.
 
 Environment:
   DS4_NVIDIA_DRIVER_VERSION   override target package version
+  DS4_NVIDIA_KERNEL_FLAVOR    override target kernel flavor
+  DS4_NVIDIA_KERNEL_VERSION   override target kernel package version
 USAGE
 }
 
@@ -44,6 +52,9 @@ while [ "$#" -gt 0 ]; do
             ;;
         --disable-workbench-apt)
             DISABLE_WORKBENCH_APT=1
+            ;;
+        --align-kernel)
+            ALIGN_KERNEL=1
             ;;
         --reboot)
             REBOOT=1
@@ -68,7 +79,7 @@ current_driver()
 
 pkg_has_version()
 {
-    apt-cache policy "$1" 2>/dev/null | awk -v target="${TARGET_VERSION}" '$1 == target || $2 == target { found=1 } END { exit(found == 1 ? 0 : 1) }'
+    apt-cache policy "$1" 2>/dev/null | awk -v target="$2" '$1 == target || $2 == target { found=1 } END { exit(found == 1 ? 0 : 1) }'
 }
 
 require_root()
@@ -125,6 +136,11 @@ disable_workbench_apt()
 
 driver_upstream="${TARGET_VERSION%%-*}"
 firmware_pkg="nvidia-firmware-580-${driver_upstream}"
+kernel_pkgs=(
+    linux-image-"${TARGET_KERNEL_FLAVOR}"
+    linux-modules-"${TARGET_KERNEL_FLAVOR}"
+    linux-modules-nvidia-580-open-"${TARGET_KERNEL_FLAVOR}"
+)
 driver_pkgs=(
     nvidia-driver-580-open
     nvidia-kernel-source-580-open
@@ -206,6 +222,8 @@ echo "node=$(hostname)"
 echo "kernel=$(uname -r)"
 echo "current_driver=$(current_driver)"
 echo "target_driver_package_version=${TARGET_VERSION}"
+echo "target_kernel=${TARGET_KERNEL_FLAVOR}"
+echo "target_kernel_package_version=${TARGET_KERNEL_VERSION}"
 
 if [ "$APPLY" -ne 0 ]; then
     require_root
@@ -216,7 +234,7 @@ if [ "$APPLY" -ne 0 ]; then
 fi
 
 for pkg in "${driver_pkgs[@]}"; do
-    if pkg_has_version "$pkg"; then
+    if pkg_has_version "$pkg" "$TARGET_VERSION"; then
         install_specs+=("${pkg}=${TARGET_VERSION}")
         installed="$(dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null || true)"
         echo "pkg ${pkg} installed=${installed:-none} target=${TARGET_VERSION}"
@@ -225,6 +243,19 @@ for pkg in "${driver_pkgs[@]}"; do
         missing=1
     fi
 done
+
+if [ "$ALIGN_KERNEL" -ne 0 ]; then
+    for pkg in "${kernel_pkgs[@]}"; do
+        if pkg_has_version "$pkg" "$TARGET_KERNEL_VERSION"; then
+            install_specs+=("${pkg}=${TARGET_KERNEL_VERSION}")
+            installed="$(dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null || true)"
+            echo "kernel_pkg ${pkg} installed=${installed:-none} target=${TARGET_KERNEL_VERSION}"
+        else
+            echo "missing target version for kernel package: ${pkg}" >&2
+            missing=1
+        fi
+    done
+fi
 
 if [ "$missing" -ne 0 ]; then
     echo "error: one or more pinned packages are unavailable from apt sources" >&2
@@ -256,6 +287,10 @@ if [ "$APPLY" -eq 0 ]; then
     if [ "$DISABLE_WORKBENCH_APT" -ne 0 ]; then
         echo "workbench apt source disable command:"
         echo "  mv /etc/apt/sources.list.d/ai-workbench-desktop.sources /etc/apt/sources.list.d.disabled/ai-workbench-desktop.sources.disabled-by-ds4"
+    fi
+    if [ "$ALIGN_KERNEL" -ne 0 ]; then
+        echo "kernel target:"
+        echo "  ${TARGET_KERNEL_FLAVOR} ${TARGET_KERNEL_VERSION}"
     fi
     exit 0
 fi
