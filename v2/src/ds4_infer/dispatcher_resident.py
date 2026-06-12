@@ -19,10 +19,16 @@ class PendingDispatcherCohort:
     service_id: str | None = None
     profile_id: str | None = None
     compute_domain: str | None = None
+    admission_mode: str = "cohort"
+    initial_count: int = 0
+    claimed_count: int = 0
+    finished_count: int = 0
+    submitted_at: float = field(default_factory=time.time)
+    last_finished_at: float | None = None
     lock: Any = field(default_factory=threading.Lock)
 
     @classmethod
-    def from_claims(cls, claims: list[QueueClaim]) -> "PendingDispatcherCohort":
+    def from_claims(cls, claims: list[QueueClaim], *, admission_mode: str = "cohort") -> "PendingDispatcherCohort":
         first = claims[0] if claims else None
         return cls(
             claims=list(claims),
@@ -30,20 +36,51 @@ class PendingDispatcherCohort:
             service_id=first.selected_service_id if first is not None else None,
             profile_id=first.selected_profile_id if first is not None else None,
             compute_domain=first.selected_compute_domain if first is not None else None,
+            admission_mode=str(admission_mode or "cohort"),
+            initial_count=len(claims),
+            claimed_count=len(claims),
         )
 
     def mark_finished(self, request_id: str) -> None:
         with self.lock:
+            before = len(self.unfinished_request_ids)
             self.unfinished_request_ids.discard(str(request_id))
+            if len(self.unfinished_request_ids) != before:
+                self.finished_count += 1
+                self.last_finished_at = time.time()
 
     def active_count(self) -> int:
         with self.lock:
-            return len(self.unfinished_request_ids)
+            active = len(self.unfinished_request_ids)
+            if self.admission_mode == "rolling_refill" and self.initial_count > 0:
+                return max(active, self.initial_count)
+            return active
 
     def active_claims(self) -> list[QueueClaim]:
         with self.lock:
             active = set(self.unfinished_request_ids)
         return [claim for claim in self.claims if claim.request_id in active]
+
+    def status(self) -> dict[str, Any]:
+        now = time.time()
+        with self.lock:
+            unfinished = len(self.unfinished_request_ids)
+            active = max(unfinished, self.initial_count) if self.admission_mode == "rolling_refill" and self.initial_count > 0 else unfinished
+            finished = int(self.finished_count)
+            last_finished = self.last_finished_at
+        return {
+            "service_id": self.service_id,
+            "profile_id": self.profile_id,
+            "compute_domain": self.compute_domain,
+            "admission_mode": self.admission_mode,
+            "initial_count": self.initial_count,
+            "claimed_count": self.claimed_count,
+            "initial_unfinished_count": unfinished,
+            "active_count": active,
+            "finished_count": finished,
+            "age_s": round(max(0.0, now - float(self.submitted_at)), 3),
+            "last_finished_age_s": None if last_finished is None else round(max(0.0, now - float(last_finished)), 3),
+        }
 
 
 @dataclass
@@ -56,6 +93,7 @@ class ResidentServicePlan:
     max_cohort_size: int
     batch_linger_s: float
     weight: float = 1.0
+    admission_mode: str = "resident_multimodel_weighted_deficit"
     deficit: float = 0.0
     submitted_count: int = 0
     completed_count: int = 0
@@ -146,10 +184,19 @@ def pending_claim_count_by_service(pending: dict[Any, Any]) -> dict[str, int]:
     return counts
 
 
+def pending_cohort_details(pending: dict[Any, Any]) -> list[dict[str, Any]]:
+    return [pending_cohort(value).status() for value in pending.values()]
+
+
 def pending_cohort(value: Any) -> PendingDispatcherCohort:
     if isinstance(value, PendingDispatcherCohort):
         return value
     return PendingDispatcherCohort.from_claims(list(value))
+
+
+def plan_uses_rolling_admission(plan: ResidentServicePlan) -> bool:
+    mode = str(plan.admission_mode or "").lower()
+    return mode in {"resident_multimodel_rolling_refill", "rolling_refill", "rolling"}
 
 
 def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weights: dict[str, float], targets: dict[str, int], lows: dict[str, int], cohort_sizes: dict[str, int], linger: dict[str, float]) -> ResidentServicePlan:
@@ -169,6 +216,7 @@ def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weigh
         max_cohort_size=max_cohort,
         batch_linger_s=max(0.0, service_linger),
         weight=max(0.01, float(weights.get(service_id, weights.get(service.profile_id, service.scheduler.get("resident_weight") or 1.0)))),
+        admission_mode=str(service.scheduler.get("admission_mode") or "resident_multimodel_weighted_deficit"),
     )
 
 

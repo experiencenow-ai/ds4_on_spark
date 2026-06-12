@@ -183,6 +183,37 @@ class BatchWorker:
             finished.add(claim.request_id)
         return completed, failed, retried
 
+    def run_resident_refill_stream(
+        self,
+        claims: list[QueueClaim],
+        concurrency: int,
+        on_result: FinishHook | None,
+        *,
+        node_id: str | None,
+        node_profile_ids: tuple[str, ...],
+        max_node_depth: int,
+        kv_capacity_bytes: int,
+        kv_shard_layouts_by_profile: Mapping[str, PipelineProfile],
+        batch_limits_by_service: Mapping[str, int],
+        refill_low_watermark: int,
+        on_item_finished: Callable[[str], None] | None = None,
+    ) -> tuple[int, int, int, int, int]:
+        return self._run_refill_stream(
+            claims,
+            concurrency,
+            on_result,
+            node_id=node_id,
+            batch_id=None,
+            node_profile_ids=node_profile_ids,
+            max_node_depth=max_node_depth,
+            kv_capacity_bytes=kv_capacity_bytes,
+            kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
+            batch_limits_by_service=batch_limits_by_service,
+            refill_low_watermark=refill_low_watermark,
+            share_compute_domain=True,
+            on_item_finished=on_item_finished,
+        )
+
     def _cancel_requested(self, claims: list[QueueClaim]) -> bool:
         for claim in claims:
             if bool(self.queue.status(request_id=claim.request_id, refresh=False).get("cancel_requested")):
@@ -219,6 +250,8 @@ class BatchWorker:
         kv_shard_layouts_by_profile: Mapping[str, PipelineProfile],
         batch_limits_by_service: Mapping[str, int],
         refill_low_watermark: int,
+        share_compute_domain: bool = False,
+        on_item_finished: Callable[[str], None] | None = None,
     ) -> tuple[int, int, int, int, int]:
         service_id = claims[0].selected_service_id
         compute_lease_id = claims[0].compute_lease_id
@@ -232,10 +265,12 @@ class BatchWorker:
             while pending:
                 done, pending = wait(pending, timeout=self.heartbeat_interval_s, return_when=FIRST_COMPLETED)
                 for future in done:
-                    item_completed, item_failed, item_retried = self._finish_pair(futures[future], _future_result(future, futures[future]), on_result)
+                    claim = futures[future]
+                    item_completed, item_failed, item_retried = self._finish_pair(claim, _future_result(future, claim), on_result)
                     completed += item_completed
                     failed += item_failed
                     retried += item_retried
+                    _notify_item_finished(on_item_finished, claim.request_id)
                 if len(pending) < low_watermark:
                     fill = max(0, int(concurrency) - len(pending))
                     if fill > 0:
@@ -251,6 +286,7 @@ class BatchWorker:
                             compute_lease_id=compute_lease_id,
                             selected_service_id=service_id,
                             allow_new_compute_lease=not pending,
+                            share_compute_domain=share_compute_domain,
                         )
                         prefilled += more_prefilled
                         claimed += len(more_claims)
@@ -278,6 +314,7 @@ class BatchWorker:
         compute_lease_id: str | None,
         selected_service_id: str | None,
         allow_new_compute_lease: bool,
+        share_compute_domain: bool = False,
     ) -> tuple[int, list[QueueClaim]]:
         prefilled = self.queue.prepare_ready(
             node_id=node_id,
@@ -289,6 +326,8 @@ class BatchWorker:
             max_node_depth=max_node_depth,
             kv_capacity_bytes=kv_capacity_bytes,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
+            selected_service_id=selected_service_id,
+            share_compute_domain=share_compute_domain,
         )
         claims = self.queue.claim_ready_batch(
             node_id=node_id,
@@ -301,8 +340,9 @@ class BatchWorker:
             batch_limits_by_service=batch_limits_by_service,
             compute_lease_id=compute_lease_id,
             selected_service_id=selected_service_id,
+            share_compute_domain=share_compute_domain,
         )
-        if not claims and allow_new_compute_lease and compute_lease_id is not None:
+        if not claims and allow_new_compute_lease and compute_lease_id is not None and not share_compute_domain:
             claims = self.queue.claim_ready_batch(
                 node_id=node_id,
                 batch_id=batch_id,

@@ -10,9 +10,9 @@
   "performance": {
     "latency_rank": 0.89,
     "max_num_batched_tokens": 32768,
-    "max_num_seqs": 32,
+    "max_num_seqs": 64,
     "measurement_notes": "PP12 no-DeepSeek candidate for 12 Spark resident deployment after 13-node full-GPU stress passed; leaves sparkc free for qualification. Gemma config advertises 262144 max_position_embeddings under text_config.",
-    "target": "12-stage Gemma4 26B-A4B peer pipeline with LMCache HMA, batch-32 admission, and 262K context cap."
+    "target": "12-stage Gemma4 26B-A4B peer pipeline with LMCache HMA, batch-64 admission, and 262K context cap."
   },
   "production_eligible": false,
   "profile_id": "gemma4_26b_a4b_it_pp12_peer_v1",

@@ -21,8 +21,10 @@ from .dispatcher_resident import PendingDispatcherCohort, ResidentServicePlan
 from .dispatcher_resident import active_resident_service_ids as _active_resident_service_ids
 from .dispatcher_resident import pending_claim_count as _pending_claim_count
 from .dispatcher_resident import pending_claim_count_by_service as _pending_claim_count_by_service
+from .dispatcher_resident import pending_cohort_details as _pending_cohort_details
 from .dispatcher_resident import pending_claims as _pending_claims
 from .dispatcher_resident import pending_cohort as _pending_cohort
+from .dispatcher_resident import plan_uses_rolling_admission as _plan_uses_rolling_admission
 from .dispatcher_resident import resident_service_order as _resident_service_order
 from .dispatcher_resident import resident_service_plans as _resident_service_plans
 from .dispatcher_resident import service_target_active as _service_target_active
@@ -475,6 +477,7 @@ class CoordinatorApi:
             "pending": 0,
             "pending_cohorts": 0,
             "pending_by_service": {},
+            "pending_cohort_details": [],
             "started_at": None,
             "last_work_at": None,
             "last_error": None,
@@ -585,9 +588,9 @@ class CoordinatorApi:
         )
         if submitted:
             self._dispatcher_count(worked_count=1, claimed_count=submitted, submitted_count=submitted)
-            self._dispatcher_note(last_work_at=time.time(), pending=_pending_claim_count(runtime.pending), pending_cohorts=len(runtime.pending), last_error=None)
+            self._dispatcher_note(last_work_at=time.time(), pending=_pending_claim_count(runtime.pending), pending_cohorts=len(runtime.pending), pending_cohort_details=_pending_cohort_details(runtime.pending), last_error=None)
             return True
-        self._dispatcher_note(pending=_pending_claim_count(runtime.pending), pending_cohorts=len(runtime.pending), last_error=None)
+        self._dispatcher_note(pending=_pending_claim_count(runtime.pending), pending_cohorts=len(runtime.pending), pending_cohort_details=_pending_cohort_details(runtime.pending), last_error=None)
         return bool(completed or failed or retried)
 
     def _dispatcher_shutdown(self, runtime: DispatcherRuntime) -> None:
@@ -596,7 +599,7 @@ class CoordinatorApi:
             completed, failed, retried = self._dispatcher_finish_done(runtime.worker, runtime.pending, block=True)
             self._dispatcher_count(completed_count=completed, failed_count=failed, retried_count=retried, requeued_count=retried)
         runtime.executor.shutdown(wait=True, cancel_futures=False)
-        self._dispatcher_note(running=False, pending=0, pending_cohorts=0)
+        self._dispatcher_note(running=False, pending=0, pending_cohorts=0, pending_cohort_details=[])
 
     def _release_jit_kv_waits_if_circuit_open(self) -> None:
         status = self.jit_kv_circuit.status()
@@ -736,7 +739,18 @@ class CoordinatorApi:
             if not claims:
                 continue
             claimed = len(claims)
-            self._dispatcher_submit_cohort(executor=executor, worker=worker, pending=pending, claims=claims)
+            self._dispatcher_submit_cohort(
+                executor=executor,
+                worker=worker,
+                pending=pending,
+                claims=claims,
+                rolling_refill=_plan_uses_rolling_admission(plan),
+                entry_node_id=entry_node_id,
+                node_profile_ids=node_profile_ids,
+                batch_limits_by_service=batch_limits_by_service,
+                kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
+                low_watermark=plan.low_watermark,
+            )
             plan.charge(claimed)
             submitted += claimed
             global_available -= claimed
@@ -790,8 +804,10 @@ class CoordinatorApi:
     def _dispatcher_note_resident(self, pending: dict[Any, Any], service_plans: dict[str, ResidentServicePlan], *, attempted: int, made_ready: int) -> None:
         self._dispatcher_note(
             pending_by_service=_pending_claim_count_by_service(pending),
+            pending_cohort_details=_pending_cohort_details(pending),
             resident_service_targets={sid: plan.target_active for sid, plan in service_plans.items()},
             resident_service_low_watermarks={sid: plan.low_watermark for sid, plan in service_plans.items()},
+            resident_service_admission_modes={sid: plan.admission_mode for sid, plan in service_plans.items()},
             resident_service_deficits={sid: round(plan.deficit, 3) for sid, plan in service_plans.items()},
             resident_refill_attempted_services=attempted,
             resident_prefilled_count=made_ready,
@@ -804,9 +820,31 @@ class CoordinatorApi:
         worker: BatchWorker,
         pending: dict[Any, Any],
         claims: list[QueueClaim],
+        rolling_refill: bool = False,
+        entry_node_id: str | None = None,
+        node_profile_ids: tuple[str, ...] = (),
+        batch_limits_by_service: dict[str, int] | None = None,
+        kv_shard_layouts_by_profile: dict[str, Any] | None = None,
+        low_watermark: int = 0,
     ) -> None:
-        cohort = PendingDispatcherCohort.from_claims(list(claims))
-        future = executor.submit(_dispatcher_run_claims, worker, claims, len(claims), cohort.mark_finished)
+        admission_mode = "rolling_refill" if rolling_refill else "cohort"
+        cohort = PendingDispatcherCohort.from_claims(list(claims), admission_mode=admission_mode)
+        if rolling_refill:
+            future = executor.submit(
+                _dispatcher_run_resident_rolling_claims,
+                worker,
+                claims,
+                len(claims),
+                cohort.mark_finished,
+                entry_node_id,
+                node_profile_ids,
+                self.dispatcher_kv_capacity_bytes,
+                kv_shard_layouts_by_profile or {},
+                batch_limits_by_service or {},
+                low_watermark,
+            )
+        else:
+            future = executor.submit(_dispatcher_run_claims, worker, claims, len(claims), cohort.mark_finished)
         pending[future] = cohort
         largest = max(int(self.dispatcher_state.get("largest_claimed_cohort_size") or 0), len(claims))
         last_by_service = dict(self.dispatcher_state.get("last_claimed_cohort_by_service") or {})
@@ -839,6 +877,10 @@ class CoordinatorApi:
                 completed += int(summary.get("completed") or 0)
                 failed += int(summary.get("failed") or 0)
                 retried += int(summary.get("retried") or 0)
+                claimed_extra = max(0, int(summary.get("claimed") or 0) - len(claims))
+                if claimed_extra:
+                    self._dispatcher_count(claimed_count=claimed_extra, submitted_count=claimed_extra)
+                self._dispatcher_note(last_summary=summary)
                 continue
             for claim, result in pairs:
                 item_completed, item_failed, item_retried = worker._finish_pair(claim, result, None)
@@ -1603,6 +1645,53 @@ def _dispatcher_run_claims(worker: BatchWorker, claims: list[QueueClaim], concur
             except Exception as exc:
                 out.append((claim, _dispatcher_transport_failure(claim, str(exc))))
     return out
+
+
+def _dispatcher_run_resident_rolling_claims(
+    worker: BatchWorker,
+    claims: list[QueueClaim],
+    concurrency: int,
+    mark_finished: Callable[[str], None] | None,
+    entry_node_id: str | None,
+    node_profile_ids: tuple[str, ...],
+    kv_capacity_bytes: int,
+    kv_shard_layouts_by_profile: dict[str, Any],
+    batch_limits_by_service: dict[str, int],
+    low_watermark: int,
+) -> list[tuple[Any, dict[str, Any]]]:
+    if not claims:
+        return []
+    if claims[0].request_kind == "cpu":
+        return _dispatcher_run_claims(worker, claims, concurrency, mark_finished)
+    try:
+        completed, failed, retried, claimed, prefilled = worker.run_resident_refill_stream(
+            claims,
+            max(1, concurrency),
+            None,
+            node_id=entry_node_id,
+            node_profile_ids=node_profile_ids,
+            max_node_depth=0,
+            kv_capacity_bytes=kv_capacity_bytes,
+            kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
+            batch_limits_by_service=batch_limits_by_service,
+            refill_low_watermark=max(1, int(low_watermark)),
+            on_item_finished=mark_finished,
+        )
+    except Exception as exc:
+        return [(claim, _dispatcher_transport_failure(claim, str(exc))) for claim in claims]
+    return [
+        (
+            _DISPATCHER_BATCH_FINISHED,
+            {
+                "completed": completed,
+                "failed": failed,
+                "retried": retried,
+                "claimed": claimed,
+                "prefilled": prefilled,
+                "dispatch_mode": "rolling_refill",
+            },
+        )
+    ]
 
 
 def _dispatcher_can_batch_models(worker: BatchWorker, claims: list[QueueClaim]) -> bool:

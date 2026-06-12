@@ -10,8 +10,9 @@ import time
 import unittest
 
 from ds4_infer.api import CoordinatorApi
-from ds4_infer.dispatcher_resident import ResidentServicePlan, resident_service_plans
+from ds4_infer.dispatcher_resident import PendingDispatcherCohort, ResidentServicePlan, resident_service_plans
 from ds4_infer.profiles import ProfileRegistry
+from ds4_infer.queue import QueueClaim
 from ds4_infer.runners import OpenAICompatibleRunner
 from ds4_infer.schemas import InferenceRequest, make_result
 from ds4_infer.topology import SparkTopology
@@ -124,6 +125,21 @@ class RecordingBatchRunner:
 
     def run_one_on_node(self, request, profile, node_id):
         raise AssertionError("dispatcher should not use per-request run_one_on_node for a compatible cohort")
+
+
+class RecordingPerRequestRunner:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def run_one_on_node(self, request, profile, node_id):
+        self.calls.append(request.request_id)
+        return make_result(
+            request=request,
+            profile_id=profile.profile_id,
+            model_id=profile.model_id,
+            backend=profile.backend,
+            text=f"single-{request.request_id}",
+        )
 
 
 class PipelineCoalescedDispatchTests(unittest.TestCase):
@@ -396,6 +412,74 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 96}, 0, 192), 0)
             self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 95}, 0, 192), 33)
             self.assertEqual(api._resident_refill_limit(plan, {}, 0, 192), 128)
+
+    def test_rolling_cohort_keeps_service_admitted_until_future_finishes(self) -> None:
+        claims = [
+            QueueClaim(
+                request_id=f"r{index}",
+                batch_id="batch",
+                request_kind="model",
+                selected_profile_id="profile",
+                selected_node_id="spark0",
+                lease_id=f"lease-{index}",
+                attempt_count=1,
+                request=None,
+                selected_service_id="svc",
+                selected_compute_domain="fleet",
+            )
+            for index in range(2)
+        ]
+        cohort = PendingDispatcherCohort.from_claims(claims, admission_mode="rolling_refill")
+        cohort.mark_finished("r0")
+        cohort.mark_finished("r1")
+        self.assertEqual(cohort.active_count(), 2)
+        self.assertEqual(cohort.status()["initial_unfinished_count"], 0)
+        self.assertEqual(cohort.status()["active_count"], 2)
+
+    def test_resident_rolling_admission_refills_until_service_queue_drains(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            registry = ProfileRegistry.load(PROFILES)
+            topology = SparkTopology.load(TOPOLOGY)
+            plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+            plan = plans["dsv4_flash_pp8"]
+            plan.admission_mode = "resident_multimodel_rolling_refill"
+            plan.target_active = 2
+            plan.low_watermark = 1
+            plan.max_cohort_size = 2
+            plan.batch_linger_s = 0.0
+            for index in range(5):
+                api.queue.submit_requests(
+                    requests=[dsv4_chat_request(f"dsv4-roll-{index}")],
+                    registry=registry,
+                    topology=topology,
+                    batch_id=f"roll-{index}",
+                    priority=10,
+                )
+            runner = RecordingPerRequestRunner()
+            worker = BatchWorker(queue=api.queue, registry=registry, runner=runner, worker_id="test-dispatcher", lease_ttl_s=30, heartbeat_interval_s=0.01)
+            pending = {}
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                submitted = api._dispatcher_refill_resident_multimodel(
+                    worker=worker,
+                    executor=executor,
+                    pending=pending,
+                    entry_node_id="spark0",
+                    node_profile_ids=tuple(topology.pipeline_profiles),
+                    batch_limits_by_service={"dsv4_flash_pp8": 2},
+                    kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                    service_plans={"dsv4_flash_pp8": plan},
+                )
+                self.assertEqual(submitted, 2)
+                self.assertEqual(len(pending), 1)
+                details = api.dispatcher_status()["pending_cohort_details"]
+                self.assertEqual(details[0]["admission_mode"], "rolling_refill")
+                completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
+            self.assertEqual((completed, failed, retried), (5, 0, 0))
+            self.assertEqual(api.queue.status(batch_id="roll-4")["state"], "completed")
+            self.assertEqual(sorted(runner.calls), [f"dsv4-roll-{index}" for index in range(5)])
+            self.assertEqual(api.dispatcher_status()["last_summary"]["dispatch_mode"], "rolling_refill")
+            self.assertEqual(api.dispatcher_status()["last_summary"]["claimed"], 5)
 
     def test_dispatcher_status_reports_kv_admission_bound(self) -> None:
         old = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")
