@@ -1,0 +1,79 @@
+{
+  "format": "ds4-qwen-gemma-resident-memory-budget-v1",
+  "profile_id": "qwen27_gemma26_pp12_no_deepseek_candidate_v1",
+  "source": "Derived from PP13 Qwen/Gemma/Kimi profiles after 2026-06-12 all-13 GPU stress passed; Kimi and DSV4 are intentionally absent.",
+  "target": {
+    "min_available_ratio": 0.1,
+    "spark0_extra_headroom": true,
+    "qualification_node_left_free": "sparkc"
+  },
+  "active_services": [
+    "qwen27_bf16_pp12",
+    "gemma4_26b_a4b_pp12"
+  ],
+  "topology": "profiles/topology/static_sparks_qwen_gemma_pp12.json",
+  "layer_partitions": {
+    "qwen27_bf16_pp12": [
+      5,
+      5,
+      5,
+      5,
+      6,
+      6,
+      6,
+      6,
+      5,
+      5,
+      5,
+      5
+    ],
+    "gemma4_26b_a4b_pp12": [
+      2,
+      2,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      2,
+      2,
+      2,
+      2
+    ]
+  },
+  "fixed_kv_cache_memory_bytes": {
+    "qwen27_bf16_pp12": 17179869184,
+    "gemma4_26b_a4b_pp12": 12884901888
+  },
+  "resident_batch_token_budget": {
+    "qwen27_bf16_pp12": 65536,
+    "gemma4_26b_a4b_pp12": 32768,
+    "notes": "Qwen keeps 262K model context and raises batch target to 64; Gemma is raised to its config-advertised 262K context with batch target 32. Live launch must prove actual KV capacity before production promotion."
+  },
+  "resident_batch_size": {
+    "qwen27_bf16_pp12": 64,
+    "gemma4_26b_a4b_pp12": 32
+  },
+  "estimated_model_layer_memory_gib": {
+    "qwen27_bf16_per_layer": 0.71,
+    "gemma4_26b_a4b_per_layer": 1.5,
+    "max_mid_node_layers": "qwen 6 + gemma 3",
+    "max_mid_node_model_layer_gib": 8.76,
+    "spark0_layers": "qwen 5 + gemma 2",
+    "spark0_model_layer_gib": 6.55
+  },
+  "gpu_budget": {
+    "qwen27_bf16_pp12": 0.42,
+    "gemma4_26b_a4b_pp12": 0.33,
+    "combined": 0.75,
+    "stress_result": "13-node stress reached 96 pct GPU util on every node for 180s, peak raw GPU draw 1191.33 W, hottest node 87 C."
+  },
+  "promotion_gates": [
+    "Launch Qwen PP12 and Gemma PP12 from pulled main only.",
+    "DSAPI readiness passes with profiles/topology/static_sparks_qwen_gemma_pp12.json.",
+    "Qwen and Gemma COMPSEC17 pass with >=2048 output token budget.",
+    "Run queue saturation at batch 16,32,64 for Qwen and 16,32 for Gemma while watching memory and power.",
+    "LMCache canary proves repeated prompts preserve answers and improve prefill behavior."
+  ]
+}

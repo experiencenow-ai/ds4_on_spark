@@ -1161,7 +1161,13 @@ def _resolve_profile(registry: ProfileRegistry, topology: SparkTopology, model: 
     if model:
         aliased = resolve_model_alias(model)
         if aliased != model:
-            return registry.get(aliased)
+            profile = registry.get(aliased)
+            if topology.pipeline_service_for_profile(profile.profile_id) is not None:
+                return profile
+            active = _active_profile_for_model(registry, topology, profile.model_id)
+            if active is not None:
+                return active
+            return profile
         try:
             return registry.get(model)
         except ValueError:
@@ -1198,10 +1204,33 @@ def _resolve_pipeline_service(topology: SparkTopology, registry: ProfileRegistry
         service = topology.pipeline_service_for_profile(profile.profile_id)
         if service is not None:
             return service
-    default_service = topology.pipeline_service_for_profile(registry.resolve(capability="efficient", chat=True, job_class="analysis").profile_id)
+        raise ValueError(f"model/profile {model_id!r} resolved to {profile.profile_id!r}, but that profile is not a configured pipeline service")
+    default_profile = registry.resolve(capability="efficient", chat=True, job_class="analysis")
+    default_service = topology.pipeline_service_for_profile(default_profile.profile_id)
+    if default_service is None:
+        active_default = _active_profile_for_model(registry, topology, default_profile.model_id)
+        if active_default is not None:
+            default_service = topology.pipeline_service_for_profile(active_default.profile_id)
     if default_service is None:
         raise ValueError("no default pipeline service is configured")
     return default_service
+
+
+def _active_profile_for_model(registry: ProfileRegistry, topology: SparkTopology, model_id: str) -> ModelProfile | None:
+    active = _active_resident_service_ids(topology)
+    candidates: list[ModelProfile] = []
+    for service in topology.pipeline_services.values():
+        if active is not None and service.service_id not in active:
+            continue
+        if service.model_id != model_id:
+            continue
+        try:
+            candidates.append(registry.get(service.profile_id))
+        except ValueError:
+            continue
+    if not candidates:
+        return None
+    return sorted(candidates, key=lambda profile: int(profile.routing.get("rank", 1000)))[0]
 
 
 OPENAI_REQUEST_FIELDS = {
