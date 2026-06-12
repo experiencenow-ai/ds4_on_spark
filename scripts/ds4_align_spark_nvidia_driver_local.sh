@@ -73,6 +73,20 @@ require_root()
     fi
 }
 
+mark_installed_manual()
+{
+    manual_pkgs=()
+    for pkg in "$@"; do
+        status="$(dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null || true)"
+        if [ "$status" = "install ok installed" ]; then
+            manual_pkgs+=("$pkg")
+        fi
+    done
+    if [ "${#manual_pkgs[@]}" -ne 0 ]; then
+        apt-mark manual "${manual_pkgs[@]}"
+    fi
+}
+
 driver_upstream="${TARGET_VERSION%%-*}"
 firmware_pkg="nvidia-firmware-580-${driver_upstream}"
 driver_pkgs=(
@@ -95,6 +109,55 @@ visual_pkgs=(
     cuda-nsight-compute-13-0
     cuda-nsight-systems-13-0
     cuda-documentation-13-0
+)
+cuda_keep_pkgs=(
+    cuda-cccl-13-0
+    cuda-command-line-tools-13-0
+    cuda-compiler-13-0
+    cuda-crt-13-0
+    cuda-cudart-13-0
+    cuda-cudart-dev-13-0
+    cuda-culibos-dev-13-0
+    cuda-cuobjdump-13-0
+    cuda-cupti-13-0
+    cuda-cupti-dev-13-0
+    cuda-cuxxfilt-13-0
+    cuda-driver-dev-13-0
+    cuda-gdb-13-0
+    cuda-libraries-13-0
+    cuda-libraries-dev-13-0
+    cuda-nvcc-13-0
+    cuda-nvdisasm-13-0
+    cuda-nvml-dev-13-0
+    cuda-nvprune-13-0
+    cuda-nvrtc-13-0
+    cuda-nvrtc-dev-13-0
+    cuda-nvtx-13-0
+    cuda-profiler-api-13-0
+    cuda-sanitizer-13-0
+    gds-tools-13-0
+    libcublas-13-0
+    libcublas-dev-13-0
+    libcufft-13-0
+    libcufft-dev-13-0
+    libcufile-13-0
+    libcufile-dev-13-0
+    libcurand-13-0
+    libcurand-dev-13-0
+    libcusolver-13-0
+    libcusolver-dev-13-0
+    libcusparse-13-0
+    libcusparse-dev-13-0
+    libnpp-13-0
+    libnpp-dev-13-0
+    libnvfatbin-13-0
+    libnvfatbin-dev-13-0
+    libnvjitlink-13-0
+    libnvjitlink-dev-13-0
+    libnvjpeg-13-0
+    libnvjpeg-dev-13-0
+    libnvptxcompiler-13-0
+    libnvvm-13-0
 )
 station_pkgs=(
     nvidia-system-station-games
@@ -140,6 +203,10 @@ if [ "$APPLY" -eq 0 ]; then
         printf '  apt-get purge -y'
         printf ' %q' "${visual_pkgs[@]}"
         printf '\n'
+        echo "cuda keep command:"
+        printf '  apt-mark manual'
+        printf ' %q' "${cuda_keep_pkgs[@]}"
+        printf '\n'
     fi
     if [ "$PRUNE_STATION_APPS" -ne 0 ]; then
         echo "station app prune command:"
@@ -153,6 +220,7 @@ fi
 apt-get install -y "${install_specs[@]}"
 if [ "$PRUNE_VISUAL" -ne 0 ]; then
     apt-get purge -y "${visual_pkgs[@]}"
+    mark_installed_manual "${cuda_keep_pkgs[@]}"
 fi
 if [ "$PRUNE_STATION_APPS" -ne 0 ]; then
     apt-get purge -y "${station_pkgs[@]}"
