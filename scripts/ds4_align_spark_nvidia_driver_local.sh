@@ -62,7 +62,7 @@ current_driver()
 
 pkg_has_version()
 {
-    apt-cache policy "$1" 2>/dev/null | awk -v target="${TARGET_VERSION}" '$1 == target { found=1 } END { exit(found == 1 ? 0 : 1) }'
+    apt-cache policy "$1" 2>/dev/null | awk -v target="${TARGET_VERSION}" '$1 == target || $2 == target { found=1 } END { exit(found == 1 ? 0 : 1) }'
 }
 
 require_root()
