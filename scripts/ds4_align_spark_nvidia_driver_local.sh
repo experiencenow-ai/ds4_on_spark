@@ -5,12 +5,13 @@ TARGET_VERSION="${DS4_NVIDIA_DRIVER_VERSION:-580.159.03-0ubuntu0.24.04.1}"
 APPLY=0
 PRUNE_VISUAL=0
 PRUNE_STATION_APPS=0
+DISABLE_WORKBENCH_APT=0
 REBOOT=0
 
 usage()
 {
     cat <<USAGE
-usage: $0 [--check] [--apply] [--prune-visual-tools] [--prune-station-apps] [--reboot]
+usage: $0 [--check] [--apply] [--prune-visual-tools] [--prune-station-apps] [--disable-workbench-apt] [--reboot]
 
 Align this Spark node to the DS4 NVIDIA driver baseline:
   ${TARGET_VERSION}
@@ -18,7 +19,9 @@ Align this Spark node to the DS4 NVIDIA driver baseline:
 Default mode is --check. Use --apply under sudo to install the pinned driver
 package family. Use --prune-visual-tools to remove CUDA visual/profiling tools
 that are not needed for inference. Use --prune-station-apps only if this node
-does not need desktop station apps.
+does not need desktop station apps. Use --disable-workbench-apt to disable the
+AI Workbench desktop apt source before apt-get update; it is not needed for DS4
+inference and has a separate signing key from the CUDA/driver repos.
 
 Environment:
   DS4_NVIDIA_DRIVER_VERSION   override target package version
@@ -38,6 +41,9 @@ while [ "$#" -gt 0 ]; do
             ;;
         --prune-station-apps)
             PRUNE_STATION_APPS=1
+            ;;
+        --disable-workbench-apt)
+            DISABLE_WORKBENCH_APT=1
             ;;
         --reboot)
             REBOOT=1
@@ -84,6 +90,21 @@ mark_installed_manual()
     done
     if [ "${#manual_pkgs[@]}" -ne 0 ]; then
         apt-mark manual "${manual_pkgs[@]}"
+    fi
+}
+
+disable_workbench_apt()
+{
+    src="/etc/apt/sources.list.d/ai-workbench-desktop.sources"
+    dst="${src}.disabled-by-ds4"
+    if [ -e "$src" ]; then
+        if [ -e "$dst" ]; then
+            dst="${dst}.$(date +%Y%m%d%H%M%S)"
+        fi
+        mv "$src" "$dst"
+        echo "disabled_workbench_apt_source=${dst}"
+    else
+        echo "disabled_workbench_apt_source=absent"
     fi
 }
 
@@ -173,6 +194,9 @@ echo "target_driver_package_version=${TARGET_VERSION}"
 
 if [ "$APPLY" -ne 0 ]; then
     require_root
+    if [ "$DISABLE_WORKBENCH_APT" -ne 0 ]; then
+        disable_workbench_apt
+    fi
     apt-get update
 fi
 
@@ -213,6 +237,10 @@ if [ "$APPLY" -eq 0 ]; then
         printf '  apt-get purge -y'
         printf ' %q' "${station_pkgs[@]}"
         printf '\n'
+    fi
+    if [ "$DISABLE_WORKBENCH_APT" -ne 0 ]; then
+        echo "workbench apt source disable command:"
+        echo "  mv /etc/apt/sources.list.d/ai-workbench-desktop.sources /etc/apt/sources.list.d/ai-workbench-desktop.sources.disabled-by-ds4"
     fi
     exit 0
 fi
