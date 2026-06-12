@@ -406,7 +406,7 @@ class KvCachePlanningTests(unittest.TestCase):
     def test_qwen_gemma_pp12_plain_plans_omit_external_kv_connector(self) -> None:
         for deployment_path, expected_profile, expected_batch in (
             (QWEN_PP12_PLAIN_DEPLOYMENT, "qwen3_6_27b_bf16_pp12_plain_efficient_v1", "128"),
-            (GEMMA26_PP12_PLAIN_DEPLOYMENT, "gemma4_26b_a4b_it_pp12_plain_peer_v1", "64"),
+            (GEMMA26_PP12_PLAIN_DEPLOYMENT, "gemma4_26b_a4b_it_pp12_plain_peer_v1", "128"),
         ):
             deployment = KvCacheDeployment.load(deployment_path)
             plan = plan_deployment(deployment)

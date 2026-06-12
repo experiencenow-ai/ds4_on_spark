@@ -53,7 +53,7 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
 
         caps = {entry["service_id"]: int(entry["service"]["max_batch_size"]) for entry in entries}
 
-        self.assertEqual(caps, {"gemma4_26b_a4b_pp12": 64, "qwen27_bf16_pp12": 128})
+        self.assertEqual(caps, {"gemma4_26b_a4b_pp12": 128, "qwen27_bf16_pp12": 128})
         for entry in entries:
             expected = str(entry["service"]["max_batch_size"])
             deployment = entry["deployment"]

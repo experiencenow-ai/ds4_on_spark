@@ -95,7 +95,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
 
         self.assertEqual(len(topology.nodes), 12)
         self.assertEqual(capacity[QWEN_PP12], 128)
-        self.assertEqual(capacity[GEMMA26_PP12], 64)
+        self.assertEqual(capacity[GEMMA26_PP12], 128)
         self.assertEqual(
             topology.routing_policy["active_resident_service_ids"],
             ["qwen27_bf16_pp12", "gemma4_26b_a4b_pp12"],
@@ -110,16 +110,16 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(qwen.kv_cache["expected_entry_fraction_per_node"], 1.0 / 12.0)
         self.assertEqual(gemma.kv_cache["expected_entry_fraction_per_node"], 1.0 / 12.0)
         self.assertEqual(qwen.scheduler["vllm_max_num_seqs"], 128)
-        self.assertEqual(gemma.scheduler["vllm_max_num_seqs"], 64)
+        self.assertEqual(gemma.scheduler["vllm_max_num_seqs"], 128)
         self.assertEqual(qwen.scheduler["admission_mode"], "resident_multimodel_rolling_refill")
         self.assertEqual(gemma.scheduler["admission_mode"], "resident_multimodel_rolling_refill")
         self.assertEqual(qwen.scheduler["refill_low_watermark"], 96)
-        self.assertEqual(gemma.scheduler["refill_low_watermark"], 48)
+        self.assertEqual(gemma.scheduler["refill_low_watermark"], 96)
         self.assertEqual(
             topology.routing_policy["resident_coordinator_defaults"]["dispatch_window"],
-            192,
+            256,
         )
-        self.assertEqual(float(qwen.kv_cache["gpu_memory_utilization"]) + float(gemma.kv_cache["gpu_memory_utilization"]), 0.75)
+        self.assertEqual(float(qwen.kv_cache["gpu_memory_utilization"]) + float(gemma.kv_cache["gpu_memory_utilization"]), 0.8)
 
     def test_qwen_gemma_pp12_plain_topology_disables_external_lmcache(self) -> None:
         topology = SparkTopology.load(QWEN_GEMMA_PP12_PLAIN_TOPOLOGY)
@@ -127,7 +127,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
 
         self.assertEqual(len(topology.nodes), 12)
         self.assertEqual(capacity[QWEN_PP12_PLAIN], 128)
-        self.assertEqual(capacity[GEMMA26_PP12_PLAIN], 64)
+        self.assertEqual(capacity[GEMMA26_PP12_PLAIN], 128)
         self.assertEqual(
             topology.routing_policy["active_resident_service_ids"],
             ["qwen27_bf16_pp12", "gemma4_26b_a4b_pp12"],

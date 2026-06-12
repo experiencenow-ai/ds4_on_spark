@@ -13,6 +13,7 @@ from typing import Any, Callable, Iterator, Protocol
 from urllib import error, request as urlrequest
 
 from .builders import model_batch_payload, request_messages, request_prompt
+from .chat_streaming import run_parallel_chat_stream
 from .cohort_safety import coalesced_completion_token_budget, coalesced_failure_should_bisect, mark_coalesced_split, prompt_token_estimate
 from .jit_kv import build_prefetch_payload, disable_strict_kv, run_prefetch
 from .kv_cache import kv_cache_extra_body, kv_cache_vllm_request_fields
@@ -434,12 +435,12 @@ class OpenAICompatibleRunner:
                 }
                 for future in as_completed(futures):
                     item = futures[future]
-                    if cancel_event is not None and cancel_event.is_set():
-                        break
                     result = future.result()
                     out[item.request_id] = result
                     if on_result is not None:
                         on_result(item.request_id, result)
+                    if cancel_event is not None and cancel_event.is_set():
+                        break
         if len(chunks) > 1:
             _mark_coalesced_planned_split(
                 out,
@@ -547,17 +548,17 @@ class OpenAICompatibleRunner:
             workers = _parallel_chat_concurrency(profile, len(chunk), max_cohort)
             with ThreadPoolExecutor(max_workers=workers) as executor:
                 futures = {
-                    executor.submit(self._run_one_chat_parallel_member, item, profile, started, len(chunk)): item
+                    executor.submit(self._run_one_chat_parallel_member, item, profile, started, len(chunk), cancel_event=cancel_event): item
                     for item in chunk
                 }
                 for future in as_completed(futures):
                     item = futures[future]
-                    if cancel_event is not None and cancel_event.is_set():
-                        break
                     result = future.result()
                     out[item.request_id] = result
                     if on_result is not None:
                         on_result(item.request_id, result)
+                    if cancel_event is not None and cancel_event.is_set():
+                        break
         if len(chunks) > 1:
             _mark_coalesced_chat_planned_split(
                 out,
@@ -574,6 +575,8 @@ class OpenAICompatibleRunner:
         profile: ModelProfile,
         started: float,
         batch_size: int,
+        *,
+        cancel_event: Event | None = None,
     ) -> dict:
         try:
             payload = _openai_payload(request, profile)
@@ -582,6 +585,19 @@ class OpenAICompatibleRunner:
                 extra_body = dict(payload.get("extra_body") or {})
                 extra_body.setdefault("request_id", request.request_id)
                 payload["extra_body"] = extra_body
+            if cancel_event is not None and _env_bool("DS4_PIPELINE_PARALLEL_CHAT_INTERNAL_STREAMING", True):
+                return run_parallel_chat_stream(
+                    post_sse_json=self._post_sse_json,
+                    transport_failure=self._transport_failure,
+                    request=request,
+                    profile=profile,
+                    payload=payload,
+                    base_url=self.base_url,
+                    endpoint=self.chat_endpoint,
+                    started=started,
+                    batch_size=batch_size,
+                    cancel_event=cancel_event,
+                )
             data = self._post_json(self.chat_endpoint, payload)
             text = extract_openai_chat_text(data)
             result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
@@ -596,14 +612,7 @@ class OpenAICompatibleRunner:
             }
             return result
         except Exception as exc:
-            return self._transport_failure(
-                request,
-                profile,
-                started,
-                str(exc),
-                endpoint=self.chat_endpoint,
-                coalesced_batch_size=batch_size,
-            )
+            return self._transport_failure(request, profile, started, str(exc), endpoint=self.chat_endpoint, coalesced_batch_size=batch_size)
 
     def _chat_batch_plan(self, requests: list[InferenceRequest], profile: ModelProfile) -> tuple[list[list[InferenceRequest]], list[tuple[list[InferenceRequest], dict[str, Any]]], int, int] | None:
         request_list = list(requests)
