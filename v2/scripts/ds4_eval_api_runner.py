@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent import futures
 import json
 import re
 import time
@@ -604,13 +605,28 @@ def _run_direct_vllm_batch(args: argparse.Namespace, requests_payload: list[dict
 
 def _run_direct_vllm_chat_batch(args: argparse.Namespace, requests_payload: list[dict]) -> tuple[dict, dict, float]:
     started = time.time()
-    responses = []
-    results = []
-    for row in requests_payload:
+    responses: list[dict | None] = [None] * len(requests_payload)
+    results: list[dict | None] = [None] * len(requests_payload)
+    concurrency = max(1, int(getattr(args, "chat_concurrency", 1) or 1))
+
+    def run_one(index: int, row: dict) -> tuple[int, dict, dict]:
         payload = _direct_chat_payload(args, row)
         response = _post_json(args.vllm_url, "/v1/chat/completions", payload, timeout=float(args.vllm_timeout_s))
-        responses.append(response)
-        results.append(_direct_collect_item_from_chat(row, response))
+        return index, response, _direct_collect_item_from_chat(row, response)
+
+    if concurrency == 1 or len(requests_payload) <= 1:
+        for idx, row in enumerate(requests_payload):
+            index, response, result = run_one(idx, row)
+            responses[index] = response
+            results[index] = result
+    else:
+        workers = min(concurrency, len(requests_payload))
+        with futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            pending = [executor.submit(run_one, idx, row) for idx, row in enumerate(requests_payload)]
+            for future in futures.as_completed(pending):
+                index, response, result = future.result()
+                responses[index] = response
+                results[index] = result
     run_s = time.time() - started
     return {"format": "ds4-eval-direct-vllm-chat-collect-v1", "results": results}, {"responses": responses}, run_s
 
@@ -1163,6 +1179,7 @@ def _build_parser() -> argparse.ArgumentParser:
     dc.add_argument("--disable-thinking", dest="enable_thinking", action="store_false")
     dc.add_argument("--chat-template-thinking-key", default="thinking")
     dc.add_argument("--thinking-budget-tokens", type=int, default=1024)
+    dc.add_argument("--chat-concurrency", type=int, default=1)
     dc.add_argument("--temperature", type=float, default=0.0)
     dc.add_argument("--source", action="append", default=[], help="Only include ds4-eval cases with this source; repeat for multiple sources.")
     dc.add_argument("--limit", type=int, default=0)

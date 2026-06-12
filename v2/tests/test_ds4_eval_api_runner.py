@@ -90,6 +90,12 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         self.assertFalse(args.enable_thinking)
         self.assertEqual(args.vllm_timeout_s, 3600.0)
 
+    def test_direct_vllm_chat_accepts_concurrency(self) -> None:
+        parser = self.runner._build_parser()
+        args = parser.parse_args(["run-direct-vllm-chat", "--out-dir", "/tmp/ds4-eval-test", "--chat-concurrency", "16"])
+
+        self.assertEqual(args.chat_concurrency, 16)
+
     def test_disabled_thinking_zeros_request_budget(self) -> None:
         args = argparse.Namespace(
             vllm_url="http://vllm",
@@ -357,6 +363,44 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         self.assertEqual(items["a"]["result"]["output"]["text"], "Answer: A")
         self.assertEqual(items["b"]["result"]["output"]["text"], "Answer: B")
         self.assertEqual(sum(item["result"]["usage"]["completion_tokens"] for item in items.values()), 10)
+
+    def test_direct_chat_concurrent_collect_preserves_request_mapping(self) -> None:
+        args = argparse.Namespace(
+            vllm_url="http://vllm",
+            served_model="kimi",
+            max_output_tokens=64,
+            temperature=0.0,
+            enable_thinking=True,
+            chat_template_thinking_key="enable_thinking",
+            thinking_budget_tokens=32,
+            vllm_timeout_s=120.0,
+            chat_concurrency=2,
+        )
+        rows = [
+            {"request_id": "a", "input": {"messages": [{"role": "user", "content": "first"}]}},
+            {"request_id": "b", "input": {"messages": [{"role": "user", "content": "second"}]}},
+        ]
+        original_post_json = self.runner._post_json
+
+        def fake_post_json(base_url, path, payload, *, timeout=120):
+            self.assertEqual(base_url, "http://vllm")
+            self.assertEqual(path, "/v1/chat/completions")
+            prompt = payload["messages"][0]["content"]
+            return {
+                "choices": [{"message": {"content": f"Answer: {prompt}"}}],
+                "usage": {"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7},
+            }
+
+        self.runner._post_json = fake_post_json
+        try:
+            collect, response, _run_s = self.runner._run_direct_vllm_chat_batch(args, rows)
+        finally:
+            self.runner._post_json = original_post_json
+
+        items = self.runner._collect_items_by_request_id(collect)
+        self.assertEqual(items["a"]["result"]["output"]["text"], "Answer: first")
+        self.assertEqual(items["b"]["result"]["output"]["text"], "Answer: second")
+        self.assertEqual(response["responses"][0]["choices"][0]["message"]["content"], "Answer: first")
 
 
 if __name__ == "__main__":
