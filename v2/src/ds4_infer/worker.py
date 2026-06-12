@@ -111,12 +111,20 @@ class BatchWorker:
             if retry_state in {"failed", "cancelled"} and on_result is not None:
                 on_result(claim, result)
             return (0, 1, 0) if retry_state == "failed" else (0, 0, 0)
-        state = "completed" if result.get("status") == "completed" else "failed"
+        result_status = str(result.get("status") or "")
+        if result_status == "cancelled":
+            state = "cancelled"
+        else:
+            state = "completed" if result_status == "completed" else "failed"
         if not self.queue.finish_request(request_id=claim.request_id, lease_id=claim.lease_id, state=state, result=result, error=None if state == "completed" else str(result.get("status", "failed"))):
             return (0, 0, 0)
         if on_result is not None:
             on_result(claim, result)
-        return (1, 0, 0) if state == "completed" else (0, 1, 0)
+        if state == "completed":
+            return (1, 0, 0)
+        if state == "failed":
+            return (0, 1, 0)
+        return (0, 0, 0)
 
     def _run_model_batch(self, claims: list[QueueClaim], concurrency: int) -> list[tuple[QueueClaim, dict[str, Any]]]:
         profile = self.registry.get(claims[0].selected_profile_id)
@@ -259,6 +267,7 @@ class BatchWorker:
         claimed = len(claims)
         prefilled = 0
         completed = failed = retried = 0
+        refill_cancelled = False
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
             futures = {pool.submit(self._run_one, claim): claim for claim in claims}
             pending = set(futures)
@@ -271,7 +280,9 @@ class BatchWorker:
                     failed += item_failed
                     retried += item_retried
                     _notify_item_finished(on_item_finished, claim.request_id)
-                if len(pending) < low_watermark:
+                if pending and self._cancel_requested([futures[future] for future in pending]):
+                    refill_cancelled = True
+                if not refill_cancelled and len(pending) < low_watermark:
                     fill = max(0, int(concurrency) - len(pending))
                     if fill > 0:
                         more_prefilled, more_claims = self._claim_refill(
@@ -387,12 +398,19 @@ class BatchWorker:
     def _run_one(self, claim: QueueClaim) -> dict[str, Any]:
         if claim.request_kind != "model" or claim.request is None:
             return _failure(claim, "worker cannot run CPU claim without CPU batch path")
+        if self._claim_cancelled_or_terminal(claim):
+            return _cancelled(claim)
         profile = self.registry.get(claim.selected_profile_id)
         if hasattr(self.runner, "run_one_on_node"):
             result = self.runner.run_one_on_node(claim.request, profile, claim.selected_node_id)  # type: ignore[attr-defined]
         else:
             result = self.runner.run_one(claim.request, profile)
         return _result_for_claim(claim, result)
+
+    def _claim_cancelled_or_terminal(self, claim: QueueClaim) -> bool:
+        status = self.queue.status(request_id=claim.request_id, refresh=False)
+        state = str(status.get("state") or "")
+        return bool(status.get("cancel_requested")) or state in _TERMINAL_STATES
 
     def _run_cpu_claims(self, claims: list[QueueClaim], concurrency: int) -> list[tuple[QueueClaim, dict[str, Any]]]:
         service = claims[0].service_name or ""
@@ -453,6 +471,10 @@ def _future_result(future: Any, claim: QueueClaim) -> dict[str, Any]:
 
 def _failure(claim: QueueClaim, error: str) -> dict[str, Any]:
     return {"format": "ds4-inference-failure-v1", "request_id": claim.request_id, "status": "failed", "error": error}
+
+
+def _cancelled(claim: QueueClaim) -> dict[str, Any]:
+    return {"format": "ds4-inference-cancelled-v1", "request_id": claim.request_id, "status": "cancelled", "reason": "cancelled before model dispatch"}
 
 
 def _summary(claimed: int, completed: int, failed: int, reap: dict[str, Any], **extra: Any) -> dict[str, Any]:

@@ -142,6 +142,22 @@ class RecordingPerRequestRunner:
         )
 
 
+class CancellingPerRequestRunner(RecordingPerRequestRunner):
+    def __init__(self, cancel_once) -> None:
+        super().__init__()
+        self.cancel_once = cancel_once
+        self.cancelled = False
+        self.lock = threading.Lock()
+
+    def run_one_on_node(self, request, profile, node_id):
+        with self.lock:
+            if not self.cancelled:
+                self.cancelled = True
+                self.cancel_once()
+        time.sleep(0.01)
+        return super().run_one_on_node(request, profile, node_id)
+
+
 class PipelineCoalescedDispatchTests(unittest.TestCase):
     def test_runner_sends_one_openai_completion_request_for_compatible_completion_cohort(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
@@ -480,6 +496,49 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual(sorted(runner.calls), [f"dsv4-roll-{index}" for index in range(5)])
             self.assertEqual(api.dispatcher_status()["last_summary"]["dispatch_mode"], "rolling_refill")
             self.assertEqual(api.dispatcher_status()["last_summary"]["claimed"], 5)
+
+    def test_resident_rolling_admission_stops_refill_after_batch_cancel(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            registry = ProfileRegistry.load(PROFILES)
+            topology = SparkTopology.load(TOPOLOGY)
+            plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+            plan = plans["dsv4_flash_pp8"]
+            plan.admission_mode = "resident_multimodel_rolling_refill"
+            plan.target_active = 2
+            plan.low_watermark = 2
+            plan.max_cohort_size = 2
+            plan.batch_linger_s = 0.0
+            api.queue.submit_requests(
+                requests=[dsv4_chat_request(f"dsv4-cancel-{index}") for index in range(5)],
+                registry=registry,
+                topology=topology,
+                batch_id="roll-cancel",
+                priority=10,
+            )
+            runner = CancellingPerRequestRunner(lambda: api.queue.cancel(batch_id="roll-cancel", reason="test cancel", force_running=False))
+            worker = BatchWorker(queue=api.queue, registry=registry, runner=runner, worker_id="test-dispatcher", lease_ttl_s=30, heartbeat_interval_s=0.01)
+            pending = {}
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                submitted = api._dispatcher_refill_resident_multimodel(
+                    worker=worker,
+                    executor=executor,
+                    pending=pending,
+                    entry_node_id="spark0",
+                    node_profile_ids=tuple(topology.pipeline_profiles),
+                    batch_limits_by_service={"dsv4_flash_pp8": 2},
+                    kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                    service_plans={"dsv4_flash_pp8": plan},
+                )
+                self.assertEqual(submitted, 2)
+                completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
+            self.assertGreaterEqual(completed, 1)
+            self.assertLessEqual(completed, 2)
+            self.assertEqual((failed, retried), (0, 0))
+            self.assertLessEqual(len(runner.calls), 2)
+            self.assertEqual(api.queue.status(batch_id="roll-cancel")["state"], "cancelled")
+            self.assertEqual(api.dispatcher_status()["last_summary"]["dispatch_mode"], "rolling_refill")
+            self.assertEqual(api.dispatcher_status()["last_summary"]["claimed"], 2)
 
     def test_dispatcher_status_reports_kv_admission_bound(self) -> None:
         old = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")
