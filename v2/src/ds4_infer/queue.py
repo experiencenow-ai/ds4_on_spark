@@ -556,6 +556,36 @@ class InferenceQueue:
             leases = [dict(row) for row in conn.execute("select * from compute_leases order by compute_domain")]
             return {"format": QUEUE_FORMAT, "state_counts": counts, "newest_event_id": int(event["newest"] or 0), "active_compute_leases": leases, "pipeline_status": self._pipeline_status_locked(conn)}
 
+    def service_state_counts(self) -> dict[str, Any]:
+        terminal = set(TERMINAL_STATES)
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                """
+                select coalesce(selected_service_id,'unassigned') service_id,state,count(*) n
+                from requests
+                group by coalesce(selected_service_id,'unassigned'),state
+                order by service_id,state
+                """
+            ).fetchall()
+        by_service: dict[str, dict[str, int]] = {}
+        unfinished: dict[str, int] = {}
+        running: dict[str, int] = {}
+        for row in rows:
+            service_id = str(row["service_id"] or "unassigned")
+            state = str(row["state"])
+            count = int(row["n"])
+            by_service.setdefault(service_id, {})[state] = count
+            if state not in terminal:
+                unfinished[service_id] = int(unfinished.get(service_id, 0)) + count
+            if state == "running":
+                running[service_id] = count
+        return {
+            "format": QUEUE_FORMAT,
+            "state_counts_by_service": by_service,
+            "unfinished_by_service": unfinished,
+            "running_by_service": running,
+        }
+
     def usage(self, *, window_s: float = 300.0, now: float | None = None, limit: int = 10000) -> dict[str, Any]:
         window = max(1.0, min(86400.0, float(window_s)))
         end_ts = time.time() if now is None else float(now)

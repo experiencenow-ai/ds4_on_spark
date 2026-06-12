@@ -206,12 +206,35 @@ def _probe(entries: list[dict[str, object]], args: argparse.Namespace) -> None:
     rows = []
     for entry in entries:
         url = f"http://127.0.0.1:{entry['http_port']}/v1/models"
-        code = "import json,os,urllib.request\nu=os.environ['U'];t=float(os.environ['T'])\ntry:\n r=urllib.request.urlopen(u,timeout=t);print(json.dumps({'ok':True,'status':r.status,'body':r.read(512).decode('utf-8','replace')}))\nexcept Exception as e:\n print(json.dumps({'ok':False,'error':str(e)}))"
-        result = _ssh(str(entry["entry_node_id"]), f"U={shlex.quote(url)} T={args.probe_timeout_s} python3 -c {shlex.quote(code)}", args, capture=True)
+        result = _ssh(str(entry["entry_node_id"]), f"U={shlex.quote(url)} T={args.probe_timeout_s} python3 -c {shlex.quote(_remote_probe_code())}", args, capture=True)
         rows.append({"service_id": entry["service_id"], "url": url, "ok": _probe_result_ok(result), "out": result.stdout.strip(), "err": result.stderr.strip()})
     _emit_rows(rows, args)
     if any(not row["ok"] for row in rows):
         raise SystemExit(1)
+
+
+def _remote_probe_code() -> str:
+    return "\n".join(
+        [
+            "import json,os,time,urllib.request",
+            "u=os.environ['U']",
+            "deadline=time.time()+max(0.1,float(os.environ['T']))",
+            "last=''",
+            "while True:",
+            " remaining=deadline-time.time()",
+            " if remaining<=0:",
+            "  break",
+            " try:",
+            "  r=urllib.request.urlopen(u,timeout=max(0.2,min(2.0,remaining)))",
+            "  print(json.dumps({'ok':True,'status':r.status,'body':r.read(512).decode('utf-8','replace')}))",
+            "  raise SystemExit(0)",
+            " except Exception as e:",
+            "  last=str(e)",
+            "  time.sleep(max(0.1,min(2.0,deadline-time.time())))",
+            "print(json.dumps({'ok':False,'error':last}))",
+            "raise SystemExit(1)",
+        ]
+    )
 
 
 def _probe_result_ok(result: subprocess.CompletedProcess[str]) -> bool:
