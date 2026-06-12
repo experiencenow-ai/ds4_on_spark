@@ -138,7 +138,7 @@ class GithubPrScriptTests(unittest.TestCase):
                 "PUT",
                 "repos/experiencenow-ai/ds4_on_spark/pulls/9/merge",
                 "-f",
-                "merge_method=squash",
+                "merge_method=merge",
                 "-f",
                 "commit_title=Merge me",
             ],

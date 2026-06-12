@@ -205,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
     merge.add_argument("pr", nargs="?")
     merge.add_argument("--interval", type=int, default=10)
     merge.add_argument("--timeout", type=int, default=1800)
-    merge.add_argument("--method", choices=("squash", "merge", "rebase"), default="squash")
+    merge.add_argument("--method", choices=("squash", "merge", "rebase"), default="merge")
     merge.add_argument("--delete-branch", action=argparse.BooleanOptionalAction, default=True)
     merge.add_argument("--skip-checks", action="store_true")
     ship = sub.add_parser("ship", help="push, create or reuse PR, wait for checks, then merge")
@@ -217,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
     ship.add_argument("--body-file")
     ship.add_argument("--interval", type=int, default=10)
     ship.add_argument("--timeout", type=int, default=1800)
-    ship.add_argument("--method", choices=("squash", "merge", "rebase"), default="squash")
+    ship.add_argument("--method", choices=("squash", "merge", "rebase"), default="merge")
     ship.add_argument("--delete-branch", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args(argv)
     if args.cmd == "create":

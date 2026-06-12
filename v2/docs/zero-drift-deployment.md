@@ -65,6 +65,10 @@ The helper pushes the current branch first, creates the PR with an explicit
 guesswork such as creating a PR before the branch has an upstream or relying on
 `gh` to infer the head branch.
 
+The default merge method is a normal merge commit so branch-level commit history
+lands on `main`. Pass `--method squash` only when flattening a tiny branch is
+intentional.
+
 ## Pipeline lifecycle
 
 For resident Qwen, DSV4, and Gemma pipeline tests, use the shared lifecycle
