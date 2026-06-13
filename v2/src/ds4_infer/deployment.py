@@ -136,6 +136,21 @@ def _scheduler_checks(
         details={"cohort_workers": int(dispatcher_cohort_workers), "service_count": service_count},
         severity="warning",
     )
+    _check(
+        checks,
+        int(dispatcher_cohort_workers) >= max(1, largest),
+        "cohort_workers_cover_largest_service",
+        "cohort worker pool can feed the largest resident target without underfilling vLLM",
+        details={"cohort_workers": int(dispatcher_cohort_workers), "largest_target_active": largest},
+    )
+    _check(
+        checks,
+        int(dispatcher_cohort_workers) >= target_sum,
+        "cohort_workers_cover_sum_targets",
+        "cohort worker pool can feed every active resident target at once",
+        details={"cohort_workers": int(dispatcher_cohort_workers), "target_active_sum": target_sum},
+        severity="warning",
+    )
 
 
 def _readiness_payload(
