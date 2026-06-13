@@ -50,6 +50,31 @@ PYTHONPATH=src python3 -m ds4_transfer.fast_copy \
   --jobs-per-edge 16
 ```
 
+## Partitioned Waterfall
+
+For PP model layouts where each node keeps only its assigned shards, use the
+waterfall copier instead of full fan-out. It reads one keep manifest per node,
+copies only files needed downstream, and forwards a file to the next ring hop as
+soon as the current hop has a complete size-verified copy. With
+`--cleanup-transit`, a node deletes safetensor shards it does not keep after it
+has forwarded them successfully.
+
+```bash
+cd v2
+PYTHONPATH=src python3 -m ds4_transfer.waterfall_copy \
+  --topology profiles/transfer/spark_200g.json \
+  --source-node spark0 \
+  --source-path /home/spark0/ds4_nvme/models/hf/moonshotai/Kimi-K2.7-Code \
+  --destination-path-template '/home/{node}/models/hf/moonshotai/Kimi-K2.7-Code' \
+  --manifest-dir /private/tmp/kimi27_waterfall_manifests \
+  --keep-manifest-template '{node}_keep.txt' \
+  --cleanup-transit
+```
+
+Use `--dry-run` first. The source node's full external seed copy is not removed;
+cleanup applies only to transit safetensor files on downstream model
+directories.
+
 ## Full Fan-Out
 
 The default fan-out for a spark3 seed is:
