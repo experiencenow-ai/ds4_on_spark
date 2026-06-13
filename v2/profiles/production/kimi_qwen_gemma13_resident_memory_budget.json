@@ -77,6 +77,74 @@
     "gemma4_26b_a4b_pp13": 16,
     "kimi27_pp13": 32
   },
+  "throughput_utility_metric": {
+    "format": "ds4-centaur-throughput-utility-v1",
+    "goal": "Rank resident 3x pipeline candidates by useful generated throughput while preserving minimum input/output budgets and avoiding oversized GPU KV residency.",
+    "formula": "score = assumed_decode_tok_s * lane_weight * accuracy_weight * batch_factor * input_budget_factor * output_budget_factor * kv_efficiency",
+    "factor_definitions": {
+      "batch_factor": "min(1, batch_size / (pipeline_parallel_size * target_batch_per_pipeline_stage))",
+      "input_budget_factor": "min(1, input_budget_tokens / min_input_budget_tokens)",
+      "output_budget_factor": "min(1, output_budget_tokens / min_output_budget_tokens)",
+      "kv_resident_input_batches": "kv_capacity_tokens / (batch_size * input_budget_tokens), or a measured equivalent",
+      "kv_efficiency": "0 below min_kv_resident_input_batches, 1 from min through preferred, preferred/actual above preferred"
+    },
+    "defaults": {
+      "target_batch_per_pipeline_stage": 2.0,
+      "min_input_budget_tokens": 8192,
+      "min_output_budget_tokens": 4096,
+      "min_kv_resident_input_batches": 2.0,
+      "preferred_kv_resident_input_batches": 3.0
+    },
+    "hard_constraints": {
+      "accuracy_preserved": true,
+      "active_gpu_memory_utilization_sum_max": 0.85,
+      "min_available_gib_per_node": 12,
+      "strict_kv_eviction_required": true,
+      "external_cache_required": true
+    },
+    "service_candidates": [
+      {
+        "service_id": "kimi27_pp13",
+        "lane": "smart",
+        "lane_weight": 1.35,
+        "pipeline_parallel_size": 13,
+        "batch_size": 32,
+        "input_budget_tokens": 8192,
+        "output_budget_tokens": 4096,
+        "assumed_decode_tok_s": 0,
+        "accuracy_weight": 1.0,
+        "kv_resident_input_batches": 3.0,
+        "measurement_status": "fill from completed Kimi2.7 92x DSAPI run before promotion"
+      },
+      {
+        "service_id": "qwen27_bf16_pp13",
+        "lane": "fast_reasoning",
+        "lane_weight": 1.0,
+        "pipeline_parallel_size": 13,
+        "batch_size": 32,
+        "input_budget_tokens": 8192,
+        "output_budget_tokens": 4096,
+        "assumed_decode_tok_s": 0,
+        "accuracy_weight": 1.0,
+        "kv_resident_input_batches": 3.0,
+        "measurement_status": "requires pulled-main PP13 DSAPI batch benchmark"
+      },
+      {
+        "service_id": "gemma4_26b_a4b_pp13",
+        "lane": "fast_diverse",
+        "lane_weight": 0.85,
+        "pipeline_parallel_size": 13,
+        "batch_size": 32,
+        "input_budget_tokens": 8192,
+        "output_budget_tokens": 4096,
+        "assumed_decode_tok_s": 0,
+        "accuracy_weight": 1.0,
+        "kv_resident_input_batches": 3.0,
+        "measurement_status": "raise from batch16 only after a pulled-main launch proves memory fit"
+      }
+    ],
+    "promotion_rule": "Promote the highest-scoring candidate whose hard constraints pass; if Kimi cannot fit with Qwen and Gemma below the GPU cap and memory floor, run Kimi as a dedicated smart lane and keep Qwen/Gemma as the high-throughput resident pair."
+  },
   "kimi_batch32_fit_estimate": {
     "basis": "Live Kimi2.7 PP13 DSAPI run used an 8 GiB fixed GPU KV cap, max_num_seqs=16, and max_num_batched_tokens=32768; vLLM reported roughly 1% KV usage while the run stalled on long active decodes. The next qualification doubles max_num_seqs and the token gate without increasing fixed KV.",
     "rough_fixed_8gib_token_capacity": 1978027,
@@ -139,6 +207,6 @@
     "Kimi2.7, Qwen27 PP13, and Gemma4 PP13 services are all launched from pulled main checkouts and pass DSAPI smoke through the triad topology.",
     "LMCache canaries prove cache load/store does not change answers for each resident service.",
     "DSAPI readiness passes with profiles/topology/static_sparks_kimi_qwen_gemma_pp13.json.",
-    "Batch 32/32/16 throughput test keeps all active GPUs busy without resource-governor throttling."
+    "Run a metric-scored batch sweep starting at Kimi/Qwen/Gemma 32/32/32; only fall back to Gemma batch 16 if the pulled-main launch fails the memory floor or readiness gates."
   ]
 }
