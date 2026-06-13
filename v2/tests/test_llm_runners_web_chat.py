@@ -836,6 +836,42 @@ class LlmRunnersWebChatTests(unittest.TestCase):
             events = list(runner._post_sse_json("/v1/completions", {"model": "served"}, cancel_event=threading.Event()))
         self.assertEqual(events, [{"choices": [{"text": "ok", "finish_reason": "stop"}]}])
 
+    def test_sse_reader_can_leave_cancel_socket_timeout_disabled(self) -> None:
+        class FakeSock:
+            def __init__(self) -> None:
+                self.calls: list[float] = []
+
+            def settimeout(self, value: float) -> None:
+                self.calls.append(value)
+
+        class FakeResponse:
+            def __init__(self, sock: FakeSock) -> None:
+                self._sock = sock
+                self.lines = [b"data: [DONE]\n", b"\n"]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def readline(self):
+                return self.lines.pop(0)
+
+        old = os.environ.get("DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S")
+        sock = FakeSock()
+        runner = OpenAICompatibleRunner(base_url="http://unused")
+        try:
+            os.environ["DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S"] = "0"
+            with patch("ds4_infer.runners.urlrequest.urlopen", return_value=FakeResponse(sock)):
+                self.assertEqual(list(runner._post_sse_json("/v1/completions", {"model": "served"}, cancel_event=threading.Event())), [])
+        finally:
+            if old is None:
+                os.environ.pop("DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S", None)
+            else:
+                os.environ["DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S"] = old
+        self.assertEqual(sock.calls, [])
+
     def test_pipeline_runner_uses_final_only_for_forced_output_nonstreaming_worker(self) -> None:
         profile = ModelProfile.from_json(
             {
