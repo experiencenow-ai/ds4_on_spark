@@ -1,5 +1,5 @@
 {
-  "description": "Thirteen-Spark qualification topology for Kimi K2.7 Code PP13. It is intentionally separate from the resident Kimi/Qwen/Gemma topology so COMPSEC17 can be tested without changing production routing.",
+  "description": "Thirteen-Spark qualification topology for Kimi K2.7 Code PP13. It is intentionally separate from the resident Kimi/Qwen/Gemma topology so DSAPI can target Kimi explicitly without changing production routing.",
   "format": "ds4-spark-topology-v1",
   "nodes": [
     {
@@ -200,6 +200,15 @@
       "service_ids": [
         "kimi27_pp13"
       ]
+    },
+    "resident_coordinator_defaults": {
+      "completion_budget_include_output": false,
+      "completion_chunk_concurrency": 1,
+      "completion_cohort_max": 16,
+      "completion_pp_safe_cohort_max": 16,
+      "completion_token_budget": 32768,
+      "dispatch_refill_batch": 64,
+      "dispatch_window": 64
     },
     "pipeline_services": {
       "kimi27_pp13": {

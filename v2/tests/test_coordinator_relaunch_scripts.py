@@ -20,6 +20,7 @@ FIRST3_MEMORY_BUDGET = json.loads(FIRST3_MEMORY_BUDGET_PROFILE.read_text(encodin
 STATIC_SPARKS_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 STATIC_TOPOLOGY = json.loads(STATIC_SPARKS_TOPOLOGY.read_text(encoding="utf-8"))
 QWEN_GEMMA_PP12_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_qwen_gemma_pp12.json"
+KIMI27_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi27_code_pp13.json"
 
 
 def load_script(path: Path):
@@ -114,6 +115,26 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "256")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "131072")
         self.assertEqual(limits, {"gemma4_26b_a4b_pp12": 128, "qwen27_bf16_pp12": 128})
+
+    def test_relaunch_kimi27_profile_selects_kimi_topology_and_lmcache_auto_kv(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+        old_argv = list(sys.argv)
+        sys.argv = [str(RELAUNCH_SCRIPT), "--profile", "kimi27"]
+        try:
+            args = relaunch._parse_args()
+        finally:
+            sys.argv = old_argv
+        defaults = relaunch._profile_defaults(args.profile, topology_path=relaunch._resolve_topology_path(args.topology, ROOT))
+        limits = json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])
+
+        self.assertEqual(args.topology, str(KIMI27_TOPOLOGY.relative_to(ROOT)))
+        self.assertEqual(defaults["DS4_API_RESIDENT_SERVICE_IDS"], "kimi27_pp13")
+        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "64")
+        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "64")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "16")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "16")
+        self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"], "kimi27_pp13")
+        self.assertEqual(limits, {"kimi27_pp13": 16})
 
     def test_relaunch_resident256_profile_widens_feed_without_kv_bloat(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)

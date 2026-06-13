@@ -121,6 +121,49 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(payload["chat_template_kwargs"], {"enable_thinking": True})
         self.assertNotIn("extra_body", payload)
 
+    def test_kimi27_pipeline_payload_uses_thinking_budget_and_lmcache_auto_kv(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("kimi27_code_pp13_smart_v1")
+        old_auto = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE")
+        old_services = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS")
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = "1"
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = "kimi27_pp13"
+        try:
+            request = InferenceRequest.from_json(
+                {
+                    "format": "ds4-inference-request-v1",
+                    "request_id": "kimi27-thinking-payload",
+                    "capability": None,
+                    "chat": True,
+                    "immediate": False,
+                    "job_class": "analysis",
+                    "max_output_tokens": 4096,
+                    "thinking_budget_tokens": 1024,
+                    "temperature": 0,
+                    "input": {"messages": [{"role": "user", "content": "solve"}]},
+                    "output_contract": {"format": "text"},
+                    "model_pin": {"profile_id": profile.profile_id},
+                }
+            )
+            payload = _openai_payload(request, profile)
+        finally:
+            if old_auto is None:
+                os.environ.pop("DS4_PIPELINE_AUTO_KV_CACHE", None)
+            else:
+                os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = old_auto
+            if old_services is None:
+                os.environ.pop("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS", None)
+            else:
+                os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = old_services
+        self.assertEqual(payload["model"], "kimi27-code-pp13")
+        self.assertEqual(payload["max_tokens"], 5120)
+        self.assertEqual(payload["thinking"]["budget_tokens"], 1024)
+        self.assertEqual(payload["thinking_budget_tokens"], 1024)
+        self.assertEqual(payload["thinking_token_budget"], 1024)
+        self.assertEqual(payload["chat_template_kwargs"], {"enable_thinking": True})
+        self.assertEqual(payload["extra_body"]["ds4_kv_cache"]["backend"], "lmcache")
+        self.assertEqual(payload["extra_body"]["ds4_kv_cache"]["model_fingerprint"]["service_id"], "kimi27_pp13")
+
     def test_dsv4_openai_payload_defaults_chat_template_thinking_off(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
