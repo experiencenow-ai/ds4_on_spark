@@ -18,6 +18,7 @@ from ds4_infer.topology import SparkTopology
 ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
+KIMI27_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi27_code_pp13.json"
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 
@@ -160,9 +161,64 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(payload["thinking"]["budget_tokens"], 1024)
         self.assertEqual(payload["thinking_budget_tokens"], 1024)
         self.assertEqual(payload["thinking_token_budget"], 1024)
-        self.assertEqual(payload["chat_template_kwargs"], {"enable_thinking": True})
+        self.assertEqual(payload["chat_template_kwargs"], {"thinking": True})
         self.assertEqual(payload["extra_body"]["ds4_kv_cache"]["backend"], "lmcache")
         self.assertEqual(payload["extra_body"]["ds4_kv_cache"]["model_fingerprint"]["service_id"], "kimi27_pp13")
+
+    def test_kimi27_chat_request_uses_builtin_renderer_without_tokenizer(self) -> None:
+        old = os.environ.get("DS4_API_RENDER_CHAT_WITH_TOKENIZER")
+        os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = "0"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=KIMI27_TOPOLOGY, runner_kind="fake")
+                api.handle_post(
+                    "/v1/chat/completions",
+                    {
+                        "model": "kimi27",
+                        "messages": [{"role": "user", "content": "hello"}],
+                        "thinking_budget_tokens": 0,
+                        "ds4_async": True,
+                        "batch_id": "kimi-rendered-chat",
+                    },
+                )
+                with api.queue._connect() as conn:
+                    row = conn.execute("select request_json from requests where batch_id=?", ("kimi-rendered-chat",)).fetchone()
+                request_json = json.loads(str(row["request_json"]))
+        finally:
+            if old is None:
+                os.environ.pop("DS4_API_RENDER_CHAT_WITH_TOKENIZER", None)
+            else:
+                os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = old
+        prompt = request_json["input"]["rendered_prompt"]
+        self.assertIn("<|im_user|>user<|im_middle|>hello<|im_end|>", prompt)
+        self.assertTrue(prompt.endswith("<|im_assistant|>assistant<|im_middle|><think></think>"))
+        self.assertEqual(request_json["input"]["prompt"], prompt)
+
+    def test_kimi27_chat_request_renders_thinking_prompt(self) -> None:
+        old = os.environ.get("DS4_API_RENDER_CHAT_WITH_TOKENIZER")
+        os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = "0"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=KIMI27_TOPOLOGY, runner_kind="fake")
+                api.handle_post(
+                    "/v1/chat/completions",
+                    {
+                        "model": "kimi27",
+                        "messages": [{"role": "user", "content": "solve"}],
+                        "thinking_budget_tokens": 128,
+                        "ds4_async": True,
+                        "batch_id": "kimi-thinking-chat",
+                    },
+                )
+                with api.queue._connect() as conn:
+                    row = conn.execute("select request_json from requests where batch_id=?", ("kimi-thinking-chat",)).fetchone()
+                request_json = json.loads(str(row["request_json"]))
+        finally:
+            if old is None:
+                os.environ.pop("DS4_API_RENDER_CHAT_WITH_TOKENIZER", None)
+            else:
+                os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = old
+        self.assertTrue(request_json["input"]["rendered_prompt"].endswith("<|im_assistant|>assistant<|im_middle|><think>"))
 
     def test_dsv4_openai_payload_defaults_chat_template_thinking_off(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

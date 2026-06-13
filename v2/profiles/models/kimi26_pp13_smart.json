@@ -24,7 +24,8 @@
   },
   "routing": {
     "chat_cohort_transport": "parallel_chat_completions",
-    "chat_template_thinking_key": "enable_thinking",
+    "chat_template_renderer": "kimi_k2",
+    "chat_template_thinking_key": "thinking",
     "default_for": [],
     "optional_kv_cache_deployments": [
       "profiles/kv_cache/kimi26_pp13_lmcache_hma.json"
