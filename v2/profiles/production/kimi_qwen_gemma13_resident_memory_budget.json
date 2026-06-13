@@ -69,11 +69,11 @@
   "resident_batch_token_budget": {
     "qwen27_bf16_pp13": 32768,
     "gemma4_26b_a4b_pp13": 16384,
-    "notes": "Kimi2.7 stays at batch 16 with a 32768-token service gate while DSAPI admits up to 64 total completion-cohort items across the triad. The fixed 8 GiB Kimi and Qwen KV caps plus 6 GiB Gemma cap reserve just enough GPU KV for active and near-future JIT/cache batches instead of bloating resident KV.",
+    "notes": "Kimi2.7 stays at batch 16 with a 32768-token service gate while Qwen uses its live max_num_seqs=32 service cap and Gemma stays at batch 16. The fixed 8 GiB Kimi and Qwen KV caps plus 6 GiB Gemma cap reserve just enough GPU KV for active and near-future JIT/cache batches instead of bloating resident KV.",
     "kimi27_pp13": 32768
   },
   "resident_batch_size": {
-    "qwen27_bf16_pp13": 16,
+    "qwen27_bf16_pp13": 32,
     "gemma4_26b_a4b_pp13": 16,
     "kimi27_pp13": 16
   },
@@ -131,7 +131,7 @@
   },
   "power_policy": {
     "hardware_power_limit_status": "No reliable per-Spark 150W NVML/powercap limit was exposed by nvidia-smi or /sys/class/powercap during the 2026-06-11 probe.",
-    "initial_control": "Use DSAPI service batch limits, token budgets, and one-running-batch-per-compute-domain admission until a hardware power cap is proven. Kimi batch 16 is a throughput target, not permission to saturate all three resident services at once.",
+    "initial_control": "Use DSAPI service batch limits, token budgets, and one-running-batch-per-compute-domain admission until a hardware power cap is proven. Qwen batch 32 is coordinator-safe because the live service is already launched with --max-num-seqs 32; Kimi and Gemma stay at batch 16 until their model services are deliberately relaunched.",
     "target_watts_per_spark": 150
   },
   "promotion_gates": [

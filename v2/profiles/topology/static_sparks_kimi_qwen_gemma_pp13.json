@@ -288,7 +288,7 @@
           "batch_linger_s": 0.05,
           "max_running_batches_per_compute_domain": 1,
           "queue_limit": 64,
-          "refill_low_watermark": 4,
+          "refill_low_watermark": 12,
           "vllm_max_num_batched_tokens": 16384,
           "vllm_max_num_seqs": 16
         },
@@ -354,7 +354,7 @@
           "batch_linger_s": 0.05,
           "max_running_batches_per_compute_domain": 1,
           "queue_limit": 64,
-          "refill_low_watermark": 1,
+          "refill_low_watermark": 12,
           "vllm_max_num_batched_tokens": 32768,
           "vllm_max_num_seqs": 16
         },
@@ -396,7 +396,7 @@
           5,
           5
         ],
-        "max_batch_size": 16,
+        "max_batch_size": 32,
         "model_id": "Qwen/Qwen3.6-27B",
         "node_ids": [
           "spark0",
@@ -420,9 +420,9 @@
           "batch_linger_s": 0.05,
           "max_running_batches_per_compute_domain": 1,
           "queue_limit": 128,
-          "refill_low_watermark": 8,
+          "refill_low_watermark": 24,
           "vllm_max_num_batched_tokens": 32768,
-          "vllm_max_num_seqs": 16
+          "vllm_max_num_seqs": 32
         },
         "served_model_name": "qwen27-bf16-pp13",
         "service_id": "qwen27_bf16_pp13",
