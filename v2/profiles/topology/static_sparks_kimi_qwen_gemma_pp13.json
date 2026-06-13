@@ -289,7 +289,7 @@
           "batch_linger_s": 0.05,
           "max_running_batches_per_compute_domain": 1,
           "queue_limit": 64,
-          "refill_low_watermark": 12,
+          "refill_low_watermark": 14,
           "vllm_max_num_batched_tokens": 16384,
           "vllm_max_num_seqs": 16
         },
@@ -356,7 +356,7 @@
           "batch_linger_s": 0.05,
           "max_running_batches_per_compute_domain": 1,
           "queue_limit": 128,
-          "refill_low_watermark": 24,
+          "refill_low_watermark": 28,
           "vllm_max_num_batched_tokens": 65536,
           "vllm_max_num_seqs": 32
         },
@@ -423,7 +423,7 @@
           "batch_linger_s": 0.05,
           "max_running_batches_per_compute_domain": 1,
           "queue_limit": 128,
-          "refill_low_watermark": 24,
+          "refill_low_watermark": 28,
           "vllm_max_num_batched_tokens": 32768,
           "vllm_max_num_seqs": 32
         },
