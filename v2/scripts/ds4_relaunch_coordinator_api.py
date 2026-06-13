@@ -21,6 +21,7 @@ DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_res
 FIRST3_MEMORY_BUDGET = ROOT / "profiles" / "production" / "first3_resident_memory_budget.json"
 STATIC_SPARKS_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 KIMI27_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi27_code_pp13.json"
+KIMI_QWEN_GEMMA_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_gemma_pp13.json"
 DEFAULT_COORDINATOR_PYTHON = Path("/home/spark0/ds4-vllm-local/bin/python")
 
 
@@ -72,7 +73,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-pull", action="store_true")
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--skip-tests", action="store_true")
-    parser.add_argument("--profile", choices=("throughput", "production", "resident128", "resident256", "kimi27"), default="resident128")
+    parser.add_argument("--profile", choices=("throughput", "production", "resident128", "resident256", "kimi27", "centaur", "triad"), default="resident128")
     parser.add_argument("--env", action="append", default=[], metavar="KEY=VALUE", help="Extra coordinator environment override; repeatable.")
     parser.add_argument("--prefetch-token-file", default=os.environ.get("DS4_API_JIT_KV_PREFETCH_TOKEN_FILE", str(DEFAULT_PREFETCH_TOKEN_FILE)), help="Token file used when DS4 JIT KV prefetch API is enabled; falls back to /tmp on Linux.")
     parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
@@ -96,6 +97,8 @@ def _parse_args() -> argparse.Namespace:
 def _default_topology_for_profile(profile: str) -> str:
     if profile == "kimi27":
         return str(KIMI27_TOPOLOGY.relative_to(ROOT))
+    if profile in {"centaur", "triad"}:
+        return str(KIMI_QWEN_GEMMA_TOPOLOGY.relative_to(ROOT))
     return "profiles/topology/static_sparks.json"
 
 
@@ -185,7 +188,7 @@ _SAFETY_PROFILE_DEFAULTS = {
 def _profile_defaults(profile: str, *, topology_path: Path = STATIC_SPARKS_TOPOLOGY) -> dict[str, str]:
     dsv4 = _load_dsv4_production_profile()
     common = _common_profile_defaults(dsv4)
-    if profile in {"throughput", "production", "resident128", "resident256", "kimi27"}:
+    if profile in {"throughput", "production", "resident128", "resident256", "kimi27", "centaur", "triad"}:
         common.update(_dsv4_profile_defaults(dsv4, profile, topology_path=topology_path))
     return common
 

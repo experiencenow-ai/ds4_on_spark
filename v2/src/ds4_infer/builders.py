@@ -20,7 +20,7 @@ MODEL_ALIASES = {
     "gemma26": "gemma4_26b_a4b_it_pp8_peer_v1",
     "gemma-a4b": "gemma4_26b_a4b_it_pp8_peer_v1",
     "gemma31": "gemma4_31b_it_pp8_peer_v1",
-    "kimi": "kimi26_pp13_smart_v1",
+    "kimi": "kimi27_code_pp13_smart_v1",
     "kimi26": "kimi26_pp13_smart_v1",
     "kimi-k2.6": "kimi26_pp13_smart_v1",
     "kimi2.6": "kimi26_pp13_smart_v1",

@@ -1,35 +1,20 @@
 {
   "format": "ds4-first3-resident-memory-budget-v2",
-  "profile_id": "first3_kimi26_qwen27_gemma26_pp13_candidate_v1",
-  "source": "Kimi K2.6 PP13 live startup telemetry on 2026-06-11 plus first-three PP8 Qwen/Gemma measured per-layer memory from profiles/production/first3_resident_memory_budget.json.",
+  "profile_id": "centaur_kimi27_qwen27_gemma26_pp13_candidate_v1",
+  "source": "Kimi K2.7 Code PP13 qualification telemetry on 2026-06-13 plus first-three PP8 Qwen/Gemma measured per-layer memory from profiles/production/first3_resident_memory_budget.json.",
   "target": {
     "min_available_ratio": 0.1,
-    "min_available_gib": 12.0,
+    "min_available_gib": 12,
     "power_safe_initial": true,
     "spark0_extra_headroom": true
   },
   "active_services": [
-    "kimi26_pp13",
+    "kimi27_pp13",
     "qwen27_bf16_pp13",
     "gemma4_26b_a4b_pp13"
   ],
   "topology": "profiles/topology/static_sparks_kimi_qwen_gemma_pp13.json",
   "layer_partitions": {
-    "kimi26_pp13": [
-      4,
-      4,
-      4,
-      5,
-      5,
-      5,
-      5,
-      5,
-      5,
-      5,
-      5,
-      5,
-      4
-    ],
     "qwen27_bf16_pp13": [
       5,
       5,
@@ -59,26 +44,41 @@
       3,
       2,
       2
+    ],
+    "kimi27_pp13": [
+      4,
+      4,
+      4,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      4
     ]
   },
   "fixed_kv_cache_memory_bytes": {
-    "kimi26_pp13": 8589934592,
     "qwen27_bf16_pp13": 8589934592,
-    "gemma4_26b_a4b_pp13": 6442450944
+    "gemma4_26b_a4b_pp13": 6442450944,
+    "kimi27_pp13": 8589934592
   },
   "resident_batch_token_budget": {
-    "kimi26_pp13": 32768,
     "qwen27_bf16_pp13": 32768,
     "gemma4_26b_a4b_pp13": 16384,
-    "notes": "Kimi is raised from the boot-safe batch-4/8192-token profile to batch 16 with a 32768-token scheduler gate. This allows 16 active requests without permitting 16 fully-prefilling 8192-token requests in one step. Raise again only after live throughput and power telemetry prove office power margin."
+    "notes": "Kimi2.7 stays at batch 16 with a 32768-token service gate while DSAPI admits up to 64 total completion-cohort items across the triad. The fixed 8 GiB Kimi and Qwen KV caps plus 6 GiB Gemma cap reserve just enough GPU KV for active and near-future JIT/cache batches instead of bloating resident KV.",
+    "kimi27_pp13": 32768
   },
   "resident_batch_size": {
-    "kimi26_pp13": 16,
     "qwen27_bf16_pp13": 32,
-    "gemma4_26b_a4b_pp13": 16
+    "gemma4_26b_a4b_pp13": 16,
+    "kimi27_pp13": 16
   },
   "kimi_batch16_fit_estimate": {
-    "basis": "Live Kimi-only startup reported roughly 48.14 GiB available GPU KV memory and 11905328 GPU KV tokens on rank0 at gpu_memory_utilization=0.70. The resident profile fixes Kimi KV to 8 GiB, roughly 16.6% of that allocation.",
+    "basis": "Live Kimi2.7 PP13 direct/DSAPI runs completed with an 8 GiB fixed GPU KV cap, max_num_seqs=16, and max_num_batched_tokens=32768. The cap is intentionally small relative to the full resident capacity so LMCache/JIT can supply longer-lived prefixes from local storage.",
     "rough_fixed_8gib_token_capacity": 1978027,
     "batch16_8192_context_tokens": 131072,
     "estimated_capacity_margin": 15.09,
@@ -91,7 +91,7 @@
     "spark3": 31.7,
     "spark4": 29.7,
     "spark5": 31.7,
-    "spark6": 31.0,
+    "spark6": 31,
     "spark7": 28.9,
     "spark8": 30.6,
     "spark9": 30.9,
@@ -108,7 +108,7 @@
     "gemma4_26b_a4b": {
       "per_layer": 1.5
     },
-    "local_lmcache_cpu_allowance_per_node": 2.0
+    "local_lmcache_cpu_allowance_per_node": 2
   },
   "projection": {
     "post_kimi_plus_qwen_gemma_available_gib": {
@@ -135,10 +135,10 @@
     "target_watts_per_spark": 150
   },
   "promotion_gates": [
-    "Kimi 92-question COMPSEC run scores high enough to replace DSV4 as smart model.",
-    "Kimi PP13 relaunch with fixed KV cap handles COMPSEC17.",
-    "Kimi LMCache canary proves cache load/store does not change answers.",
-    "Qwen and Gemma PP13 candidate launches pass smoke and fit telemetry.",
-    "DSAPI readiness passes with profiles/topology/static_sparks_kimi_qwen_gemma_pp13.json."
+    "Kimi2.7 COMPSEC17 and 92-question runs stay within the accepted quality range for the smart lane.",
+    "Kimi2.7, Qwen27 PP13, and Gemma4 PP13 services are all launched from pulled main checkouts and pass DSAPI smoke through the triad topology.",
+    "LMCache canaries prove cache load/store does not change answers for each resident service.",
+    "DSAPI readiness passes with profiles/topology/static_sparks_kimi_qwen_gemma_pp13.json.",
+    "Batch 16/32/16 throughput test keeps all active GPUs busy without resource-governor throttling."
   ]
 }

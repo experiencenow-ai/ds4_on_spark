@@ -28,7 +28,7 @@
   "serving_capabilities": {
     "auto_tool_choice": true,
     "default_chat_template_kwargs": {
-      "enable_thinking": true
+      "thinking": true
     },
     "prefix_caching": true,
     "reasoning_parser": "kimi_k2",
