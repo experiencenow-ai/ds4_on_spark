@@ -856,7 +856,9 @@ class OpenAICompatibleRunner:
                 if cancel_event is not None and cancel_event.is_set(): break
                 try:
                     raw_line = response.readline()
-                except (TimeoutError, socket.timeout):
+                except (TimeoutError, socket.timeout, OSError) as exc:
+                    if not isinstance(exc, (TimeoutError, socket.timeout)) and "cannot read from timed out object" not in str(exc).lower():
+                        raise
                     if cancel_event is not None and cancel_event.is_set(): break
                     continue
                 if not raw_line: break

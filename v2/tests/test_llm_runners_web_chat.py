@@ -808,6 +808,34 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(results["r"]["output"]["text"], "first done")
         self.assertIn("cancelled", results["r2"]["transport"]["error"])
 
+    def test_sse_reader_treats_python_timed_out_object_as_poll_timeout(self) -> None:
+        class FakeResponse:
+            def __init__(self) -> None:
+                self.lines = [
+                    OSError("cannot read from timed out object"),
+                    b'data: {"choices":[{"text":"ok","finish_reason":"stop"}]}\n',
+                    b"\n",
+                    b"data: [DONE]\n",
+                    b"\n",
+                ]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def readline(self):
+                item = self.lines.pop(0)
+                if isinstance(item, BaseException):
+                    raise item
+                return item
+
+        runner = OpenAICompatibleRunner(base_url="http://unused")
+        with patch("ds4_infer.runners.urlrequest.urlopen", return_value=FakeResponse()):
+            events = list(runner._post_sse_json("/v1/completions", {"model": "served"}, cancel_event=threading.Event()))
+        self.assertEqual(events, [{"choices": [{"text": "ok", "finish_reason": "stop"}]}])
+
     def test_pipeline_runner_uses_final_only_for_forced_output_nonstreaming_worker(self) -> None:
         profile = ModelProfile.from_json(
             {
