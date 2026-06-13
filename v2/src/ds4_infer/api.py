@@ -773,7 +773,7 @@ class CoordinatorApi:
         service_available = max(0, int(plan.target_active) - active)
         if service_available <= 0:
             return 0
-        if active > 0 and active >= int(plan.low_watermark):
+        if active > int(plan.low_watermark):
             return 0
         return min(
             service_available,
