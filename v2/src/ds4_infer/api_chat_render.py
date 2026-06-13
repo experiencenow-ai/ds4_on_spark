@@ -105,6 +105,8 @@ def _render_chat_prompt_with_builtin(profile: ModelProfile, messages: list[dict[
     renderer = str(profile.routing.get("chat_template_renderer") or "")
     if renderer == "deepseek_v4":
         return _deepseek_v4_chat_prompt(profile, messages, body=body, metadata=metadata, thinking_budget_tokens=thinking_budget_tokens)
+    if renderer == "kimi_k2":
+        return _kimi_k2_chat_prompt(profile, messages, body=body, metadata=metadata, thinking_budget_tokens=thinking_budget_tokens)
     return ""
 
 
@@ -131,6 +133,39 @@ def _deepseek_v4_chat_prompt(profile: ModelProfile, messages: list[dict[str, Any
     thinking = _chat_template_kwargs_for_body(profile, body, metadata, thinking_budget_tokens).get("thinking")
     parts.append("<｜Assistant｜>")
     parts.append("<think>" if bool(thinking) else "</think>")
+    return "".join(parts)
+
+
+def _kimi_k2_chat_prompt(profile: ModelProfile, messages: list[dict[str, Any]], *, body: dict[str, Any], metadata: dict[str, Any], thinking_budget_tokens: int) -> str:
+    if body.get("tools") is not None or body.get("tool_choice") is not None:
+        raise ValueError("Kimi K2 DS API chat renderer does not support tool template rendering yet")
+    parts: list[str] = []
+    for message in messages:
+        role = str(message.get("role") or "user")
+        role_name = str(message.get("name") or role)
+        content = str(message.get("content") or "")
+        if role == "user":
+            parts.append(f"<|im_user|>{role_name}<|im_middle|>")
+            parts.append(content)
+        elif role == "assistant":
+            if message.get("tool_calls") is not None:
+                raise ValueError("Kimi K2 DS API chat renderer does not support assistant tool calls yet")
+            reasoning = str(message.get("reasoning", message.get("reasoning_content", "")) or "")
+            parts.append(f"<|im_assistant|>{role_name}<|im_middle|>")
+            parts.append(f"<think>{reasoning}</think>")
+            parts.append(content)
+        elif role == "system":
+            parts.append(f"<|im_system|>{role_name}<|im_middle|>")
+            parts.append(content)
+        elif role == "tool":
+            raise ValueError("Kimi K2 DS API chat renderer does not support tool result messages yet")
+        else:
+            parts.append(f"<|im_system|>{role_name}<|im_middle|>")
+            parts.append(content)
+        parts.append("<|im_end|>")
+    thinking = _chat_template_kwargs_for_body(profile, body, metadata, thinking_budget_tokens).get("thinking")
+    parts.append("<|im_assistant|>assistant<|im_middle|>")
+    parts.append("<think>" if bool(thinking) else "<think></think>")
     return "".join(parts)
 
 
