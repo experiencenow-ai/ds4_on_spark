@@ -283,9 +283,11 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str, *, topology_pa
     if str(dsv4["service_id"]) in batch_limits:
         batch_limits[str(dsv4["service_id"])] = int(dsv4["max_num_seqs"])
     needs_dsv4_prefetch = not topology_services or dsv4_service_id in topology_services
+    cohort_workers = _topology_cohort_workers(coordinator=coordinator, active_services=topology_services, batch_limits=batch_limits)
     return {
         "DS4_API_RESIDENT_SERVICE_IDS": ",".join(topology_services) if topology_services else "qwen27_bf16_pp8,gemma4_26b_a4b_pp8,dsv4_flash_pp8",
         "DS4_API_JIT_KV_PREFETCH_API": "1" if needs_dsv4_prefetch else "0",
+        "DS4_API_DISPATCH_COHORT_WORKERS": str(cohort_workers),
         "DS4_API_DISPATCH_WINDOW": str(coordinator["dispatch_window"]),
         "DS4_API_DISPATCH_REFILL_BATCH": str(coordinator["dispatch_refill_batch"]),
         "DS4_API_DISPATCH_BATCH_LINGER_S": "0.05",
@@ -345,6 +347,19 @@ def _topology_active_services(topology_path: Path) -> list[str]:
     if isinstance(raw, str):
         return [item.strip() for item in raw.replace(";", ",").split(",") if item.strip()]
     return []
+
+
+def _topology_cohort_workers(*, coordinator: dict[str, object], active_services: list[str], batch_limits: dict[str, int]) -> int:
+    raw = coordinator.get("dispatch_cohort_workers")
+    if raw is not None:
+        return max(1, int(raw))
+    active = active_services or list(batch_limits)
+    targets = [int(batch_limits[service_id]) for service_id in active if service_id in batch_limits]
+    if not targets:
+        return int(_COMMON_STATIC_DEFAULTS["DS4_API_DISPATCH_COHORT_WORKERS"])
+    target_sum = sum(targets)
+    window = int(coordinator.get("dispatch_window") or target_sum)
+    return max(1, min(max(1, window), target_sum))
 
 
 def _load_topology(topology_path: Path) -> dict[str, object]:

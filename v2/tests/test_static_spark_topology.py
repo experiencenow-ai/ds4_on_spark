@@ -139,7 +139,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
             topology=topology,
             dispatcher_window=128,
             dispatcher_refill_batch=128,
-            dispatcher_cohort_workers=16,
+            dispatcher_cohort_workers=32,
             resident_multimodel=True,
         )
 
@@ -148,6 +148,17 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(payload["resident_gpu_memory_utilization_sum"], 0.7)
         failed_errors = {item["name"] for item in payload["checks"] if not item["ok"] and item["severity"] == "error"}
         self.assertNotIn("resident_gpu_budget_declared", failed_errors)
+
+        underfilled = deployment_readiness(
+            topology=topology,
+            dispatcher_window=128,
+            dispatcher_refill_batch=128,
+            dispatcher_cohort_workers=16,
+            resident_multimodel=True,
+        )
+        self.assertFalse(underfilled["ready"])
+        failed_errors = {item["name"] for item in underfilled["checks"] if not item["ok"] and item["severity"] == "error"}
+        self.assertIn("cohort_workers_cover_largest_service", failed_errors)
 
     def test_qwen_gemma_pp12_topology_leaves_sparkc_for_qualification(self) -> None:
         topology = SparkTopology.load(QWEN_GEMMA_PP12_TOPOLOGY)
