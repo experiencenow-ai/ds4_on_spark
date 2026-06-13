@@ -843,14 +843,12 @@ class OpenAICompatibleRunner:
             raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
         with response:
             if cancel_event is not None:
-                fp = getattr(response, "fp", None)
-                raw = getattr(fp, "raw", None)
-                inner = getattr(raw, "_fp", None)
-                for item in (response, fp, raw, inner):
-                    settimeout = getattr(getattr(item, "_sock", None), "settimeout", None)
-                    if settimeout is not None:
-                        settimeout(max(0.05, _env_float("DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S", 1.0)))
-                        break
+                poll_timeout = _env_float("DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S", 1.0)
+                if poll_timeout > 0:
+                    fp = getattr(response, "fp", None); raw = getattr(fp, "raw", None)
+                    for item in (response, fp, raw, getattr(raw, "_fp", None)):
+                        settimeout = getattr(getattr(item, "_sock", None), "settimeout", None)
+                        if settimeout is not None: settimeout(max(0.05, poll_timeout)); break
             event_data: list[str] = []
             while True:
                 if cancel_event is not None and cancel_event.is_set(): break
