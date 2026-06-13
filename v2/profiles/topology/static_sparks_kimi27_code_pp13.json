@@ -1,0 +1,274 @@
+{
+  "description": "Thirteen-Spark qualification topology for Kimi K2.7 Code PP13. It is intentionally separate from the resident Kimi/Qwen/Gemma topology so COMPSEC17 can be tested without changing production routing.",
+  "format": "ds4-spark-topology-v1",
+  "nodes": [
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark0",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1"
+      ],
+      "roles": [
+        "queue_ingress",
+        "api_ingress",
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark1",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark2",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark3",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark4",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark5",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark6",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark7",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark8",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark9",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "sparka",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "sparkb",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "sparkc",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    }
+  ],
+  "routing_policy": {
+    "active_resident_service_ids": [
+      "kimi27_pp13"
+    ],
+    "allow_dynamic_load_for_unmatched_profiles": false,
+    "bind_on_submit": true,
+    "immediate_requests_prefer_roles": [
+      "production"
+    ],
+    "normal_requests_prefer_roles": [
+      "production"
+    ],
+    "queue_entry_node_id": "spark0",
+    "resident_service_expectations": {
+      "cache_backends": {
+        "kimi27_pp13": "lmcache_hma"
+      },
+      "cache_connectors": {
+        "kimi27_pp13": "lmcache"
+      },
+      "dsv4_service_id": "",
+      "gpu_utilization_hard_cap": 0.85,
+      "gpu_utilization_floors": {},
+      "service_ids": [
+        "kimi27_pp13"
+      ]
+    },
+    "pipeline_services": {
+      "kimi27_pp13": {
+        "api_base_url": "http://127.0.0.1:8138",
+        "compute_domain": "spark-fleet-0",
+        "dtype": "int4-bfloat16-fp8kv",
+        "entry_node_id": "spark0",
+        "kv_cache": {
+          "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/kimi27_code_pp13_fp8kv/p4_4_4_5_5_5_5_5_5_5_5_5_4",
+          "connector_id": "lmcache",
+          "expected_entry_fraction_per_node": 0.07692307692307693,
+          "external_backend": "lmcache_hma",
+          "kv_cache_memory_bytes": 8589934592,
+          "sharding": "pipeline_layers"
+        },
+        "layer_partition": [
+          4,
+          4,
+          4,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          4
+        ],
+        "max_batch_size": 16,
+        "model_id": "moonshotai/Kimi-K2.7-Code",
+        "node_ids": [
+          "spark0",
+          "spark1",
+          "spark2",
+          "spark3",
+          "spark4",
+          "spark5",
+          "spark6",
+          "spark7",
+          "spark8",
+          "spark9",
+          "sparka",
+          "sparkb",
+          "sparkc"
+        ],
+        "pipeline_parallel_size": 13,
+        "profile_id": "kimi27_code_pp13_smart_v1",
+        "scheduler": {
+          "admission_mode": "single_active_batch_per_compute_domain",
+          "batch_linger_s": 0.05,
+          "max_running_batches_per_compute_domain": 1,
+          "queue_limit": 64,
+          "refill_low_watermark": 1,
+          "vllm_max_num_batched_tokens": 32768,
+          "vllm_max_num_seqs": 16
+        },
+        "served_model_name": "kimi27-code-pp13",
+        "service_id": "kimi27_pp13",
+        "telemetry": {
+          "expected_stage_count": 13,
+          "stage_report_command": "ds4-infer pipeline-telemetry-report",
+          "stage_state": "qualification"
+        },
+        "tensor_parallel_size": 1,
+        "total_layers": 61
+      }
+    }
+  },
+  "topology_id": "static_sparks_kimi27_code_pp13"
+}
