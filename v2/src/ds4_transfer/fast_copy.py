@@ -65,6 +65,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--jobs-per-edge", type=int, default=16)
     parser.add_argument("--port-base", type=int, default=49300)
     parser.add_argument("--timeout-s", type=int, default=3600)
+    parser.add_argument("--nc-connect-timeout-s", type=int, default=15)
     parser.add_argument("--striped-file-stripes", type=int, default=8)
     parser.add_argument("--striped-file-threshold-bytes", type=int, default=64 * 1024 * 1024)
     parser.add_argument("--remote-v2-dir", default="~/src/ds4_on_spark/v2")
@@ -76,6 +77,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         parser.error("--striped-file-stripes must be positive")
     if args.striped_file_threshold_bytes < 0:
         parser.error("--striped-file-threshold-bytes must be non-negative")
+    if args.nc_connect_timeout_s < 1:
+        parser.error("--nc-connect-timeout-s must be positive")
     if args.fanout_all == (args.destination_node is not None):
         parser.error("use exactly one of --fanout-all or --destination-node")
     if args.destination_node is not None and args.destination_path is None:
@@ -140,7 +143,8 @@ def _copy_file(topology: TransferTopology, args: argparse.Namespace, item: FileI
         port=port,
         dst=shlex.quote(dst),
     )
-    client_script = "set -eu; for i in $(seq 1 50); do nc -N -s {bind} {dst_ip} {port} < {src} && exit 0; sleep 0.2; done; exit 1".format(
+    client_script = "set -eu; for i in $(seq 1 50); do timeout {nc_timeout} nc -N -s {bind} {dst_ip} {port} < {src} && exit 0; sleep 0.2; done; exit 1".format(
+        nc_timeout=int(args.nc_connect_timeout_s),
         bind=shlex.quote(rail.source_ip),
         dst_ip=shlex.quote(rail.destination_ip),
         port=port,
@@ -173,7 +177,15 @@ def _copy_file_striped(topology: TransferTopology, args: argparse.Namespace, ite
 
 
 def _striped_remote_python(args: argparse.Namespace) -> str:
-    return "cd {v2}; PYTHONPATH=src python3 -m ds4_transfer.striped_channel".format(v2=shlex.quote(args.remote_v2_dir))
+    return "cd {v2}; PYTHONPATH=src python3 -m ds4_transfer.striped_channel".format(v2=_remote_shell_path(args.remote_v2_dir))
+
+
+def _remote_shell_path(path: str) -> str:
+    if path == "~":
+        return '"$HOME"'
+    if path.startswith("~/"):
+        return '"$HOME"/' + shlex.quote(path[2:])
+    return shlex.quote(path)
 
 
 def _striped_server_script(

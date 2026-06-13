@@ -106,6 +106,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--port-base", type=int, default=49300)
     parser.add_argument("--port-stride", type=int, default=1000)
     parser.add_argument("--timeout-s", type=int, default=3600)
+    parser.add_argument("--nc-connect-timeout-s", type=int, default=15)
     parser.add_argument("--striped-file-stripes", type=int, default=8)
     parser.add_argument("--striped-file-threshold-bytes", type=int, default=64 * 1024 * 1024)
     parser.add_argument("--remote-v2-dir", default="~/src/ds4_on_spark/v2")
@@ -118,6 +119,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         parser.error("--striped-file-stripes must be positive")
     if args.striped_file_threshold_bytes < 0:
         parser.error("--striped-file-threshold-bytes must be non-negative")
+    if args.nc_connect_timeout_s < 1:
+        parser.error("--nc-connect-timeout-s must be positive")
     return args
 
 
@@ -289,6 +292,7 @@ def _copy_args_for_edge(args: argparse.Namespace, edge_index: int) -> SimpleName
         striped_file_threshold_bytes=args.striped_file_threshold_bytes,
         remote_v2_dir=args.remote_v2_dir,
         timeout_s=args.timeout_s,
+        nc_connect_timeout_s=args.nc_connect_timeout_s,
     )
 
 

@@ -226,6 +226,7 @@ def _fast_copy_argv(topology: TransferTopology, request: TransferRequest) -> lis
         "--destination-path", request.destination_path,
         "--jobs-per-edge", str(topology.default_jobs_per_edge),
         "--port-base", str(topology.port_base),
+        "--nc-connect-timeout-s", str(int(request.raw.get("nc_connect_timeout_s", 15))),
         "--striped-file-stripes", str(int(request.raw.get("striped_file_stripes", 8))),
         "--striped-file-threshold-bytes", str(int(request.raw.get("striped_file_threshold_bytes", 64 * 1024 * 1024))),
     ]
