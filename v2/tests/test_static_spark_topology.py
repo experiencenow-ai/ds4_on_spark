@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.api import _resolve_pipeline_service
+from ds4_infer.deployment import deployment_readiness
 from ds4_infer.dispatcher_resident import active_resident_service_ids, resident_service_plans
 from ds4_infer.pipelines import pipeline_service_batch_limit
 from ds4_infer.runners import FakeRunner
@@ -90,6 +91,9 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(kimi.scheduler["refill_low_watermark"], 24)
         self.assertEqual(qwen.scheduler["refill_low_watermark"], 24)
         self.assertEqual(gemma.scheduler["refill_low_watermark"], 12)
+        self.assertEqual(kimi.kv_cache["gpu_memory_utilization"], 0.7)
+        self.assertEqual(qwen.kv_cache["gpu_memory_utilization"], 0.25)
+        self.assertEqual(gemma.kv_cache["gpu_memory_utilization"], 0.2)
         for service in (kimi, qwen, gemma):
             self.assertEqual(service.entry_node_id, "spark0")
             self.assertEqual(service.node_ids, ("spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7", "spark8", "spark9", "sparka", "sparkb", "sparkc"))
@@ -121,8 +125,25 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(kimi.node_ids, ("spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7", "spark8", "spark9", "sparka", "sparkb", "sparkc"))
         self.assertEqual(kimi.kv_cache["connector_id"], "lmcache")
         self.assertEqual(kimi.kv_cache["external_backend"], "lmcache_hma")
+        self.assertEqual(kimi.kv_cache["gpu_memory_utilization"], 0.7)
         self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["dispatch_window"], 128)
         self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_cohort_max"], 32)
+
+    def test_kimi27_dedicated_readiness_has_gpu_budget(self) -> None:
+        topology = SparkTopology.load(KIMI27_TOPOLOGY)
+        payload = deployment_readiness(
+            topology=topology,
+            dispatcher_window=128,
+            dispatcher_refill_batch=128,
+            dispatcher_cohort_workers=16,
+            resident_multimodel=True,
+        )
+
+        self.assertTrue(payload["ready"])
+        self.assertEqual(payload["resident_gpu_memory_utilization"], {"kimi27_pp13": 0.7})
+        self.assertEqual(payload["resident_gpu_memory_utilization_sum"], 0.7)
+        failed_errors = {item["name"] for item in payload["checks"] if not item["ok"] and item["severity"] == "error"}
+        self.assertNotIn("resident_gpu_budget_declared", failed_errors)
 
     def test_qwen_gemma_pp12_topology_leaves_sparkc_for_qualification(self) -> None:
         topology = SparkTopology.load(QWEN_GEMMA_PP12_TOPOLOGY)
