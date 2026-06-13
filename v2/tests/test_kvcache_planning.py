@@ -225,7 +225,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(rank12["lmcache_config"]["data"]["local_disk"], "/home/sparkc/ds4_nvme/ds4_lmcache/kimi26_pp13_fp8kv/p4_4_4_5_5_5_5_5_5_5_5_5_4")
         self.assertIn("--headless", rank12["argv"])
 
-    def test_kimi27_pp13_lmcache_plan_uses_rank0_view_and_source_guard(self) -> None:
+    def test_kimi27_pp13_lmcache_plan_uses_uniform_local_directory_and_source_guard(self) -> None:
         deployment = KvCacheDeployment.load(KIMI27_PP13_DEPLOYMENT)
         plan = plan_deployment(deployment)
 
@@ -237,7 +237,7 @@ class KvCachePlanningTests(unittest.TestCase):
         rank12 = plan["vllm_nodes"][-1]
         self.assertEqual(rank0["argv"][1], "/home/spark0/src/vllm/tools/ds4_run_vllm_from_source.py")
         self.assertEqual(rank0["argv"][3], "/home/spark0/src/vllm")
-        self.assertEqual(rank0["argv"][8], "/home/spark0/models/hf/moonshotai/Kimi-K2.7-Code-pp13-view")
+        self.assertEqual(rank0["argv"][8], "/home/spark0/models/hf/moonshotai/Kimi-K2.7-Code")
         self.assertEqual(rank12["argv"][8], "/home/sparkc/models/hf/moonshotai/Kimi-K2.7-Code")
         self.assertIn("--served-model-name", rank0["argv"])
         self.assertEqual(rank0["argv"][rank0["argv"].index("--served-model-name") + 1], "kimi27-code-pp13")

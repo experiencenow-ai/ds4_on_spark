@@ -1,6 +1,6 @@
 {
   "contract_id": "kimi27_code_pp13_v1",
-  "description": "Kimi K2.7 Code 13-stage vLLM layer-pipeline runtime. spark0 is the API ingress and uses a copied pp13 view of the model files; nonzero ranks use their node-local waterfall-trimmed model directories.",
+  "description": "Kimi K2.7 Code 13-stage vLLM layer-pipeline runtime. Each rank uses the same node-local model directory path with real files pruned to the shards required by that PP13 stage.",
   "format": "ds4-runtime-contract-v1",
   "kv_cache": {
     "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/kimi27_code_pp13_fp8kv/p4_4_4_5_5_5_5_5_5_5_5_5_4",
@@ -36,9 +36,8 @@
   },
   "model": {
     "model_id": "moonshotai/Kimi-K2.7-Code",
-    "rank0_model_path": "/home/{node}/models/hf/moonshotai/Kimi-K2.7-Code-pp13-view",
-    "served_model_name": "kimi27-code-pp13",
-    "worker_model_path": "/home/{node}/models/hf/moonshotai/Kimi-K2.7-Code"
+    "model_path": "/home/{node}/models/hf/moonshotai/Kimi-K2.7-Code",
+    "served_model_name": "kimi27-code-pp13"
   },
   "pipeline": {
     "entry_base_url": "http://127.0.0.1:8137",

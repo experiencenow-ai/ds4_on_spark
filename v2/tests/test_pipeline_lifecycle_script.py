@@ -158,8 +158,8 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertFalse(scope["is_vllm_serve"]("python3 -c \"return (' -m vllm.entrypoints.cli.main serve ' in cmd)\""))
         self.assertTrue(scope["is_vllm_serve"]("/opt/venv/bin/python -m vllm.entrypoints.cli.main serve google/gemma-4-26B-A4B-it"))
         self.assertTrue(scope["is_vllm_serve"]("/opt/venv/bin/vllm serve google/gemma-4-26B-A4B-it"))
-        self.assertTrue(scope["is_vllm_serve"]("/opt/venv/bin/python /home/spark0/src/vllm/tools/ds4_run_vllm_from_source.py --source-root /home/spark0/src/vllm --module vllm.entrypoints.cli.main -- serve /home/spark0/models/hf/moonshotai/Kimi-K2.7-Code-pp13-view"))
-        self.assertTrue(scope["is_vllm_serve"]("/opt/venv/bin/python /home/spark0/src/vllm/tools/ds4_run_vllm_from_source.py --source-root /home/spark0/src/vllm -- -m vllm.entrypoints.cli.main serve /home/spark0/models/hf/moonshotai/Kimi-K2.7-Code-pp13-view"))
+        self.assertTrue(scope["is_vllm_serve"]("/opt/venv/bin/python /home/spark0/src/vllm/tools/ds4_run_vllm_from_source.py --source-root /home/spark0/src/vllm --module vllm.entrypoints.cli.main -- serve /home/spark0/models/hf/moonshotai/Kimi-K2.7-Code"))
+        self.assertTrue(scope["is_vllm_serve"]("/opt/venv/bin/python /home/spark0/src/vllm/tools/ds4_run_vllm_from_source.py --source-root /home/spark0/src/vllm -- -m vllm.entrypoints.cli.main serve /home/spark0/models/hf/moonshotai/Kimi-K2.7-Code"))
         self.assertFalse(scope["is_vllm_serve"]("/opt/venv/bin/python /home/spark0/src/vllm/tools/ds4_run_vllm_from_source.py --source-root /home/spark0/src/vllm -- python -c pass"))
 
     def test_prefetch_token_loader_falls_back_to_second_default_file(self) -> None:

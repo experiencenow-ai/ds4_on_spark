@@ -115,9 +115,6 @@
   "master_port": 29664,
   "max_batch_size": 16,
   "model_id": "/home/{node}/models/hf/moonshotai/Kimi-K2.7-Code",
-  "model_id_by_rank": {
-    "0": "/home/{node}/models/hf/moonshotai/Kimi-K2.7-Code-pp13-view"
-  },
   "pipeline_nodes": [
     "spark0",
     "spark1",
