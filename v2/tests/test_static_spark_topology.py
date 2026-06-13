@@ -71,7 +71,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
 
         self.assertEqual(len(topology.nodes), 13)
         self.assertEqual(capacity[KIMI27_PP13], 16)
-        self.assertEqual(capacity[QWEN_PP13], 16)
+        self.assertEqual(capacity[QWEN_PP13], 32)
         self.assertEqual(capacity[GEMMA26_PP13], 16)
         self.assertEqual(
             topology.routing_policy["active_resident_service_ids"],
@@ -87,6 +87,9 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(kimi.layer_partition, (4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4))
         self.assertEqual(qwen.layer_partition, (5, 5, 5, 5, 5, 5, 5, 4, 5, 5, 5, 5, 5))
         self.assertEqual(gemma.layer_partition, (2, 2, 3, 3, 2, 3, 2, 2, 2, 2, 3, 2, 2))
+        self.assertEqual(kimi.scheduler["refill_low_watermark"], 12)
+        self.assertEqual(qwen.scheduler["refill_low_watermark"], 24)
+        self.assertEqual(gemma.scheduler["refill_low_watermark"], 12)
         for service in (kimi, qwen, gemma):
             self.assertEqual(service.entry_node_id, "spark0")
             self.assertEqual(service.node_ids, ("spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7", "spark8", "spark9", "sparka", "sparkb", "sparkc"))
