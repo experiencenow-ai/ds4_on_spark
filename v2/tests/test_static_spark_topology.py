@@ -70,16 +70,20 @@ class StaticSparkTopologyTests(unittest.TestCase):
         capacity = topology.estimate_capacity_by_profile()
 
         self.assertEqual(len(topology.nodes), 13)
-        self.assertEqual(capacity[KIMI_PP13], 16)
+        self.assertEqual(capacity[KIMI27_PP13], 16)
         self.assertEqual(capacity[QWEN_PP13], 32)
         self.assertEqual(capacity[GEMMA26_PP13], 16)
         self.assertEqual(
             topology.routing_policy["active_resident_service_ids"],
-            ["kimi26_pp13", "qwen27_bf16_pp13", "gemma4_26b_a4b_pp13"],
+            ["kimi27_pp13", "qwen27_bf16_pp13", "gemma4_26b_a4b_pp13"],
         )
-        kimi = topology.pipeline_service_by_id("kimi26_pp13")
+        kimi = topology.pipeline_service_by_id("kimi27_pp13")
         qwen = topology.pipeline_service_by_id("qwen27_bf16_pp13")
         gemma = topology.pipeline_service_by_id("gemma4_26b_a4b_pp13")
+        self.assertEqual(kimi.profile_id, KIMI27_PP13)
+        self.assertEqual(kimi.model_id, "moonshotai/Kimi-K2.7-Code")
+        self.assertEqual(kimi.api_base_url, "http://127.0.0.1:8138")
+        self.assertEqual(kimi.service_id, "kimi27_pp13")
         self.assertEqual(kimi.layer_partition, (4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4))
         self.assertEqual(qwen.layer_partition, (5, 5, 5, 5, 5, 5, 5, 4, 5, 5, 5, 5, 5))
         self.assertEqual(gemma.layer_partition, (2, 2, 3, 3, 2, 3, 2, 2, 2, 2, 3, 2, 2))
@@ -90,6 +94,12 @@ class StaticSparkTopologyTests(unittest.TestCase):
             self.assertEqual(service.kv_cache["external_backend"], "lmcache_hma")
             self.assertEqual(service.kv_cache["expected_entry_fraction_per_node"], 1.0 / 13.0)
             self.assertGreater(int(service.kv_cache["kv_cache_memory_bytes"]), 0)
+        coordinator = topology.routing_policy["resident_coordinator_defaults"]
+        self.assertEqual(coordinator["dispatch_window"], 128)
+        self.assertEqual(coordinator["dispatch_refill_batch"], 128)
+        self.assertEqual(coordinator["completion_cohort_max"], 64)
+        self.assertEqual(coordinator["completion_pp_safe_cohort_max"], 32)
+        self.assertEqual(coordinator["completion_token_budget"], 65536)
 
     def test_kimi27_pp13_topology_is_dedicated_qualification_service(self) -> None:
         topology = SparkTopology.load(KIMI27_TOPOLOGY)
@@ -195,10 +205,10 @@ class StaticSparkTopologyTests(unittest.TestCase):
         old_topology = SparkTopology.load(TOPOLOGY)
         new_topology = SparkTopology.load(KIMI_TOPOLOGY)
 
-        self.assertNotIn(KIMI_PP13, old_topology.pipeline_profiles)
+        self.assertNotIn(KIMI27_PP13, old_topology.pipeline_profiles)
         self.assertNotIn(QWEN_PP13, old_topology.pipeline_profiles)
         self.assertNotIn(GEMMA26_PP13, old_topology.pipeline_profiles)
-        self.assertIn(KIMI_PP13, new_topology.pipeline_profiles)
+        self.assertIn(KIMI27_PP13, new_topology.pipeline_profiles)
         self.assertIn(QWEN_PP13, new_topology.pipeline_profiles)
         self.assertIn(GEMMA26_PP13, new_topology.pipeline_profiles)
 

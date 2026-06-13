@@ -21,6 +21,7 @@ STATIC_SPARKS_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 STATIC_TOPOLOGY = json.loads(STATIC_SPARKS_TOPOLOGY.read_text(encoding="utf-8"))
 QWEN_GEMMA_PP12_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_qwen_gemma_pp12.json"
 KIMI27_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi27_code_pp13.json"
+KIMI_QWEN_GEMMA_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_gemma_pp13.json"
 
 
 def load_script(path: Path):
@@ -152,6 +153,44 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(limits, {"kimi27_pp13": 16})
         self.assertEqual(env["DS4_API_JIT_KV_PREFETCH_API"], "0")
         self.assertEqual(env["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"], "kimi27_pp13")
+
+    def test_relaunch_centaur_profile_selects_kimi_qwen_gemma_topology(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+        old_argv = list(sys.argv)
+        old_prefetch = os.environ.get("DS4_API_JIT_KV_PREFETCH_API")
+        old_services = os.environ.get("DS4_API_RESIDENT_SERVICE_IDS")
+        os.environ["DS4_API_JIT_KV_PREFETCH_API"] = "1"
+        os.environ["DS4_API_RESIDENT_SERVICE_IDS"] = "stale-service"
+        sys.argv = [str(RELAUNCH_SCRIPT), "--profile", "centaur"]
+        try:
+            args = relaunch._parse_args()
+            env = relaunch._coordinator_env(args, ROOT)
+        finally:
+            sys.argv = old_argv
+            if old_prefetch is None:
+                os.environ.pop("DS4_API_JIT_KV_PREFETCH_API", None)
+            else:
+                os.environ["DS4_API_JIT_KV_PREFETCH_API"] = old_prefetch
+            if old_services is None:
+                os.environ.pop("DS4_API_RESIDENT_SERVICE_IDS", None)
+            else:
+                os.environ["DS4_API_RESIDENT_SERVICE_IDS"] = old_services
+        defaults = relaunch._profile_defaults(args.profile, topology_path=relaunch._resolve_topology_path(args.topology, ROOT))
+        limits = json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])
+
+        self.assertEqual(args.topology, str(KIMI_QWEN_GEMMA_TOPOLOGY.relative_to(ROOT)))
+        self.assertEqual(defaults["DS4_API_RESIDENT_SERVICE_IDS"], "kimi27_pp13,qwen27_bf16_pp13,gemma4_26b_a4b_pp13")
+        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "128")
+        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "128")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "64")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "65536")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "32")
+        self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(23622320128))
+        self.assertEqual(defaults["DS4_API_JIT_KV_PREFETCH_API"], "0")
+        self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"], "kimi27_pp13,qwen27_bf16_pp13,gemma4_26b_a4b_pp13")
+        self.assertEqual(limits, {"gemma4_26b_a4b_pp13": 16, "kimi27_pp13": 16, "qwen27_bf16_pp13": 32})
+        self.assertEqual(env["DS4_API_RESIDENT_SERVICE_IDS"], "kimi27_pp13,qwen27_bf16_pp13,gemma4_26b_a4b_pp13")
+        self.assertEqual(env["DS4_API_JIT_KV_PREFETCH_API"], "0")
 
     def test_relaunch_resident256_profile_widens_feed_without_kv_bloat(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)

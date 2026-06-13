@@ -42,6 +42,7 @@ class InferenceContractTests(unittest.TestCase):
         self.assertEqual(resolve_model_alias("qwen-bf16"), "qwen3_6_27b_bf16_pp8_efficient_v1")
         self.assertEqual(resolve_model_alias("gemma"), "gemma4_26b_a4b_it_pp8_peer_v1")
         self.assertEqual(resolve_model_alias("gemma4"), "gemma4_26b_a4b_it_pp8_peer_v1")
+        self.assertEqual(resolve_model_alias("kimi"), "kimi27_code_pp13_smart_v1")
         self.assertEqual(resolve_model_alias("kimi26"), "kimi26_pp13_smart_v1")
         self.assertEqual(resolve_model_alias("kimi27"), "kimi27_code_pp13_smart_v1")
 

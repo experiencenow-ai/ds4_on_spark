@@ -50,7 +50,7 @@
     "--tool-call-parser",
     "kimi_k2",
     "--default-chat-template-kwargs",
-    "{\"enable_thinking\": true}"
+    "{\"thinking\": true}"
   ],
   "extra_env": {
     "CPATH": "/home/{node}/ds4_python_headers:/home/{node}/ds4_python_headers/python3.12:/home/{node}/ds4_python_headers/aarch64-linux-gnu/python3.12",
