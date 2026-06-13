@@ -108,6 +108,7 @@
         "lane": "smart",
         "lane_weight": 1.35,
         "pipeline_parallel_size": 13,
+        "gpu_memory_utilization": 0.7,
         "batch_size": 32,
         "input_budget_tokens": 8192,
         "output_budget_tokens": 4096,
@@ -121,6 +122,7 @@
         "lane": "fast_reasoning",
         "lane_weight": 1.0,
         "pipeline_parallel_size": 13,
+        "gpu_memory_utilization": 0.25,
         "batch_size": 32,
         "input_budget_tokens": 8192,
         "output_budget_tokens": 4096,
@@ -134,6 +136,7 @@
         "lane": "fast_diverse",
         "lane_weight": 0.85,
         "pipeline_parallel_size": 13,
+        "gpu_memory_utilization": 0.2,
         "batch_size": 32,
         "input_budget_tokens": 8192,
         "output_budget_tokens": 4096,
@@ -141,6 +144,29 @@
         "accuracy_weight": 1.0,
         "kv_resident_input_batches": 3.0,
         "measurement_status": "raise from batch16 only after a pulled-main launch proves memory fit"
+      }
+    ],
+    "pipeline_candidates": [
+      {
+        "pipeline_id": "centaur_kimi_qwen_gemma_pp13",
+        "service_ids": [
+          "kimi27_pp13",
+          "qwen27_bf16_pp13",
+          "gemma4_26b_a4b_pp13"
+        ]
+      },
+      {
+        "pipeline_id": "centaur_qwen_gemma_fast_pair",
+        "service_ids": [
+          "qwen27_bf16_pp13",
+          "gemma4_26b_a4b_pp13"
+        ]
+      },
+      {
+        "pipeline_id": "centaur_kimi_smart_lane",
+        "service_ids": [
+          "kimi27_pp13"
+        ]
       }
     ],
     "promotion_rule": "Promote the highest-scoring candidate whose hard constraints pass; if Kimi cannot fit with Qwen and Gemma below the GPU cap and memory floor, run Kimi as a dedicated smart lane and keep Qwen/Gemma as the high-throughput resident pair."
