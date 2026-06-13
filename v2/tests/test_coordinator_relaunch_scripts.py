@@ -118,6 +118,7 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "256")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "131072")
         self.assertEqual(defaults["DS4_API_JIT_KV_PREFETCH_API"], "0")
+        self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE"], "1")
         self.assertEqual(limits, {"gemma4_26b_a4b_pp12": 128, "qwen27_bf16_pp12": 128})
 
     def test_relaunch_kimi27_profile_selects_kimi_topology_and_lmcache_auto_kv(self) -> None:
@@ -153,9 +154,11 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "16")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "2")
         self.assertEqual(defaults["DS4_API_JIT_KV_PREFETCH_API"], "0")
+        self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE"], "1")
         self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"], "kimi27_pp13")
         self.assertEqual(limits, {"kimi27_pp13": 32})
         self.assertEqual(env["DS4_API_JIT_KV_PREFETCH_API"], "0")
+        self.assertEqual(env["DS4_PIPELINE_AUTO_KV_CACHE"], "1")
         self.assertEqual(env["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"], "kimi27_pp13")
 
     def test_relaunch_centaur_profile_selects_kimi_qwen_gemma_topology(self) -> None:
@@ -193,10 +196,12 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "2")
         self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(23622320128))
         self.assertEqual(defaults["DS4_API_JIT_KV_PREFETCH_API"], "0")
+        self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE"], "1")
         self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"], "kimi27_pp13,qwen27_bf16_pp13,gemma4_26b_a4b_pp13")
         self.assertEqual(limits, {"gemma4_26b_a4b_pp13": 16, "kimi27_pp13": 32, "qwen27_bf16_pp13": 32})
         self.assertEqual(env["DS4_API_RESIDENT_SERVICE_IDS"], "kimi27_pp13,qwen27_bf16_pp13,gemma4_26b_a4b_pp13")
         self.assertEqual(env["DS4_API_JIT_KV_PREFETCH_API"], "0")
+        self.assertEqual(env["DS4_PIPELINE_AUTO_KV_CACHE"], "1")
 
     def test_relaunch_resident256_profile_widens_feed_without_kv_bloat(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
@@ -319,9 +324,11 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         old_kv = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")
         old_resident = os.environ.get("DS4_API_RESIDENT_MULTIMODEL")
         old_services = os.environ.get("DS4_API_RESIDENT_SERVICE_IDS")
+        old_auto_kv = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE")
         os.environ["DS4_API_DISPATCH_KV_CAPACITY_BYTES"] = "0"
         os.environ["DS4_API_RESIDENT_MULTIMODEL"] = "0"
         os.environ["DS4_API_RESIDENT_SERVICE_IDS"] = "all-the-things"
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = "0"
         try:
             args = type("Args", (), {
                 "profile": DSV4_PRODUCTION["coordinator_profile"],
@@ -341,9 +348,14 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
                 os.environ.pop("DS4_API_RESIDENT_SERVICE_IDS", None)
             else:
                 os.environ["DS4_API_RESIDENT_SERVICE_IDS"] = old_services
+            if old_auto_kv is None:
+                os.environ.pop("DS4_PIPELINE_AUTO_KV_CACHE", None)
+            else:
+                os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = old_auto_kv
         self.assertEqual(env["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(FIRST3_MEMORY_BUDGET["coordinator"]["dispatch_kv_capacity_bytes"]))
         self.assertEqual(env["DS4_API_RESIDENT_MULTIMODEL"], "1")
         self.assertEqual(env["DS4_API_RESIDENT_SERVICE_IDS"], "qwen27_bf16_pp8,gemma4_26b_a4b_pp8,dsv4_flash_pp8")
+        self.assertEqual(env["DS4_PIPELINE_AUTO_KV_CACHE"], "1")
 
 
 if __name__ == "__main__":

@@ -58,7 +58,7 @@ def deployment_readiness(
     _external_kv_checks(checks, services=services)
     gpu_budget = _gpu_budget_by_service(services)
     _resident_gpu_budget_checks(checks, services=services, gpu_budget=gpu_budget)
-    _jit_kv_checks(checks, strict=strict)
+    _jit_kv_checks(checks, services=services, strict=strict)
     return _readiness_payload(
         checks=checks,
         strict=strict,
@@ -243,6 +243,7 @@ def _pipeline_checks(checks: list[dict[str, Any]], service: Any) -> None:
 def _external_kv_checks(checks: list[dict[str, Any]], *, services: list[Any]) -> None:
     for service in services:
         _external_kv_service_checks(checks, service)
+    _external_kv_auto_plan_checks(checks, services=services)
 
 
 def _external_kv_service_checks(checks: list[dict[str, Any]], service: Any) -> None:
@@ -316,6 +317,29 @@ def _external_kv_sharding_checks(checks: list[dict[str, Any]], service: Any, kv_
     )
 
 
+def _external_kv_auto_plan_checks(checks: list[dict[str, Any]], *, services: list[Any]) -> None:
+    cached_services = _services_with_external_kv(services)
+    if not cached_services:
+        return
+    auto_enabled = _env_bool("DS4_PIPELINE_AUTO_KV_CACHE", False)
+    allowed = _csv_env("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS")
+    missing = sorted(service.service_id for service in cached_services if allowed and service.service_id not in allowed and service.profile_id not in allowed)
+    _check(
+        checks,
+        auto_enabled,
+        "external_kv_auto_plan_enabled",
+        "DSAPI auto-KV plans are enabled for resident external KV services",
+        details={"services": [service.service_id for service in cached_services], "DS4_PIPELINE_AUTO_KV_CACHE": os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE", "")},
+    )
+    _check(
+        checks,
+        not missing,
+        "external_kv_auto_plan_service_ids_cover_active",
+        "DSAPI auto-KV service allowlist covers every active external KV service",
+        details={"missing": missing, "allowed": sorted(allowed)},
+    )
+
+
 def _resident_gpu_budget_checks(checks: list[dict[str, Any]], *, services: list[Any], gpu_budget: dict[str, float]) -> None:
     missing = [service.service_id for service in services if service.service_id not in gpu_budget]
     _check(
@@ -373,9 +397,10 @@ def _float_or_none(value: Any) -> float | None:
         return None
 
 
-def _jit_kv_checks(checks: list[dict[str, Any]], *, strict: bool) -> None:
+def _jit_kv_checks(checks: list[dict[str, Any]], *, services: list[Any], strict: bool) -> None:
     token = os.environ.get("DS4_API_JIT_KV_PREFETCH_TOKEN", "")
     endpoint_enabled = _env_bool("DS4_API_JIT_KV_PREFETCH_API", bool(token))
+    needs_prefetch = _services_need_jit_prefetch(services)
     _check(
         checks,
         _env_bool("DS4_API_JIT_KV_RECOVER_ON_STARTUP", True),
@@ -392,17 +417,19 @@ def _jit_kv_checks(checks: list[dict[str, Any]], *, strict: bool) -> None:
     )
     _check(
         checks,
-        endpoint_enabled,
+        (not needs_prefetch) or endpoint_enabled,
         "jit_kv_prefetch_gate_enabled",
         "vLLM DS4 KV prefetch endpoint use is enabled",
-        severity="error" if strict else "warning",
+        details={"required": needs_prefetch},
+        severity="error" if strict or needs_prefetch else "warning",
     )
     _check(
         checks,
-        bool(token),
+        (not needs_prefetch) or bool(token),
         "jit_kv_prefetch_token_present",
         "DS4 has a token for vLLM DS4 KV prefetch",
-        severity="error" if strict else "warning",
+        details={"required": needs_prefetch},
+        severity="error" if strict or needs_prefetch else "warning",
     )
     block_tokens = max(1, _env_int("DS4_API_JIT_KV_BLOCK_SIZE_TOKENS", 16))
     min_tokens = _env_int("DS4_API_JIT_KV_MIN_PREFIX_TOKENS", max(1, _env_int("DS4_PIPELINE_PRESTAGE_COMMON_PREFIX_MIN_CHARS", 1024) // 4))
@@ -414,6 +441,32 @@ def _jit_kv_checks(checks: list[dict[str, Any]], *, strict: bool) -> None:
         details={"min_prefix_tokens": min_tokens, "block_size_tokens": block_tokens},
         severity="error" if strict else "warning",
     )
+
+
+def _services_with_external_kv(services: list[Any]) -> list[Any]:
+    out = []
+    for service in services:
+        kv_cache = dict(getattr(service, "kv_cache", {}) or {})
+        connector = str(kv_cache.get("connector_id") or "")
+        backend = str(kv_cache.get("external_backend") or "")
+        if connector and connector != "none" and backend and backend != "none":
+            out.append(service)
+    return out
+
+
+def _services_need_jit_prefetch(services: list[Any]) -> bool:
+    for service in services:
+        kv_cache = dict(getattr(service, "kv_cache", {}) or {})
+        backend = str(kv_cache.get("external_backend") or "")
+        connector = str(kv_cache.get("connector_id") or "")
+        if backend == "dsv4_hma" or connector == "simple_cpu_offload":
+            return True
+    return False
+
+
+def _csv_env(name: str) -> set[str]:
+    raw = os.environ.get(name, "")
+    return {item.strip() for item in raw.replace(";", ",").split(",") if item.strip()}
 
 
 def _check(
