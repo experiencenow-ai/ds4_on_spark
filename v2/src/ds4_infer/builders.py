@@ -19,6 +19,9 @@ MODEL_ALIASES = {
     "gemma-e4b": "gemma4_e4b_it_pp8_peer_v1",
     "gemma26": "gemma4_26b_a4b_it_pp8_peer_v1",
     "gemma-a4b": "gemma4_26b_a4b_it_pp8_peer_v1",
+    "gemma-pp13": "gemma4_26b_a4b_it_pp13_peer_v1",
+    "gemma26-pp13": "gemma4_26b_a4b_it_pp13_peer_v1",
+    "gemma-a4b-pp13": "gemma4_26b_a4b_it_pp13_peer_v1",
     "gemma31": "gemma4_31b_it_pp8_peer_v1",
     "kimi": "kimi27_code_pp13_smart_v1",
     "kimi26": "kimi26_pp13_smart_v1",
@@ -34,6 +37,9 @@ MODEL_ALIASES = {
     "qwen27": "qwen3_6_27b_bf16_pp8_efficient_v1",
     "qwen-bf16": "qwen3_6_27b_bf16_pp8_efficient_v1",
     "qwen27-bf16": "qwen3_6_27b_bf16_pp8_efficient_v1",
+    "qwen-pp13": "qwen3_6_27b_bf16_pp13_efficient_v1",
+    "qwen27-pp13": "qwen3_6_27b_bf16_pp13_efficient_v1",
+    "qwen-bf16-pp13": "qwen3_6_27b_bf16_pp13_efficient_v1",
     "fast": "qwen3_6_35b_a3b_fp8_fastest_v1",
 }
 

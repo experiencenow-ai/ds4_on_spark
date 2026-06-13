@@ -40,8 +40,10 @@ class InferenceContractTests(unittest.TestCase):
     def test_first3_model_aliases_resolve_to_resident_services(self) -> None:
         self.assertEqual(resolve_model_alias("qwen27"), "qwen3_6_27b_bf16_pp8_efficient_v1")
         self.assertEqual(resolve_model_alias("qwen-bf16"), "qwen3_6_27b_bf16_pp8_efficient_v1")
+        self.assertEqual(resolve_model_alias("qwen-pp13"), "qwen3_6_27b_bf16_pp13_efficient_v1")
         self.assertEqual(resolve_model_alias("gemma"), "gemma4_26b_a4b_it_pp8_peer_v1")
         self.assertEqual(resolve_model_alias("gemma4"), "gemma4_26b_a4b_it_pp8_peer_v1")
+        self.assertEqual(resolve_model_alias("gemma-pp13"), "gemma4_26b_a4b_it_pp13_peer_v1")
         self.assertEqual(resolve_model_alias("kimi"), "kimi27_code_pp13_smart_v1")
         self.assertEqual(resolve_model_alias("kimi26"), "kimi26_pp13_smart_v1")
         self.assertEqual(resolve_model_alias("kimi27"), "kimi27_code_pp13_smart_v1")
