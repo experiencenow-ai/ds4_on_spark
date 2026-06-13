@@ -64,6 +64,13 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
 
         self.assertFalse(args.enable_thinking)
         self.assertEqual(args.thinking_budget_tokens, 1024)
+        self.assertFalse(args.cancel_on_timeout)
+
+    def test_run_can_explicitly_cancel_batch_on_timeout(self) -> None:
+        parser = self.runner._build_parser()
+        args = parser.parse_args(["run", "--out-dir", "/tmp/ds4-eval-test", "--cancel-on-timeout"])
+
+        self.assertTrue(args.cancel_on_timeout)
 
     def test_run_can_enable_thinking_for_diagnostics(self) -> None:
         parser = self.runner._build_parser()

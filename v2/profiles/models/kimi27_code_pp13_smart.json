@@ -11,9 +11,9 @@
   "performance": {
     "aggregate_completion_tok_s": 26.48,
     "latency_rank": 1.8,
-    "max_num_batched_tokens": 32768,
-    "max_num_seqs": 16,
-    "measurement_notes": "Direct vLLM PP13 qualification reached 16/17 COMPSEC and 60/92 raw at max_output_tokens=2048 with Kimi reasoning enabled; several AIME/GPQA failures were mechanical truncations and are being rechecked at 4096.",
+    "max_num_batched_tokens": 65536,
+    "max_num_seqs": 32,
+    "measurement_notes": "DSAPI PP13 92-question run reached 56/69 completed rows before the old 7200s eval guard cancelled the remainder; live vLLM KV usage stayed near 1% at batch 16, so the next qualification cap is max_num_seqs=32 with a 65536-token service gate.",
     "target": "13-stage Kimi K2.7 Code smart-model qualification pipeline using the proven Kimi K2.6 PP13 layer partition."
   },
   "production_eligible": false,

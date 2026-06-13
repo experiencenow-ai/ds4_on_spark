@@ -70,7 +70,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         capacity = topology.estimate_capacity_by_profile()
 
         self.assertEqual(len(topology.nodes), 13)
-        self.assertEqual(capacity[KIMI27_PP13], 16)
+        self.assertEqual(capacity[KIMI27_PP13], 32)
         self.assertEqual(capacity[QWEN_PP13], 32)
         self.assertEqual(capacity[GEMMA26_PP13], 16)
         self.assertEqual(
@@ -87,7 +87,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(kimi.layer_partition, (4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4))
         self.assertEqual(qwen.layer_partition, (5, 5, 5, 5, 5, 5, 5, 4, 5, 5, 5, 5, 5))
         self.assertEqual(gemma.layer_partition, (2, 2, 3, 3, 2, 3, 2, 2, 2, 2, 3, 2, 2))
-        self.assertEqual(kimi.scheduler["refill_low_watermark"], 12)
+        self.assertEqual(kimi.scheduler["refill_low_watermark"], 24)
         self.assertEqual(qwen.scheduler["refill_low_watermark"], 24)
         self.assertEqual(gemma.scheduler["refill_low_watermark"], 12)
         for service in (kimi, qwen, gemma):
@@ -109,7 +109,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         capacity = topology.estimate_capacity_by_profile()
 
         self.assertEqual(len(topology.nodes), 13)
-        self.assertEqual(capacity[KIMI27_PP13], 16)
+        self.assertEqual(capacity[KIMI27_PP13], 32)
         self.assertEqual(topology.routing_policy["active_resident_service_ids"], ["kimi27_pp13"])
         kimi = topology.pipeline_service_by_id("kimi27_pp13")
         self.assertEqual(kimi.profile_id, KIMI27_PP13)
@@ -121,8 +121,8 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(kimi.node_ids, ("spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7", "spark8", "spark9", "sparka", "sparkb", "sparkc"))
         self.assertEqual(kimi.kv_cache["connector_id"], "lmcache")
         self.assertEqual(kimi.kv_cache["external_backend"], "lmcache_hma")
-        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["dispatch_window"], 64)
-        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_cohort_max"], 16)
+        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["dispatch_window"], 128)
+        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_cohort_max"], 32)
 
     def test_qwen_gemma_pp12_topology_leaves_sparkc_for_qualification(self) -> None:
         topology = SparkTopology.load(QWEN_GEMMA_PP12_TOPOLOGY)

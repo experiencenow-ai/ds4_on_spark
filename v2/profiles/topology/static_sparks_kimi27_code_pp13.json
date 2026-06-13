@@ -204,11 +204,11 @@
     "resident_coordinator_defaults": {
       "completion_budget_include_output": false,
       "completion_chunk_concurrency": 1,
-      "completion_cohort_max": 16,
-      "completion_pp_safe_cohort_max": 16,
-      "completion_token_budget": 32768,
-      "dispatch_refill_batch": 64,
-      "dispatch_window": 64
+      "completion_cohort_max": 32,
+      "completion_pp_safe_cohort_max": 32,
+      "completion_token_budget": 65536,
+      "dispatch_refill_batch": 128,
+      "dispatch_window": 128
     },
     "pipeline_services": {
       "kimi27_pp13": {
@@ -239,7 +239,7 @@
           5,
           4
         ],
-        "max_batch_size": 16,
+        "max_batch_size": 32,
         "model_id": "moonshotai/Kimi-K2.7-Code",
         "node_ids": [
           "spark0",
@@ -262,10 +262,10 @@
           "admission_mode": "single_active_batch_per_compute_domain",
           "batch_linger_s": 0.05,
           "max_running_batches_per_compute_domain": 1,
-          "queue_limit": 64,
-          "refill_low_watermark": 1,
-          "vllm_max_num_batched_tokens": 32768,
-          "vllm_max_num_seqs": 16
+          "queue_limit": 128,
+          "refill_low_watermark": 24,
+          "vllm_max_num_batched_tokens": 65536,
+          "vllm_max_num_seqs": 32
         },
         "served_model_name": "kimi27-code-pp13",
         "service_id": "kimi27_pp13",
