@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 KIMI_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_gemma_pp13.json"
+KIMI27_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi27_code_pp13.json"
 QWEN_GEMMA_PP12_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_qwen_gemma_pp12.json"
 QWEN_GEMMA_PP12_PLAIN_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_qwen_gemma_pp12_plain.json"
 VALIDATION_TASKS = ROOT / "profiles" / "validation" / "xhigh_live_validation_tasks.json"
@@ -31,6 +32,7 @@ GEMMA12_PP = "gemma4_12b_it_pp8_peer_v1"
 GEMMA26_PP = "gemma4_26b_a4b_it_pp8_peer_v1"
 GEMMA31_PP = "gemma4_31b_it_pp8_peer_v1"
 KIMI_PP13 = "kimi26_pp13_smart_v1"
+KIMI27_PP13 = "kimi27_code_pp13_smart_v1"
 QWEN_PP13 = "qwen3_6_27b_bf16_pp13_efficient_v1"
 GEMMA26_PP13 = "gemma4_26b_a4b_it_pp13_peer_v1"
 QWEN_PP12 = "qwen3_6_27b_bf16_pp12_efficient_v1"
@@ -88,6 +90,23 @@ class StaticSparkTopologyTests(unittest.TestCase):
             self.assertEqual(service.kv_cache["external_backend"], "lmcache_hma")
             self.assertEqual(service.kv_cache["expected_entry_fraction_per_node"], 1.0 / 13.0)
             self.assertGreater(int(service.kv_cache["kv_cache_memory_bytes"]), 0)
+
+    def test_kimi27_pp13_topology_is_dedicated_qualification_service(self) -> None:
+        topology = SparkTopology.load(KIMI27_TOPOLOGY)
+        capacity = topology.estimate_capacity_by_profile()
+
+        self.assertEqual(len(topology.nodes), 13)
+        self.assertEqual(capacity[KIMI27_PP13], 16)
+        self.assertEqual(topology.routing_policy["active_resident_service_ids"], ["kimi27_pp13"])
+        kimi = topology.pipeline_service_by_id("kimi27_pp13")
+        self.assertEqual(kimi.profile_id, KIMI27_PP13)
+        self.assertEqual(kimi.model_id, "moonshotai/Kimi-K2.7-Code")
+        self.assertEqual(topology.routing_policy["pipeline_services"]["kimi27_pp13"]["served_model_name"], "kimi27-code-pp13")
+        self.assertEqual(kimi.layer_partition, (4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4))
+        self.assertEqual(kimi.entry_node_id, "spark0")
+        self.assertEqual(kimi.node_ids, ("spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7", "spark8", "spark9", "sparka", "sparkb", "sparkc"))
+        self.assertEqual(kimi.kv_cache["connector_id"], "lmcache")
+        self.assertEqual(kimi.kv_cache["external_backend"], "lmcache_hma")
 
     def test_qwen_gemma_pp12_topology_leaves_sparkc_for_qualification(self) -> None:
         topology = SparkTopology.load(QWEN_GEMMA_PP12_TOPOLOGY)

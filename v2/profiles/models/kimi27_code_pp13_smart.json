@@ -1,0 +1,62 @@
+{
+  "backend": "vllm_pipeline",
+  "capability_classes": [
+    "smart",
+    "smartest",
+    "world_model_deep",
+    "peer"
+  ],
+  "format": "ds4-model-profile-v1",
+  "model_id": "moonshotai/Kimi-K2.7-Code",
+  "performance": {
+    "aggregate_completion_tok_s": 0,
+    "latency_rank": 1.8,
+    "max_num_batched_tokens": 32768,
+    "max_num_seqs": 16,
+    "measurement_notes": "Unvalidated Kimi K2.7 Code PP13 qualification profile. Initial gate is direct vLLM COMPSEC17 with max_output_tokens=2048 and Kimi reasoning/tool parser enabled.",
+    "target": "13-stage Kimi K2.7 Code smart-model qualification pipeline using the proven Kimi K2.6 PP13 layer partition."
+  },
+  "production_eligible": false,
+  "profile_id": "kimi27_code_pp13_smart_v1",
+  "quality": {
+    "compsec17": "pending direct vLLM PP13 qualification",
+    "ds4_eval_status": "pending COMPSEC17 and 92-question evaluation"
+  },
+  "routing": {
+    "chat_cohort_transport": "parallel_chat_completions",
+    "chat_template_thinking_key": "enable_thinking",
+    "default_for": [],
+    "optional_kv_cache_deployments": [
+      "profiles/kv_cache/kimi27_code_pp13_lmcache_hma.json"
+    ],
+    "pipeline": {
+      "api_base_url": "http://127.0.0.1:8137",
+      "compute_domain": "spark-fleet-0",
+      "entry_node_id": "spark0",
+      "served_model_name": "kimi27-code-pp13",
+      "service_id": "kimi27_pp13"
+    },
+    "pipeline_service_id": "kimi27_pp13",
+    "rank": 15,
+    "requires_profile_pin": false,
+    "served_model_name": "kimi27-code-pp13",
+    "startup_autoload": false,
+    "tokenizer_path": "/home/spark0/models/hf/moonshotai/Kimi-K2.7-Code-pp13-view"
+  },
+  "runtime_contract_id": "kimi27_code_pp13_v1",
+  "supported_job_classes": [
+    "analysis",
+    "atom_edit",
+    "cluster_synthesis",
+    "debug",
+    "json_repair",
+    "longmem",
+    "summary",
+    "tool_chat",
+    "triage",
+    "world_model_extract"
+  ],
+  "supports_chat": true,
+  "supports_completion": true,
+  "supports_thinking": true
+}
