@@ -246,6 +246,7 @@
           "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.07692307692307693,
           "external_backend": "lmcache_hma",
+          "gpu_memory_utilization": 0.2,
           "kv_cache_memory_bytes": 6442450944,
           "sharding": "pipeline_layers"
         },
@@ -312,6 +313,7 @@
           "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.07692307692307693,
           "external_backend": "lmcache_hma",
+          "gpu_memory_utilization": 0.7,
           "kv_cache_memory_bytes": 8589934592,
           "sharding": "pipeline_layers"
         },
@@ -378,6 +380,7 @@
           "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.07692307692307693,
           "external_backend": "lmcache_hma",
+          "gpu_memory_utilization": 0.25,
           "kv_cache_memory_bytes": 8589934592,
           "sharding": "pipeline_layers"
         },
