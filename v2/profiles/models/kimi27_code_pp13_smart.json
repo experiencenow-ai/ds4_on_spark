@@ -9,11 +9,11 @@
   "format": "ds4-model-profile-v1",
   "model_id": "moonshotai/Kimi-K2.7-Code",
   "performance": {
-    "aggregate_completion_tok_s": 0,
+    "aggregate_completion_tok_s": 26.48,
     "latency_rank": 1.8,
     "max_num_batched_tokens": 32768,
     "max_num_seqs": 16,
-    "measurement_notes": "Unvalidated Kimi K2.7 Code PP13 qualification profile. Initial gate is direct vLLM COMPSEC17 with max_output_tokens=2048 and Kimi reasoning/tool parser enabled.",
+    "measurement_notes": "Direct vLLM PP13 qualification reached 16/17 COMPSEC and 60/92 raw at max_output_tokens=2048 with Kimi reasoning enabled; several AIME/GPQA failures were mechanical truncations and are being rechecked at 4096.",
     "target": "13-stage Kimi K2.7 Code smart-model qualification pipeline using the proven Kimi K2.6 PP13 layer partition."
   },
   "production_eligible": false,
@@ -30,7 +30,7 @@
       "profiles/kv_cache/kimi27_code_pp13_lmcache_hma.json"
     ],
     "pipeline": {
-      "api_base_url": "http://127.0.0.1:8137",
+      "api_base_url": "http://127.0.0.1:8138",
       "compute_domain": "spark-fleet-0",
       "entry_node_id": "spark0",
       "served_model_name": "kimi27-code-pp13",

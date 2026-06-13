@@ -102,11 +102,14 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(kimi.profile_id, KIMI27_PP13)
         self.assertEqual(kimi.model_id, "moonshotai/Kimi-K2.7-Code")
         self.assertEqual(topology.routing_policy["pipeline_services"]["kimi27_pp13"]["served_model_name"], "kimi27-code-pp13")
+        self.assertEqual(topology.routing_policy["pipeline_services"]["kimi27_pp13"]["api_base_url"], "http://127.0.0.1:8138")
         self.assertEqual(kimi.layer_partition, (4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4))
         self.assertEqual(kimi.entry_node_id, "spark0")
         self.assertEqual(kimi.node_ids, ("spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7", "spark8", "spark9", "sparka", "sparkb", "sparkc"))
         self.assertEqual(kimi.kv_cache["connector_id"], "lmcache")
         self.assertEqual(kimi.kv_cache["external_backend"], "lmcache_hma")
+        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["dispatch_window"], 64)
+        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_cohort_max"], 16)
 
     def test_qwen_gemma_pp12_topology_leaves_sparkc_for_qualification(self) -> None:
         topology = SparkTopology.load(QWEN_GEMMA_PP12_TOPOLOGY)

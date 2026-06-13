@@ -1749,7 +1749,7 @@ def _profile_service_id(profile: ModelProfile) -> str | None:
 def _auto_kv_backend(service_id: str | None) -> str:
     if service_id == "dsv4_flash_pp8":
         return "dsv4_hma"
-    if service_id in {"qwen27_bf16_pp8", "gemma4_26b_a4b_pp8"}:
+    if service_id and service_id.startswith(("qwen", "gemma", "kimi")):
         return "lmcache"
     return "auto"
 
