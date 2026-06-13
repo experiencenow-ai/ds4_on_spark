@@ -711,8 +711,12 @@ class PipelineApiTests(unittest.TestCase):
         old_strict = os.environ.get("DS4_API_DEPLOYMENT_STRICT")
         old_token = os.environ.get("DS4_API_JIT_KV_PREFETCH_TOKEN")
         old_api = os.environ.get("DS4_API_JIT_KV_PREFETCH_API")
+        old_auto = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE")
+        old_services = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS")
         os.environ["DS4_API_DEPLOYMENT_STRICT"] = "1"
         os.environ["DS4_API_JIT_KV_PREFETCH_API"] = "1"
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = "1"
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = "qwen27_bf16_pp8,gemma4_26b_a4b_pp8,dsv4_flash_pp8"
         os.environ.pop("DS4_API_JIT_KV_PREFETCH_TOKEN", None)
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -731,6 +735,14 @@ class PipelineApiTests(unittest.TestCase):
                 os.environ.pop("DS4_API_JIT_KV_PREFETCH_API", None)
             else:
                 os.environ["DS4_API_JIT_KV_PREFETCH_API"] = old_api
+            if old_auto is None:
+                os.environ.pop("DS4_PIPELINE_AUTO_KV_CACHE", None)
+            else:
+                os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = old_auto
+            if old_services is None:
+                os.environ.pop("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS", None)
+            else:
+                os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = old_services
         self.assertEqual(code, 503)
         self.assertFalse(payload["ready"])
         self.assertEqual(payload["active_resident_service_ids"], ["dsv4_flash_pp8", "gemma4_26b_a4b_pp8", "qwen27_bf16_pp8"])
@@ -750,6 +762,44 @@ class PipelineApiTests(unittest.TestCase):
         passing = {item["name"] for item in payload["checks"] if item["ok"]}
         self.assertIn("dsv4_flash_pp8:external_kv_backend_expected", passing)
         self.assertIn("dsv4_gpu_budget_below_no_headroom_startup_point", passing)
+
+    def test_deployment_readiness_fails_when_external_kv_auto_plans_are_disabled(self) -> None:
+        old_auto = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE")
+        old_services = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS")
+        old_prefetch = os.environ.get("DS4_API_JIT_KV_PREFETCH_API")
+        old_token = os.environ.get("DS4_API_JIT_KV_PREFETCH_TOKEN")
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = "0"
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = "kimi27_pp13"
+        os.environ["DS4_API_JIT_KV_PREFETCH_API"] = "0"
+        os.environ.pop("DS4_API_JIT_KV_PREFETCH_TOKEN", None)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=KIMI27_TOPOLOGY, runner_kind="fake")
+                code, payload = api.handle_get("/ds4/deployment/readiness", {})
+        finally:
+            if old_auto is None:
+                os.environ.pop("DS4_PIPELINE_AUTO_KV_CACHE", None)
+            else:
+                os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = old_auto
+            if old_services is None:
+                os.environ.pop("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS", None)
+            else:
+                os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = old_services
+            if old_prefetch is None:
+                os.environ.pop("DS4_API_JIT_KV_PREFETCH_API", None)
+            else:
+                os.environ["DS4_API_JIT_KV_PREFETCH_API"] = old_prefetch
+            if old_token is None:
+                os.environ.pop("DS4_API_JIT_KV_PREFETCH_TOKEN", None)
+            else:
+                os.environ["DS4_API_JIT_KV_PREFETCH_TOKEN"] = old_token
+        self.assertEqual(code, 503)
+        self.assertFalse(payload["ready"])
+        failed = {item["name"] for item in payload["checks"] if not item["ok"] and item["severity"] == "error"}
+        self.assertIn("external_kv_auto_plan_enabled", failed)
+        passing = {item["name"] for item in payload["checks"] if item["ok"]}
+        self.assertIn("jit_kv_prefetch_gate_enabled", passing)
+        self.assertIn("jit_kv_prefetch_token_present", passing)
 
     def test_pipeline_runner_prestages_common_strict_kv_prefix(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

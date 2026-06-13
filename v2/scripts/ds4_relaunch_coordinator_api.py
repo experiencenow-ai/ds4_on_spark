@@ -182,6 +182,7 @@ _SAFETY_PROFILE_DEFAULTS = {
     "DS4_PIPELINE_COMPLETION_TOKEN_ESTIMATE_MODE",
     "DS4_PIPELINE_COMPLETION_STREAM_WALL_TIMEOUT_S",
     "DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S",
+    "DS4_PIPELINE_AUTO_KV_CACHE",
     "DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS",
 }
 
@@ -283,6 +284,7 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str, *, topology_pa
     if str(dsv4["service_id"]) in batch_limits:
         batch_limits[str(dsv4["service_id"])] = int(dsv4["max_num_seqs"])
     needs_dsv4_prefetch = not topology_services or dsv4_service_id in topology_services
+    auto_kv_enabled = _topology_needs_auto_kv(topology_path, topology_services)
     cohort_workers = _topology_cohort_workers(coordinator=coordinator, active_services=topology_services, batch_limits=batch_limits)
     return {
         "DS4_API_RESIDENT_SERVICE_IDS": ",".join(topology_services) if topology_services else "qwen27_bf16_pp8,gemma4_26b_a4b_pp8,dsv4_flash_pp8",
@@ -298,6 +300,7 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str, *, topology_pa
         "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": str(coordinator["completion_chunk_concurrency"]),
         "DS4_API_DISPATCH_KV_CAPACITY_BYTES": str(coordinator["dispatch_kv_capacity_bytes"]),
         "DS4_API_BATCH_LIMITS_JSON": json.dumps(batch_limits, separators=(",", ":")),
+        "DS4_PIPELINE_AUTO_KV_CACHE": "1" if auto_kv_enabled else "0",
         "DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS": ",".join(topology_services) if topology_services else "qwen27_bf16_pp8,gemma4_26b_a4b_pp8,dsv4_flash_pp8",
     }
 
@@ -347,6 +350,22 @@ def _topology_active_services(topology_path: Path) -> list[str]:
     if isinstance(raw, str):
         return [item.strip() for item in raw.replace(";", ",").split(",") if item.strip()]
     return []
+
+
+def _topology_needs_auto_kv(topology_path: Path, active_services: list[str]) -> bool:
+    topology = _load_topology(topology_path)
+    routing = topology.get("routing_policy") if isinstance(topology.get("routing_policy"), dict) else {}
+    services = routing.get("pipeline_services") if isinstance(routing.get("pipeline_services"), dict) else {}
+    active = set(active_services or services)
+    for service_id, raw_service in services.items():
+        if str(service_id) not in active or not isinstance(raw_service, dict):
+            continue
+        kv_cache = raw_service.get("kv_cache") if isinstance(raw_service.get("kv_cache"), dict) else {}
+        connector = str(kv_cache.get("connector_id") or "")
+        backend = str(kv_cache.get("external_backend") or "")
+        if connector and connector != "none" and backend and backend != "none":
+            return True
+    return False
 
 
 def _topology_cohort_workers(*, coordinator: dict[str, object], active_services: list[str], batch_limits: dict[str, int]) -> int:

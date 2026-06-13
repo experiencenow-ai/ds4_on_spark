@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -135,27 +136,41 @@ class StaticSparkTopologyTests(unittest.TestCase):
 
     def test_kimi27_dedicated_readiness_has_gpu_budget(self) -> None:
         topology = SparkTopology.load(KIMI27_TOPOLOGY)
-        payload = deployment_readiness(
-            topology=topology,
-            dispatcher_window=128,
-            dispatcher_refill_batch=128,
-            dispatcher_cohort_workers=32,
-            resident_multimodel=True,
-        )
+        old_auto = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE")
+        old_services = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS")
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = "1"
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = "kimi27_pp13"
+        try:
+            payload = deployment_readiness(
+                topology=topology,
+                dispatcher_window=128,
+                dispatcher_refill_batch=128,
+                dispatcher_cohort_workers=32,
+                resident_multimodel=True,
+            )
 
-        self.assertTrue(payload["ready"])
-        self.assertEqual(payload["resident_gpu_memory_utilization"], {"kimi27_pp13": 0.7})
-        self.assertEqual(payload["resident_gpu_memory_utilization_sum"], 0.7)
-        failed_errors = {item["name"] for item in payload["checks"] if not item["ok"] and item["severity"] == "error"}
-        self.assertNotIn("resident_gpu_budget_declared", failed_errors)
+            self.assertTrue(payload["ready"])
+            self.assertEqual(payload["resident_gpu_memory_utilization"], {"kimi27_pp13": 0.7})
+            self.assertEqual(payload["resident_gpu_memory_utilization_sum"], 0.7)
+            failed_errors = {item["name"] for item in payload["checks"] if not item["ok"] and item["severity"] == "error"}
+            self.assertNotIn("resident_gpu_budget_declared", failed_errors)
 
-        underfilled = deployment_readiness(
-            topology=topology,
-            dispatcher_window=128,
-            dispatcher_refill_batch=128,
-            dispatcher_cohort_workers=16,
-            resident_multimodel=True,
-        )
+            underfilled = deployment_readiness(
+                topology=topology,
+                dispatcher_window=128,
+                dispatcher_refill_batch=128,
+                dispatcher_cohort_workers=16,
+                resident_multimodel=True,
+            )
+        finally:
+            if old_auto is None:
+                os.environ.pop("DS4_PIPELINE_AUTO_KV_CACHE", None)
+            else:
+                os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = old_auto
+            if old_services is None:
+                os.environ.pop("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS", None)
+            else:
+                os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = old_services
         self.assertFalse(underfilled["ready"])
         failed_errors = {item["name"] for item in underfilled["checks"] if not item["ok"] and item["severity"] == "error"}
         self.assertIn("cohort_workers_cover_largest_service", failed_errors)

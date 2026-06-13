@@ -505,6 +505,8 @@ class CoordinatorApi:
             "kv_capacity_bytes": self.dispatcher_kv_capacity_bytes,
             "kv_admission_unlimited": self.dispatcher_kv_capacity_bytes <= 0,
             "kv_admission_warning": "unlimited_kv_admission" if self.dispatcher_kv_capacity_bytes <= 0 else None,
+            "auto_kv_cache_enabled": _env_bool("DS4_PIPELINE_AUTO_KV_CACHE", False),
+            "auto_kv_cache_service_ids": sorted(_csv_env("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS")),
             "resource_governor": self.dispatcher_resource_governor.status(),
             "last_summary": None,
             "last_claimed_cohort_size": 0,
@@ -1738,6 +1740,11 @@ def _env_float(name: str, default: float) -> float:
     if value is None or value == "":
         return float(default)
     return float(value)
+
+
+def _csv_env(name: str) -> set[str]:
+    raw = os.environ.get(name, "")
+    return {item.strip() for item in raw.replace(";", ",").split(",") if item.strip()}
 
 
 if __name__ == "__main__":
