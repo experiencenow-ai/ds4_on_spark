@@ -323,6 +323,33 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         self.assertEqual(calls[0][0], "/ds4/queue/submit")
         self.assertEqual(calls[0][1]["requests"], requests_payload)
 
+    def test_drive_worker_post_uses_benchmark_timeout_window(self) -> None:
+        calls: list[tuple[str, float]] = []
+
+        def fake_post(base_url: str, path: str, payload: dict[str, object], *, timeout_s: float = 60.0) -> dict[str, object]:
+            calls.append((path, timeout_s))
+            return {"ok": True}
+
+        def fake_get(base_url: str, path: str, query: dict[str, object]) -> dict[str, object]:
+            if path == "/ds4/queue/status":
+                return {"state": "completed"}
+            if path == "/ds4/queue/collect":
+                return {"results": []}
+            return {}
+
+        args = argparse.Namespace(base_url="http://127.0.0.1:8700", drive_worker=True, limit=2, concurrency=2, timeout_s=1800, poll_s=0.001, cancel_on_timeout=True, priority=None)
+        old_post = bench._post
+        old_get = bench._get
+        try:
+            bench._post = fake_post
+            bench._get = fake_get
+            bench._submit_and_collect(args, "batch-a", None, [{"request_id": "req-a"}])
+        finally:
+            bench._post = old_post
+            bench._get = old_get
+
+        self.assertIn(("/ds4/queue/work", 1830.0), calls)
+
     def test_benchmark_summary_uses_metric_output_target(self) -> None:
         args = argparse.Namespace(
             base_url="http://127.0.0.1:8700",

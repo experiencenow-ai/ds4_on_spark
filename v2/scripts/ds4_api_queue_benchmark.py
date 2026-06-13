@@ -66,7 +66,7 @@ def _submit_and_collect(args: argparse.Namespace, batch_id: str, out_dir: Path |
     status: dict[str, Any] = {}
     while True:
         if args.drive_worker:
-            _post(args.base_url, "/ds4/queue/work", {"batch_id": batch_id, "limit": args.limit, "concurrency": args.concurrency, "timeout_s": args.timeout_s})
+            _post(args.base_url, "/ds4/queue/work", {"batch_id": batch_id, "limit": args.limit, "concurrency": args.concurrency, "timeout_s": args.timeout_s}, timeout_s=max(60.0, float(args.timeout_s) + 30.0))
         status = _get(args.base_url, "/ds4/queue/status", {"batch_id": batch_id, "refresh": 0})
         if str(status.get("state")) in TERMINAL:
             break
@@ -412,11 +412,11 @@ def _profile_id_for_model(base_url: str, model: str) -> str:
     return model
 
 
-def _post(base_url: str, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
+def _post(base_url: str, endpoint: str, body: dict[str, Any], *, timeout_s: float = 60.0) -> dict[str, Any]:
     data = json.dumps(body).encode("utf-8")
     req = request.Request(base_url.rstrip("/") + endpoint, data=data, headers={"content-type": "application/json"}, method="POST")
     try:
-        with request.urlopen(req, timeout=60) as response:
+        with request.urlopen(req, timeout=timeout_s) as response:
             return json.loads(response.read().decode("utf-8"))
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[-4000:]
