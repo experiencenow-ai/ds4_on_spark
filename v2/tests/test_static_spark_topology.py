@@ -71,7 +71,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
 
         self.assertEqual(len(topology.nodes), 13)
         self.assertEqual(capacity[KIMI27_PP13], 16)
-        self.assertEqual(capacity[QWEN_PP13], 32)
+        self.assertEqual(capacity[QWEN_PP13], 16)
         self.assertEqual(capacity[GEMMA26_PP13], 16)
         self.assertEqual(
             topology.routing_policy["active_resident_service_ids"],

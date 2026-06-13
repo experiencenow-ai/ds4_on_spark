@@ -73,7 +73,7 @@
     "kimi27_pp13": 32768
   },
   "resident_batch_size": {
-    "qwen27_bf16_pp13": 32,
+    "qwen27_bf16_pp13": 16,
     "gemma4_26b_a4b_pp13": 16,
     "kimi27_pp13": 16
   },
