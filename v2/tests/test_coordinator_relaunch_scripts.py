@@ -120,11 +120,24 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
     def test_relaunch_kimi27_profile_selects_kimi_topology_and_lmcache_auto_kv(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
         old_argv = list(sys.argv)
+        old_prefetch = os.environ.get("DS4_API_JIT_KV_PREFETCH_API")
+        old_auto_kv_services = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS")
+        os.environ["DS4_API_JIT_KV_PREFETCH_API"] = "1"
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = "stale-service"
         sys.argv = [str(RELAUNCH_SCRIPT), "--profile", "kimi27"]
         try:
             args = relaunch._parse_args()
+            env = relaunch._coordinator_env(args, ROOT)
         finally:
             sys.argv = old_argv
+            if old_prefetch is None:
+                os.environ.pop("DS4_API_JIT_KV_PREFETCH_API", None)
+            else:
+                os.environ["DS4_API_JIT_KV_PREFETCH_API"] = old_prefetch
+            if old_auto_kv_services is None:
+                os.environ.pop("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS", None)
+            else:
+                os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = old_auto_kv_services
         defaults = relaunch._profile_defaults(args.profile, topology_path=relaunch._resolve_topology_path(args.topology, ROOT))
         limits = json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])
 
@@ -137,6 +150,8 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_API_JIT_KV_PREFETCH_API"], "0")
         self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"], "kimi27_pp13")
         self.assertEqual(limits, {"kimi27_pp13": 16})
+        self.assertEqual(env["DS4_API_JIT_KV_PREFETCH_API"], "0")
+        self.assertEqual(env["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"], "kimi27_pp13")
 
     def test_relaunch_resident256_profile_widens_feed_without_kv_bloat(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
