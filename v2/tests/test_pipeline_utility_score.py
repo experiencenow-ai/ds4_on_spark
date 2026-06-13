@@ -91,6 +91,63 @@ class PipelineUtilityScoreTests(unittest.TestCase):
         self.assertTrue(metric["hard_constraints"]["strict_kv_eviction_required"])
         self.assertEqual({item["service_id"] for item in metric["service_candidates"]}, {"kimi27_pp13", "qwen27_bf16_pp13", "gemma4_26b_a4b_pp13"})
         self.assertEqual(metric["service_candidates"][2]["batch_size"], 32)
+        self.assertEqual(metric["service_candidates"][0]["gpu_memory_utilization"], 0.7)
+        self.assertEqual({item["pipeline_id"] for item in metric["pipeline_candidates"]}, {"centaur_kimi_qwen_gemma_pp13", "centaur_qwen_gemma_fast_pair", "centaur_kimi_smart_lane"})
+
+    def test_optimizer_blocks_over_cap_triad(self) -> None:
+        payload = {
+            "throughput_utility_metric": {
+                "defaults": {"target_batch_per_pipeline_stage": 2.0, "min_input_budget_tokens": 8192, "min_output_budget_tokens": 4096, "min_kv_resident_input_batches": 2.0, "preferred_kv_resident_input_batches": 3.0},
+                "hard_constraints": {"active_gpu_memory_utilization_sum_max": 0.85, "strict_kv_eviction_required": True},
+                "service_candidates": [
+                    {"service_id": "kimi", "pipeline_parallel_size": 13, "gpu_memory_utilization": 0.7, "batch_size": 32, "input_budget_tokens": 8192, "output_budget_tokens": 4096, "assumed_decode_tok_s": 20, "kv_resident_input_batches": 3.0},
+                    {"service_id": "qwen", "pipeline_parallel_size": 13, "gpu_memory_utilization": 0.25, "batch_size": 32, "input_budget_tokens": 8192, "output_budget_tokens": 4096, "assumed_decode_tok_s": 200, "kv_resident_input_batches": 3.0},
+                    {"service_id": "gemma", "pipeline_parallel_size": 13, "gpu_memory_utilization": 0.2, "batch_size": 32, "input_budget_tokens": 8192, "output_budget_tokens": 4096, "assumed_decode_tok_s": 160, "kv_resident_input_batches": 3.0},
+                ],
+                "pipeline_candidates": [
+                    {"pipeline_id": "triad", "service_ids": ["kimi", "qwen", "gemma"]},
+                    {"pipeline_id": "fast_pair", "service_ids": ["qwen", "gemma"]},
+                    {"pipeline_id": "smart_lane", "service_ids": ["kimi"]},
+                ],
+            }
+        }
+
+        result = score.optimize_payload(payload)
+        by_id = {item["pipeline_id"]: item for item in result["candidates"]}
+
+        self.assertFalse(by_id["triad"]["eligible"])
+        self.assertIn("gpu_utilization_sum 1.150 > 0.850", by_id["triad"]["violations"])
+        self.assertTrue(by_id["fast_pair"]["eligible"])
+        self.assertTrue(by_id["smart_lane"]["eligible"])
+        self.assertGreater(by_id["fast_pair"]["score"], by_id["smart_lane"]["score"])
+
+    def test_optimizer_expands_batch_and_kv_candidates(self) -> None:
+        payload = {
+            "throughput_utility_metric": {
+                "defaults": {"target_batch_per_pipeline_stage": 2.0, "min_input_budget_tokens": 8192, "min_output_budget_tokens": 4096, "min_kv_resident_input_batches": 2.0, "preferred_kv_resident_input_batches": 3.0},
+                "hard_constraints": {"active_gpu_memory_utilization_sum_max": 0.85, "strict_kv_eviction_required": True},
+                "service_candidates": [
+                    {
+                        "service_id": "kimi",
+                        "pipeline_parallel_size": 13,
+                        "gpu_memory_utilization": 0.5,
+                        "batch_size_candidates": [16, 32],
+                        "input_budget_tokens": 8192,
+                        "output_budget_tokens": 4096,
+                        "assumed_decode_tok_s": 20,
+                        "kv_resident_input_batches_candidates": [1.5, 2.0, 3.0],
+                    }
+                ],
+            }
+        }
+
+        result = score.optimize_payload(payload)
+        eligible = [item for item in result["candidates"] if item["eligible"]]
+
+        self.assertEqual(result["candidate_count"], 6)
+        self.assertEqual(result["eligible_count"], 4)
+        self.assertEqual(eligible[0]["services"][0]["batch_size"], 32)
+        self.assertEqual(eligible[0]["services"][0]["kv_status"], "target")
 
 
 if __name__ == "__main__":
