@@ -5,6 +5,7 @@ from pathlib import Path
 import unittest
 
 from ds4_transfer.service import TransferRequest, TransferTopology, plan_transfer, run_transfer
+from ds4_transfer.fast_copy import _remote_shell_path
 
 ROOT = Path(__file__).resolve().parents[1]
 TOPOLOGY = ROOT / "profiles" / "transfer" / "spark_200g.json"
@@ -79,6 +80,10 @@ class TransferPlanTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["status"], "planned")
         self.assertEqual(result["plan"]["source_node"], "spark2")
+
+    def test_remote_shell_path_expands_home_on_remote(self) -> None:
+        self.assertEqual(_remote_shell_path("~/src/ds4_on_spark/v2"), '"$HOME"/src/ds4_on_spark/v2')
+        self.assertEqual(_remote_shell_path("/opt/ds4/v2"), "/opt/ds4/v2")
 
 
 if __name__ == "__main__":
