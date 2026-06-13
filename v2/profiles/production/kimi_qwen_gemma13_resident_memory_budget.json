@@ -112,10 +112,10 @@
         "batch_size": 32,
         "input_budget_tokens": 8192,
         "output_budget_tokens": 4096,
-        "assumed_decode_tok_s": 17.209727,
+        "assumed_decode_tok_s": 16.207321,
         "accuracy_weight": 1.0,
         "kv_resident_input_batches": 3.0,
-        "measurement_status": "measured on kimi27-92-batch32-4096-20260613T1334Z: 72/92 accuracy, 119807 completion tokens, 6961.586s, 17.209727 aggregate completion tok/s; first pass before inclusive-refill/chunking deployment"
+        "measurement_status": "measured on kimi27-92-batch32-4096-secondpass-20260613T1540Z: 74/92 accuracy, 124689 completion tokens, 7693.375s, 16.207321 aggregate completion tok/s; COMPSEC 17/17; local prefix-cache replay hit 25568 prompt tokens, external KV transfer 0"
       },
       {
         "service_id": "qwen27_bf16_pp13",
@@ -188,6 +188,37 @@
       "GPQA Diamond": "20/24",
       "GPQA Diamond (modified)": "1/1",
       "SuperGPQA": "20/25"
+    }
+  },
+  "observed_kimi27_92_batch32_4096_secondpass_20260613T1540Z": {
+    "accuracy": 0.804348,
+    "aggregate_completion_tok_s": 16.207321,
+    "answer_marker_false": 2,
+    "batch_id": "kimi27-92-batch32-4096-secondpass-20260613T1540Z",
+    "cache_delta": {
+      "external_prefix_cache_hits": 0,
+      "external_prefix_cache_queries": 729,
+      "local_compute_prompt_tokens": 729,
+      "local_prefix_cache_hit_tokens": 25568,
+      "prompt_tokens_total": 26297
+    },
+    "completion_tokens": 124689,
+    "failed": 18,
+    "first_pass_delta": {
+      "improved_rows": 7,
+      "net_passes": 2,
+      "regressed_rows": 5
+    },
+    "over_4096_completion_tokens": 5,
+    "passed": 74,
+    "request_count": 92,
+    "run_s": 7693.375087,
+    "source_pass_counts": {
+      "AIME2025": "17/25",
+      "COMPSEC": "17/17",
+      "GPQA Diamond": "18/24",
+      "GPQA Diamond (modified)": "1/1",
+      "SuperGPQA": "21/25"
     }
   },
   "kimi_batch32_fit_estimate": {
