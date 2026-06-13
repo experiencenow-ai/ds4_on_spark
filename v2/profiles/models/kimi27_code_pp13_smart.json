@@ -41,7 +41,7 @@
     "requires_profile_pin": false,
     "served_model_name": "kimi27-code-pp13",
     "startup_autoload": false,
-    "tokenizer_path": "/home/spark0/models/hf/moonshotai/Kimi-K2.7-Code-pp13-view"
+    "tokenizer_path": "/home/spark0/models/hf/moonshotai/Kimi-K2.7-Code"
   },
   "runtime_contract_id": "kimi27_code_pp13_v1",
   "supported_job_classes": [
