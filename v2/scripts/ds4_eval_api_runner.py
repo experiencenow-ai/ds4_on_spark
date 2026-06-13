@@ -1314,7 +1314,7 @@ def _build_parser() -> argparse.ArgumentParser:
     r.add_argument("--progress-every-s", type=float, default=10.0)
     r.add_argument("--abort-after-completed", type=int, default=0)
     r.add_argument("--abort-if-accuracy-below", type=float, default=-1.0)
-    r.add_argument("--cancel-on-timeout", dest="cancel_on_timeout", action="store_true", default=True)
+    r.add_argument("--cancel-on-timeout", dest="cancel_on_timeout", action="store_true", default=False)
     r.add_argument("--no-cancel-on-timeout", dest="cancel_on_timeout", action="store_false")
     r.add_argument("--show-deltas", action="store_true")
     _add_cache_metric_args(r)

@@ -1,5 +1,5 @@
 {
-  "description": "Thirteen-Spark resident topology for Kimi K2.7 Code smart-model service plus Qwen27 BF16 and Gemma4 26B-A4B peer services. All three models are layer-pipelined across spark0-sparkc. Kimi2.7 is configured as the smart lane with parser/tool setup, prefix caching, and batch-16 admission while DSAPI token budgets and resource governance keep node load bounded.",
+  "description": "Thirteen-Spark resident topology for Kimi K2.7 Code smart-model service plus Qwen27 BF16 and Gemma4 26B-A4B peer services. All three models are layer-pipelined across spark0-sparkc. Kimi2.7 is configured as the smart lane with parser/tool setup, prefix caching, and batch-32 admission while DSAPI token budgets and resource governance keep node load bounded.",
   "format": "ds4-spark-topology-v1",
   "nodes": [
     {
@@ -330,7 +330,7 @@
           5,
           4
         ],
-        "max_batch_size": 16,
+        "max_batch_size": 32,
         "model_id": "moonshotai/Kimi-K2.7-Code",
         "node_ids": [
           "spark0",
@@ -353,10 +353,10 @@
           "admission_mode": "single_active_batch_per_compute_domain",
           "batch_linger_s": 0.05,
           "max_running_batches_per_compute_domain": 1,
-          "queue_limit": 64,
-          "refill_low_watermark": 12,
-          "vllm_max_num_batched_tokens": 32768,
-          "vllm_max_num_seqs": 16
+          "queue_limit": 128,
+          "refill_low_watermark": 24,
+          "vllm_max_num_batched_tokens": 65536,
+          "vllm_max_num_seqs": 32
         },
         "served_model_name": "kimi27-code-pp13",
         "service_id": "kimi27_pp13",

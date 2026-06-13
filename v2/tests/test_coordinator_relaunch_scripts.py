@@ -145,13 +145,13 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
 
         self.assertEqual(args.topology, str(KIMI27_TOPOLOGY.relative_to(ROOT)))
         self.assertEqual(defaults["DS4_API_RESIDENT_SERVICE_IDS"], "kimi27_pp13")
-        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "64")
-        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "64")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "16")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "16")
+        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "128")
+        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "128")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "32")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "32")
         self.assertEqual(defaults["DS4_API_JIT_KV_PREFETCH_API"], "0")
         self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"], "kimi27_pp13")
-        self.assertEqual(limits, {"kimi27_pp13": 16})
+        self.assertEqual(limits, {"kimi27_pp13": 32})
         self.assertEqual(env["DS4_API_JIT_KV_PREFETCH_API"], "0")
         self.assertEqual(env["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"], "kimi27_pp13")
 
@@ -189,7 +189,7 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(23622320128))
         self.assertEqual(defaults["DS4_API_JIT_KV_PREFETCH_API"], "0")
         self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"], "kimi27_pp13,qwen27_bf16_pp13,gemma4_26b_a4b_pp13")
-        self.assertEqual(limits, {"gemma4_26b_a4b_pp13": 16, "kimi27_pp13": 16, "qwen27_bf16_pp13": 32})
+        self.assertEqual(limits, {"gemma4_26b_a4b_pp13": 16, "kimi27_pp13": 32, "qwen27_bf16_pp13": 32})
         self.assertEqual(env["DS4_API_RESIDENT_SERVICE_IDS"], "kimi27_pp13,qwen27_bf16_pp13,gemma4_26b_a4b_pp13")
         self.assertEqual(env["DS4_API_JIT_KV_PREFETCH_API"], "0")
 
