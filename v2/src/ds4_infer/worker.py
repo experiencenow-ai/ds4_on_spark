@@ -305,7 +305,7 @@ class BatchWorker:
                     if not pending:
                         wait_for_workers = False
                         break
-                if not refill_cancelled and len(pending) < low_watermark:
+                if not refill_cancelled and len(pending) <= low_watermark:
                     fill = max(0, int(concurrency) - len(pending))
                     if fill > 0:
                         more_prefilled, more_claims = self._claim_refill(

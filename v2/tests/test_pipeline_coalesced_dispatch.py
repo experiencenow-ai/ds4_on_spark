@@ -467,7 +467,7 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 batch_linger_s=0.0,
             )
             self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 127}, 0, 192), 0)
-            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 96}, 0, 192), 0)
+            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 96}, 0, 192), 32)
             self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 95}, 0, 192), 33)
             self.assertEqual(api._resident_refill_limit(plan, {}, 0, 192), 128)
 
