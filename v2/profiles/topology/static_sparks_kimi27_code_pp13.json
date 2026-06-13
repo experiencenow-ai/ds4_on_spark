@@ -203,9 +203,9 @@
     },
     "resident_coordinator_defaults": {
       "completion_budget_include_output": false,
-      "completion_chunk_concurrency": 1,
+      "completion_chunk_concurrency": 2,
       "completion_cohort_max": 32,
-      "completion_pp_safe_cohort_max": 32,
+      "completion_pp_safe_cohort_max": 16,
       "completion_token_budget": 65536,
       "dispatch_refill_batch": 128,
       "dispatch_window": 128

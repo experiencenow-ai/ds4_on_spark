@@ -105,7 +105,8 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(coordinator["dispatch_window"], 128)
         self.assertEqual(coordinator["dispatch_refill_batch"], 128)
         self.assertEqual(coordinator["completion_cohort_max"], 64)
-        self.assertEqual(coordinator["completion_pp_safe_cohort_max"], 32)
+        self.assertEqual(coordinator["completion_pp_safe_cohort_max"], 16)
+        self.assertEqual(coordinator["completion_chunk_concurrency"], 2)
         self.assertEqual(coordinator["completion_token_budget"], 65536)
 
     def test_kimi27_pp13_topology_is_dedicated_qualification_service(self) -> None:
@@ -128,6 +129,8 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(kimi.kv_cache["gpu_memory_utilization"], 0.7)
         self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["dispatch_window"], 128)
         self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_cohort_max"], 32)
+        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_pp_safe_cohort_max"], 16)
+        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_chunk_concurrency"], 2)
 
     def test_kimi27_dedicated_readiness_has_gpu_budget(self) -> None:
         topology = SparkTopology.load(KIMI27_TOPOLOGY)
