@@ -240,7 +240,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(rank0["argv"][3], "/home/spark0/src/vllm")
         self.assertEqual(rank0["argv"][8], "/home/spark0/models/hf/moonshotai/Kimi-K2.7-Code")
         self.assertEqual(rank12["argv"][8], "/home/sparkc/models/hf/moonshotai/Kimi-K2.7-Code")
-        self.assertEqual(rank0["argv"][rank0["argv"].index("--max-num-seqs") + 1], "64")
+        self.assertEqual(rank0["argv"][rank0["argv"].index("--max-num-seqs") + 1], "128")
         self.assertIn("--served-model-name", rank0["argv"])
         self.assertEqual(rank0["argv"][rank0["argv"].index("--served-model-name") + 1], "kimi27-code-pp13")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--default-chat-template-kwargs") + 1], "{\"thinking\": true}")
