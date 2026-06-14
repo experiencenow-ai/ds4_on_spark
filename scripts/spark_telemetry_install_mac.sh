@@ -9,16 +9,12 @@ uid="$(id -u)"
 
 mkdir -p "$install_dir" "$launch_agents_dir" /tmp/ds4_telemetry/mac
 
-for name in spark_telemetry_collect.py spark_telemetry_common.py spark_telemetry_dashboard.py; do
+for name in spark_telemetry_collect.py spark_telemetry_common.py spark_telemetry_dashboard.py spark_telemetry_export_layer_partitions.py; do
 	cp "$repo_dir/scripts/$name" "$install_dir/$name"
 	chmod +x "$install_dir/$name"
 done
 
-if [ -r "$install_dir/model_layer_partitions.json" ]; then
-	echo "keeping $install_dir/model_layer_partitions.json"
-else
-	echo '{"model_layer_partitions":{}}' > "$install_dir/model_layer_partitions.json"
-fi
+PYTHONPATH="$repo_dir" python3 "$repo_dir/scripts/spark_telemetry_export_layer_partitions.py" --repo-root "$repo_dir" --out "$install_dir/model_layer_partitions.json"
 
 for plist in com.ds4.spark-telemetry-collector.plist com.ds4.spark-telemetry-dashboard.plist; do
 	cp "$repo_dir/deploy/launchd/$plist" "$launch_agents_dir/$plist"

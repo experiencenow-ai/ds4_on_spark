@@ -179,6 +179,8 @@ def node_state(row: dict[str,Any], error_streak: int = NODE_DOWN_ERROR_THRESHOLD
         return("warn","queued")
     if fnum(row.get("last_vllm_requests_running")) > 0.0 or fnum(row.get("last_vllm_prompt_tokens_per_s")) > 0.0 or fnum(row.get("last_vllm_generation_tokens_per_s")) > 0.0:
         return("busy","busy")
+    if fnum(row.get("last_gpu_util_pct")) >= 20.0:
+        return("busy","gpu")
     return("idle","idle")
 
 
@@ -298,10 +300,14 @@ def load_model_layer_partitions() -> dict[str,list[int]]:
         return(MODEL_LAYER_PARTITIONS)
     installed_path = Path(MODEL_LAYER_PARTITIONS_JSON_OVERRIDE or DEFAULT_MODEL_LAYER_PARTITIONS_JSON).expanduser()
     installed = load_installed_model_layer_partitions(installed_path)
-    if installed:
-        MODEL_LAYER_PARTITIONS = installed
-        return(installed)
     root = repo_root()
+    out = load_repo_model_layer_partitions(root)
+    out.update(installed)
+    MODEL_LAYER_PARTITIONS = out
+    return(out)
+
+
+def load_repo_model_layer_partitions(root: Path) -> dict[str,list[int]]:
     partitions_by_service: dict[str,list[int]] = {}
     budget_path = root / "v2" / "profiles" / "production" / "first3_resident_memory_budget.json"
     try:
@@ -342,7 +348,6 @@ def load_model_layer_partitions() -> dict[str,list[int]]:
             values = [int(item) for item in partition]
             if values:
                 out[model] = values
-    MODEL_LAYER_PARTITIONS = out
     return(out)
 
 
