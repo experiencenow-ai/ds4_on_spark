@@ -352,7 +352,7 @@
         "pipeline_parallel_size": 13,
         "profile_id": "kimi27_code_pp13_smart_v1",
         "scheduler": {
-          "admission_mode": "single_active_batch_per_compute_domain",
+          "admission_mode": "resident_multimodel_rolling_refill",
           "batch_linger_s": 0.05,
           "max_running_batches_per_compute_domain": 1,
           "queue_limit": 256,

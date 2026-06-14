@@ -93,6 +93,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(kimi.model_id, "moonshotai/Kimi-K2.7-Code")
         self.assertEqual(kimi.api_base_url, "http://127.0.0.1:8138")
         self.assertEqual(kimi.service_id, "kimi27_pp13")
+        self.assertEqual(kimi.scheduler["admission_mode"], "resident_multimodel_rolling_refill")
         self.assertEqual(kimi.layer_partition, (4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4))
         self.assertEqual(qwen.layer_partition, (5, 5, 5, 5, 5, 5, 5, 4, 5, 5, 5, 5, 5))
         self.assertEqual(gemma.layer_partition, (2, 2, 3, 3, 2, 3, 2, 2, 2, 2, 3, 2, 2))
