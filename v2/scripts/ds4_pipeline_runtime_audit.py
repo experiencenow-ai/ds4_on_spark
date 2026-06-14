@@ -459,14 +459,22 @@ def _check_spark_update_scripts(errors: list[str], checks: list[str]) -> None:
             errors.append(label)
         else:
             checks.append(label)
+    topology_default = "topology_path=\"${DS4_SPARK_FLEET_TOPOLOGY:-$repo_dir/v2/profiles/transfer/spark_200g.json}\""
     default_nodes = "nodes=(spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7)"
     self_update_call = "self_update_local_checkout \"${nodes[@]}\""
-    if default_nodes not in update_script:
-        errors.append("Spark updater must default no-arg runs to spark0..spark7")
-    elif update_script.find(default_nodes) > update_script.find(self_update_call):
+    if topology_default not in update_script or "load_default_nodes()" not in update_script:
+        errors.append("Spark updater must default no-arg runs from the fleet topology")
+    elif default_nodes in update_script:
+        errors.append("Spark updater must not keep the legacy spark0..spark7 literal default")
+    elif update_script.find("if [ \"${#nodes[@]}\" -eq 0 ]; then") > update_script.find(self_update_call):
         errors.append("Spark updater must set default nodes before self-update expansion")
     else:
-        checks.append("Spark updater no-arg default nodes are set before self-update")
+        checks.append("Spark updater no-arg default nodes come from topology before self-update")
+    print_hosts = (ROOT / "scripts" / "print_spark_hosts.py").read_text(encoding="utf-8")
+    if "spark_200g.json" not in print_hosts or "DEFAULT_NODES" in print_hosts:
+        errors.append("Spark hosts printer must default from the fleet topology")
+    else:
+        checks.append("Spark hosts printer defaults from fleet topology")
     if "--code-only" not in pull_script or "ds4_update_spark_nodes.sh" not in pull_script:
         errors.append("Spark pull wrapper must call ds4_update_spark_nodes.sh --code-only")
     else:
