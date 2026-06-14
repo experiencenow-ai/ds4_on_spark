@@ -70,6 +70,18 @@ class ProfileRegistry:
         self._by_id = {profile.profile_id: profile for profile in profiles}
         if len(self._by_id) != len(profiles):
             raise ValueError("duplicate profile_id in registry")
+        self._by_alias: dict[str, ModelProfile] = {}
+        self._ambiguous_aliases: set[str] = set()
+        for profile in profiles:
+            for alias in _profile_aliases(profile):
+                if alias == profile.profile_id or alias in self._ambiguous_aliases:
+                    continue
+                previous = self._by_alias.get(alias)
+                if previous is None:
+                    self._by_alias[alias] = profile
+                elif previous.profile_id != profile.profile_id:
+                    self._by_alias.pop(alias, None)
+                    self._ambiguous_aliases.add(alias)
 
     @staticmethod
     def load(profiles_dir: str | Path) -> "ProfileRegistry":
@@ -86,6 +98,11 @@ class ProfileRegistry:
         try:
             return self._by_id[profile_id]
         except KeyError as exc:
+            if profile_id in self._ambiguous_aliases:
+                raise ValueError(f"ambiguous model profile alias: {profile_id}") from exc
+            aliased = self._by_alias.get(profile_id)
+            if aliased is not None:
+                return aliased
             raise ValueError(f"unknown model profile: {profile_id}") from exc
 
     def resolve(self, *, capability: str | None, chat: bool, job_class: str, model_pin: dict[str, Any] | None = None) -> ModelProfile:
@@ -123,3 +140,17 @@ def _routing_rank(profile: ModelProfile) -> tuple[int, float, str]:
     rank = int(profile.routing.get("rank", 1000))
     latency = float(profile.performance.get("p95_latency_s", profile.performance.get("latency_rank", 1_000_000.0)))
     return (rank, latency, profile.profile_id)
+
+def _profile_aliases(profile: ModelProfile) -> tuple[str, ...]:
+    aliases: list[str] = []
+    for key in ("pipeline_service_id", "service_id", "served_model_name", "runner_model_id"):
+        value = profile.routing.get(key)
+        if isinstance(value, str) and value:
+            aliases.append(value)
+    pipeline = profile.routing.get("pipeline")
+    if isinstance(pipeline, dict):
+        for key in ("service_id", "served_model_name", "runner_model_id"):
+            value = pipeline.get(key)
+            if isinstance(value, str) and value:
+                aliases.append(value)
+    return tuple(dict.fromkeys(aliases))
