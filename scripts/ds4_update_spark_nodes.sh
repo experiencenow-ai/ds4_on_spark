@@ -10,6 +10,8 @@ usage: scripts/ds4_update_spark_nodes.sh [--code-only] [spark0 spark1 ...]
 Updates reachable Spark nodes to the merged DS4 repo ref. The default mode is
 --code-only: pull origin/main on all reachable Spark checkouts and do not touch
 runtime env, systemd units, or running services.
+When no nodes are provided, the node list comes from
+v2/profiles/transfer/spark_200g.json.
 
 Modes:
   --code-only                  pull Spark checkouts only; no service side effects
@@ -42,6 +44,7 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
 fi
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+topology_path="${DS4_SPARK_FLEET_TOPOLOGY:-$repo_dir/v2/profiles/transfer/spark_200g.json}"
 update_mode="${DS4_UPDATE_MODE:-code-only}"
 nodes=()
 while [ "$#" -gt 0 ]
@@ -83,8 +86,51 @@ do
 	shift
 done
 
+load_default_nodes()
+{
+	python3 - "$topology_path" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as handle:
+    topology = json.load(handle)
+for node in topology.get("nodes", []):
+    node_id = node.get("node_id")
+    if node_id:
+        print(node_id)
+PY
+}
+
+node_ssh_target()
+{
+	local node="$1"
+	python3 - "$topology_path" "$node" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+node_id = sys.argv[2]
+try:
+    with open(path, "r", encoding="utf-8") as handle:
+        topology = json.load(handle)
+except (OSError, ValueError, json.JSONDecodeError):
+    print(node_id)
+    raise SystemExit(0)
+for node in topology.get("nodes", []):
+    if node.get("node_id") == node_id:
+        print(node.get("host") or node_id)
+        raise SystemExit(0)
+print(node_id)
+PY
+}
+
 if [ "${#nodes[@]}" -eq 0 ]; then
-	nodes=(spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7)
+	mapfile -t nodes < <(load_default_nodes)
+	if [ "${#nodes[@]}" -eq 0 ]; then
+		echo "no default Spark nodes found in topology: $topology_path" >&2
+		exit 15
+	fi
 fi
 
 case "$update_mode" in
@@ -171,7 +217,7 @@ ssh_cmd()
 {
 	local host="$1"
 	shift
-	ssh $ssh_opts -o BatchMode=yes -o ConnectTimeout="$connect_timeout" "$host" "$@"
+	ssh $ssh_opts -o BatchMode=yes -o ConnectTimeout="$connect_timeout" "$(node_ssh_target "$host")" "$@"
 }
 
 remote_repo_path()

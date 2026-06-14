@@ -45,6 +45,8 @@ tmp_script="$(mktemp)"
 tmp_unit="$(mktemp)"
 tmp_override="$(mktemp)"
 trap 'rm -f "$tmp_script" "$tmp_unit" "$tmp_override"' EXIT
+override_dir="/etc/systemd/system/ds4-ring-200g.service.d"
+override_file="$override_dir/zz-ds4-ring-control-iface.conf"
 
 cat >"$tmp_script" <<EOF
 #!/bin/sh
@@ -89,8 +91,9 @@ EOF
 
 install -m 0755 "$tmp_script" /usr/local/sbin/ds4-ring-control-iface
 install -m 0644 "$tmp_unit" /etc/systemd/system/ds4-ring-control-iface.service
-install -d -m 0755 /etc/systemd/system/ds4-ring-200g.service.d
-install -m 0644 "$tmp_override" /etc/systemd/system/ds4-ring-200g.service.d/control-iface.conf
+install -d -m 0755 "$override_dir"
+rm -f "$override_dir/control-iface.conf"
+install -m 0644 "$tmp_override" "$override_file"
 systemctl daemon-reload
 systemctl reset-failed ds4-ring-control-iface.service ds4-ring-200g.service 2>/dev/null || true
 systemctl enable ds4-ring-control-iface.service
