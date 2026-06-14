@@ -285,11 +285,15 @@
         "pipeline_parallel_size": 13,
         "profile_id": "gemma4_26b_a4b_it_pp13_peer_v1",
         "scheduler": {
-          "admission_mode": "single_active_batch_per_compute_domain",
+          "admission_mode": "resident_multimodel_rolling_refill",
           "batch_linger_s": 0.05,
+          "dispatch_batch_limit": 16,
           "max_running_batches_per_compute_domain": 1,
+          "queue_depth_target": 64,
           "queue_limit": 64,
-          "refill_low_watermark": 14,
+          "ready_shape_bucketing": true,
+          "ready_shape_lookahead": 4,
+          "refill_low_watermark": 48,
           "vllm_max_num_batched_tokens": 16384,
           "vllm_max_num_seqs": 16
         },
@@ -423,11 +427,15 @@
         "pipeline_parallel_size": 13,
         "profile_id": "qwen3_6_27b_bf16_pp13_efficient_v1",
         "scheduler": {
-          "admission_mode": "single_active_batch_per_compute_domain",
+          "admission_mode": "resident_multimodel_rolling_refill",
           "batch_linger_s": 0.05,
+          "dispatch_batch_limit": 32,
           "max_running_batches_per_compute_domain": 1,
+          "queue_depth_target": 128,
           "queue_limit": 128,
-          "refill_low_watermark": 28,
+          "ready_shape_bucketing": true,
+          "ready_shape_lookahead": 4,
+          "refill_low_watermark": 96,
           "vllm_max_num_batched_tokens": 32768,
           "vllm_max_num_seqs": 32
         },
@@ -443,9 +451,9 @@
       }
     },
     "resident_coordinator_defaults": {
-      "dispatch_window": 560,
-      "dispatch_refill_batch": 560,
-      "dispatch_cohort_workers": 560,
+      "dispatch_window": 704,
+      "dispatch_refill_batch": 704,
+      "dispatch_cohort_workers": 704,
       "completion_cohort_max": 256,
       "completion_token_budget": 131072,
       "completion_budget_include_output": false,
