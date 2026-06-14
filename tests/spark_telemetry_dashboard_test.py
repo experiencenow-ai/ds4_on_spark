@@ -114,6 +114,22 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["nodes"][0]["state_label"], "gpu")
         self.assertEqual(snap["active_nodes"], 1)
 
+    def test_snapshot_counts_queued_but_running_node_as_active(self):
+        payload = {
+            "updated_iso": "2026-05-26T00:00:00+00:00",
+            "updated_unix": 1,
+            "nodes": {
+                "spark0": {"sample_count": 1, "last_gpu_util_pct": 0, "last_vllm_metrics_up": 1, "last_vllm_requests_running": 8, "last_vllm_requests_waiting": 2},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "summary.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            snap = dashboard.build_snapshot(str(path))
+        self.assertEqual(snap["nodes"][0]["state"], "warn")
+        self.assertEqual(snap["nodes"][0]["state_label"], "queued")
+        self.assertEqual(snap["active_nodes"], 1)
+
     def test_snapshot_preserves_all_thirteen_spark_labels(self):
         labels = ["spark0","spark1","spark2","spark3","spark4","spark5","spark6","spark7","spark8","spark9","sparka","sparkb","sparkc"]
         payload = {

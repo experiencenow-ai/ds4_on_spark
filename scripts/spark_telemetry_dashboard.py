@@ -241,6 +241,17 @@ def normalize_node(node: str, row: dict[str,Any], error_streak: int = NODE_DOWN_
     })
 
 
+def node_is_active(node: dict[str,Any]) -> bool:
+    if node["state"] in ("busy","hot"):
+        return(True)
+    return(
+        fnum(node.get("vllm_running")) > 0.0
+        or fnum(node.get("input_tok_s")) > 0.0
+        or fnum(node.get("output_tok_s")) > 0.0
+        or fnum(node.get("gpu_pct")) >= 20.0
+    )
+
+
 def node_metric_map(raw: Any) -> dict[str,float]:
     out: dict[str,float] = {}
     for item in str(raw or "").split(";"):
@@ -524,7 +535,7 @@ def build_snapshot(summary_path: str, summary_stale_s: float = 0.0) -> dict[str,
         "gpu_known": len(gpu_nodes) > 0,
         "avg_gpu_pct": avg_gpu_pct,
         "busy_gpu_nodes": sum(1 for node in reachable if node["gpu_pct"] >= 90.0),
-        "active_nodes": sum(1 for node in reachable if node["state"] in ("busy","hot")),
+        "active_nodes": sum(1 for node in reachable if node_is_active(node)),
         "hot_nodes": sum(1 for node in reachable if node["state"] == "hot"),
         "vllm_running": running,
         "vllm_waiting": waiting,
