@@ -23,7 +23,7 @@
     "ds4_eval_status": "Full 92-question direct vLLM run scored 64/92 overall with thinking disabled: COMPSEC 16/17, GPQA Diamond 20/25, SuperGPQA 19/25, AIME2025 9/25."
   },
   "routing": {
-    "chat_cohort_transport": "parallel_chat_completions",
+    "chat_cohort_transport": "parallel_completion_prompts",
     "chat_template_renderer": "kimi_k2",
     "chat_template_thinking_key": "thinking",
     "default_for": [],

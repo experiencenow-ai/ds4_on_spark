@@ -204,6 +204,56 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         self.assertEqual(rendered, "rendered")
         self.assertEqual(calls[0][2]["chat_template_kwargs"], {"enable_thinking": False})
 
+    def test_render_prompt_closes_dangling_think_when_disabled(self) -> None:
+        original_post_json = self.runner._post_json
+
+        def fake_post_json(base_url, path, payload):
+            if path == "/v1/chat/completions/render":
+                return {"token_ids": [1, 2, 3]}
+            if path == "/detokenize":
+                return {"prompt": "<|im_assistant|>assistant<|im_middle|><think>"}
+            raise AssertionError(path)
+
+        self.runner._post_json = fake_post_json
+        try:
+            rendered = self.runner.render_prompt(
+                "http://vllm",
+                "kimi",
+                "question",
+                64,
+                enable_thinking=False,
+                thinking_key="thinking",
+            )
+        finally:
+            self.runner._post_json = original_post_json
+
+        self.assertEqual(rendered, "<|im_assistant|>assistant<|im_middle|><think></think>")
+
+    def test_render_prompt_keeps_open_think_when_enabled(self) -> None:
+        original_post_json = self.runner._post_json
+
+        def fake_post_json(base_url, path, payload):
+            if path == "/v1/chat/completions/render":
+                return {"token_ids": [1, 2, 3]}
+            if path == "/detokenize":
+                return {"prompt": "<|im_assistant|>assistant<|im_middle|><think>"}
+            raise AssertionError(path)
+
+        self.runner._post_json = fake_post_json
+        try:
+            rendered = self.runner.render_prompt(
+                "http://vllm",
+                "kimi",
+                "question",
+                64,
+                enable_thinking=True,
+                thinking_key="thinking",
+            )
+        finally:
+            self.runner._post_json = original_post_json
+
+        self.assertEqual(rendered, "<|im_assistant|>assistant<|im_middle|><think>")
+
     def test_default_eval_prompt_keeps_official_contract(self) -> None:
         prompt = self.runner.build_question_prompt(
             {"question": "Pick one.", "choices": ["alpha", "beta"], "source": "X"}

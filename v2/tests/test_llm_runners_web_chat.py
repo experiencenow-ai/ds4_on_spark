@@ -500,6 +500,21 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertTrue(result["r"]["transport"]["coalesced_chat_parallel_completion"])
         self.assertTrue(result["r2"]["transport"]["chat_as_completion_prompts"])
 
+    def test_kimi_profiles_use_rendered_completion_prompt_transport(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        for profile_id in ("kimi26_pp13_smart_v1", "kimi27_code_pp13_smart_v1"):
+            profile = registry.get(profile_id)
+            self.assertEqual(profile.routing.get("chat_cohort_transport"), "parallel_completion_prompts")
+            raw = make_request(chat=True).raw
+            raw["input"]["rendered_prompt"] = "<|im_assistant|>assistant<|im_middle|><think></think>"
+            runner = CapturingRunner()
+
+            result = runner.run_one(InferenceRequest.from_json(raw), profile)
+
+            self.assertEqual(runner.calls[0][0], "/v1/completions")
+            self.assertEqual(runner.calls[0][1]["prompt"], "<|im_assistant|>assistant<|im_middle|><think></think>")
+            self.assertTrue(result["transport"]["chat_as_completion_prompts"])
+
     def test_dsv4_profile_uses_native_chat_even_when_rendered_prompt_is_present(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
