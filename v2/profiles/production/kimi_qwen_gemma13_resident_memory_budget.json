@@ -69,13 +69,13 @@
   "resident_batch_token_budget": {
     "qwen27_bf16_pp13": 32768,
     "gemma4_26b_a4b_pp13": 16384,
-    "notes": "Kimi2.7 moves to batch 32 with a 65536-token service gate after the first DSAPI 92-question run showed 56/69 completed rows, near-1% live KV use at batch 16, and long-tail stalls. Qwen uses its live max_num_seqs=32 service cap and Gemma stays at batch 16 until a separate relaunch gate.",
-    "kimi27_pp13": 65536
+    "notes": "Kimi2.7 moves to DSAPI admission 128 with a 131072-token service gate after pulled-main probes showed 128x512x128 reached 143.5 tok/s, vLLM admitted 128 running with low KV use, and no resource-governor throttle. Qwen uses its live max_num_seqs=32 service cap and Gemma stays at batch 16 until a separate relaunch gate.",
+    "kimi27_pp13": 131072
   },
   "resident_batch_size": {
     "qwen27_bf16_pp13": 32,
     "gemma4_26b_a4b_pp13": 16,
-    "kimi27_pp13": 32
+    "kimi27_pp13": 128
   },
   "throughput_utility_metric": {
     "format": "ds4-centaur-throughput-utility-v1",
@@ -109,7 +109,7 @@
         "lane_weight": 1.35,
         "pipeline_parallel_size": 13,
         "gpu_memory_utilization": 0.7,
-        "batch_size": 32,
+        "batch_size": 128,
         "input_budget_tokens": 8192,
         "output_budget_tokens": 4096,
         "assumed_decode_tok_s": 16.207321,

@@ -23,6 +23,8 @@ QWEN_BF16KV_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_bf
 GEMMA26_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_26b_a4b_it_pp8_lmcache_hma.json"
 KIMI_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "kimi26_pp13_lmcache_hma.json"
 KIMI27_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "kimi27_code_pp13_lmcache_hma.json"
+QWEN_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp13_lmcache_hma.json"
+GEMMA26_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_26b_a4b_it_pp13_lmcache_hma.json"
 QWEN_PP12_PLAIN_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp12_plain.json"
 GEMMA26_PP12_PLAIN_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_26b_a4b_it_pp12_plain.json"
 DSV4_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "dsv4_flash_pp8_simple_offload.json"
@@ -248,6 +250,14 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(rank0["lmcache_config"]["data"]["local_disk"], "/home/spark0/ds4_nvme/ds4_lmcache/kimi27_code_pp13_fp8kv/p4_4_4_5_5_5_5_5_5_5_5_5_4")
         self.assertEqual(rank12["lmcache_config"]["data"]["local_disk"], "/home/sparkc/ds4_nvme/ds4_lmcache/kimi27_code_pp13_fp8kv/p4_4_4_5_5_5_5_5_5_5_5_5_4")
         self.assertIn("--headless", rank12["argv"])
+
+    def test_pp13_lmcache_services_enable_private_cache_admin(self) -> None:
+        deployments = (KIMI27_PP13_DEPLOYMENT, QWEN_PP13_DEPLOYMENT, GEMMA26_PP13_DEPLOYMENT)
+        for path in deployments:
+            with self.subTest(deployment=path.name):
+                plan = plan_deployment(KvCacheDeployment.load(path))
+                for node in plan["vllm_nodes"]:
+                    self.assertEqual(node["env"]["VLLM_DS4_ENABLE_CACHE_ADMIN"], "1")
 
     def test_write_qwen_bf16_pp8_scripts_materialize_lmcache_config(self) -> None:
         deployment = KvCacheDeployment.load(QWEN_PP_DEPLOYMENT)
