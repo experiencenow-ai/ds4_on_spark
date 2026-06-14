@@ -48,6 +48,19 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
             if service_kv.get("cache_root"):
                 self.assertEqual(deployment["cache_directories"][0], service_kv["cache_root"])
 
+    def test_catalog_accepts_relative_profile_paths_from_v2_cwd(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(ROOT)
+            entries = lifecycle._load_entries("profiles/topology/static_sparks.json", "profiles/models")
+        finally:
+            os.chdir(old_cwd)
+
+        self.assertEqual({entry["service_id"] for entry in entries}, set(TOPOLOGY["routing_policy"]["pipeline_services"]))
+        for entry in entries:
+            self.assertTrue((ROOT / str(entry["profile_path"])).exists(), entry["service_id"])
+
     def test_pp12_deployment_batch_caps_match_topology(self) -> None:
         lifecycle = load_script(SCRIPT)
         entries = lifecycle._load_entries(str(ROOT / "profiles" / "topology" / "static_sparks_qwen_gemma_pp12.json"), str(ROOT / "profiles" / "models"))
