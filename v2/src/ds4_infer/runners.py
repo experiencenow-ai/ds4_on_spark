@@ -16,6 +16,7 @@ from urllib import error, request as urlrequest
 from .builders import model_batch_payload, request_messages, request_prompt
 from .chat_streaming import run_parallel_chat_stream
 from .cohort_safety import coalesced_completion_token_budget, coalesced_failure_should_bisect, mark_coalesced_split, prompt_token_estimate
+from .coalesced_groups import plan_compatible_payload_groups
 from .jit_kv import build_prefetch_payload, disable_strict_kv, run_prefetch
 from .kv_cache import kv_cache_extra_body, kv_cache_vllm_request_fields
 from .profiles import ModelProfile
@@ -656,13 +657,15 @@ class OpenAICompatibleRunner:
             return None
         max_cohort = _completion_effective_max_cohort(profile)
         token_budget = coalesced_completion_token_budget()
-        payloads: list[tuple[list[InferenceRequest], dict[str, Any]]] = []
-        chunks = _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget)
-        for chunk in chunks:
-            payload = _coalesced_completion_payload(chunk, profile, self.default_extra_body)
-            if payload is None:
-                return None
-            payloads.append((chunk, payload))
+        planned = plan_compatible_payload_groups(
+            request_list,
+            payload_for_chunk=lambda chunk: _coalesced_completion_payload(chunk, profile, self.default_extra_body),
+            chunk_items=lambda group: _completion_cohort_chunks(group, max_cohort=max_cohort, token_budget=token_budget),
+            minimum=minimum,
+        )
+        if planned is None:
+            return None
+        chunks, payloads = planned
         out: dict[str, dict] = {}
         concurrency = _completion_chunk_concurrency(profile)
         if concurrency > 1 and len(payloads) > 1:
@@ -723,14 +726,17 @@ class OpenAICompatibleRunner:
             return None
         max_cohort = _completion_effective_max_cohort(profile)
         token_budget = coalesced_completion_token_budget()
-        chunks = _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget)
-        payloads: list[tuple[list[InferenceRequest], dict[str, Any]]] = []
-        for chunk in chunks:
-            payload = _coalesced_completion_payload(chunk, profile, self.default_extra_body)
-            if payload is None:
-                return None
+        planned = plan_compatible_payload_groups(
+            request_list,
+            payload_for_chunk=lambda chunk: _coalesced_completion_payload(chunk, profile, self.default_extra_body),
+            chunk_items=lambda group: _completion_cohort_chunks(group, max_cohort=max_cohort, token_budget=token_budget),
+            minimum=minimum,
+        )
+        if planned is None:
+            return None
+        chunks, payloads = planned
+        for _, payload in payloads:
             payload["stream"] = True
-            payloads.append((chunk, payload))
         out: dict[str, dict] = {}
         concurrency = _completion_chunk_concurrency(profile)
         if concurrency > 1 and len(payloads) > 1:
@@ -1152,6 +1158,7 @@ def _coalesced_completion_payload(requests: list[InferenceRequest], profile: Mod
     if auto_kv_suppressed:
         payload[AUTO_KV_BATCH_SUPPRESSED_KEY] = True
     return payload
+
 
 def _coalesced_chat_payload(requests: list[InferenceRequest], profile: ModelProfile, default_extra_body: dict[str, Any]) -> dict[str, Any] | None:
     conversations: list[list[dict[str, str]]] = []
