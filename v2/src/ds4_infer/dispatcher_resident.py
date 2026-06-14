@@ -51,10 +51,7 @@ class PendingDispatcherCohort:
 
     def active_count(self) -> int:
         with self.lock:
-            active = len(self.unfinished_request_ids)
-            if self.admission_mode == "rolling_refill" and self.initial_count > 0:
-                return max(active, self.initial_count)
-            return active
+            return len(self.unfinished_request_ids)
 
     def active_claims(self) -> list[QueueClaim]:
         with self.lock:
@@ -65,7 +62,6 @@ class PendingDispatcherCohort:
         now = time.time()
         with self.lock:
             unfinished = len(self.unfinished_request_ids)
-            active = max(unfinished, self.initial_count) if self.admission_mode == "rolling_refill" and self.initial_count > 0 else unfinished
             finished = int(self.finished_count)
             last_finished = self.last_finished_at
         return {
@@ -76,7 +72,7 @@ class PendingDispatcherCohort:
             "initial_count": self.initial_count,
             "claimed_count": self.claimed_count,
             "initial_unfinished_count": unfinished,
-            "active_count": active,
+            "active_count": unfinished,
             "finished_count": finished,
             "age_s": round(max(0.0, now - float(self.submitted_at)), 3),
             "last_finished_age_s": None if last_finished is None else round(max(0.0, now - float(last_finished)), 3),
