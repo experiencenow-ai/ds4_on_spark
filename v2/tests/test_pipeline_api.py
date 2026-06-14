@@ -96,6 +96,14 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(assignment.service_id, "gemma4_12b_pp8")
         self.assertEqual(_openai_payload(request, profile)["model"], "gemma-4-12b-it-pp8")
 
+    def test_model_pins_accept_resident_service_aliases(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        self.assertEqual(registry.get("kimi27_pp13").profile_id, "kimi27_code_pp13_smart_v1")
+        self.assertEqual(registry.get("qwen27_bf16_pp13").profile_id, "qwen3_6_27b_bf16_pp13_efficient_v1")
+        self.assertEqual(registry.get("gemma4_26b_a4b_pp13").profile_id, "gemma4_26b_a4b_it_pp13_peer_v1")
+        profile = registry.resolve(capability=None, chat=True, job_class="analysis", model_pin={"profile_id": "kimi27_pp13"})
+        self.assertEqual(profile.profile_id, "kimi27_code_pp13_smart_v1")
+
     def test_pipeline_openai_payload_uses_shared_thinking_fields(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
