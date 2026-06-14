@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from .dispatcher_resident import active_resident_service_ids, service_target_active
+from .dispatcher_resident import active_resident_service_ids, resident_service_plans, service_target_active
 from .env_utils import env_bool as _env_bool, env_int as _env_int
 from .topology import SparkTopology
 
@@ -38,8 +38,19 @@ def deployment_readiness(
     strict = _env_bool("DS4_API_DEPLOYMENT_STRICT", False)
     active_ids = active_resident_service_ids(topology)
     services = _active_services(topology, active_ids)
-    targets = {service.service_id: service_target_active(service) for service in services}
-    queue_depth_targets = {service.service_id: _service_queue_depth_target(service) for service in services}
+    service_plans = _readiness_service_plans(topology)
+    targets = {
+        service.service_id: int(service_plans[service.service_id].target_active)
+        if service.service_id in service_plans
+        else service_target_active(service)
+        for service in services
+    }
+    queue_depth_targets = {
+        service.service_id: int(service_plans[service.service_id].queue_depth_target)
+        if service.service_id in service_plans
+        else _service_queue_depth_target(service)
+        for service in services
+    }
     largest = max(targets.values(), default=0)
     target_sum = sum(targets.values())
     largest_queue_depth = max(queue_depth_targets.values(), default=0)
@@ -287,15 +298,26 @@ def _readiness_payload(
 
 
 def default_dispatch_window(topology: SparkTopology) -> int:
-    services = _active_services(topology, active_resident_service_ids(topology))
-    values = [_service_queue_depth_target(service) for service in services]
+    plans = _readiness_service_plans(topology)
+    values = [int(plan.queue_depth_target) for plan in plans.values()]
+    if not values:
+        services = _active_services(topology, active_resident_service_ids(topology))
+        values = [_service_queue_depth_target(service) for service in services]
     return max(64, sum(values) if values else 0)
 
 
 def default_cohort_workers(topology: SparkTopology) -> int:
-    services = _active_services(topology, active_resident_service_ids(topology))
-    values = [_service_queue_depth_target(service) for service in services]
+    plans = _readiness_service_plans(topology)
+    values = [int(plan.queue_depth_target) for plan in plans.values()]
+    if not values:
+        services = _active_services(topology, active_resident_service_ids(topology))
+        values = [_service_queue_depth_target(service) for service in services]
     return max(4, sum(values) if values else 0)
+
+
+def _readiness_service_plans(topology: SparkTopology) -> dict[str, Any]:
+    entry_node_id = str(topology.routing_policy.get("queue_entry_node_id") or "spark0")
+    return resident_service_plans(topology, entry_node_id=entry_node_id, default_batch_linger_s=0.0)
 
 
 def _active_services(topology: SparkTopology, active_ids: set[str] | None) -> list[Any]:

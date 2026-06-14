@@ -66,6 +66,13 @@ def make_request(request_id: str, *, capability: str, job_class: str, chat: bool
     return InferenceRequest.from_json(payload)
 
 
+def _restore_env(name: str, value: str | None) -> None:
+    if value is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = value
+
+
 class StaticSparkTopologyTests(unittest.TestCase):
     def test_kimi_qwen_gemma_pp13_topology_uses_all_thirteen_sparks(self) -> None:
         topology = SparkTopology.load(KIMI_TOPOLOGY)
@@ -223,6 +230,46 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertTrue(checks["first3_gpu_budget_under_hard_cap"]["ok"])
         self.assertEqual(checks["first3_gpu_budget_under_hard_cap"]["details"]["sum"], 0)
         self.assertEqual(checks["first3_gpu_budget_under_hard_cap"]["details"]["percentage_budget_services"], [])
+
+    def test_kimi_qwen_readiness_honors_resident_target_overrides(self) -> None:
+        topology = SparkTopology.load(KIMI_TOPOLOGY)
+        old_active = os.environ.get("DS4_API_RESIDENT_SERVICE_IDS")
+        old_targets = os.environ.get("DS4_API_SERVICE_TARGETS_JSON")
+        old_queue_targets = os.environ.get("DS4_API_SERVICE_QUEUE_DEPTH_TARGETS_JSON")
+        old_lows = os.environ.get("DS4_API_SERVICE_LOW_WATERMARKS_JSON")
+        old_cohorts = os.environ.get("DS4_API_SERVICE_MAX_COHORTS_JSON")
+        old_auto = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE")
+        old_auto_services = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS")
+        os.environ["DS4_API_RESIDENT_SERVICE_IDS"] = "kimi27_pp13,qwen27_bf16_pp13"
+        os.environ["DS4_API_SERVICE_TARGETS_JSON"] = '{"kimi27_pp13":96,"qwen27_bf16_pp13":32}'
+        os.environ["DS4_API_SERVICE_QUEUE_DEPTH_TARGETS_JSON"] = '{"kimi27_pp13":96,"qwen27_bf16_pp13":32}'
+        os.environ["DS4_API_SERVICE_LOW_WATERMARKS_JSON"] = '{"kimi27_pp13":84,"qwen27_bf16_pp13":28}'
+        os.environ["DS4_API_SERVICE_MAX_COHORTS_JSON"] = '{"kimi27_pp13":96,"qwen27_bf16_pp13":32}'
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = "1"
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = "kimi27_pp13,qwen27_bf16_pp13"
+        try:
+            payload = deployment_readiness(
+                topology=topology,
+                dispatcher_window=256,
+                dispatcher_refill_batch=256,
+                dispatcher_cohort_workers=128,
+                resident_multimodel=True,
+            )
+        finally:
+            _restore_env("DS4_API_RESIDENT_SERVICE_IDS", old_active)
+            _restore_env("DS4_API_SERVICE_TARGETS_JSON", old_targets)
+            _restore_env("DS4_API_SERVICE_QUEUE_DEPTH_TARGETS_JSON", old_queue_targets)
+            _restore_env("DS4_API_SERVICE_LOW_WATERMARKS_JSON", old_lows)
+            _restore_env("DS4_API_SERVICE_MAX_COHORTS_JSON", old_cohorts)
+            _restore_env("DS4_PIPELINE_AUTO_KV_CACHE", old_auto)
+            _restore_env("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS", old_auto_services)
+        self.assertTrue(payload["ready"])
+        self.assertEqual(payload["resident_service_targets"], {"kimi27_pp13": 96, "qwen27_bf16_pp13": 32})
+        self.assertEqual(payload["resident_service_queue_depth_targets"], {"kimi27_pp13": 96, "qwen27_bf16_pp13": 32})
+        self.assertEqual(payload["largest_target_active"], 96)
+        self.assertEqual(payload["target_active_sum"], 128)
+        self.assertEqual(payload["largest_queue_depth_target"], 96)
+        self.assertEqual(payload["queue_depth_target_sum"], 128)
 
     def test_qwen_gemma_pp12_topology_leaves_sparkc_for_qualification(self) -> None:
         topology = SparkTopology.load(QWEN_GEMMA_PP12_TOPOLOGY)
