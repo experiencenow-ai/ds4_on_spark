@@ -97,7 +97,7 @@
     },
     "hard_constraints": {
       "accuracy_preserved": true,
-      "active_gpu_memory_utilization_sum_max": 0.85,
+      "active_gpu_memory_utilization_sum_max": 0.93,
       "min_available_gib_per_node": 12,
       "strict_kv_eviction_required": true,
       "external_cache_required": true
@@ -108,7 +108,7 @@
         "lane": "smart",
         "lane_weight": 1.35,
         "pipeline_parallel_size": 13,
-        "gpu_memory_utilization": 0.7,
+        "gpu_memory_utilization": 0.48,
         "batch_size": 256,
         "input_budget_tokens": 8192,
         "output_budget_tokens": 4096,

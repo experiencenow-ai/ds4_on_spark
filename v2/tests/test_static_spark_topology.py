@@ -111,7 +111,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         for service in (kimi, qwen, gemma):
             self.assertTrue(service.scheduler["ready_shape_bucketing"])
             self.assertEqual(service.scheduler["ready_shape_lookahead"], 4)
-        self.assertEqual(kimi.kv_cache["gpu_memory_utilization"], 0.7)
+        self.assertEqual(kimi.kv_cache["gpu_memory_utilization"], 0.48)
         self.assertEqual(qwen.kv_cache["gpu_memory_utilization"], 0.25)
         self.assertEqual(gemma.kv_cache["gpu_memory_utilization"], 0.2)
         for service in (kimi, qwen, gemma):
@@ -235,10 +235,10 @@ class StaticSparkTopologyTests(unittest.TestCase):
                 os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = old_services
         self.assertTrue(payload["ready"])
         self.assertEqual(payload["active_resident_service_ids"], ["kimi27_pp13", "qwen27_bf16_pp13"])
-        self.assertEqual(payload["resident_gpu_memory_utilization"], {"kimi27_pp13": 0.7, "qwen27_bf16_pp13": 0.25})
+        self.assertEqual(payload["resident_gpu_memory_utilization"], {"kimi27_pp13": 0.48, "qwen27_bf16_pp13": 0.25})
         self.assertEqual(payload["resident_service_targets"], {"kimi27_pp13": 256, "qwen27_bf16_pp13": 32})
         self.assertEqual(payload["resident_service_queue_depth_targets"], {"kimi27_pp13": 512, "qwen27_bf16_pp13": 128})
-        self.assertAlmostEqual(payload["resident_gpu_memory_utilization_sum"], 0.95)
+        self.assertAlmostEqual(payload["resident_gpu_memory_utilization_sum"], 0.73)
         self.assertEqual(payload["resident_fixed_kv_cache_memory_bytes"], {"kimi27_pp13": 8589934592, "qwen27_bf16_pp13": 8589934592})
         self.assertEqual(payload["resident_fixed_kv_cache_memory_bytes_sum"], 17179869184)
         kimi = topology.pipeline_service_by_id("kimi27_pp13")
