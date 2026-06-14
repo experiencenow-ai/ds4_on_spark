@@ -130,6 +130,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(coordinator["completion_pp_safe_cohort_max"], 256)
         self.assertEqual(coordinator["completion_chunk_concurrency"], 4)
         self.assertEqual(coordinator["completion_token_budget"], 131072)
+        self.assertEqual(coordinator["auto_kv_batch_policy"], "strict_cache")
 
     def test_kimi27_pp13_topology_is_dedicated_qualification_service(self) -> None:
         topology = SparkTopology.load(KIMI27_TOPOLOGY)

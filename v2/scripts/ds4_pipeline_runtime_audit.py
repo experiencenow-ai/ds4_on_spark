@@ -397,7 +397,10 @@ def _check_relaunch_defaults(profile: dict[str, Any], errors: list[str], checks:
         "DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX": "completion_pp_safe_cohort_max",
         "DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY": "completion_chunk_concurrency",
         "DS4_API_DISPATCH_KV_CAPACITY_BYTES": "dispatch_kv_capacity_bytes",
+        "DS4_PIPELINE_AUTO_KV_BATCH_POLICY": "auto_kv_batch_policy",
     }.items():
+        if profile_key not in coordinator:
+            continue
         expected = _bool_env_value(coordinator.get(profile_key)) if key == "DS4_PIPELINE_COMPLETION_COHORT_BUDGET_INCLUDE_OUTPUT" else str(coordinator[profile_key])
         _require_equal(defaults.get(key), expected, f"coordinator {profile['coordinator_profile']} {key}", errors, checks)
     batch_limits = json.loads(defaults.get("DS4_API_BATCH_LIMITS_JSON", "{}"))

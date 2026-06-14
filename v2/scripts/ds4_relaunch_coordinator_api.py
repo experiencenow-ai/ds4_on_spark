@@ -302,6 +302,7 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str, *, topology_pa
         "DS4_API_BATCH_LIMITS_JSON": json.dumps(batch_limits, separators=(",", ":")),
         "DS4_PIPELINE_AUTO_KV_CACHE": "1" if auto_kv_enabled else "0",
         "DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS": ",".join(topology_services) if topology_services else "qwen27_bf16_pp8,gemma4_26b_a4b_pp8,dsv4_flash_pp8",
+        "DS4_PIPELINE_AUTO_KV_BATCH_POLICY": str(coordinator.get("auto_kv_batch_policy") or "prefer_batch"),
     }
 
 

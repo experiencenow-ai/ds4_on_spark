@@ -157,10 +157,12 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_API_JIT_KV_PREFETCH_API"], "0")
         self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE"], "1")
         self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"], "kimi27_pp13")
+        self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_BATCH_POLICY"], "prefer_batch")
         self.assertEqual(limits, {"kimi27_pp13": 256})
         self.assertEqual(env["DS4_API_JIT_KV_PREFETCH_API"], "0")
         self.assertEqual(env["DS4_PIPELINE_AUTO_KV_CACHE"], "1")
         self.assertEqual(env["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"], "kimi27_pp13")
+        self.assertEqual(env["DS4_PIPELINE_AUTO_KV_BATCH_POLICY"], "prefer_batch")
 
     def test_relaunch_centaur_profile_selects_kimi_qwen_gemma_topology(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
@@ -199,10 +201,12 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_API_JIT_KV_PREFETCH_API"], "0")
         self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE"], "1")
         self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"], "kimi27_pp13,qwen27_bf16_pp13,gemma4_26b_a4b_pp13")
+        self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_BATCH_POLICY"], "strict_cache")
         self.assertEqual(limits, {"gemma4_26b_a4b_pp13": 16, "kimi27_pp13": 256, "qwen27_bf16_pp13": 32})
         self.assertEqual(env["DS4_API_RESIDENT_SERVICE_IDS"], "kimi27_pp13,qwen27_bf16_pp13,gemma4_26b_a4b_pp13")
         self.assertEqual(env["DS4_API_JIT_KV_PREFETCH_API"], "0")
         self.assertEqual(env["DS4_PIPELINE_AUTO_KV_CACHE"], "1")
+        self.assertEqual(env["DS4_PIPELINE_AUTO_KV_BATCH_POLICY"], "strict_cache")
 
     def test_relaunch_resident256_profile_widens_feed_without_kv_bloat(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
