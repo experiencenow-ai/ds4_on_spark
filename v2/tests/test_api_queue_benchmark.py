@@ -374,6 +374,81 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
 
         self.assertEqual(summary["output_tokens_target"], 16)
 
+    def test_parse_vllm_metrics_keeps_cache_token_sources(self) -> None:
+        metrics = bench._parse_vllm_prometheus_metrics(
+            "\n".join(
+                [
+                    '# HELP vllm:prompt_tokens_by_source_total Prompt tokens by source.',
+                    'vllm:prompt_tokens_by_source_total{engine="0",model_name="kimi",source="local_compute"} 512.0',
+                    'vllm:prompt_tokens_by_source_total{engine="0",model_name="kimi",source="local_cache_hit"} 128.0',
+                    'vllm:prompt_tokens_by_source_total{engine="0",model_name="kimi",source="external_kv_transfer"} 256.0',
+                    'vllm:prompt_tokens_cached_total{engine="0",model_name="kimi"} 384.0',
+                    'vllm:generation_tokens_total{engine="0",model_name="kimi"} 1024.0',
+                    'vllm:num_requests_running{engine="0",model_name="kimi"} 2.0',
+                    'vllm:kv_cache_usage_perc{engine="0",model_name="kimi"} 0.25',
+                ]
+            )
+        )
+
+        self.assertEqual(metrics["prompt_tokens_by_source_total"]["local_compute"], 512.0)
+        self.assertEqual(metrics["prompt_tokens_by_source_total"]["local_cache_hit"], 128.0)
+        self.assertEqual(metrics["prompt_tokens_by_source_total"]["external_kv_transfer"], 256.0)
+        self.assertEqual(metrics["counters"]["prompt_tokens_cached_total"], 384.0)
+        self.assertEqual(metrics["counters"]["generation_tokens_total"], 1024.0)
+        self.assertEqual(metrics["gauges"]["num_requests_running"], 2.0)
+        self.assertEqual(metrics["gauges"]["kv_cache_usage_perc"], 0.25)
+
+    def test_vllm_metrics_delta_summary_exposes_external_kv_hits(self) -> None:
+        before = {
+            "format": "vllm-prometheus-snapshot-v1",
+            "prompt_tokens_by_source_total": {"local_compute": 100.0, "external_kv_transfer": 0.0},
+            "counters": {"prompt_tokens_cached_total": 10.0, "generation_tokens_total": 20.0},
+            "gauges": {},
+        }
+        after = {
+            "format": "vllm-prometheus-snapshot-v1",
+            "prompt_tokens_by_source_total": {"local_compute": 100.0, "local_cache_hit": 128.0, "external_kv_transfer": 512.0},
+            "counters": {"prompt_tokens_cached_total": 650.0, "generation_tokens_total": 276.0},
+            "gauges": {},
+        }
+
+        summary = bench._vllm_metrics_delta_summary(before, after)
+
+        self.assertEqual(summary["delta"]["prompt_tokens_by_source_total"]["external_kv_transfer"], 512.0)
+        self.assertEqual(summary["derived"]["prompt_token_source_total_delta"], 640.0)
+        self.assertEqual(summary["derived"]["cache_hit_token_delta"], 640.0)
+        self.assertEqual(summary["derived"]["cache_hit_token_ratio"], 1.0)
+        self.assertEqual(summary["derived"]["generation_token_delta"], 256.0)
+
+    def test_benchmark_summary_embeds_vllm_metric_deltas(self) -> None:
+        args = argparse.Namespace(
+            base_url="http://127.0.0.1:8700",
+            model="dsv4",
+            concurrency=2,
+            limit=2,
+            input_tokens=128,
+            output_tokens=256,
+            drive_worker=False,
+            requests_jsonl=None,
+            preserve_request_ids=False,
+            ignore_eos=True,
+            cancel_on_timeout=True,
+            pipeline_stages=8,
+            equivalent_sparks=2,
+            reference_tok_s=144.6,
+            vllm_metrics_url="http://127.0.0.1:8138/metrics",
+        )
+        requests_payload = [{"request_id": "req-a", "max_output_tokens": 16}, {"request_id": "req-b", "max_output_tokens": 16}]
+        collected = {"results": []}
+        before = {"prompt_tokens_by_source_total": {"local_compute": 1.0}, "counters": {"generation_tokens_total": 2.0}, "gauges": {}}
+        after = {"prompt_tokens_by_source_total": {"local_compute": 1.0, "external_kv_transfer": 32.0}, "counters": {"generation_tokens_total": 34.0}, "gauges": {}}
+
+        summary = bench._benchmark_summary(args, "batch-a", None, requests_payload, 0.1, 1.0, collected, vllm_metrics_before=before, vllm_metrics_after=after)
+
+        self.assertEqual(summary["vllm_metrics_url"], "http://127.0.0.1:8138/metrics")
+        self.assertEqual(summary["vllm_metrics"]["derived"]["external_kv_transfer_token_delta"], 32.0)
+        self.assertEqual(summary["vllm_metrics"]["derived"]["generation_token_delta"], 32.0)
+
 
 if __name__ == "__main__":
     unittest.main()
