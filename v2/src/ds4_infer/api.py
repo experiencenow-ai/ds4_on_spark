@@ -1741,7 +1741,8 @@ def _dispatcher_run_resident_rolling_claims(
     if claims[0].request_kind == "cpu":
         return _dispatcher_run_claims(worker, claims, concurrency, mark_finished)
     force_refill_stream = _dispatcher_force_refill_stream_for_claims(claims)
-    if not force_refill_stream and _dispatcher_can_batch_models(worker, claims) and hasattr(worker.runner, "run_many_on_node_incremental"):
+    prefer_cohort_batch = _env_bool("DS4_API_RESIDENT_PREFER_COHORT_BATCH", False)
+    if not force_refill_stream and prefer_cohort_batch and _dispatcher_can_batch_models(worker, claims) and hasattr(worker.runner, "run_many_on_node_incremental"):
         return _dispatcher_run_rolling_batch_claims(worker, claims, concurrency, mark_finished)
     return _dispatcher_run_rolling_refill_stream_claims(
         worker,
@@ -1772,6 +1773,8 @@ def _dispatcher_run_rolling_refill_stream_claims(
     forced: bool = False,
 ) -> list[tuple[Any, dict[str, Any]]]:
     ineligible_reason = _dispatcher_batch_ineligible_reason(worker, claims)
+    if ineligible_reason == "eligible" and not forced:
+        ineligible_reason = "rolling_admission_stream"
     try:
         completed, failed, retried, claimed, prefilled = worker.run_resident_refill_stream(
             claims,
