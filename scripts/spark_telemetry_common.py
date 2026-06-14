@@ -400,6 +400,7 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
     pending_by_service = {str(k):num(v) for k,v in pending_by_service_raw.items()} if isinstance(pending_by_service_raw,dict) else {}
     resident_targets_raw = dispatcher.get("resident_service_targets",{})
     resident_targets = {str(k):num(v) for k,v in resident_targets_raw.items()} if isinstance(resident_targets_raw,dict) else {}
+    current_resident_service_ids = set(resident_targets)
     service_ids: Dict[str,object] = {}
     active_service_ids: Dict[str,object] = {}
     model_count = 0
@@ -413,6 +414,8 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
     for service_id in list(pending_by_service) + list(resident_targets):
         if service_id:
             service_ids[service_id] = True
+    for service_id in current_resident_service_ids:
+        active_service_ids[service_id] = True
     for service_id,count in pending_by_service.items():
         if service_id and count > 0.0:
             active_service_ids[service_id] = True
@@ -422,27 +425,52 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
     pipeline = data.get("pipeline_status",{})
     kv_shards = pipeline.get("kv_shards",[]) if isinstance(pipeline,dict) else []
     stages = pipeline.get("stages",[]) if isinstance(pipeline,dict) else []
+    def current_service(service_id: object) -> str:
+        value = str(service_id or "")
+        if value == "":
+            return("")
+        if current_resident_service_ids and value not in current_resident_service_ids:
+            return("")
+        return(value)
     if isinstance(pipeline,dict):
-        add_service_id(active_service_ids,pipeline.get("service_id"))
-        add_lease_service_ids(active_service_ids,pipeline.get("active_compute_leases",[]))
-    add_lease_service_ids(active_service_ids,data.get("active_compute_leases",[]))
+        add_service_id(active_service_ids,current_service(pipeline.get("service_id")))
+        for item in pipeline.get("active_compute_leases",[]):
+            if isinstance(item,dict):
+                add_service_id(active_service_ids,current_service(item.get("service_id")))
+            else:
+                add_service_id(active_service_ids,current_service(item))
+    for item in data.get("active_compute_leases",[]):
+        if isinstance(item,dict):
+            add_service_id(active_service_ids,current_service(item.get("service_id")))
+        else:
+            add_service_id(active_service_ids,current_service(item))
+    auto_kv_service_ids = dispatcher.get("auto_kv_cache_service_ids",[])
     kv_services: Dict[str,object] = {}
     kv_by_node: Dict[str,str] = {}
     stage_services: Dict[str,str] = {}
+    kv_shard_count = 0
     kv_entries = 0
     kv_bytes = 0
+    if bool(dispatcher.get("auto_kv_cache_enabled",False)) and isinstance(auto_kv_service_ids,list):
+        for service_id in auto_kv_service_ids:
+            service_id = current_service(service_id)
+            if service_id:
+                kv_services[service_id] = True
+                service_ids[service_id] = True
     if isinstance(kv_shards,list):
         for shard in kv_shards:
             if not isinstance(shard,dict):
                 continue
-            service_id = str(shard.get("service_id") or "")
+            service_id = current_service(shard.get("service_id"))
+            if not service_id:
+                continue
             node_id = str(shard.get("node_id") or "")
-            if service_id:
-                kv_services[service_id] = True
-                service_ids[service_id] = True
-                active_service_ids[service_id] = True
+            kv_services[service_id] = True
+            service_ids[service_id] = True
+            active_service_ids[service_id] = True
             if node_id and service_id:
                 kv_by_node[node_id] = service_id
+            kv_shard_count += 1
             kv_entries += int(num(shard.get("entries",0)))
             kv_bytes += int(num(shard.get("bytes",0)))
     if isinstance(stages,list):
@@ -450,7 +478,7 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
             if not isinstance(stage,dict):
                 continue
             node_id = str(stage.get("node_id") or "")
-            service_id = str(stage.get("service_id") or "")
+            service_id = current_service(stage.get("service_id"))
             if not node_id:
                 continue
             if service_id:
@@ -482,7 +510,7 @@ def ds4_api_queue_from_status(data: Dict[str,object], source: str, dispatcher: D
         "local_queue_token_rate_completed": int(num(token_rates.get("local_queue_token_rate_completed",0))),
         "local_queue_last_service": last_service,
         "local_queue_resident_multimodel": 1 if bool(dispatcher.get("resident_multimodel",False)) else 0,
-        "local_queue_kv_shards": len(kv_shards) if isinstance(kv_shards,list) else 0,
+        "local_queue_kv_shards": kv_shard_count,
         "local_queue_kv_entries": kv_entries,
         "local_queue_kv_bytes": kv_bytes,
         "local_queue_kv_services": ",".join(sorted(kv_services)),
