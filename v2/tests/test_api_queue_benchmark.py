@@ -124,6 +124,7 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
                 ]
             ),
             shape_mix_file=None,
+            shape_mix_order="grouped",
             temperature=0.0,
             job_class="analysis",
             ignore_eos=True,
@@ -136,6 +137,31 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         self.assertEqual([item["input"]["openai"]["min_tokens"] for item in requests], [16, 16, 128])
         self.assertEqual(requests[-1]["input"]["benchmark_shape"]["shared_prefix_tokens"], 64)
         self.assertEqual(requests[-1]["input"]["prompt"].count("shared-prefix-benchmark"), 64)
+
+    def test_benchmark_generates_round_robin_mixed_shapes(self) -> None:
+        args = argparse.Namespace(
+            input_tokens=128,
+            output_tokens=64,
+            shared_prefix_tokens=0,
+            suffix_tokens=None,
+            shape_mix_json=json.dumps(
+                [
+                    {"count": 3, "input_tokens": 32, "output_tokens": 16},
+                    {"count": 2, "input_tokens": 256, "output_tokens": 128},
+                ]
+            ),
+            shape_mix_file=None,
+            shape_mix_order="round-robin",
+            temperature=0.0,
+            job_class="analysis",
+            ignore_eos=True,
+        )
+
+        requests = bench._generated_requests(args, "mixed", "profile-a")
+
+        self.assertEqual([item["input"]["benchmark_shape"]["shape_index"] for item in requests], [0, 1, 0, 1, 0])
+        self.assertEqual([item["max_output_tokens"] for item in requests], [16, 128, 16, 128, 16])
+        self.assertEqual([item["input"]["openai"]["min_tokens"] for item in requests], [16, 128, 16, 128, 16])
 
     def test_benchmark_generates_token_shape_hint_for_uniform_requests(self) -> None:
         args = argparse.Namespace(
@@ -257,8 +283,19 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         args = argparse.Namespace(base_url="http://127.0.0.1:8700", model="dsv4", input_tokens=128, output_tokens=256, concurrency=256, limit=256, drive_worker=False, ignore_eos=True, preserve_request_ids=False)
         manifest = bench._manifest_json(args, "batch-file", [{"request_id": "a", "max_output_tokens": 128}, {"request_id": "b", "max_output_tokens": 128}])
         self.assertEqual(manifest["output_tokens_target"], 128)
+        self.assertEqual(manifest["output_tokens_target_min"], 128)
+        self.assertEqual(manifest["output_tokens_target_max"], 128)
         self.assertEqual(manifest["completion_tokens_target"], 256)
         self.assertEqual(manifest["min_tokens"], 128)
+
+    def test_file_driven_manifest_reports_nonuniform_completion_range(self) -> None:
+        args = argparse.Namespace(base_url="http://127.0.0.1:8700", model="dsv4", input_tokens=128, output_tokens=256, concurrency=256, limit=256, drive_worker=False, ignore_eos=True, preserve_request_ids=False, shape_mix_order="round-robin")
+        manifest = bench._manifest_json(args, "batch-file", [{"request_id": "a", "max_output_tokens": 64}, {"request_id": "b", "max_output_tokens": 192}])
+        self.assertEqual(manifest["shape_mix_order"], "round-robin")
+        self.assertEqual(manifest["output_tokens_target"], 256)
+        self.assertEqual(manifest["output_tokens_target_min"], 64)
+        self.assertEqual(manifest["output_tokens_target_max"], 192)
+        self.assertEqual(manifest["completion_tokens_target"], 256)
 
     def test_result_timings_expose_transport_retries(self) -> None:
         results = [
