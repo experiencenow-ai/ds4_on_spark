@@ -111,9 +111,9 @@ class StaticSparkTopologyTests(unittest.TestCase):
             self.assertEqual(service.kv_cache["expected_entry_fraction_per_node"], 1.0 / 13.0)
             self.assertGreater(int(service.kv_cache["kv_cache_memory_bytes"]), 0)
         coordinator = topology.routing_policy["resident_coordinator_defaults"]
-        self.assertEqual(coordinator["dispatch_window"], 512)
-        self.assertEqual(coordinator["dispatch_refill_batch"], 512)
-        self.assertEqual(coordinator["dispatch_cohort_workers"], 512)
+        self.assertEqual(coordinator["dispatch_window"], 560)
+        self.assertEqual(coordinator["dispatch_refill_batch"], 560)
+        self.assertEqual(coordinator["dispatch_cohort_workers"], 560)
         self.assertEqual(coordinator["completion_cohort_max"], 256)
         self.assertEqual(coordinator["completion_pp_safe_cohort_max"], 256)
         self.assertEqual(coordinator["completion_chunk_concurrency"], 4)
@@ -159,9 +159,9 @@ class StaticSparkTopologyTests(unittest.TestCase):
         try:
             payload = deployment_readiness(
                 topology=topology,
-                dispatcher_window=512,
-                dispatcher_refill_batch=512,
-                dispatcher_cohort_workers=512,
+                dispatcher_window=560,
+                dispatcher_refill_batch=560,
+                dispatcher_cohort_workers=560,
                 resident_multimodel=True,
             )
 

@@ -443,9 +443,9 @@
       }
     },
     "resident_coordinator_defaults": {
-      "dispatch_window": 512,
-      "dispatch_refill_batch": 512,
-      "dispatch_cohort_workers": 512,
+      "dispatch_window": 560,
+      "dispatch_refill_batch": 560,
+      "dispatch_cohort_workers": 560,
       "completion_cohort_max": 256,
       "completion_token_budget": 131072,
       "completion_budget_include_output": false,
