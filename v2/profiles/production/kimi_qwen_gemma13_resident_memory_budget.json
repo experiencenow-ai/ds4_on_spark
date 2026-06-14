@@ -69,7 +69,7 @@
   "resident_batch_token_budget": {
     "qwen27_bf16_pp13": 32768,
     "gemma4_26b_a4b_pp13": 16384,
-    "notes": "Kimi2.7 triad admission follows the live model service cap of max_num_seqs=256 with a 131072-token service gate. Pulled-main DSAPI probes showed 128x512x128 reached 143.5 tok/s, a mixed round-robin 256-request run recovered from 75.7 to 161.8 tok/s after ready-shape bucketing, and vLLM KV use stayed low with no resource-governor throttle. Qwen uses its live max_num_seqs=32 service cap and Gemma stays at batch 16 until a separate relaunch gate.",
+    "notes": "Kimi2.7 triad admission follows the live model service cap of max_num_seqs=256 with a 131072-token service gate. Pulled-main DSAPI probes showed 128x512x128 reached 143.5 tok/s, a mixed round-robin 256-request run recovered from 75.7 to 161.8 tok/s after ready-shape bucketing, and vLLM KV use stayed low with no resource-governor throttle. A 512-request Kimi pressure probe stalled after DSAPI submitted two 256-request cohorts, so Kimi keeps a 256 dispatch cap but refills only after active work falls to 128. Qwen uses its live max_num_seqs=32 service cap and Gemma stays at batch 16 until a separate relaunch gate.",
     "kimi27_pp13": 131072
   },
   "resident_batch_size": {
@@ -222,12 +222,12 @@
     }
   },
   "kimi_batch256_fit_estimate": {
-    "basis": "Live Kimi2.7 PP13 service is launched with an 8 GiB fixed GPU KV cap, max_num_seqs=256, and max_num_batched_tokens=131072. DSAPI Kimi128 short-context probes used under 3% of that cap, and the next pulled-main qualification raises DSAPI admission to the live service cap without increasing fixed KV.",
+    "basis": "Live Kimi2.7 PP13 service is launched with an 8 GiB fixed GPU KV cap, max_num_seqs=256, and max_num_batched_tokens=131072. DSAPI Kimi128 short-context probes used under 3% of that cap, and pulled-main qualification raises DSAPI dispatch to the live service cap without increasing fixed KV while holding the refill watermark at 128 to avoid a second full cohort backlog.",
     "rough_fixed_8gib_token_capacity": 1978027,
     "batch256_512_context_tokens": 131072,
     "batch256_8192_context_tokens": 2097152,
     "estimated_capacity_margin_at_512_tokens": 15.09,
-    "notes": "This is an order-of-magnitude fit check, not a substitute for a pulled-main DSAPI benchmark. It says short-context max_num_seqs=256 should fit comfortably with the fixed 8 GiB Kimi KV cap; full 8192-context 256-way admission exceeds the rough resident-token estimate and must rely on strict token-budget admission, eviction, and external cache."
+    "notes": "This is an order-of-magnitude fit check, not a substitute for a pulled-main DSAPI benchmark. It says short-context max_num_seqs=256 should fit comfortably with the fixed 8 GiB Kimi KV cap; full 8192-context 256-way admission exceeds the rough resident-token estimate and must rely on strict token-budget admission, eviction, and external cache. The 512-request pressure stall showed DSAPI must not keep another full 256-request Kimi cohort resident at the vLLM gate while the first cohort is still full."
   },
   "observed_kimi_pp13_available_gib_before_small_overlay": {
     "spark0": 39.3,
@@ -276,7 +276,7 @@
   },
   "power_policy": {
     "hardware_power_limit_status": "No reliable per-Spark 150W NVML/powercap limit was exposed by nvidia-smi or /sys/class/powercap during the 2026-06-11 probe.",
-    "initial_control": "Use DSAPI service batch limits, token budgets, and one-running-batch-per-compute-domain admission until a hardware power cap is proven. Qwen batch 32 and Kimi batch 256 are coordinator-safe because the live services are already launched with those max-num-seqs caps; Gemma stays at batch 16 until a separate relaunch gate.",
+    "initial_control": "Use DSAPI service batch limits, token budgets, one-running-batch-per-compute-domain admission, and conservative refill watermarks until a hardware power cap is proven. Qwen batch 32 and Kimi dispatch batch 256 match live max-num-seqs caps, but Kimi refills at 128 active requests after the 512-request pressure stall; Gemma stays at batch 16 until a separate relaunch gate.",
     "target_watts_per_spark": 150
   },
   "promotion_gates": [

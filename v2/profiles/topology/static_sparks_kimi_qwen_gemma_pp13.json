@@ -360,7 +360,7 @@
           "queue_limit": 512,
           "ready_shape_bucketing": true,
           "ready_shape_lookahead": 4,
-          "refill_low_watermark": 384,
+          "refill_low_watermark": 128,
           "vllm_max_num_batched_tokens": 131072,
           "vllm_max_num_seqs": 256
         },
