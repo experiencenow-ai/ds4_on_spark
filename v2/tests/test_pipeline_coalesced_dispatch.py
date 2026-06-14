@@ -145,6 +145,38 @@ class BlockingIncrementalBatchRunner:
         return {}
 
 
+class BlockingRefillIncrementalRunner:
+    def __init__(self) -> None:
+        self.condition = threading.Condition()
+        self.batch_sizes: list[int] = []
+        self.cancel_seen = threading.Event()
+
+    def run_many_on_node(self, requests, profile, node_id, *, concurrency=1):
+        raise AssertionError("test requires forced refill stream path")
+
+    def run_many_on_node_incremental(self, requests, profile, node_id, *, concurrency=1, on_result, on_delta=None, cancel_event=None):
+        with self.condition:
+            self.batch_sizes.append(len(requests))
+            self.condition.notify_all()
+        while cancel_event is None or not cancel_event.is_set():
+            time.sleep(0.005)
+        self.cancel_seen.set()
+        return {}
+
+    def run_one_on_node(self, request, profile, node_id):
+        raise AssertionError("rolling refill should use incremental singleton transport when cancelable")
+
+    def wait_started(self, count: int, timeout_s: float = 1.0) -> bool:
+        deadline = time.time() + timeout_s
+        with self.condition:
+            while len(self.batch_sizes) < count:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    return False
+                self.condition.wait(remaining)
+            return True
+
+
 class RecordingIncrementalBatchRunner:
     def __init__(self) -> None:
         self.batch_sizes: list[int] = []
@@ -843,8 +875,8 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                     self.assertEqual(submitted, 4)
                     completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
                 self.assertEqual((completed, failed, retried), (4, 0, 0))
-                self.assertEqual(runner.batch_sizes, [])
-                self.assertEqual(sorted(runner.calls), [f"dsv4-forced-stream-{index}" for index in range(4)])
+                self.assertEqual(runner.batch_sizes, [1, 1, 1, 1])
+                self.assertEqual(runner.calls, [])
                 status = api.dispatcher_status()
                 self.assertEqual(status["last_summary"]["transport_mode"], "rolling_refill_stream")
                 self.assertEqual(status["last_summary"]["batch_ineligible_reason"], "forced_refill_stream")
@@ -932,6 +964,43 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual(api.queue.status(batch_id="roll-force-cancel")["state"], "cancelled")
             self.assertEqual(api.dispatcher_status()["last_summary"]["dispatch_mode"], "rolling_refill")
             self.assertEqual(api.dispatcher_status()["last_summary"]["claimed"], 2)
+
+    def test_forced_rolling_refill_cancel_reaches_incremental_transport(self) -> None:
+        old_force = os.environ.get("DS4_API_RESIDENT_FORCE_REFILL_STREAM")
+        os.environ["DS4_API_RESIDENT_FORCE_REFILL_STREAM"] = "1"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+                registry = ProfileRegistry.load(PROFILES)
+                topology = SparkTopology.load(TOPOLOGY)
+                plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+                plan = plans["dsv4_flash_pp8"]
+                plan.admission_mode = "resident_multimodel_rolling_refill"
+                plan.target_active = 2
+                plan.low_watermark = 2
+                plan.max_cohort_size = 2
+                plan.batch_linger_s = 0.0
+                api.queue.submit_requests(requests=[dsv4_chat_request(f"dsv4-stream-cancel-{index}") for index in range(2)], registry=registry, topology=topology, batch_id="roll-stream-cancel", priority=10)
+                runner = BlockingRefillIncrementalRunner()
+                worker = BatchWorker(queue=api.queue, registry=registry, runner=runner, worker_id="test-dispatcher", lease_ttl_s=30, heartbeat_interval_s=0.01)
+                pending = {}
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    submitted = api._dispatcher_refill_resident_multimodel(worker=worker, executor=executor, pending=pending, entry_node_id="spark0", node_profile_ids=tuple(topology.pipeline_profiles), batch_limits_by_service={"dsv4_flash_pp8": 2}, kv_shard_layouts_by_profile=dict(topology.pipeline_profiles), service_plans={"dsv4_flash_pp8": plan})
+                    self.assertEqual(submitted, 2)
+                    self.assertTrue(runner.wait_started(2))
+                    api.queue.cancel(batch_id="roll-stream-cancel", reason="operator cancel", force_running=True)
+                    completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
+                self.assertEqual((completed, failed, retried), (0, 0, 0))
+                self.assertEqual(runner.batch_sizes, [1, 1])
+                self.assertTrue(runner.cancel_seen.wait(1.0))
+                self.assertEqual(pending, {})
+                self.assertEqual(api.queue.status(batch_id="roll-stream-cancel")["state"], "cancelled")
+                self.assertEqual(api.dispatcher_status()["last_summary"]["transport_mode"], "rolling_refill_stream")
+        finally:
+            if old_force is None:
+                os.environ.pop("DS4_API_RESIDENT_FORCE_REFILL_STREAM", None)
+            else:
+                os.environ["DS4_API_RESIDENT_FORCE_REFILL_STREAM"] = old_force
 
     def test_dispatcher_status_reports_kv_admission_bound(self) -> None:
         old = os.environ.get("DS4_API_DISPATCH_KV_CAPACITY_BYTES")
