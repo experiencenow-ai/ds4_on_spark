@@ -394,7 +394,15 @@ def _pipeline_batch_limits(*, topology_path: Path = STATIC_SPARKS_TOPOLOGY, over
         if not isinstance(service, dict):
             continue
         scheduler = service.get("scheduler") if isinstance(service.get("scheduler"), dict) else {}
-        raw = scheduler.get("vllm_max_num_seqs") or service.get("max_batch_size") or scheduler.get("queue_limit")
+        raw = (
+            scheduler.get("dispatch_batch_limit")
+            or scheduler.get("max_dispatch_cohort")
+            or scheduler.get("queue_depth_target")
+            or scheduler.get("vllm_queue_depth_target")
+            or scheduler.get("vllm_max_num_seqs")
+            or service.get("max_batch_size")
+            or scheduler.get("queue_limit")
+        )
         if raw is None:
             continue
         limits[str(service_id)] = int(raw)

@@ -89,6 +89,7 @@ class ResidentServicePlan:
     profile_id: str
     compute_domain: str
     target_active: int
+    queue_depth_target: int
     low_watermark: int
     max_cohort_size: int
     batch_linger_s: float
@@ -115,6 +116,7 @@ class ResidentServicePlan:
 def resident_service_plans(topology: SparkTopology, *, entry_node_id: str, default_batch_linger_s: float) -> dict[str, ResidentServicePlan]:
     weights = _json_float_env("DS4_API_SERVICE_WEIGHTS_JSON")
     targets = _json_int_env("DS4_API_SERVICE_TARGETS_JSON")
+    queue_targets = _json_int_env("DS4_API_SERVICE_QUEUE_DEPTH_TARGETS_JSON")
     lows = _json_int_env("DS4_API_SERVICE_LOW_WATERMARKS_JSON")
     cohort_sizes = _json_int_env("DS4_API_SERVICE_MAX_COHORTS_JSON")
     linger = _json_float_env("DS4_API_SERVICE_LINGER_JSON")
@@ -130,6 +132,7 @@ def resident_service_plans(topology: SparkTopology, *, entry_node_id: str, defau
             default_batch_linger_s=default_batch_linger_s,
             weights=weights,
             targets=targets,
+            queue_targets=queue_targets,
             lows=lows,
             cohort_sizes=cohort_sizes,
             linger=linger,
@@ -158,7 +161,7 @@ def service_target_active(service: Any) -> int:
 def resident_service_order(plans: dict[str, ResidentServicePlan], active_by_service: dict[str, int]) -> list[ResidentServicePlan]:
     def key(plan: ResidentServicePlan) -> tuple[float, float, float, str]:
         active = int(active_by_service.get(plan.service_id, 0))
-        ratio = active / max(1, int(plan.target_active))
+        ratio = active / max(1, int(plan.queue_depth_target))
         below_low = 0.0 if active < plan.low_watermark else 1.0
         return (below_low, ratio, -float(plan.deficit), plan.service_id)
     return sorted(plans.values(), key=key)
@@ -199,20 +202,23 @@ def plan_uses_rolling_admission(plan: ResidentServicePlan) -> bool:
     return mode in {"resident_multimodel_rolling_refill", "rolling_refill", "rolling"}
 
 
-def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weights: dict[str, float], targets: dict[str, int], lows: dict[str, int], cohort_sizes: dict[str, int], linger: dict[str, float]) -> ResidentServicePlan:
+def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weights: dict[str, float], targets: dict[str, int], queue_targets: dict[str, int], lows: dict[str, int], cohort_sizes: dict[str, int], linger: dict[str, float]) -> ResidentServicePlan:
     service_id = service.service_id
     target = max(1, int(targets.get(service_id, targets.get(service.profile_id, service_target_active(service)))))
+    queue_target = max(target, int(queue_targets.get(service_id, queue_targets.get(service.profile_id, _scheduler_int(service, ("queue_depth_target", "vllm_queue_depth_target", "submit_queue_depth_target"), target)))))
     low = int(lows.get(service_id, lows.get(service.profile_id, int(service.scheduler.get("refill_low_watermark") or 0))))
     if low <= 0:
-        low = max(1, int(target * 0.75))
-    max_cohort = max(1, int(cohort_sizes.get(service_id, cohort_sizes.get(service.profile_id, pipeline_service_batch_limit(service)))))
+        low = max(1, int(queue_target * 0.75))
+    max_cohort_default = _scheduler_int(service, ("dispatch_batch_limit", "max_dispatch_cohort", "queue_depth_target", "vllm_queue_depth_target"), pipeline_service_batch_limit(service))
+    max_cohort = max(1, int(cohort_sizes.get(service_id, cohort_sizes.get(service.profile_id, max_cohort_default))))
     service_linger = float(linger.get(service_id, linger.get(service.profile_id, _scheduler_linger(service, default_batch_linger_s))))
     return ResidentServicePlan(
         service_id=service_id,
         profile_id=service.profile_id,
         compute_domain=service.compute_domain,
         target_active=target,
-        low_watermark=min(target, max(1, low)),
+        queue_depth_target=queue_target,
+        low_watermark=min(queue_target, max(1, low)),
         max_cohort_size=max_cohort,
         batch_linger_s=max(0.0, service_linger),
         weight=max(0.01, float(weights.get(service_id, weights.get(service.profile_id, service.scheduler.get("resident_weight") or 1.0)))),
@@ -223,6 +229,17 @@ def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weigh
 def _scheduler_linger(service: Any, default_batch_linger_s: float) -> float:
     raw = service.scheduler.get("batch_linger_s") if service.scheduler.get("batch_linger_s") is not None else default_batch_linger_s
     return float(raw)
+
+
+def _scheduler_int(service: Any, keys: tuple[str, ...], default: int) -> int:
+    scheduler = getattr(service, "scheduler", {}) or {}
+    if not isinstance(scheduler, dict):
+        return int(default)
+    for key in keys:
+        value = scheduler.get(key)
+        if value is not None:
+            return int(value)
+    return int(default)
 
 
 def _json_int_env(name: str) -> dict[str, int]:
