@@ -26,6 +26,9 @@ class RingControlInstallerTests(unittest.TestCase):
 
         self.assertIn("ExecStart=/usr/local/sbin/ds4-ring-control-iface", text)
         self.assertIn("install -m 0755 \"$tmp_script\" /usr/local/sbin/ds4-ring-control-iface", text)
+        self.assertIn("Before=network-pre.target network-online.target ds4-ring-200g.service", text)
+        self.assertIn("Restart=on-failure", text)
+        self.assertIn("systemctl reset-failed ds4-ring-control-iface.service ds4-ring-200g.service", text)
         self.assertNotIn("ExecStart=/usr/local/sbin/ds4-ring-control-iface-apply", text)
         self.assertNotIn("install -m 0755 \"$tmp_script\" /usr/local/sbin/ds4-ring-control-iface-apply", text)
 
@@ -34,7 +37,8 @@ class RingControlInstallerTests(unittest.TestCase):
 
         self.assertIn("/etc/systemd/system/ds4-ring-200g.service.d", text)
         self.assertIn("control-iface.conf", text)
-        self.assertIn("ds4-ring-200g-apply && /usr/local/sbin/ds4-ring-200g-extend13 && /usr/local/sbin/ds4-ring-control-iface", text)
+        self.assertIn("/usr/local/sbin/ds4-ring-control-iface && /usr/local/sbin/ds4-ring-200g-apply", text)
+        self.assertIn("ds4-ring-200g-extend13 && /usr/local/sbin/ds4-ring-control-iface", text)
 
 
 if __name__ == "__main__":
