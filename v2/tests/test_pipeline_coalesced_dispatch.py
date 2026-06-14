@@ -764,7 +764,7 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual(api.dispatcher_status()["last_summary"]["dispatch_mode"], "rolling_refill")
             self.assertEqual(api.dispatcher_status()["last_summary"]["claimed"], 5)
 
-    def test_resident_rolling_admission_uses_incremental_batch_runner(self) -> None:
+    def test_resident_rolling_admission_defaults_to_refill_stream(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
             registry = ProfileRegistry.load(PROFILES)
@@ -796,12 +796,60 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 self.assertEqual(submitted, 4)
                 completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
             self.assertEqual((completed, failed, retried), (4, 0, 0))
-            self.assertEqual(runner.batch_sizes, [4])
+            self.assertEqual(runner.batch_sizes, [1, 1, 1, 1])
             status = api.dispatcher_status()
             self.assertEqual(status["last_summary"]["dispatch_mode"], "rolling_refill")
-            self.assertEqual(status["last_summary"]["transport_mode"], "rolling_batch_incremental")
-            self.assertEqual(status["resident_rolling_batch_count"], 1)
-            self.assertEqual(status["resident_rolling_refill_stream_count"], 0)
+            self.assertEqual(status["last_summary"]["transport_mode"], "rolling_refill_stream")
+            self.assertEqual(status["last_summary"]["batch_ineligible_reason"], "rolling_admission_stream")
+            self.assertEqual(status["resident_rolling_batch_count"], 0)
+            self.assertEqual(status["resident_rolling_refill_stream_count"], 1)
+
+    def test_resident_rolling_admission_can_opt_into_incremental_batch_runner(self) -> None:
+        old = os.environ.get("DS4_API_RESIDENT_PREFER_COHORT_BATCH")
+        os.environ["DS4_API_RESIDENT_PREFER_COHORT_BATCH"] = "1"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+                registry = ProfileRegistry.load(PROFILES)
+                topology = SparkTopology.load(TOPOLOGY)
+                plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+                plan = plans["dsv4_flash_pp8"]
+                plan.admission_mode = "resident_multimodel_rolling_refill"
+                plan.target_active = 4
+                plan.queue_depth_target = 4
+                plan.low_watermark = 2
+                plan.max_cohort_size = 4
+                plan.batch_linger_s = 0.0
+                requests = [dsv4_chat_request(f"dsv4-batch-roll-{index}") for index in range(4)]
+                api.queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id="roll-batch", priority=10)
+                runner = RecordingIncrementalBatchRunner()
+                worker = BatchWorker(queue=api.queue, registry=registry, runner=runner, worker_id="test-dispatcher", lease_ttl_s=30, heartbeat_interval_s=0.01)
+                pending = {}
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    submitted = api._dispatcher_refill_resident_multimodel(
+                        worker=worker,
+                        executor=executor,
+                        pending=pending,
+                        entry_node_id="spark0",
+                        node_profile_ids=tuple(topology.pipeline_profiles),
+                        batch_limits_by_service={"dsv4_flash_pp8": 4},
+                        kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                        service_plans={"dsv4_flash_pp8": plan},
+                    )
+                    self.assertEqual(submitted, 4)
+                    completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
+                self.assertEqual((completed, failed, retried), (4, 0, 0))
+                self.assertEqual(runner.batch_sizes, [4])
+                status = api.dispatcher_status()
+                self.assertEqual(status["last_summary"]["dispatch_mode"], "rolling_refill")
+                self.assertEqual(status["last_summary"]["transport_mode"], "rolling_batch_incremental")
+                self.assertEqual(status["resident_rolling_batch_count"], 1)
+                self.assertEqual(status["resident_rolling_refill_stream_count"], 0)
+        finally:
+            if old is None:
+                os.environ.pop("DS4_API_RESIDENT_PREFER_COHORT_BATCH", None)
+            else:
+                os.environ["DS4_API_RESIDENT_PREFER_COHORT_BATCH"] = old
 
     def test_resident_rolling_admission_blocks_early_parallel_same_service_cohorts_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
