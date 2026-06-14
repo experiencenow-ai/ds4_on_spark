@@ -63,13 +63,19 @@ EOF
 cat >"$tmp_unit" <<'EOF'
 [Unit]
 Description=DS4 ring control dummy interface
-After=network-online.target ds4-ring-200g.service
-Wants=network-online.target
+DefaultDependencies=no
+After=local-fs.target systemd-modules-load.service
+Before=network-pre.target network-online.target ds4-ring-200g.service
+Wants=network-pre.target
+StartLimitIntervalSec=120
+StartLimitBurst=20
 
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/ds4-ring-control-iface
 RemainAfterExit=yes
+Restart=on-failure
+RestartSec=2s
 
 [Install]
 WantedBy=multi-user.target
@@ -78,7 +84,7 @@ EOF
 cat >"$tmp_override" <<'EOF'
 [Service]
 ExecStart=
-ExecStart=/bin/sh -c '/usr/local/sbin/ds4-ring-200g-apply && /usr/local/sbin/ds4-ring-200g-extend13 && /usr/local/sbin/ds4-ring-control-iface'
+ExecStart=/bin/sh -c '/usr/local/sbin/ds4-ring-control-iface && /usr/local/sbin/ds4-ring-200g-apply && /usr/local/sbin/ds4-ring-200g-extend13 && /usr/local/sbin/ds4-ring-control-iface'
 EOF
 
 install -m 0755 "$tmp_script" /usr/local/sbin/ds4-ring-control-iface
@@ -86,6 +92,7 @@ install -m 0644 "$tmp_unit" /etc/systemd/system/ds4-ring-control-iface.service
 install -d -m 0755 /etc/systemd/system/ds4-ring-200g.service.d
 install -m 0644 "$tmp_override" /etc/systemd/system/ds4-ring-200g.service.d/control-iface.conf
 systemctl daemon-reload
+systemctl reset-failed ds4-ring-control-iface.service ds4-ring-200g.service 2>/dev/null || true
 systemctl enable ds4-ring-control-iface.service
 systemctl restart ds4-ring-control-iface.service
 if [ "${DS4_RESTART_RING_SERVICE:-1}" != "0" ]
