@@ -14,8 +14,8 @@
   },
   "admission": {
     "max_num_batched_tokens": 65536,
-    "max_num_seqs": 32,
-    "power_policy": "one active Kimi batch per compute domain; batch 32 is the next qualification cap after batch 16 showed near-1% KV usage but long-tail completion stalls"
+    "max_num_seqs": 64,
+    "power_policy": "one active Kimi batch per compute domain; batch 64 is the next qualification cap after batch 32 showed below-1% live KV usage and DSAPI transport throughput above 120 tok/s on replay"
   },
   "launch": {
     "api_base_url": "http://127.0.0.1:8138",
