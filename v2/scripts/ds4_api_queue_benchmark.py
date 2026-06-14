@@ -150,6 +150,7 @@ def _benchmark_metrics(args: argparse.Namespace, requests_payload: list[dict[str
     aggregate_tok_s = tokens / run_s if run_s > 0 else 0.0
     transport_tok_s = tokens / timings["transport_duration_s_max"] if timings["transport_duration_s_max"] > 0 else 0.0
     target_tokens = _target_completion_tokens(requests_payload)
+    output_token_range = _request_int_range(requests_payload, "max_output_tokens")
     perf_valid = int(timings["attempt_count_max"]) <= 1
     return {
         "timings": timings,
@@ -166,6 +167,8 @@ def _benchmark_metrics(args: argparse.Namespace, requests_payload: list[dict[str
         "performance_target": _benchmark_performance_score(args, aggregate_tok_s),
         "transport_performance_target": _benchmark_performance_score(args, transport_tok_s),
         "output_tokens_target": _uniform_request_int(requests_payload, "max_output_tokens", args.output_tokens),
+        "output_tokens_target_min": output_token_range[0],
+        "output_tokens_target_max": output_token_range[1],
     }
 
 
@@ -194,6 +197,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--input-tokens", type=int, default=512)
     parser.add_argument("--shape-mix-json", help="JSON array of request shapes, for example '[{\"count\":64,\"input_tokens\":256,\"output_tokens\":128},{\"count\":64,\"input_tokens\":2048,\"output_tokens\":128}]'.")
     parser.add_argument("--shape-mix-file", help="Read --shape-mix-json from a file.")
+    parser.add_argument("--shape-mix-order", choices=("grouped", "round-robin"), default="grouped", help="Order generated shape-mix requests. grouped preserves shape order; round-robin interleaves one request per shape each pass.")
     parser.add_argument("--shared-prefix-tokens", type=int, default=0, help="Approximate token count for a token-identical prefix placed before each unique suffix.")
     parser.add_argument("--suffix-tokens", type=int, help="Approximate token count for the per-request suffix when --shared-prefix-tokens is used. Defaults to input_tokens - shared_prefix_tokens.")
     parser.add_argument("--output-tokens", type=int, default=256)
@@ -271,6 +275,7 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _manifest_json(args: argparse.Namespace, batch_id: str, requests_payload: list[dict[str, Any]]) -> dict[str, Any]:
     output_tokens_target = _uniform_request_int(requests_payload, "max_output_tokens", args.output_tokens)
+    output_token_range = _request_int_range(requests_payload, "max_output_tokens")
     return {
         "format": "ds4-api-file-driven-benchmark-manifest-v1",
         "base_url": args.base_url,
@@ -279,9 +284,12 @@ def _manifest_json(args: argparse.Namespace, batch_id: str, requests_payload: li
         "request_count": len(requests_payload),
         "input_tokens_target": args.input_tokens,
         "shape_mix": _shape_mix_manifest(args),
+        "shape_mix_order": getattr(args, "shape_mix_order", "grouped"),
         "shared_prefix_tokens_target": int(getattr(args, "shared_prefix_tokens", 0) or 0),
         "suffix_tokens_target": _suffix_tokens(args),
         "output_tokens_target": output_tokens_target,
+        "output_tokens_target_min": output_token_range[0],
+        "output_tokens_target_max": output_token_range[1],
         "completion_tokens_target": _target_completion_tokens(requests_payload),
         "concurrency": args.concurrency,
         "limit": args.limit,
@@ -306,16 +314,43 @@ def _uniform_request_int(requests_payload: list[dict[str, Any]], key: str, fallb
     return next(iter(values)) if len(values) == 1 else int(fallback)
 
 
+def _request_int_range(requests_payload: list[dict[str, Any]], key: str) -> tuple[int, int]:
+    values: list[int] = []
+    for item in requests_payload:
+        try:
+            values.append(int(item[key]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    if not values:
+        return (0, 0)
+    return (min(values), max(values))
+
+
 def _generated_requests(args: argparse.Namespace, batch_id: str, profile_id: str) -> list[dict[str, Any]]:
     shapes = _shape_mix(args)
     if not shapes:
         return [_request_json(args, batch_id, profile_id, idx) for idx in range(args.batch_size)]
+    if getattr(args, "shape_mix_order", "grouped") == "round-robin":
+        return _generated_round_robin_shape_requests(args, batch_id, profile_id, shapes)
     requests_payload: list[dict[str, Any]] = []
     for shape_index, shape in enumerate(shapes):
         count = max(1, int(shape.get("count", 1) or 1))
         for _ in range(count):
             idx = len(requests_payload)
             requests_payload.append(_request_json(args, batch_id, profile_id, idx, shape=shape, shape_index=shape_index))
+    return requests_payload
+
+
+def _generated_round_robin_shape_requests(args: argparse.Namespace, batch_id: str, profile_id: str, shapes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    requests_payload: list[dict[str, Any]] = []
+    remaining = [max(1, int(shape.get("count", 1) or 1)) for shape in shapes]
+    while any(count > 0 for count in remaining):
+        for shape_index, shape in enumerate(shapes):
+            if remaining[shape_index] <= 0:
+                continue
+            idx = len(requests_payload)
+            requests_payload.append(_request_json(args, batch_id, profile_id, idx, shape=shape, shape_index=shape_index))
+            remaining[shape_index] -= 1
     return requests_payload
 
 
