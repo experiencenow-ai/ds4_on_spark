@@ -509,6 +509,11 @@ class CoordinatorApi:
             "auto_kv_cache_service_ids": sorted(_csv_env("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS")),
             "resource_governor": self.dispatcher_resource_governor.status(),
             "last_summary": None,
+            "resident_rolling_batch_count": 0,
+            "resident_rolling_refill_stream_count": 0,
+            "resident_rolling_last_transport_mode": None,
+            "resident_rolling_last_ineligible_reason": None,
+            "resident_rolling_last_runner_type": None,
             "last_claimed_cohort_size": 0,
             "largest_claimed_cohort_size": 0,
             "last_claimed_service_id": None,
@@ -893,7 +898,16 @@ class CoordinatorApi:
                 claimed_extra = max(0, int(summary.get("claimed") or 0) - len(claims))
                 if claimed_extra:
                     self._dispatcher_count(claimed_count=claimed_extra, submitted_count=claimed_extra)
-                self._dispatcher_note(last_summary=summary)
+                if summary.get("transport_mode") == "rolling_batch_incremental":
+                    self._dispatcher_count(resident_rolling_batch_count=1)
+                if summary.get("transport_mode") == "rolling_refill_stream":
+                    self._dispatcher_count(resident_rolling_refill_stream_count=1)
+                self._dispatcher_note(
+                    last_summary=summary,
+                    resident_rolling_last_transport_mode=summary.get("transport_mode"),
+                    resident_rolling_last_ineligible_reason=summary.get("batch_ineligible_reason"),
+                    resident_rolling_last_runner_type=summary.get("runner_type"),
+                )
                 continue
             for claim, result in pairs:
                 item_completed, item_failed, item_retried = worker._finish_pair(claim, result, None)
@@ -1690,6 +1704,8 @@ def _dispatcher_run_rolling_batch_claims(
         summary.setdefault("claimed", len(claims))
         summary.setdefault("prefilled", 0)
         summary["dispatch_mode"] = "rolling_refill"
+        summary["transport_mode"] = "rolling_batch_incremental"
+        summary["runner_type"] = type(worker.runner).__name__
         return [(_DISPATCHER_BATCH_FINISHED, summary)]
     return pairs
 
@@ -1712,6 +1728,33 @@ def _dispatcher_run_resident_rolling_claims(
         return _dispatcher_run_claims(worker, claims, concurrency, mark_finished)
     if _dispatcher_can_batch_models(worker, claims) and hasattr(worker.runner, "run_many_on_node_incremental"):
         return _dispatcher_run_rolling_batch_claims(worker, claims, concurrency, mark_finished)
+    return _dispatcher_run_rolling_refill_stream_claims(
+        worker,
+        claims,
+        concurrency,
+        mark_finished,
+        entry_node_id,
+        node_profile_ids,
+        kv_capacity_bytes,
+        kv_shard_layouts_by_profile,
+        batch_limits_by_service,
+        low_watermark,
+    )
+
+
+def _dispatcher_run_rolling_refill_stream_claims(
+    worker: BatchWorker,
+    claims: list[QueueClaim],
+    concurrency: int,
+    mark_finished: Callable[[str], None] | None,
+    entry_node_id: str | None,
+    node_profile_ids: tuple[str, ...],
+    kv_capacity_bytes: int,
+    kv_shard_layouts_by_profile: dict[str, Any],
+    batch_limits_by_service: dict[str, int],
+    low_watermark: int,
+) -> list[tuple[Any, dict[str, Any]]]:
+    ineligible_reason = _dispatcher_batch_ineligible_reason(worker, claims)
     try:
         completed, failed, retried, claimed, prefilled = worker.run_resident_refill_stream(
             claims,
@@ -1738,9 +1781,34 @@ def _dispatcher_run_resident_rolling_claims(
                 "claimed": claimed,
                 "prefilled": prefilled,
                 "dispatch_mode": "rolling_refill",
+                "transport_mode": "rolling_refill_stream",
+                "batch_ineligible_reason": ineligible_reason,
+                "runner_type": type(worker.runner).__name__,
             },
         )
     ]
+
+
+def _dispatcher_batch_ineligible_reason(worker: BatchWorker, claims: list[QueueClaim]) -> str:
+    if not claims:
+        return "empty"
+    if claims[0].request_kind != "model":
+        return "non_model"
+    if not hasattr(worker.runner, "run_many_on_node"):
+        return "runner_missing_batch"
+    if not hasattr(worker.runner, "run_many_on_node_incremental"):
+        return "runner_missing_incremental_batch"
+    first = claims[0]
+    for claim in claims:
+        if claim.request_kind != "model":
+            return "mixed_kind"
+        if claim.selected_profile_id != first.selected_profile_id:
+            return "mixed_profile"
+        if claim.selected_node_id != first.selected_node_id:
+            return "mixed_node"
+        if claim.selected_service_id != first.selected_service_id:
+            return "mixed_service"
+    return "eligible"
 
 
 def _dispatcher_can_batch_models(worker: BatchWorker, claims: list[QueueClaim]) -> bool:

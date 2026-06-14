@@ -647,7 +647,11 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
             self.assertEqual((completed, failed, retried), (4, 0, 0))
             self.assertEqual(runner.batch_sizes, [4])
-            self.assertEqual(api.dispatcher_status()["last_summary"]["dispatch_mode"], "rolling_refill")
+            status = api.dispatcher_status()
+            self.assertEqual(status["last_summary"]["dispatch_mode"], "rolling_refill")
+            self.assertEqual(status["last_summary"]["transport_mode"], "rolling_batch_incremental")
+            self.assertEqual(status["resident_rolling_batch_count"], 1)
+            self.assertEqual(status["resident_rolling_refill_stream_count"], 0)
 
     def test_resident_rolling_admission_stops_refill_after_batch_cancel(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
