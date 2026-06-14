@@ -280,11 +280,12 @@ class BatchWorker:
         prefilled = 0
         completed = failed = retried = 0
         refill_cancelled = False
+        cancel_event = Event()
         finished: set[str] = set()
         pool = ThreadPoolExecutor(max_workers=concurrency)
         wait_for_workers = True
         try:
-            futures = {pool.submit(self._run_one, claim): claim for claim in claims}
+            futures = {pool.submit(self._run_refill_one, claim, cancel_event): claim for claim in claims}
             pending = set(futures)
             while pending:
                 done, pending = wait(pending, timeout=self.heartbeat_interval_s, return_when=FIRST_COMPLETED)
@@ -298,6 +299,7 @@ class BatchWorker:
                     _notify_item_finished(on_item_finished, claim.request_id)
                 if pending and self._cancel_requested([futures[future] for future in pending]):
                     refill_cancelled = True
+                    cancel_event.set()
                     item_completed, item_failed, item_retried, pending = _finish_cancelled_pending_futures(self, futures, pending, finished, on_result, on_item_finished)
                     completed += item_completed
                     failed += item_failed
@@ -327,7 +329,7 @@ class BatchWorker:
                         if more_claims:
                             compute_lease_id = more_claims[0].compute_lease_id
                         for claim in more_claims:
-                            next_future = pool.submit(self._run_one, claim)
+                            next_future = pool.submit(self._run_refill_one, claim, cancel_event)
                             futures[next_future] = claim
                             pending.add(next_future)
                 if pending:
@@ -430,6 +432,36 @@ class BatchWorker:
             result = self.runner.run_one_on_node(claim.request, profile, claim.selected_node_id)  # type: ignore[attr-defined]
         else:
             result = self.runner.run_one(claim.request, profile)
+        return _result_for_claim(claim, result)
+
+    def _run_refill_one(self, claim: QueueClaim, cancel_event: Event) -> dict[str, Any]:
+        if claim.request_kind != "model" or claim.request is None:
+            return _failure(claim, "worker cannot run CPU claim without CPU batch path")
+        if self._claim_cancelled_or_terminal(claim):
+            return _cancelled(claim)
+        if not hasattr(self.runner, "run_many_on_node_incremental"):
+            return self._run_one(claim)
+        profile = self.registry.get(claim.selected_profile_id)
+        results: dict[str, dict[str, Any]] = {}
+
+        def push_result(request_id: str, result: dict[str, Any]) -> None:
+            results[request_id] = result
+
+        try:
+            batch = self.runner.run_many_on_node_incremental(
+                [claim.request],
+                profile,
+                claim.selected_node_id,
+                concurrency=1,
+                on_result=push_result,
+                on_delta=lambda request_id, text, payload: _push_stream_delta(self.queue, request_id, text, payload),
+                cancel_event=cancel_event,
+            )  # type: ignore[attr-defined]
+        except Exception as exc:
+            return _failure(claim, str(exc))
+        result = results.get(claim.request_id)
+        if result is None and isinstance(batch, dict):
+            result = batch.get(claim.request_id)
         return _result_for_claim(claim, result)
 
     def _claim_cancelled_or_terminal(self, claim: QueueClaim) -> bool:

@@ -886,6 +886,36 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(results["r"]["output"]["text"], "first done")
         self.assertIn("cancelled", results["r2"]["transport"]["error"])
 
+    def test_pipeline_runner_streams_singleton_when_cancelable(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": False,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {"served_model_name": "served-model"},
+            }
+        )
+        request_item = InferenceRequest.from_json(make_request(chat=False).raw)
+        seen = []
+        runner = CancellableStreamingPipelineRunner()
+        results = runner.run_many_on_node_incremental(
+            [request_item],
+            profile,
+            None,
+            concurrency=1,
+            on_result=lambda request_id, result: seen.append((request_id, result["status"])),
+            cancel_event=threading.Event(),
+        )
+        self.assertTrue(runner.backend.cancel_event_seen)
+        self.assertFalse(runner.backend.tail_requested)
+        self.assertEqual(seen, [("r", "completed")])
+        self.assertEqual(results["r"]["output"]["text"], "first done")
+
     def test_sse_reader_treats_python_timed_out_object_as_poll_timeout(self) -> None:
         class FakeResponse:
             def __init__(self) -> None:

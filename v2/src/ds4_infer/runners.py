@@ -721,7 +721,7 @@ class OpenAICompatibleRunner:
         if not _env_bool("DS4_PIPELINE_COHORT_COMPLETION_STREAMING", True):
             return None
         request_list = list(requests)
-        minimum = max(2, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MIN", "2") or "2"))
+        minimum = 1 if cancel_event is not None and _env_bool("DS4_PIPELINE_INTERNAL_STREAM_CANCELABLE_SINGLETONS", True) else max(2, int(os.environ.get("DS4_PIPELINE_COMPLETION_COHORT_MIN", "2") or "2"))
         if len(request_list) < minimum:
             return None
         max_cohort = _completion_effective_max_cohort(profile)
@@ -786,6 +786,8 @@ class OpenAICompatibleRunner:
                     out[chunk[index].request_id] = result
                     completed_indexes.add(index)
                     on_result(chunk[index].request_id, result)
+                if len(completed_indexes) >= len(chunk):
+                    break
                 if stream_deadline > 0 and time.time() >= stream_deadline and len(completed_indexes) < len(chunk):
                     timeout_error = f"coalesced completion stream wall timeout after {stream_timeout_s:.3f}s"
                     break
