@@ -13,10 +13,10 @@
     "sharding": "pipeline_layers"
   },
   "admission": {
-    "max_num_batched_tokens": 65536,
-    "max_num_seqs": 128,
-    "power_policy": "one active Kimi batch per compute domain; vLLM max_num_seqs stays 128 while DSAPI may submit up to the declared queue_depth_target to keep vLLM's own wait queue warm without increasing GPU KV residency",
-    "queue_depth_target": 256
+    "max_num_batched_tokens": 131072,
+    "max_num_seqs": 256,
+    "power_policy": "one active Kimi batch per compute domain; vLLM max_num_seqs moves to 256 after pulled-main DSAPI probes showed 128x512x128 used under 3% of the fixed 8 GiB GPU KV cap with no thermal or power throttle; DSAPI may submit up to queue_depth_target to keep vLLM's own wait queue warm during long tails",
+    "queue_depth_target": 512
   },
   "launch": {
     "api_base_url": "http://127.0.0.1:8138",

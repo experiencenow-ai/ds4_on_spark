@@ -9,11 +9,11 @@
   "format": "ds4-model-profile-v1",
   "model_id": "moonshotai/Kimi-K2.7-Code",
   "performance": {
-    "aggregate_completion_tok_s": 26.48,
+    "aggregate_completion_tok_s": 143.52,
     "latency_rank": 1.8,
-    "max_num_batched_tokens": 65536,
-    "max_num_seqs": 128,
-    "measurement_notes": "DSAPI PP13 rolling-refill benchmark completed 64x512x128 with batch-64 service/coordinator cap at 65.8 tok/s cold and 98.1 tok/s replay; batch-128 replay reached 130.9 tok/s with LMCache hits but vLLM Waiting stayed 0 during uniform-output cohorts. The next coordinator-only qualification keeps vLLM max_num_seqs=128 and raises DSAPI submit queue depth to 256 to avoid empty vLLM wait queues during tails.",
+    "max_num_batched_tokens": 131072,
+    "max_num_seqs": 256,
+    "measurement_notes": "Pulled-main DSAPI coalesced completion probes on 2026-06-14: 64x512x32 reached 101.6 tok/s, 128x512x32 reached 115.8 tok/s, 256x512x32 reached 117.9 tok/s while vLLM admitted 128 running and 128 waiting, and 128x512x128 reached 143.5 tok/s with 128 running, <3% KV usage, max sampled utilization 96%, no resource-governor throttle. Next qualification raises vLLM max_num_seqs to 256 and max_num_batched_tokens to 131072.",
     "target": "13-stage Kimi K2.7 Code smart-model qualification pipeline using the proven Kimi K2.6 PP13 layer partition."
   },
   "production_eligible": false,

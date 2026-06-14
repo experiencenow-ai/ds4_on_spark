@@ -28,7 +28,7 @@
     "--max-model-len",
     "8192",
     "--max-num-batched-tokens",
-    "65536",
+    "131072",
     "--gpu-memory-utilization",
     "0.70",
     "--kv-cache-memory-bytes",
@@ -113,7 +113,7 @@
   },
   "master_addr": "10.10.100.10",
   "master_port": 29664,
-  "max_batch_size": 128,
+  "max_batch_size": 256,
   "model_id": "/home/{node}/models/hf/moonshotai/Kimi-K2.7-Code",
   "pipeline_nodes": [
     "spark0",
