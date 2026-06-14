@@ -89,6 +89,8 @@ class ResidentServicePlan:
     low_watermark: int
     max_cohort_size: int
     batch_linger_s: float
+    ready_shape_bucketing: bool = False
+    ready_shape_lookahead: int = 1
     weight: float = 1.0
     admission_mode: str = "resident_multimodel_weighted_deficit"
     deficit: float = 0.0
@@ -213,6 +215,8 @@ def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weigh
     max_cohort = max(1, int(cohort_sizes.get(service_id, cohort_sizes.get(service.profile_id, max_cohort_default))))
     service_linger = float(linger.get(service_id, linger.get(service.profile_id, _scheduler_linger(service, default_batch_linger_s))))
     admission_mode = str(admission_modes.get(service_id, admission_modes.get(service.profile_id, default_admission_mode or service.scheduler.get("admission_mode") or "resident_multimodel_weighted_deficit")))
+    shape_bucketing = bool(service.scheduler.get("ready_shape_bucketing", False))
+    shape_lookahead = max(1, _scheduler_int(service, ("ready_shape_lookahead",), 1))
     return ResidentServicePlan(
         service_id=service_id,
         profile_id=service.profile_id,
@@ -222,6 +226,8 @@ def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weigh
         low_watermark=min(queue_target, max(1, low)),
         max_cohort_size=max_cohort,
         batch_linger_s=max(0.0, service_linger),
+        ready_shape_bucketing=shape_bucketing,
+        ready_shape_lookahead=shape_lookahead,
         weight=max(0.01, float(weights.get(service_id, weights.get(service.profile_id, service.scheduler.get("resident_weight") or 1.0)))),
         admission_mode=admission_mode,
     )

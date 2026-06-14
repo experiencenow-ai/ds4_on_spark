@@ -229,6 +229,10 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertAlmostEqual(payload["resident_gpu_memory_utilization_sum"], 0.95)
         self.assertEqual(payload["resident_fixed_kv_cache_memory_bytes"], {"kimi27_pp13": 8589934592, "qwen27_bf16_pp13": 8589934592})
         self.assertEqual(payload["resident_fixed_kv_cache_memory_bytes_sum"], 17179869184)
+        kimi = topology.pipeline_service_by_id("kimi27_pp13")
+        self.assertEqual(kimi.scheduler["admission_mode"], "resident_multimodel_rolling_refill")
+        self.assertTrue(kimi.scheduler["ready_shape_bucketing"])
+        self.assertEqual(kimi.scheduler["ready_shape_lookahead"], 4)
         checks = {item["name"]: item for item in payload["checks"]}
         self.assertTrue(checks["first3_gpu_budget_under_hard_cap"]["ok"])
         self.assertEqual(checks["first3_gpu_budget_under_hard_cap"]["details"]["sum"], 0)

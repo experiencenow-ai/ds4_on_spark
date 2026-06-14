@@ -801,11 +801,12 @@ class CoordinatorApi:
         return refill_available
 
     def _resident_prepare_ready(self, worker: BatchWorker, plan: ResidentServicePlan, entry_node_id: str, node_profile_ids: tuple[str, ...], limit: int, kv_shard_layouts_by_profile: dict[str, Any]) -> int:
+        prepare_limit = limit * max(1, int(plan.ready_shape_lookahead)) if plan.ready_shape_bucketing else limit
         return self.queue.prepare_ready(
             node_id=entry_node_id,
             eligible_profile_ids=node_profile_ids,
             batch_id=None,
-            limit=limit,
+            limit=prepare_limit,
             leased_by=worker.worker_id,
             lease_ttl_s=worker.lease_ttl_s,
             max_node_depth=0,
@@ -827,6 +828,8 @@ class CoordinatorApi:
             batch_limits_by_service=batch_limits_by_service,
             selected_service_id=plan.service_id,
             share_compute_domain=True,
+            ready_shape_bucketing=plan.ready_shape_bucketing,
+            ready_shape_lookahead=plan.ready_shape_lookahead,
         )
 
     def _dispatcher_note_resident(self, pending: dict[Any, Any], service_plans: dict[str, ResidentServicePlan], *, attempted: int, made_ready: int) -> None:
