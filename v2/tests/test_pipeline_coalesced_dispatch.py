@@ -770,6 +770,41 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual(status["resident_rolling_batch_count"], 1)
             self.assertEqual(status["resident_rolling_refill_stream_count"], 0)
 
+    def test_resident_rolling_admission_blocks_parallel_same_service_cohorts_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            topology = SparkTopology.load(TOPOLOGY)
+            plan = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)["dsv4_flash_pp8"]
+            plan.admission_mode = "resident_multimodel_rolling_refill"
+            plan.target_active = 96
+            plan.queue_depth_target = 96
+            plan.low_watermark = 84
+            plan.max_cohort_size = 96
+
+            self.assertEqual(api._resident_refill_limit(plan, {}, 0, 256), 96)
+            self.assertEqual(api._resident_refill_limit(plan, {"dsv4_flash_pp8": 57}, 0, 256), 0)
+
+    def test_resident_rolling_admission_can_enable_parallel_same_service_cohorts(self) -> None:
+        old = os.environ.get("DS4_API_RESIDENT_ALLOW_PARALLEL_COHORTS")
+        os.environ["DS4_API_RESIDENT_ALLOW_PARALLEL_COHORTS"] = "1"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+                topology = SparkTopology.load(TOPOLOGY)
+                plan = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)["dsv4_flash_pp8"]
+                plan.admission_mode = "resident_multimodel_rolling_refill"
+                plan.target_active = 96
+                plan.queue_depth_target = 96
+                plan.low_watermark = 84
+                plan.max_cohort_size = 96
+
+                self.assertEqual(api._resident_refill_limit(plan, {"dsv4_flash_pp8": 57}, 0, 256), 39)
+        finally:
+            if old is None:
+                os.environ.pop("DS4_API_RESIDENT_ALLOW_PARALLEL_COHORTS", None)
+            else:
+                os.environ["DS4_API_RESIDENT_ALLOW_PARALLEL_COHORTS"] = old
+
     def test_resident_rolling_admission_can_force_refill_stream_for_service(self) -> None:
         old = os.environ.get("DS4_API_RESIDENT_FORCE_REFILL_STREAM_SERVICE_IDS")
         os.environ["DS4_API_RESIDENT_FORCE_REFILL_STREAM_SERVICE_IDS"] = "dsv4_flash_pp8"
