@@ -23,7 +23,7 @@
     "ds4_eval_status": "pending COMPSEC17 and 92-question evaluation"
   },
   "routing": {
-    "chat_cohort_transport": "parallel_chat_completions",
+    "chat_cohort_transport": "parallel_completion_prompts",
     "chat_template_renderer": "kimi_k2",
     "chat_template_thinking_key": "thinking",
     "default_for": [],

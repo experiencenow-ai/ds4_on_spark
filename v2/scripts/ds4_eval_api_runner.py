@@ -284,6 +284,8 @@ def render_prompt(vllm_url: str, model: str, question_prompt: str, max_tokens: i
     prompt = detok.get("prompt")
     if not isinstance(prompt, str):
         raise ValueError(f"detokenize endpoint did not return prompt: {detok}")
+    if not enable_thinking and prompt.endswith("<think>"):
+        prompt += "</think>"
     return prompt
 
 
