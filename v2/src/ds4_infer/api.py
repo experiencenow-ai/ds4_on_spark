@@ -469,9 +469,25 @@ class CoordinatorApi:
             state["queue_status_newest_event_id"] = int(queue_status.get("newest_event_id") or 0)
         except Exception as exc:
             state["queue_status_error"] = str(exc)
+        self._dispatcher_status_add_resident_defaults(state)
         state.update(self.jit_kv_circuit.status())
         state["jit_kv_startup_recovery"] = dict(self.jit_kv_startup_recovery)
         return state
+
+    def _dispatcher_status_add_resident_defaults(self, state: dict[str, Any]) -> None:
+        if not bool(state.get("resident_multimodel", False)):
+            return
+        try:
+            topology = self._topology()
+            entry_node_id = str(topology.routing_policy.get("queue_entry_node_id", "spark0"))
+            service_plans = _resident_service_plans(topology, entry_node_id=entry_node_id, default_batch_linger_s=self.dispatcher_batch_linger_s)
+        except Exception as exc:
+            state.setdefault("resident_service_status_error", str(exc))
+            return
+        state.setdefault("resident_service_targets", {sid: plan.target_active for sid, plan in service_plans.items()})
+        state.setdefault("resident_service_queue_depth_targets", {sid: plan.queue_depth_target for sid, plan in service_plans.items()})
+        state.setdefault("resident_service_low_watermarks", {sid: plan.low_watermark for sid, plan in service_plans.items()})
+        state.setdefault("resident_service_admission_modes", {sid: plan.admission_mode for sid, plan in service_plans.items()})
 
     def _dispatcher_is_active(self) -> bool:
         return bool(self.dispatcher_enabled and self.dispatcher_thread is not None and self.dispatcher_thread.is_alive())

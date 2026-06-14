@@ -1066,6 +1066,16 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             else:
                 os.environ["DS4_API_DISPATCH_KV_CAPACITY_BYTES"] = old
 
+    def test_dispatcher_status_reports_resident_targets_before_first_dispatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            status = api.dispatcher_status()
+
+            self.assertTrue(status["resident_multimodel"])
+            self.assertEqual(status["resident_service_targets"]["dsv4_flash_pp8"], 64)
+            self.assertEqual(status["resident_service_queue_depth_targets"]["dsv4_flash_pp8"], 64)
+            self.assertIn("dsv4_flash_pp8", status["resident_service_admission_modes"])
+
     def test_dispatcher_status_reports_live_queue_counts_by_service(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
