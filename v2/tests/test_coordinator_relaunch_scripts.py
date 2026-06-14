@@ -151,7 +151,7 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "128")
         self.assertEqual(defaults["DS4_API_DISPATCH_COHORT_WORKERS"], "32")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "32")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "16")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "32")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "2")
         self.assertEqual(defaults["DS4_API_JIT_KV_PREFETCH_API"], "0")
         self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE"], "1")
