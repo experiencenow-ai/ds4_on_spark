@@ -571,6 +571,32 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual((completed, failed, retried), (3, 0, 0))
             self.assertEqual(runner.batch_sizes, [3])
 
+    def test_resident_service_admission_mode_can_be_overridden_by_env(self) -> None:
+        old_json = os.environ.get("DS4_API_SERVICE_ADMISSION_MODES_JSON")
+        old_default = os.environ.get("DS4_API_SERVICE_ADMISSION_MODE")
+        try:
+            os.environ["DS4_API_SERVICE_ADMISSION_MODES_JSON"] = json.dumps({"dsv4_flash_pp8": "resident_multimodel_rolling_refill"})
+            os.environ.pop("DS4_API_SERVICE_ADMISSION_MODE", None)
+            topology = SparkTopology.load(TOPOLOGY)
+            plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+            self.assertEqual(plans["dsv4_flash_pp8"].admission_mode, "resident_multimodel_rolling_refill")
+            os.environ["DS4_API_SERVICE_ADMISSION_MODES_JSON"] = json.dumps({"dsv4_vllm_mtp_pp8_smartest_v1": "rolling_refill"})
+            plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+            self.assertEqual(plans["dsv4_flash_pp8"].admission_mode, "rolling_refill")
+            os.environ.pop("DS4_API_SERVICE_ADMISSION_MODES_JSON", None)
+            os.environ["DS4_API_SERVICE_ADMISSION_MODE"] = "resident_multimodel_rolling_refill"
+            plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+            self.assertEqual(plans["qwen27_bf16_pp8"].admission_mode, "resident_multimodel_rolling_refill")
+        finally:
+            if old_json is None:
+                os.environ.pop("DS4_API_SERVICE_ADMISSION_MODES_JSON", None)
+            else:
+                os.environ["DS4_API_SERVICE_ADMISSION_MODES_JSON"] = old_json
+            if old_default is None:
+                os.environ.pop("DS4_API_SERVICE_ADMISSION_MODE", None)
+            else:
+                os.environ["DS4_API_SERVICE_ADMISSION_MODE"] = old_default
+
     def test_resident_refill_waits_for_low_watermark_then_restores_target(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")

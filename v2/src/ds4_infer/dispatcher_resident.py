@@ -116,6 +116,8 @@ def resident_service_plans(topology: SparkTopology, *, entry_node_id: str, defau
     lows = _json_int_env("DS4_API_SERVICE_LOW_WATERMARKS_JSON")
     cohort_sizes = _json_int_env("DS4_API_SERVICE_MAX_COHORTS_JSON")
     linger = _json_float_env("DS4_API_SERVICE_LINGER_JSON")
+    admission_modes = _json_str_env("DS4_API_SERVICE_ADMISSION_MODES_JSON")
+    default_admission_mode = os.environ.get("DS4_API_SERVICE_ADMISSION_MODE") or os.environ.get("DS4_API_RESIDENT_ADMISSION_MODE") or ""
     active = active_resident_service_ids(topology)
     plans: dict[str, ResidentServicePlan] = {}
     for service in topology.pipeline_services.values():
@@ -132,6 +134,8 @@ def resident_service_plans(topology: SparkTopology, *, entry_node_id: str, defau
             lows=lows,
             cohort_sizes=cohort_sizes,
             linger=linger,
+            admission_modes=admission_modes,
+            default_admission_mode=default_admission_mode,
         )
     return plans
 
@@ -198,7 +202,7 @@ def plan_uses_rolling_admission(plan: ResidentServicePlan) -> bool:
     return mode in {"resident_multimodel_rolling_refill", "rolling_refill", "rolling"}
 
 
-def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weights: dict[str, float], targets: dict[str, int], queue_targets: dict[str, int], lows: dict[str, int], cohort_sizes: dict[str, int], linger: dict[str, float]) -> ResidentServicePlan:
+def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weights: dict[str, float], targets: dict[str, int], queue_targets: dict[str, int], lows: dict[str, int], cohort_sizes: dict[str, int], linger: dict[str, float], admission_modes: dict[str, str], default_admission_mode: str) -> ResidentServicePlan:
     service_id = service.service_id
     target = max(1, int(targets.get(service_id, targets.get(service.profile_id, service_target_active(service)))))
     queue_target = max(target, int(queue_targets.get(service_id, queue_targets.get(service.profile_id, _scheduler_int(service, ("queue_depth_target", "vllm_queue_depth_target", "submit_queue_depth_target"), target)))))
@@ -208,6 +212,7 @@ def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weigh
     max_cohort_default = _scheduler_int(service, ("dispatch_batch_limit", "max_dispatch_cohort", "queue_depth_target", "vllm_queue_depth_target"), pipeline_service_batch_limit(service))
     max_cohort = max(1, int(cohort_sizes.get(service_id, cohort_sizes.get(service.profile_id, max_cohort_default))))
     service_linger = float(linger.get(service_id, linger.get(service.profile_id, _scheduler_linger(service, default_batch_linger_s))))
+    admission_mode = str(admission_modes.get(service_id, admission_modes.get(service.profile_id, default_admission_mode or service.scheduler.get("admission_mode") or "resident_multimodel_weighted_deficit")))
     return ResidentServicePlan(
         service_id=service_id,
         profile_id=service.profile_id,
@@ -218,7 +223,7 @@ def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weigh
         max_cohort_size=max_cohort,
         batch_linger_s=max(0.0, service_linger),
         weight=max(0.01, float(weights.get(service_id, weights.get(service.profile_id, service.scheduler.get("resident_weight") or 1.0)))),
-        admission_mode=str(service.scheduler.get("admission_mode") or "resident_multimodel_weighted_deficit"),
+        admission_mode=admission_mode,
     )
 
 
@@ -257,6 +262,16 @@ def _json_float_env(name: str) -> dict[str, float]:
             out[str(key)] = float(value)
         except (TypeError, ValueError):
             continue
+    return out
+
+
+def _json_str_env(name: str) -> dict[str, str]:
+    parsed = _json_env(name)
+    out: dict[str, str] = {}
+    for key, value in parsed.items():
+        text = str(value).strip()
+        if text:
+            out[str(key)] = text
     return out
 
 
