@@ -644,6 +644,9 @@ class CoordinatorApi:
         kv_shard_layouts_by_profile: dict[str, Any],
         service_plans: dict[str, ResidentServicePlan] | None = None,
     ) -> int:
+        if not self._dispatcher_has_refill_demand(pending):
+            self._dispatcher_note(resource_governor=self.dispatcher_resource_governor.status())
+            return 0
         if not self._dispatcher_resource_allows_refill():
             return 0
         service_plans = service_plans or {}
@@ -667,6 +670,12 @@ class CoordinatorApi:
             batch_limits_by_service=batch_limits_by_service,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
         )
+
+    def _dispatcher_has_refill_demand(self, pending: dict[Any, Any]) -> bool:
+        if self.dispatcher_window - _pending_claim_count(pending) <= 0:
+            return False
+        counts = self.queue.status(refresh=False).get("state_counts") or {}
+        return any(int(counts.get(state) or 0) > 0 for state in ("queued", "ready"))
 
     def _dispatcher_resource_allows_refill(self) -> bool:
         decision = self.dispatcher_resource_governor.before_refill()
