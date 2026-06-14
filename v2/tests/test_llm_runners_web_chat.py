@@ -98,8 +98,10 @@ class CapturingAntirezRunner(AntirezRunner):
 class StreamingCompletionBackend(OpenAICompatibleRunner):
     def __init__(self) -> None:
         super().__init__(base_url="http://unused")
+        self.calls: list[tuple[str, dict]] = []
 
     def _post_sse_json(self, endpoint: str, payload: dict, **kwargs):
+        self.calls.append((endpoint, payload))
         assert endpoint == self.completion_endpoint
         assert payload["stream"] is True
         assert len(payload["prompt"]) == 2
@@ -202,9 +204,10 @@ class SlowChatBatchBackend(OpenAICompatibleRunner):
 class StreamingPipelineRunner(PipelineOpenAIRunner):
     def __init__(self) -> None:
         super().__init__(base_urls={"svc": "http://unused"})
+        self.backend = StreamingCompletionBackend()
 
     def _runner_for(self, profile: ModelProfile, node_id: str | None) -> StreamingCompletionBackend:
-        return StreamingCompletionBackend()
+        return self.backend
 
 
 class SlowTailStreamingPipelineRunner(PipelineOpenAIRunner):
@@ -333,6 +336,27 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(result["r2"]["output"]["text"], "two")
         self.assertEqual(result["r"]["usage"]["completion_tokens"], 64)
         self.assertEqual(result["r2"]["transport"]["coalesced_batch_size"], 2)
+
+    def test_openai_runner_coalesces_mixed_completion_subgroups(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")
+        requests = []
+        for request_id, tokens in (("r", 64), ("r2", 128), ("r3", 64), ("r4", 128)):
+            raw = make_request(chat=False).raw
+            raw["request_id"] = request_id
+            raw["max_output_tokens"] = tokens
+            raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": tokens}
+            requests.append(InferenceRequest.from_json(raw))
+        runner = CapturingCoalescedRunner()
+
+        result = runner.run_many_completion(requests, profile)
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(sorted(payload["max_tokens"] for _, payload in runner.calls), [64, 128])
+        self.assertEqual([len(payload["prompt"]) for _, payload in runner.calls], [2, 2])
+        self.assertTrue(all(row["transport"]["coalesced_completion_batch"] for row in result.values()))
+        self.assertEqual({row["transport"]["coalesced_batch_size"] for row in result.values()}, {2})
 
     def test_openai_runner_does_not_coalesce_chat_batch(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
@@ -645,6 +669,45 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(seen, [("r2", "second done"), ("r", "first done")])
         self.assertEqual(results["r"]["transport"]["coalesced_completion_streaming"], True)
         self.assertEqual(results["r2"]["transport"]["coalesced_batch_size"], 2)
+
+    def test_pipeline_runner_batches_mixed_completion_subgroups_incrementally(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": False,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {"served_model_name": "served-model"},
+            }
+        )
+        requests = []
+        for request_id, tokens in (("r", 64), ("r2", 128), ("r3", 64), ("r4", 128)):
+            raw = make_request(chat=False).raw
+            raw["request_id"] = request_id
+            raw["max_output_tokens"] = tokens
+            raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": tokens}
+            requests.append(InferenceRequest.from_json(raw))
+        seen = []
+        runner = NonStreamingCoalescedPipelineRunner()
+
+        results = runner.run_many_on_node_incremental(
+            requests,
+            profile,
+            None,
+            concurrency=4,
+            on_result=lambda request_id, result: seen.append((request_id, result["output"]["text"])),
+        )
+
+        self.assertEqual(sorted(payload["max_tokens"] for _, payload in runner.backend.calls), [64, 128])
+        self.assertEqual(sorted(len(payload["prompt"]) for _, payload in runner.backend.calls), [2, 2])
+        self.assertEqual(set(results), {"r", "r2", "r3", "r4"})
+        self.assertEqual({row["transport"]["coalesced_batch_size"] for row in results.values()}, {2})
+        self.assertTrue(all(row["transport"]["coalesced_completion_batch"] for row in results.values()))
+        self.assertEqual(len(seen), 4)
 
     def test_pipeline_runner_publishes_chat_batch_chunks_incrementally(self) -> None:
         profile = ModelProfile.from_json(

@@ -656,13 +656,10 @@ class OpenAICompatibleRunner:
             return None
         max_cohort = _completion_effective_max_cohort(profile)
         token_budget = coalesced_completion_token_budget()
-        payloads: list[tuple[list[InferenceRequest], dict[str, Any]]] = []
-        chunks = _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget)
-        for chunk in chunks:
-            payload = _coalesced_completion_payload(chunk, profile, self.default_extra_body)
-            if payload is None:
-                return None
-            payloads.append((chunk, payload))
+        planned = _coalesced_completion_payload_groups(request_list, profile, self.default_extra_body, max_cohort=max_cohort, token_budget=token_budget, minimum=minimum)
+        if planned is None:
+            return None
+        chunks, payloads = planned
         out: dict[str, dict] = {}
         concurrency = _completion_chunk_concurrency(profile)
         if concurrency > 1 and len(payloads) > 1:
@@ -723,14 +720,12 @@ class OpenAICompatibleRunner:
             return None
         max_cohort = _completion_effective_max_cohort(profile)
         token_budget = coalesced_completion_token_budget()
-        chunks = _completion_cohort_chunks(request_list, max_cohort=max_cohort, token_budget=token_budget)
-        payloads: list[tuple[list[InferenceRequest], dict[str, Any]]] = []
-        for chunk in chunks:
-            payload = _coalesced_completion_payload(chunk, profile, self.default_extra_body)
-            if payload is None:
-                return None
+        planned = _coalesced_completion_payload_groups(request_list, profile, self.default_extra_body, max_cohort=max_cohort, token_budget=token_budget, minimum=minimum)
+        if planned is None:
+            return None
+        chunks, payloads = planned
+        for _, payload in payloads:
             payload["stream"] = True
-            payloads.append((chunk, payload))
         out: dict[str, dict] = {}
         concurrency = _completion_chunk_concurrency(profile)
         if concurrency > 1 and len(payloads) > 1:
@@ -1152,6 +1147,49 @@ def _coalesced_completion_payload(requests: list[InferenceRequest], profile: Mod
     if auto_kv_suppressed:
         payload[AUTO_KV_BATCH_SUPPRESSED_KEY] = True
     return payload
+
+
+def _coalesced_completion_payload_groups(
+    requests: list[InferenceRequest],
+    profile: ModelProfile,
+    default_extra_body: dict[str, Any],
+    *,
+    max_cohort: int,
+    token_budget: int,
+    minimum: int,
+) -> tuple[list[list[InferenceRequest]], list[tuple[list[InferenceRequest], dict[str, Any]]]] | None:
+    groups: dict[str, list[InferenceRequest]] = {}
+    for item in requests:
+        key = _coalesced_completion_compat_key(item, profile, default_extra_body)
+        if key is None:
+            return None
+        groups.setdefault(key, []).append(item)
+    chunks: list[list[InferenceRequest]] = []
+    payloads: list[tuple[list[InferenceRequest], dict[str, Any]]] = []
+    for group in groups.values():
+        if len(group) < minimum:
+            return None
+        for chunk in _completion_cohort_chunks(group, max_cohort=max_cohort, token_budget=token_budget):
+            payload = _coalesced_completion_payload(chunk, profile, default_extra_body)
+            if payload is None:
+                return None
+            chunks.append(chunk)
+            payloads.append((chunk, payload))
+    return chunks, payloads
+
+
+def _coalesced_completion_compat_key(item: InferenceRequest, profile: ModelProfile, default_extra_body: dict[str, Any]) -> str | None:
+    if item.chat:
+        return None
+    payload = _openai_payload(item, profile)
+    _merge_extra_body(payload, default_extra_body)
+    if not isinstance(payload.get("prompt"), str):
+        return None
+    payload, _ = maybe_suppress_generated_auto_kv_for_cohort(payload)
+    comparable = dict(payload)
+    comparable.pop("prompt", None)
+    return json.dumps(comparable, sort_keys=True, separators=(",", ":"), default=str)
+
 
 def _coalesced_chat_payload(requests: list[InferenceRequest], profile: ModelProfile, default_extra_body: dict[str, Any]) -> dict[str, Any] | None:
     conversations: list[list[dict[str, str]]] = []
