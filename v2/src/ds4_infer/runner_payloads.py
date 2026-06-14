@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from .builders import apply_thinking_fields
 from .profiles import ModelProfile
 from .schemas import InferenceRequest
 
+AUTO_KV_BATCH_SUPPRESSED_KEY = "_ds4_auto_kv_suppressed_for_cohort"
 VLLM_CHAT_TOP_LEVEL_EXTRA_FIELDS = {
     "chat_template_kwargs",
     "thinking",
     "thinking_budget_tokens",
     "thinking_token_budget",
 }
+_AUTO_KV_STRICT_BATCH_POLICIES = {"strict", "strict-cache", "strict_cache", "prefer_cache", "cache"}
 
 
 def requests_need_client_stream(requests: list[InferenceRequest]) -> bool:
@@ -40,3 +43,28 @@ def merge_payload_extra_body(payload: dict[str, Any], extra_body: dict[str, Any]
                 payload[key] = incoming.pop(key)
     if incoming:
         payload["extra_body"] = {**dict(payload.get("extra_body") or {}), **incoming}
+
+
+def maybe_suppress_generated_auto_kv_for_cohort(payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    policy = os.environ.get("DS4_PIPELINE_AUTO_KV_BATCH_POLICY", "prefer_batch").strip().lower()
+    if policy in _AUTO_KV_STRICT_BATCH_POLICIES:
+        return payload, False
+    extra_body = payload.get("extra_body")
+    plan = extra_body.get("ds4_kv_cache") if isinstance(extra_body, dict) else None
+    transfer = payload.get("kv_transfer_params")
+    transfer_plan = transfer.get("ds4_kv_cache") if isinstance(transfer, dict) else None
+    cache_id = plan.get("cache_id") if isinstance(plan, dict) else None
+    transfer_cache_id = transfer_plan.get("cache_id") if isinstance(transfer_plan, dict) else None
+    if not (isinstance(cache_id, str) and cache_id.startswith("ds4-auto:")):
+        return payload, False
+    if not (isinstance(transfer_cache_id, str) and transfer_cache_id.startswith("ds4-auto:")):
+        return payload, False
+    cleaned = dict(payload)
+    cleaned.pop("kv_transfer_params", None)
+    cleaned_extra_body = dict(extra_body or {})
+    cleaned_extra_body.pop("ds4_kv_cache", None)
+    if cleaned_extra_body:
+        cleaned["extra_body"] = cleaned_extra_body
+    else:
+        cleaned.pop("extra_body", None)
+    return cleaned, True

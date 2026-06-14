@@ -19,7 +19,7 @@ from .cohort_safety import coalesced_completion_token_budget, coalesced_failure_
 from .jit_kv import build_prefetch_payload, disable_strict_kv, run_prefetch
 from .kv_cache import kv_cache_extra_body, kv_cache_vllm_request_fields
 from .profiles import ModelProfile
-from .runner_payloads import merge_payload_extra_body, merge_request_extra_body, requests_need_client_stream
+from .runner_payloads import AUTO_KV_BATCH_SUPPRESSED_KEY, maybe_suppress_generated_auto_kv_for_cohort, merge_payload_extra_body, merge_request_extra_body, requests_need_client_stream
 from .schemas import InferenceRequest, make_result
 
 
@@ -682,10 +682,11 @@ class OpenAICompatibleRunner:
 
     def _run_completion_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, original_batch_size: int) -> dict[str, dict]:
         started = time.time()
+        auto_kv_suppressed = bool(payload.pop(AUTO_KV_BATCH_SUPPRESSED_KEY, False))
         try:
             prefetch_info = _maybe_prestage_common_kv_prefix(self, payload, chunk)
             data = self._post_json(self.completion_endpoint, payload)
-            out = _coalesced_completion_results(chunk, profile, data, base_url=self.base_url, endpoint=self.completion_endpoint, started=started, prefetch_info=prefetch_info)
+            out = _coalesced_completion_results(chunk, profile, data, base_url=self.base_url, endpoint=self.completion_endpoint, started=started, prefetch_info=prefetch_info, auto_kv_suppressed=auto_kv_suppressed)
             if original_batch_size != len(chunk):
                 mark_coalesced_split(out, original_batch_size=original_batch_size)
             return out
@@ -749,6 +750,7 @@ class OpenAICompatibleRunner:
 
     def _run_completion_stream_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, on_result: Callable[[str, dict[str, Any]], None], on_delta: Callable[[str, str, dict[str, Any]], None] | None = None, cancel_event: Event | None = None) -> dict[str, dict]:
         started = time.time()
+        auto_kv_suppressed = bool(payload.pop(AUTO_KV_BATCH_SUPPRESSED_KEY, False))
         stream_timeout_s = _completion_stream_wall_timeout_s()
         stream_deadline = (started + stream_timeout_s) if stream_timeout_s > 0 else 0.0
         prefetch_info: dict[str, Any] | None = None
@@ -774,7 +776,7 @@ class OpenAICompatibleRunner:
                         on_delta(chunk[index].request_id, delta, {"coalesced_batch_size": len(chunk), "choice_index": index})
                     if choice.get("finish_reason") is None:
                         continue
-                    result = _coalesced_stream_result(chunk[index], profile, text_by_index[index], base_url=self.base_url, endpoint=self.completion_endpoint, started=started, batch_size=len(chunk), prefetch_info=_copy_optional_dict(prefetch_info))
+                    result = _coalesced_stream_result(chunk[index], profile, text_by_index[index], base_url=self.base_url, endpoint=self.completion_endpoint, started=started, batch_size=len(chunk), prefetch_info=_copy_optional_dict(prefetch_info), auto_kv_suppressed=auto_kv_suppressed)
                     out[chunk[index].request_id] = result
                     completed_indexes.add(index)
                     on_result(chunk[index].request_id, result)
@@ -800,7 +802,7 @@ class OpenAICompatibleRunner:
                 result = _coalesced_failure(item, profile, self.base_url, self.completion_endpoint, started, len(chunk), timeout_error)
             else:
                 text = text_by_index.get(index) or ""
-                result = _coalesced_stream_result(item, profile, text, base_url=self.base_url, endpoint=self.completion_endpoint, started=started, batch_size=len(chunk), prefetch_info=_copy_optional_dict(prefetch_info)) if text else _coalesced_failure(item, profile, self.base_url, self.completion_endpoint, started, len(chunk), "stream ended before this coalesced completion finished")
+                result = _coalesced_stream_result(item, profile, text, base_url=self.base_url, endpoint=self.completion_endpoint, started=started, batch_size=len(chunk), prefetch_info=_copy_optional_dict(prefetch_info), auto_kv_suppressed=auto_kv_suppressed) if text else _coalesced_failure(item, profile, self.base_url, self.completion_endpoint, started, len(chunk), "stream ended before this coalesced completion finished")
             out[item.request_id] = result
             completed_indexes.add(index)
             on_result(item.request_id, result)
@@ -1125,6 +1127,7 @@ def extract_openai_completion_text(data: dict[str, Any]) -> str:
 def _coalesced_completion_payload(requests: list[InferenceRequest], profile: ModelProfile, default_extra_body: dict[str, Any]) -> dict[str, Any] | None:
     prompts: list[str] = []
     shared: dict[str, Any] | None = None
+    auto_kv_suppressed = False
     for item in requests:
         if item.chat:
             return None
@@ -1133,6 +1136,7 @@ def _coalesced_completion_payload(requests: list[InferenceRequest], profile: Mod
         prompt = payload.get("prompt")
         if not isinstance(prompt, str):
             return None
+        payload, stripped_auto_kv = maybe_suppress_generated_auto_kv_for_cohort(payload)
         comparable = dict(payload)
         comparable.pop("prompt", None)
         if shared is None:
@@ -1140,10 +1144,13 @@ def _coalesced_completion_payload(requests: list[InferenceRequest], profile: Mod
         elif comparable != shared:
             return None
         prompts.append(prompt)
+        auto_kv_suppressed = auto_kv_suppressed or stripped_auto_kv
     if shared is None:
         return None
     payload = dict(shared)
     payload["prompt"] = prompts
+    if auto_kv_suppressed:
+        payload[AUTO_KV_BATCH_SUPPRESSED_KEY] = True
     return payload
 
 def _coalesced_chat_payload(requests: list[InferenceRequest], profile: ModelProfile, default_extra_body: dict[str, Any]) -> dict[str, Any] | None:
@@ -1398,6 +1405,7 @@ def _coalesced_completion_results(
     endpoint: str,
     started: float,
     prefetch_info: dict[str, Any] | None = None,
+    auto_kv_suppressed: bool = False,
 ) -> dict[str, dict]:
     choices = data.get("choices")
     if not isinstance(choices, list):
@@ -1422,6 +1430,8 @@ def _coalesced_completion_results(
         result = make_result(request=item, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=extract_openai_completion_text({"choices": [choice]}))
         result["usage"].update(_coalesced_usage(data, choice, item, len(requests)))
         result["transport"] = {"base_url": base_url, "endpoint": endpoint, "duration_s": round(time.time() - started, 6), "coalesced_completion_batch": True, "coalesced_batch_size": len(requests), "batch_size": len(requests)}
+        if auto_kv_suppressed:
+            result["transport"]["coalesced_auto_kv_suppressed"] = True
         if prefetch_info is not None:
             result["transport"]["kv_prestage"] = dict(prefetch_info)
         out[item.request_id] = result
@@ -1484,6 +1494,7 @@ def _coalesced_stream_result(
     started: float,
     batch_size: int,
     prefetch_info: dict[str, Any] | None = None,
+    auto_kv_suppressed: bool = False,
 ) -> dict[str, Any]:
     result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
     if _forced_output_request(request):
@@ -1501,6 +1512,8 @@ def _coalesced_stream_result(
     }
     if prefetch_info is not None:
         result["transport"]["kv_prestage"] = dict(prefetch_info)
+    if auto_kv_suppressed:
+        result["transport"]["coalesced_auto_kv_suppressed"] = True
     return result
 
 
