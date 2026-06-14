@@ -984,6 +984,43 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertNotIn("coalesced_completion_streaming", results["r"]["transport"])
         self.assertTrue(results["r2"]["transport"]["coalesced_completion_batch"])
 
+    def test_pipeline_runner_streams_forced_output_when_worker_can_cancel(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": False,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {"served_model_name": "served-model"},
+            }
+        )
+        first = make_request(chat=False)
+        first.raw["max_output_tokens"] = 11
+        first.raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": 11}
+        first = InferenceRequest.from_json(first.raw)
+        second_raw = make_request(chat=False).raw
+        second_raw["request_id"] = "r2"
+        second_raw["max_output_tokens"] = 11
+        second_raw["input"]["openai"] = {"ignore_eos": True, "min_tokens": 11}
+        seen = []
+        runner = StreamingPipelineRunner()
+        results = runner.run_many_on_node_incremental(
+            [first, InferenceRequest.from_json(second_raw)],
+            profile,
+            None,
+            concurrency=2,
+            on_result=lambda request_id, result: seen.append((request_id, result["output"]["text"])),
+            cancel_event=threading.Event(),
+        )
+        self.assertEqual(seen, [("r2", "second done"), ("r", "first done")])
+        self.assertEqual(len(runner.backend.calls), 1)
+        self.assertEqual(results["r"]["transport"]["coalesced_completion_streaming"], True)
+        self.assertEqual(results["r"]["usage"]["completion_tokens"], 11)
+
     def test_pipeline_runner_can_disable_internal_streaming_for_nonstreaming_worker(self) -> None:
         profile = ModelProfile.from_json(
             {

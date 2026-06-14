@@ -963,7 +963,7 @@ class PipelineOpenAIRunner:
             if coalesced_chat is not None:
                 return coalesced_chat
         if _env_bool("DS4_PIPELINE_COHORT_COMPLETIONS", True):
-            internal_stream = client_stream or _internal_stream_nonclient_cohort(request_list)
+            internal_stream = client_stream or _internal_stream_nonclient_cohort(request_list, cancel_event=cancel_event)
             if internal_stream:
                 coalesced = runner.run_many_completion_incremental(request_list, profile, on_result=on_result, on_delta=on_delta if client_stream else None, cancel_event=cancel_event)
                 if coalesced is not None:
@@ -1562,10 +1562,12 @@ def _forced_output_request(request: InferenceRequest) -> bool:
     return min_tokens >= int(request.max_output_tokens)
 
 
-def _internal_stream_nonclient_cohort(requests: list[InferenceRequest]) -> bool:
+def _internal_stream_nonclient_cohort(requests: list[InferenceRequest], *, cancel_event: Event | None = None) -> bool:
     raw = os.environ.get("DS4_PIPELINE_INTERNAL_STREAM_ALL_COHORTS")
     if raw is not None:
         return _env_bool("DS4_PIPELINE_INTERNAL_STREAM_ALL_COHORTS", True)
+    if cancel_event is not None and _env_bool("DS4_PIPELINE_INTERNAL_STREAM_CANCELABLE_COHORTS", True):
+        return True
     mode = os.environ.get("DS4_PIPELINE_INTERNAL_STREAM_MODE", "auto").strip().lower()
     if mode in {"1", "true", "yes", "on", "always"}:
         return True
