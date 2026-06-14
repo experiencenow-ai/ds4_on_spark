@@ -69,13 +69,13 @@
   "resident_batch_token_budget": {
     "qwen27_bf16_pp13": 32768,
     "gemma4_26b_a4b_pp13": 16384,
-    "notes": "Kimi2.7 moves to DSAPI admission 128 with a 131072-token service gate after pulled-main probes showed 128x512x128 reached 143.5 tok/s, vLLM admitted 128 running with low KV use, and no resource-governor throttle. Qwen uses its live max_num_seqs=32 service cap and Gemma stays at batch 16 until a separate relaunch gate.",
+    "notes": "Kimi2.7 triad admission follows the live model service cap of max_num_seqs=256 with a 131072-token service gate. Pulled-main DSAPI probes showed 128x512x128 reached 143.5 tok/s, a mixed round-robin 256-request run recovered from 75.7 to 161.8 tok/s after ready-shape bucketing, and vLLM KV use stayed low with no resource-governor throttle. Qwen uses its live max_num_seqs=32 service cap and Gemma stays at batch 16 until a separate relaunch gate.",
     "kimi27_pp13": 131072
   },
   "resident_batch_size": {
     "qwen27_bf16_pp13": 32,
     "gemma4_26b_a4b_pp13": 16,
-    "kimi27_pp13": 128
+    "kimi27_pp13": 256
   },
   "throughput_utility_metric": {
     "format": "ds4-centaur-throughput-utility-v1",
@@ -109,7 +109,7 @@
         "lane_weight": 1.35,
         "pipeline_parallel_size": 13,
         "gpu_memory_utilization": 0.7,
-        "batch_size": 128,
+        "batch_size": 256,
         "input_budget_tokens": 8192,
         "output_budget_tokens": 4096,
         "assumed_decode_tok_s": 16.207321,
@@ -221,12 +221,13 @@
       "SuperGPQA": "21/25"
     }
   },
-  "kimi_batch32_fit_estimate": {
-    "basis": "Live Kimi2.7 PP13 DSAPI run used an 8 GiB fixed GPU KV cap, max_num_seqs=16, and max_num_batched_tokens=32768; vLLM reported roughly 1% KV usage while the run stalled on long active decodes. The next qualification doubles max_num_seqs and the token gate without increasing fixed KV.",
+  "kimi_batch256_fit_estimate": {
+    "basis": "Live Kimi2.7 PP13 service is launched with an 8 GiB fixed GPU KV cap, max_num_seqs=256, and max_num_batched_tokens=131072. DSAPI Kimi128 short-context probes used under 3% of that cap, and the next pulled-main qualification raises DSAPI admission to the live service cap without increasing fixed KV.",
     "rough_fixed_8gib_token_capacity": 1978027,
-    "batch32_8192_context_tokens": 262144,
-    "estimated_capacity_margin": 7.55,
-    "notes": "This is an order-of-magnitude fit check, not a substitute for a relaunch. It says max_num_seqs=32 should still fit comfortably with the fixed 8 GiB Kimi KV cap; the practical constraints are scheduler workspace, answer length, and quality."
+    "batch256_512_context_tokens": 131072,
+    "batch256_8192_context_tokens": 2097152,
+    "estimated_capacity_margin_at_512_tokens": 15.09,
+    "notes": "This is an order-of-magnitude fit check, not a substitute for a pulled-main DSAPI benchmark. It says short-context max_num_seqs=256 should fit comfortably with the fixed 8 GiB Kimi KV cap; full 8192-context 256-way admission exceeds the rough resident-token estimate and must rely on strict token-budget admission, eviction, and external cache."
   },
   "observed_kimi_pp13_available_gib_before_small_overlay": {
     "spark0": 39.3,
@@ -275,7 +276,7 @@
   },
   "power_policy": {
     "hardware_power_limit_status": "No reliable per-Spark 150W NVML/powercap limit was exposed by nvidia-smi or /sys/class/powercap during the 2026-06-11 probe.",
-    "initial_control": "Use DSAPI service batch limits, token budgets, and one-running-batch-per-compute-domain admission until a hardware power cap is proven. Qwen batch 32 is coordinator-safe because the live service is already launched with --max-num-seqs 32; Kimi moves to batch 32 through a deliberate model-service relaunch, while Gemma stays at batch 16 until a separate relaunch gate.",
+    "initial_control": "Use DSAPI service batch limits, token budgets, and one-running-batch-per-compute-domain admission until a hardware power cap is proven. Qwen batch 32 and Kimi batch 256 are coordinator-safe because the live services are already launched with those max-num-seqs caps; Gemma stays at batch 16 until a separate relaunch gate.",
     "target_watts_per_spark": 150
   },
   "promotion_gates": [
@@ -283,6 +284,6 @@
     "Kimi2.7, Qwen27 PP13, and Gemma4 PP13 services are all launched from pulled main checkouts and pass DSAPI smoke through the triad topology.",
     "LMCache canaries prove cache load/store does not change answers for each resident service.",
     "DSAPI readiness passes with profiles/topology/static_sparks_kimi_qwen_gemma_pp13.json.",
-    "Run a metric-scored batch sweep starting at Kimi/Qwen/Gemma 32/32/32; only fall back to Gemma batch 16 if the pulled-main launch fails the memory floor or readiness gates."
+    "Run a metric-scored batch sweep starting at Kimi/Qwen/Gemma 256/32/16; only raise Gemma after the pulled-main launch passes the memory floor, readiness, accuracy, and cache gates."
   ]
 }
