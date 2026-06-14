@@ -73,8 +73,8 @@ def _is_dangerous_all_services(args: argparse.Namespace, actions: list[str]) -> 
 
 
 def _load_entries(topology_path: str, profiles_dir: str) -> list[dict[str, object]]:
-    topology = _load(Path(topology_path))
-    profiles = {str(data["profile_id"]): (path, data) for path, data in _profile_items(Path(profiles_dir))}
+    topology = _load(_resolve_cli_path(topology_path))
+    profiles = {str(data["profile_id"]): (path, data) for path, data in _profile_items(_resolve_cli_path(profiles_dir))}
     services = topology["routing_policy"]["pipeline_services"]
     entries = []
     for service_id, service in services.items():
@@ -102,6 +102,13 @@ def _load_entries(topology_path: str, profiles_dir: str) -> list[dict[str, objec
             "deployment": deployment,
         })
     return sorted(entries, key=lambda item: str(item["service_id"]))
+
+
+def _resolve_cli_path(raw: str) -> Path:
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    return path.resolve()
 
 
 def _profile_items(profiles_dir: Path) -> list[tuple[Path, dict[str, object]]]:
