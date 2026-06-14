@@ -28,6 +28,7 @@ def main() -> int:
     args = _args()
     entries = _select_entries(_load_entries(args.topology, args.profiles_dir), args.service)
     actions = _expand_actions(args.actions)
+    cleanup_on_probe_failure = _cleanup_on_probe_failure_enabled(actions, args)
     if _is_dangerous_all_services(args, actions):
         raise SystemExit("refusing mutating --service all --execute; pass --allow-all-services only for planned fleet-wide maintenance")
     if any(item in {"pull", "stop", "write-scripts", "launch"} for item in actions) and not args.execute:
@@ -36,7 +37,12 @@ def main() -> int:
         print("dry-run only; add --execute to run side-effecting lifecycle actions")
         return 0
     for action in actions:
-        _run_action(action, entries, args)
+        try:
+            _run_action(action, entries, args)
+        except SystemExit:
+            if action == "probe" and cleanup_on_probe_failure:
+                _cleanup_after_failed_probe(entries, args)
+            raise
     return 0
 
 
@@ -54,6 +60,7 @@ def _args() -> argparse.Namespace:
     parser.add_argument("--stagger-s", type=float, default=2.0)
     parser.add_argument("--remote-env", action="append", default=[], metavar="KEY=VALUE", help="export KEY=VALUE before launch scripts on each Spark node")
     parser.add_argument("--prefetch-token-file", default=str(DEFAULT_PREFETCH_TOKEN_FILE), help="Local token file to inject into token-gated vLLM DS4 KV prefetch services; falls back to /tmp on Linux.")
+    parser.add_argument("--no-cleanup-on-probe-failure", dest="cleanup_on_probe_failure", action="store_false", default=True, help="Do not stop ranks after a launch+probe sequence fails.")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--allow-all-services", action="store_true")
     parser.add_argument("--json", action="store_true")
@@ -70,6 +77,18 @@ def _expand_actions(actions: list[str]) -> list[str]:
 def _is_dangerous_all_services(args: argparse.Namespace, actions: list[str]) -> bool:
     mutating = {"pull", "stop", "write-scripts", "launch"}
     return bool(args.execute and args.service == "all" and not args.allow_all_services and any(action in mutating for action in actions))
+
+
+def _cleanup_on_probe_failure_enabled(actions: list[str], args: argparse.Namespace) -> bool:
+    if not bool(getattr(args, "execute", False)) or not bool(getattr(args, "cleanup_on_probe_failure", True)):
+        return False
+    launched = False
+    for action in actions:
+        if action == "launch":
+            launched = True
+        elif action == "probe" and launched:
+            return True
+    return False
 
 
 def _load_entries(topology_path: str, profiles_dir: str) -> list[dict[str, object]]:
@@ -252,6 +271,17 @@ def _probe_result_ok(result: subprocess.CompletedProcess[str]) -> bool:
     except json.JSONDecodeError:
         return False
     return body.get("ok") is True
+
+
+def _cleanup_after_failed_probe(entries: list[dict[str, object]], args: argparse.Namespace) -> None:
+    print("probe failed after launch; best-effort stopping launched service ranks", file=sys.stderr)
+    for entry in entries:
+        for node in entry["node_ids"]:
+            result = _ssh(str(node), _remote_kill(entry), args, capture=True)
+            if result.returncode == 0:
+                print(f"cleanup service_id={entry['service_id']} node={node} ok=True out={result.stdout.strip()}", file=sys.stderr)
+            else:
+                print(f"cleanup service_id={entry['service_id']} node={node} ok=False err={result.stderr.strip()}", file=sys.stderr)
 
 
 def _emit_rows(rows: list[dict[str, object]], args: argparse.Namespace) -> None:

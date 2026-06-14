@@ -86,6 +86,44 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
 
         self.assertEqual(lifecycle._expand_actions(["relaunch"]), ["pull", "stop", "write-scripts", "launch", "probe"])
 
+    def test_probe_cleanup_only_arms_after_executed_launch(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        enabled = type("Args", (), {"execute": True, "cleanup_on_probe_failure": True})()
+        dry_run = type("Args", (), {"execute": False, "cleanup_on_probe_failure": True})()
+        disabled = type("Args", (), {"execute": True, "cleanup_on_probe_failure": False})()
+
+        self.assertTrue(lifecycle._cleanup_on_probe_failure_enabled(["pull", "stop", "write-scripts", "launch", "probe"], enabled))
+        self.assertFalse(lifecycle._cleanup_on_probe_failure_enabled(["probe"], enabled))
+        self.assertFalse(lifecycle._cleanup_on_probe_failure_enabled(["launch"], enabled))
+        self.assertFalse(lifecycle._cleanup_on_probe_failure_enabled(["launch", "probe"], dry_run))
+        self.assertFalse(lifecycle._cleanup_on_probe_failure_enabled(["launch", "probe"], disabled))
+
+    def test_probe_failure_cleanup_attempts_every_declared_node(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        entry = {
+            "service_id": "kimi27_pp13",
+            "profile_id": "kimi27_code_pp13_v1",
+            "model_id": "moonshotai/Kimi-K2.7-Code",
+            "node_ids": ["spark0", "spark1", "spark2"],
+            "deployment": {"model_id": "/home/{node}/models/hf/moonshotai/Kimi-K2.7-Code", "served_model_name": "kimi27-code-pp13"},
+        }
+        args = type("Args", (), {"connect_timeout_s": 1})()
+        calls = []
+        old_ssh = lifecycle._ssh
+        try:
+            def fake_ssh(node, script, call_args, *, capture=False):
+                calls.append((node, capture, script))
+                return lifecycle.subprocess.CompletedProcess(["ssh"], 0, stdout='{"killed":[1]}\n', stderr="")
+
+            lifecycle._ssh = fake_ssh
+            lifecycle._cleanup_after_failed_probe([entry], args)
+        finally:
+            lifecycle._ssh = old_ssh
+
+        self.assertEqual([call[0] for call in calls], ["spark0", "spark1", "spark2"])
+        self.assertTrue(all(call[1] for call in calls))
+        self.assertTrue(all("Kimi-K2.7-Code" in call[2] for call in calls))
+
     def test_remote_launch_expands_home_paths_before_quoting(self) -> None:
         lifecycle = load_script(SCRIPT)
         entries = lifecycle._load_entries(str(ROOT / "profiles" / "topology" / "static_sparks.json"), str(ROOT / "profiles" / "models"))
