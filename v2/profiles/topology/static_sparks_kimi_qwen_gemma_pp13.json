@@ -227,7 +227,7 @@
         "kimi27_pp13": "lmcache"
       },
       "dsv4_service_id": "",
-      "gpu_utilization_hard_cap": 0.85,
+      "gpu_utilization_hard_cap": 0.93,
       "gpu_utilization_floors": {},
       "service_ids": [
         "kimi27_pp13",

@@ -122,6 +122,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
             self.assertEqual(service.kv_cache["expected_entry_fraction_per_node"], 1.0 / 13.0)
             self.assertGreater(int(service.kv_cache["kv_cache_memory_bytes"]), 0)
         coordinator = topology.routing_policy["resident_coordinator_defaults"]
+        self.assertEqual(topology.routing_policy["resident_service_expectations"]["gpu_utilization_hard_cap"], 0.93)
         self.assertEqual(coordinator["dispatch_window"], 704)
         self.assertEqual(coordinator["dispatch_refill_batch"], 704)
         self.assertEqual(coordinator["dispatch_cohort_workers"], 704)
