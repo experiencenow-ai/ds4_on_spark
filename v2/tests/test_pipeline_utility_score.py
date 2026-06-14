@@ -91,7 +91,7 @@ class PipelineUtilityScoreTests(unittest.TestCase):
         self.assertTrue(metric["hard_constraints"]["strict_kv_eviction_required"])
         self.assertEqual({item["service_id"] for item in metric["service_candidates"]}, {"kimi27_pp13", "qwen27_bf16_pp13", "gemma4_26b_a4b_pp13"})
         self.assertEqual(metric["service_candidates"][2]["batch_size"], 32)
-        self.assertEqual(metric["service_candidates"][0]["gpu_memory_utilization"], 0.48)
+        self.assertEqual(metric["service_candidates"][0]["gpu_memory_utilization"], 0.34)
         self.assertEqual({item["pipeline_id"] for item in metric["pipeline_candidates"]}, {"centaur_kimi_qwen_gemma_pp13", "centaur_qwen_gemma_fast_pair", "centaur_kimi_smart_lane"})
 
     def test_optimizer_blocks_over_cap_triad(self) -> None:
