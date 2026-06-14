@@ -136,14 +136,14 @@
         "lane": "fast_diverse",
         "lane_weight": 0.85,
         "pipeline_parallel_size": 13,
-        "gpu_memory_utilization": 0.2,
-        "batch_size": 32,
+        "gpu_memory_utilization": 0.16,
+        "batch_size": 16,
         "input_budget_tokens": 8192,
         "output_budget_tokens": 4096,
         "assumed_decode_tok_s": 0,
         "accuracy_weight": 1.0,
         "kv_resident_input_batches": 3.0,
-        "measurement_status": "raise from batch16 only after a pulled-main launch proves memory fit"
+        "measurement_status": "2026-06-14 pulled-main triad launch refused Gemma at 0.20 because spark4 had 21.17 GiB free while vLLM required 23.93 GiB; cap lowered to 0.16 for the first clean triad launch gate"
       }
     ],
     "pipeline_candidates": [

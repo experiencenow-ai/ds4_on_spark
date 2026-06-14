@@ -113,7 +113,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
             self.assertEqual(service.scheduler["ready_shape_lookahead"], 4)
         self.assertEqual(kimi.kv_cache["gpu_memory_utilization"], 0.34)
         self.assertEqual(qwen.kv_cache["gpu_memory_utilization"], 0.25)
-        self.assertEqual(gemma.kv_cache["gpu_memory_utilization"], 0.2)
+        self.assertEqual(gemma.kv_cache["gpu_memory_utilization"], 0.16)
         for service in (kimi, qwen, gemma):
             self.assertEqual(service.entry_node_id, "spark0")
             self.assertEqual(service.node_ids, ("spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7", "spark8", "spark9", "sparka", "sparkb", "sparkc"))
