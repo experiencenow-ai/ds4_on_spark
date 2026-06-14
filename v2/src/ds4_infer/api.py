@@ -780,6 +780,8 @@ class CoordinatorApi:
         service_available = max(0, int(plan.queue_depth_target) - active)
         if service_available <= 0:
             return 0
+        if active > 0 and not _resident_parallel_cohorts_enabled(plan):
+            return 0
         if active > int(plan.low_watermark):
             return 0
         return min(
@@ -1805,6 +1807,17 @@ def _dispatcher_force_refill_stream_for_claims(claims: list[QueueClaim]) -> bool
         return True
     claim_service_ids = {str(claim.selected_service_id or "") for claim in claims}
     return bool(claim_service_ids) and claim_service_ids.issubset(service_ids)
+
+
+def _resident_parallel_cohorts_enabled(plan: ResidentServicePlan) -> bool:
+    if not _plan_uses_rolling_admission(plan):
+        return True
+    if _env_bool("DS4_API_RESIDENT_ALLOW_PARALLEL_COHORTS", False):
+        return True
+    service_ids = _csv_env("DS4_API_RESIDENT_ALLOW_PARALLEL_COHORT_SERVICE_IDS")
+    if not service_ids:
+        return False
+    return "*" in service_ids or str(plan.service_id) in service_ids or str(plan.profile_id) in service_ids
 
 
 def _dispatcher_batch_ineligible_reason(worker: BatchWorker, claims: list[QueueClaim]) -> str:
