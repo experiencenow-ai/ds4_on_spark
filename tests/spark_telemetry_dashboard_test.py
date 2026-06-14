@@ -1,6 +1,7 @@
 import json
 import tempfile
 import threading
+import time
 import unittest
 import urllib.request
 from pathlib import Path
@@ -63,6 +64,39 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["nodes"][0]["cpu_pct"], 800)
         self.assertEqual(snap["nodes"][0]["gpu_power_w"], 37)
         self.assertTrue(snap["nodes"][0]["gpu_power_known"])
+
+    def test_snapshot_marks_old_summary_stale_when_threshold_enabled(self):
+        payload = {
+            "updated_iso": "2026-05-26T00:00:00+00:00",
+            "updated_unix": int(time.time()) - 120,
+            "nodes": {
+                "spark0": {"sample_count": 1, "last_gpu_util_pct": 0, "last_vllm_metrics_up": 0},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "summary.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            snap = dashboard.build_snapshot(str(path), summary_stale_s=60)
+        self.assertTrue(snap["summary_stale"])
+        self.assertGreaterEqual(snap["age_s"], 60)
+        self.assertEqual(snap["nodes"][0]["state"], "warn")
+        self.assertEqual(snap["nodes"][0]["state_label"], "stale")
+        self.assertEqual(snap["nodes"][0]["fetch_error"], "telemetry summary stale")
+
+    def test_snapshot_stale_check_is_disabled_by_default_for_fixtures(self):
+        payload = {
+            "updated_iso": "2026-05-26T00:00:00+00:00",
+            "updated_unix": 1,
+            "nodes": {
+                "spark0": {"sample_count": 1, "last_gpu_util_pct": 0, "last_vllm_metrics_up": 0},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "summary.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            snap = dashboard.build_snapshot(str(path))
+        self.assertFalse(snap["summary_stale"])
+        self.assertEqual(snap["nodes"][0]["state"], "idle")
 
     def test_snapshot_preserves_all_thirteen_spark_labels(self):
         labels = ["spark0","spark1","spark2","spark3","spark4","spark5","spark6","spark7","spark8","spark9","sparka","sparkb","sparkc"]
@@ -451,6 +485,7 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
     def test_dashboard_uses_persistent_event_stream(self):
         self.assertIn("new EventSource(`/api/stream?node=${node}`)", dashboard.DASHBOARD_HTML)
         self.assertIn('addEventListener("telemetry"', dashboard.DASHBOARD_HTML)
+        self.assertIn("STALE telemetry age", dashboard.DASHBOARD_HTML)
         self.assertNotIn("const REFRESH_MS", dashboard.DASHBOARD_HTML)
         self.assertNotIn("setInterval(", dashboard.DASHBOARD_HTML)
 

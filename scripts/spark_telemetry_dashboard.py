@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlparse
 DEFAULT_SUMMARY_JSON = "/tmp/ds4_telemetry/mac/cluster_summary.json"
 DEFAULT_NODES_DIR = "/tmp/ds4_telemetry/mac/nodes"
 DEFAULT_HISTORY_LIMIT = 720
+DEFAULT_SUMMARY_STALE_S = 60.0
 DEFAULT_REPO_ROOT = "/Users/mac/Documents/New project 4"
 DEFAULT_MODEL_LAYER_PARTITIONS_JSON = "/Users/mac/.local/share/ds4_telemetry/model_layer_partitions.json"
 NODE_DOWN_ERROR_THRESHOLD = 3
@@ -64,7 +65,7 @@ h1{font-size:22px;line-height:1.1;margin:0}.meta{color:var(--muted);text-align:r
 </style>
 </head>
 <body><main>
-<div class="top"><h1>Spark Telemetry</h1><div class="meta"><div id="updated">loading</div><div id="source"></div></div></div>
+<div class="top"><h1>Spark Telemetry</h1><div class="meta"><div id="updated">loading</div><div id="stale"></div><div id="source"></div></div></div>
 <section class="summary" id="summary"></section>
 <section class="models" id="models"></section>
 <section class="grid" id="nodes"></section>
@@ -104,7 +105,7 @@ function drawHistory(data){lastHistory=data;let el=document.getElementById("hist
 function paintChart(data,metrics,colors){let canvas=document.getElementById("chart");if(!canvas)return;metrics=metrics||activeMetrics(data);colors=colors||modeColors[selectedMode]||modeColors.queue;let rect=canvas.getBoundingClientRect();let dpr=window.devicePixelRatio||1;canvas.width=Math.max(1,Math.floor(rect.width*dpr));canvas.height=Math.max(1,Math.floor(rect.height*dpr));let ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);let w=rect.width,h=rect.height,pad=28;ctx.clearRect(0,0,w,h);ctx.strokeStyle="#313943";ctx.lineWidth=1;for(let i=0;i<=4;i++){let y=pad+((h-(pad*2))*i/4);ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(w-pad,y);ctx.stroke()}let points=data.points;metrics.forEach((m,i)=>{let scale=metricScale(m,points);let vals=emaValues(points,m.key);ctx.strokeStyle=colors[i%colors.length];ctx.lineWidth=2.2;ctx.beginPath();vals.forEach((v,idx)=>{let x=pad+((w-(pad*2))*idx/Math.max(1,points.length-1));let y=h-pad-((h-(pad*2))*Math.max(0,Math.min(scale,v))/scale);if(idx===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});ctx.stroke()});ctx.fillStyle="#a8b1bb";ctx.font="12px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif";ctx.fillText("now",w-pad-24,h-8);ctx.fillText("then",pad,h-8)}
 async function refreshHistory(){if(!selectedNode)return;try{let r=await fetch(`/api/history?node=${encodeURIComponent(selectedNode)}`,{cache:"no-store"});drawHistory(await r.json())}catch(e){document.getElementById("history").innerHTML=`<div class="empty">history read failed</div>`}}
 function renderModels(d){let models=d.models||[];let el=document.getElementById("models");if(!models.length){el.innerHTML=`<div class="model-empty">no active model token rate</div>`;return}el.innerHTML=`<table class="model-table"><thead><tr><th>Model</th><th>In/s</th><th>Out/s</th><th>Total/s</th><th>Run</th><th>Wait</th></tr></thead><tbody>${models.map(m=>`<tr><td><div class="model-name">${m.model}</div></td><td>${rate(m.input_tok_s)}</td><td>${rate(m.output_tok_s)}</td><td>${rate(m.tok_s)}</td><td>${rate(m.running)}</td><td>${rate(m.waiting)}</td></tr>`).join("")}</tbody></table>`}
-function renderSummary(d){if(!selectedNode&&d.nodes&&d.nodes.length)selectedNode=d.selected_node||d.nodes[0].node;document.getElementById("updated").textContent="updated "+(d.updated_iso||"unknown");document.getElementById("source").textContent=d.summary_path||"";document.getElementById("summary").innerHTML=[metric("Active",`${fmt(d.active_nodes)}/${d.reachable_nodes}`),metric("GPU Avg",d.gpu_known?pct(d.avg_gpu_pct):"n/a"),metric("Run/Wait",`${fmt(d.vllm_running)}/${fmt(d.vllm_waiting)}`),metric("Live In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`),metric("Active Svc",d.ds_services_known?`${fmt(d.ds_service_count)} svc`:"n/a"),metric("Queue Depth",fmt(d.queue_depth))].join("");renderModels(d);document.getElementById("nodes").innerHTML=d.nodes.map(card).join("");wireCards()}
+function renderSummary(d){if(!selectedNode&&d.nodes&&d.nodes.length)selectedNode=d.selected_node||d.nodes[0].node;document.getElementById("updated").textContent="updated "+(d.updated_iso||"unknown");document.getElementById("stale").textContent=d.summary_stale?`STALE telemetry age ${fmt(d.age_s)}s`:"";document.getElementById("source").textContent=d.summary_path||"";document.getElementById("summary").innerHTML=[metric("Active",`${fmt(d.active_nodes)}/${d.reachable_nodes}`),metric("GPU Avg",d.gpu_known?pct(d.avg_gpu_pct):"n/a"),metric("Run/Wait",`${fmt(d.vllm_running)}/${fmt(d.vllm_waiting)}`),metric("Live In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`),metric("Active Svc",d.ds_services_known?`${fmt(d.ds_service_count)} svc`:"n/a"),metric("Queue Depth",fmt(d.queue_depth))].join("");renderModels(d);document.getElementById("nodes").innerHTML=d.nodes.map(card).join("");wireCards()}
 async function refreshOnce(){try{let r=await fetch("/api/summary",{cache:"no-store"});let d=await r.json();renderSummary(d);await refreshHistory()}catch(e){document.getElementById("updated").textContent="dashboard read failed: "+e}}
 function startTelemetryStream(){if(telemetryStream)telemetryStream.close();if(!window.EventSource){refreshOnce();return}let node=encodeURIComponent(selectedNode||"");telemetryStream=new EventSource(`/api/stream?node=${node}`);telemetryStream.addEventListener("telemetry",event=>{try{let payload=JSON.parse(event.data);if(payload.summary){renderSummary(payload.summary)}if(payload.history){drawHistory(payload.history)}}catch(e){document.getElementById("updated").textContent="stream parse failed: "+e}});telemetryStream.onerror=()=>{document.getElementById("updated").textContent="stream reconnecting"}}
 window.addEventListener("resize",()=>{if(lastHistory)paintChart(lastHistory)});
@@ -121,6 +122,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--repo-root", default=os.environ.get("DS4_TELEMETRY_REPO_ROOT",DEFAULT_REPO_ROOT))
     p.add_argument("--layer-partitions-json", default=os.environ.get("DS4_TELEMETRY_LAYER_PARTITIONS_JSON",DEFAULT_MODEL_LAYER_PARTITIONS_JSON))
+    p.add_argument("--summary-stale-s", type=float, default=float(os.environ.get("DS4_TELEMETRY_SUMMARY_STALE_S",DEFAULT_SUMMARY_STALE_S)))
     return(p.parse_args())
 
 
@@ -360,7 +362,7 @@ def layer_count(model: str, rank: int, partitions: dict[str,list[int]]) -> tuple
     return(0,0)
 
 
-def build_snapshot(summary_path: str) -> dict[str,Any]:
+def build_snapshot(summary_path: str, summary_stale_s: float = 0.0) -> dict[str,Any]:
     path = Path(summary_path)
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -390,7 +392,14 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
         base = raw_nodes.get(name,{})
         row = dict(base) if isinstance(base,dict) else {}
         rows[name] = row
+    age_s = max(0,int(time.time()) - int(fnum(raw.get("updated_unix"))))
+    summary_stale = summary_stale_s > 0.0 and age_s > summary_stale_s
     nodes = [normalize_node(node,row,node_error_streak(node,row,summary_id)) for node,row in sorted(rows.items())]
+    if summary_stale:
+        for node in nodes:
+            node["state"] = "warn"
+            node["state_label"] = "stale"
+            node["fetch_error"] = str(node.get("fetch_error","") or "telemetry summary stale")
     for node in nodes:
         name = str(node.get("node",""))
         service_id = queue_kv_by_node.get(name) or stage_service_by_node.get(name) or ""
@@ -501,7 +510,9 @@ def build_snapshot(summary_path: str) -> dict[str,Any]:
         "summary_path": str(path),
         "updated_iso": raw.get("updated_iso",""),
         "updated_unix": raw.get("updated_unix",0),
-        "age_s": max(0,int(time.time()) - int(fnum(raw.get("updated_unix")))),
+        "age_s": age_s,
+        "summary_stale": summary_stale,
+        "summary_stale_s": summary_stale_s,
         "nodes": nodes,
         "models": model_items,
         "reachable_nodes": len(reachable),
@@ -567,8 +578,8 @@ def build_history(nodes_dir: str, node: str, limit: int = 360) -> dict[str,Any]:
     return({"ok":True,"node":node,"history_path":str(path),"metrics":HISTORY_METRICS,"points":points})
 
 
-def stream_payload(summary_path: str, nodes_dir: str, node: str, limit: int) -> dict[str,Any]:
-    summary = build_snapshot(summary_path)
+def stream_payload(summary_path: str, nodes_dir: str, node: str, limit: int, summary_stale_s: float = 0.0) -> dict[str,Any]:
+    summary = build_snapshot(summary_path,summary_stale_s)
     selected = node if valid_node_name(node) else ""
     if not selected and summary.get("nodes"):
         selected = str(summary["nodes"][0].get("node",""))
@@ -577,7 +588,7 @@ def stream_payload(summary_path: str, nodes_dir: str, node: str, limit: int) -> 
     return({"summary":summary,"history":history})
 
 
-def make_handler(summary_path: str, nodes_dir: str) -> type[BaseHTTPRequestHandler]:
+def make_handler(summary_path: str, nodes_dir: str, summary_stale_s: float = 0.0) -> type[BaseHTTPRequestHandler]:
     class DashboardHandler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
         def handle(self) -> None:
@@ -591,7 +602,7 @@ def make_handler(summary_path: str, nodes_dir: str) -> type[BaseHTTPRequestHandl
             if path in ("/","/index.html"):
                 self._send(200,"text/html; charset=utf-8",DASHBOARD_HTML.encode("utf-8"))
             elif path == "/api/summary":
-                payload = json.dumps(build_snapshot(summary_path),sort_keys=True).encode("utf-8")
+                payload = json.dumps(build_snapshot(summary_path,summary_stale_s),sort_keys=True).encode("utf-8")
                 self._send(200,"application/json",payload)
             elif path == "/api/history":
                 qs = parse_qs(parsed.query)
@@ -626,7 +637,7 @@ def make_handler(summary_path: str, nodes_dir: str) -> type[BaseHTTPRequestHandl
             self.end_headers()
             while True:
                 try:
-                    payload = json.dumps(stream_payload(summary_path,nodes_dir,node,limit),sort_keys=True)
+                    payload = json.dumps(stream_payload(summary_path,nodes_dir,node,limit,summary_stale_s),sort_keys=True)
                     self.wfile.write(("event: telemetry\ndata: %s\n\n" % payload).encode("utf-8"))
                     self.wfile.flush()
                     time.sleep(STREAM_INTERVAL_S)
@@ -646,8 +657,8 @@ def main() -> int:
     MODEL_LAYER_PARTITIONS_JSON_OVERRIDE = str(args.layer_partitions_json or "")
     MODEL_LAYER_PARTITIONS = None
     partitions = load_model_layer_partitions()
-    server = ReusableThreadingHTTPServer((args.host,args.port),make_handler(args.summary_json,args.nodes_dir))
-    print("serving Spark telemetry dashboard on http://%s:%d repo_root=%s layer_partitions=%d" % (args.host,args.port,repo_root(),len(partitions)),flush=True)
+    server = ReusableThreadingHTTPServer((args.host,args.port),make_handler(args.summary_json,args.nodes_dir,args.summary_stale_s))
+    print("serving Spark telemetry dashboard on http://%s:%d repo_root=%s layer_partitions=%d summary_stale_s=%.1f" % (args.host,args.port,repo_root(),len(partitions),args.summary_stale_s),flush=True)
     server.serve_forever()
     return(0)
 
