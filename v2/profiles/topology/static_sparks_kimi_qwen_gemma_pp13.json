@@ -317,7 +317,7 @@
           "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.07692307692307693,
           "external_backend": "lmcache_hma",
-          "gpu_memory_utilization": 0.48,
+          "gpu_memory_utilization": 0.34,
           "kv_cache_memory_bytes": 8589934592,
           "sharding": "pipeline_layers"
         },
