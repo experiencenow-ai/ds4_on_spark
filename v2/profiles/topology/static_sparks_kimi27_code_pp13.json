@@ -267,7 +267,7 @@
           "max_running_batches_per_compute_domain": 1,
           "queue_depth_target": 512,
           "queue_limit": 512,
-          "refill_low_watermark": 384,
+          "refill_low_watermark": 128,
           "vllm_max_num_batched_tokens": 131072,
           "vllm_max_num_seqs": 256
         },
