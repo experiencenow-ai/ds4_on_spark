@@ -30,7 +30,7 @@
     "--max-num-batched-tokens",
     "131072",
     "--gpu-memory-utilization",
-    "0.70",
+    "0.48",
     "--kv-cache-memory-bytes",
     "8589934592",
     "--kv-cache-dtype",
