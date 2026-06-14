@@ -1726,7 +1726,8 @@ def _dispatcher_run_resident_rolling_claims(
         return []
     if claims[0].request_kind == "cpu":
         return _dispatcher_run_claims(worker, claims, concurrency, mark_finished)
-    if _dispatcher_can_batch_models(worker, claims) and hasattr(worker.runner, "run_many_on_node_incremental"):
+    force_refill_stream = _dispatcher_force_refill_stream_for_claims(claims)
+    if not force_refill_stream and _dispatcher_can_batch_models(worker, claims) and hasattr(worker.runner, "run_many_on_node_incremental"):
         return _dispatcher_run_rolling_batch_claims(worker, claims, concurrency, mark_finished)
     return _dispatcher_run_rolling_refill_stream_claims(
         worker,
@@ -1739,6 +1740,7 @@ def _dispatcher_run_resident_rolling_claims(
         kv_shard_layouts_by_profile,
         batch_limits_by_service,
         low_watermark,
+        forced=force_refill_stream,
     )
 
 
@@ -1753,6 +1755,7 @@ def _dispatcher_run_rolling_refill_stream_claims(
     kv_shard_layouts_by_profile: dict[str, Any],
     batch_limits_by_service: dict[str, int],
     low_watermark: int,
+    forced: bool = False,
 ) -> list[tuple[Any, dict[str, Any]]]:
     ineligible_reason = _dispatcher_batch_ineligible_reason(worker, claims)
     try:
@@ -1782,11 +1785,26 @@ def _dispatcher_run_rolling_refill_stream_claims(
                 "prefilled": prefilled,
                 "dispatch_mode": "rolling_refill",
                 "transport_mode": "rolling_refill_stream",
-                "batch_ineligible_reason": ineligible_reason,
+                "batch_ineligible_reason": "forced_refill_stream" if forced else ineligible_reason,
+                "forced_refill_stream": bool(forced),
                 "runner_type": type(worker.runner).__name__,
             },
         )
     ]
+
+
+def _dispatcher_force_refill_stream_for_claims(claims: list[QueueClaim]) -> bool:
+    if not claims or claims[0].request_kind != "model":
+        return False
+    if _env_bool("DS4_API_RESIDENT_FORCE_REFILL_STREAM", False):
+        return True
+    service_ids = _csv_env("DS4_API_RESIDENT_FORCE_REFILL_STREAM_SERVICE_IDS")
+    if not service_ids:
+        return False
+    if "*" in service_ids:
+        return True
+    claim_service_ids = {str(claim.selected_service_id or "") for claim in claims}
+    return bool(claim_service_ids) and claim_service_ids.issubset(service_ids)
 
 
 def _dispatcher_batch_ineligible_reason(worker: BatchWorker, claims: list[QueueClaim]) -> str:
@@ -1845,6 +1863,13 @@ def _env_float(name: str, default: float) -> float:
     if value is None or value == "":
         return float(default)
     return float(value)
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return bool(default)
+    return str(value).strip().lower() not in {"0", "false", "no", "off"}
 
 
 def _csv_env(name: str) -> set[str]:
