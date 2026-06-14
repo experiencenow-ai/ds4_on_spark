@@ -1678,6 +1678,22 @@ def _dispatcher_run_claims(worker: BatchWorker, claims: list[QueueClaim], concur
     return out
 
 
+def _dispatcher_run_rolling_batch_claims(
+    worker: BatchWorker,
+    claims: list[QueueClaim],
+    concurrency: int,
+    mark_finished: Callable[[str], None] | None,
+) -> list[tuple[Any, dict[str, Any]]]:
+    pairs = _dispatcher_run_claims(worker, claims, concurrency, mark_finished)
+    if len(pairs) == 1 and pairs[0][0] is _DISPATCHER_BATCH_FINISHED:
+        summary = dict(pairs[0][1])
+        summary.setdefault("claimed", len(claims))
+        summary.setdefault("prefilled", 0)
+        summary["dispatch_mode"] = "rolling_refill"
+        return [(_DISPATCHER_BATCH_FINISHED, summary)]
+    return pairs
+
+
 def _dispatcher_run_resident_rolling_claims(
     worker: BatchWorker,
     claims: list[QueueClaim],
@@ -1694,6 +1710,8 @@ def _dispatcher_run_resident_rolling_claims(
         return []
     if claims[0].request_kind == "cpu":
         return _dispatcher_run_claims(worker, claims, concurrency, mark_finished)
+    if _dispatcher_can_batch_models(worker, claims) and hasattr(worker.runner, "run_many_on_node_incremental"):
+        return _dispatcher_run_rolling_batch_claims(worker, claims, concurrency, mark_finished)
     try:
         completed, failed, retried, claimed, prefilled = worker.run_resident_refill_stream(
             claims,
