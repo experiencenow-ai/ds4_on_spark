@@ -171,6 +171,40 @@ class RecordingIncrementalBatchRunner:
         raise AssertionError("rolling resident dispatch should batch compatible claims")
 
 
+class RecordingHybridRunner:
+    def __init__(self) -> None:
+        self.batch_sizes: list[int] = []
+        self.calls: list[str] = []
+
+    def run_many_on_node(self, requests, profile, node_id, *, concurrency=1):
+        raise AssertionError("test requires incremental batch path")
+
+    def run_many_on_node_incremental(self, requests, profile, node_id, *, concurrency=1, on_result, on_delta=None, cancel_event=None):
+        self.batch_sizes.append(len(requests))
+        out = {}
+        for request in requests:
+            result = make_result(
+                request=request,
+                profile_id=profile.profile_id,
+                model_id=profile.model_id,
+                backend=profile.backend,
+                text=f"incremental-{request.request_id}",
+            )
+            out[request.request_id] = result
+            on_result(request.request_id, result)
+        return out
+
+    def run_one_on_node(self, request, profile, node_id):
+        self.calls.append(request.request_id)
+        return make_result(
+            request=request,
+            profile_id=profile.profile_id,
+            model_id=profile.model_id,
+            backend=profile.backend,
+            text=f"single-{request.request_id}",
+        )
+
+
 class RecordingPerRequestRunner:
     def __init__(self) -> None:
         self.calls: list[str] = []
@@ -709,6 +743,55 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual(status["last_summary"]["transport_mode"], "rolling_batch_incremental")
             self.assertEqual(status["resident_rolling_batch_count"], 1)
             self.assertEqual(status["resident_rolling_refill_stream_count"], 0)
+
+    def test_resident_rolling_admission_can_force_refill_stream_for_service(self) -> None:
+        old = os.environ.get("DS4_API_RESIDENT_FORCE_REFILL_STREAM_SERVICE_IDS")
+        os.environ["DS4_API_RESIDENT_FORCE_REFILL_STREAM_SERVICE_IDS"] = "dsv4_flash_pp8"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+                registry = ProfileRegistry.load(PROFILES)
+                topology = SparkTopology.load(TOPOLOGY)
+                plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+                plan = plans["dsv4_flash_pp8"]
+                plan.admission_mode = "resident_multimodel_rolling_refill"
+                plan.target_active = 4
+                plan.queue_depth_target = 4
+                plan.low_watermark = 2
+                plan.max_cohort_size = 4
+                plan.batch_linger_s = 0.0
+                requests = [dsv4_chat_request(f"dsv4-forced-stream-{index}") for index in range(4)]
+                api.queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id="forced-stream", priority=10)
+                runner = RecordingHybridRunner()
+                worker = BatchWorker(queue=api.queue, registry=registry, runner=runner, worker_id="test-dispatcher", lease_ttl_s=30, heartbeat_interval_s=0.01)
+                pending = {}
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    submitted = api._dispatcher_refill_resident_multimodel(
+                        worker=worker,
+                        executor=executor,
+                        pending=pending,
+                        entry_node_id="spark0",
+                        node_profile_ids=tuple(topology.pipeline_profiles),
+                        batch_limits_by_service={"dsv4_flash_pp8": 4},
+                        kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                        service_plans={"dsv4_flash_pp8": plan},
+                    )
+                    self.assertEqual(submitted, 4)
+                    completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
+                self.assertEqual((completed, failed, retried), (4, 0, 0))
+                self.assertEqual(runner.batch_sizes, [])
+                self.assertEqual(sorted(runner.calls), [f"dsv4-forced-stream-{index}" for index in range(4)])
+                status = api.dispatcher_status()
+                self.assertEqual(status["last_summary"]["transport_mode"], "rolling_refill_stream")
+                self.assertEqual(status["last_summary"]["batch_ineligible_reason"], "forced_refill_stream")
+                self.assertEqual(status["last_summary"]["forced_refill_stream"], True)
+                self.assertEqual(status["resident_rolling_batch_count"], 0)
+                self.assertEqual(status["resident_rolling_refill_stream_count"], 1)
+        finally:
+            if old is None:
+                os.environ.pop("DS4_API_RESIDENT_FORCE_REFILL_STREAM_SERVICE_IDS", None)
+            else:
+                os.environ["DS4_API_RESIDENT_FORCE_REFILL_STREAM_SERVICE_IDS"] = old
 
     def test_resident_rolling_admission_stops_refill_after_batch_cancel(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
