@@ -368,6 +368,15 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertIn("deprecated spark4/spark5 DSV4 unit install/restart is disabled", script)
         self.assertIn("ds4_pipeline_lifecycle.py --service dsv4_flash_pp8 relaunch --execute", script)
 
+    def test_spark_updater_defaults_to_topology_nodes(self) -> None:
+        script = (ROOT.parent / "scripts" / "ds4_update_spark_nodes.sh").read_text(encoding="utf-8")
+
+        self.assertIn("topology_path=", script)
+        self.assertIn("load_default_nodes()", script)
+        self.assertIn("mapfile -t nodes < <(load_default_nodes)", script)
+        self.assertIn("node_ssh_target()", script)
+        self.assertNotIn("nodes=(spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7)", script)
+
 
 if __name__ == "__main__":
     unittest.main()

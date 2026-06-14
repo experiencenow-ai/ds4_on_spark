@@ -36,7 +36,8 @@ class RingControlInstallerTests(unittest.TestCase):
         text = (REPO_ROOT / "scripts/ds4_install_ring_control_iface_local.sh").read_text()
 
         self.assertIn("/etc/systemd/system/ds4-ring-200g.service.d", text)
-        self.assertIn("control-iface.conf", text)
+        self.assertIn("zz-ds4-ring-control-iface.conf", text)
+        self.assertIn("rm -f \"$override_dir/control-iface.conf\"", text)
         self.assertIn("/usr/local/sbin/ds4-ring-control-iface && /usr/local/sbin/ds4-ring-200g-apply", text)
         self.assertIn("ds4-ring-200g-extend13 && /usr/local/sbin/ds4-ring-control-iface", text)
 
