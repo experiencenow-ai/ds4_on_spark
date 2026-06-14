@@ -86,7 +86,7 @@ EOF
 cat >"$tmp_override" <<'EOF'
 [Service]
 ExecStart=
-ExecStart=/bin/sh -c '/usr/local/sbin/ds4-ring-control-iface && /usr/local/sbin/ds4-ring-200g-apply && /usr/local/sbin/ds4-ring-200g-extend13 && /usr/local/sbin/ds4-ring-control-iface'
+ExecStart=/bin/sh -c '/usr/local/sbin/ds4-ring-control-iface && if [ -x /usr/local/sbin/ds4-ring-200g-apply ] && [ -x /usr/local/sbin/ds4-ring-200g-extend13 ]; then /usr/local/sbin/ds4-ring-200g-apply && /usr/local/sbin/ds4-ring-200g-extend13; else /usr/local/sbin/ds4-ring-200g; fi && /usr/local/sbin/ds4-ring-control-iface'
 EOF
 
 install -m 0755 "$tmp_script" /usr/local/sbin/ds4-ring-control-iface
