@@ -777,19 +777,28 @@ class CoordinatorApi:
 
     def _resident_refill_limit(self, plan: ResidentServicePlan, active_by_service: dict[str, int], submitted: int, global_available: int) -> int:
         active = int(active_by_service.get(plan.service_id, 0))
-        service_available = max(0, int(plan.queue_depth_target) - active)
-        if service_available <= 0:
-            return 0
-        if active > 0 and not _resident_parallel_cohorts_enabled(plan):
-            return 0
-        if active > int(plan.low_watermark):
-            return 0
-        return min(
-            service_available,
-            max(1, int(plan.max_cohort_size)),
+        max_cohort = max(1, int(plan.max_cohort_size))
+        refill_available = min(
+            max_cohort,
             max(1, int(self.dispatcher_refill_batch) - submitted),
             global_available,
         )
+        if refill_available <= 0:
+            return 0
+        service_available = max(0, int(plan.queue_depth_target) - active)
+        if active <= 0:
+            return min(service_available, refill_available)
+        if not _plan_uses_rolling_admission(plan):
+            if service_available <= 0 or active > int(plan.low_watermark):
+                return 0
+            return min(service_available, refill_available)
+        if active > int(plan.low_watermark):
+            if not _resident_parallel_cohorts_enabled(plan):
+                return 0
+            if service_available <= 0:
+                return 0
+            return min(service_available, refill_available)
+        return refill_available
 
     def _resident_prepare_ready(self, worker: BatchWorker, plan: ResidentServicePlan, entry_node_id: str, node_profile_ids: tuple[str, ...], limit: int, kv_shard_layouts_by_profile: dict[str, Any]) -> int:
         return self.queue.prepare_ready(

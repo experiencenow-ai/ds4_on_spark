@@ -597,7 +597,7 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             else:
                 os.environ["DS4_API_SERVICE_ADMISSION_MODE"] = old_default
 
-    def test_resident_refill_waits_for_low_watermark_then_restores_target(self) -> None:
+    def test_resident_refill_waits_for_low_watermark_then_overlaps_next_cohort(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
             plan = ResidentServicePlan(
@@ -611,16 +611,17 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 batch_linger_s=0.0,
             )
             self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 127}, 0, 192), 0)
-            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 96}, 0, 192), 32)
-            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 95}, 0, 192), 33)
+            plan.admission_mode = "resident_multimodel_rolling_refill"
+            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 96}, 0, 192), 128)
+            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 95}, 0, 192), 128)
             self.assertEqual(api._resident_refill_limit(plan, {}, 0, 192), 128)
             api.dispatcher_refill_batch = 256
             plan.queue_depth_target = 256
             plan.low_watermark = 192
             plan.max_cohort_size = 256
             self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 193}, 0, 256), 0)
-            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 192}, 0, 256), 64)
-            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 128}, 0, 256), 128)
+            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 192}, 0, 256), 256)
+            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 128}, 0, 256), 256)
             self.assertEqual(api._resident_refill_limit(plan, {}, 0, 256), 256)
 
     def test_rolling_cohort_reports_partial_completion_for_refill(self) -> None:
@@ -770,7 +771,7 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual(status["resident_rolling_batch_count"], 1)
             self.assertEqual(status["resident_rolling_refill_stream_count"], 0)
 
-    def test_resident_rolling_admission_blocks_parallel_same_service_cohorts_by_default(self) -> None:
+    def test_resident_rolling_admission_blocks_early_parallel_same_service_cohorts_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
             topology = SparkTopology.load(TOPOLOGY)
@@ -782,7 +783,8 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             plan.max_cohort_size = 96
 
             self.assertEqual(api._resident_refill_limit(plan, {}, 0, 256), 96)
-            self.assertEqual(api._resident_refill_limit(plan, {"dsv4_flash_pp8": 57}, 0, 256), 0)
+            self.assertEqual(api._resident_refill_limit(plan, {"dsv4_flash_pp8": 85}, 0, 256), 0)
+            self.assertEqual(api._resident_refill_limit(plan, {"dsv4_flash_pp8": 57}, 0, 256), 96)
 
     def test_resident_rolling_admission_can_enable_parallel_same_service_cohorts(self) -> None:
         old = os.environ.get("DS4_API_RESIDENT_ALLOW_PARALLEL_COHORTS")
@@ -798,7 +800,8 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 plan.low_watermark = 84
                 plan.max_cohort_size = 96
 
-                self.assertEqual(api._resident_refill_limit(plan, {"dsv4_flash_pp8": 57}, 0, 256), 39)
+                self.assertEqual(api._resident_refill_limit(plan, {"dsv4_flash_pp8": 85}, 0, 256), 11)
+                self.assertEqual(api._resident_refill_limit(plan, {"dsv4_flash_pp8": 57}, 0, 256), 96)
         finally:
             if old is None:
                 os.environ.pop("DS4_API_RESIDENT_ALLOW_PARALLEL_COHORTS", None)
