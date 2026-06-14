@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from ds4_infer.profiles import ProfileRegistry
-from ds4_infer.api import _resolve_pipeline_service
+from ds4_infer.api import _batch_limits_by_service, _resolve_pipeline_service, _topology_dispatch_cohort_workers, _topology_dispatch_window
 from ds4_infer.deployment import deployment_readiness
 from ds4_infer.dispatcher_resident import active_resident_service_ids, resident_service_plans
 from ds4_infer.pipelines import pipeline_service_batch_limit
@@ -124,17 +124,22 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(topology.routing_policy["pipeline_services"]["kimi27_pp13"]["api_base_url"], "http://127.0.0.1:8138")
         self.assertEqual(kimi.layer_partition, (4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4))
         self.assertEqual(kimi.scheduler["admission_mode"], "resident_multimodel_rolling_refill")
-        self.assertEqual(kimi.scheduler["refill_low_watermark"], 112)
+        self.assertEqual(kimi.scheduler["dispatch_batch_limit"], 256)
+        self.assertEqual(kimi.scheduler["queue_depth_target"], 256)
+        self.assertEqual(kimi.scheduler["refill_low_watermark"], 192)
         self.assertEqual(kimi.scheduler["vllm_max_num_seqs"], 128)
         self.assertEqual(kimi.entry_node_id, "spark0")
         self.assertEqual(kimi.node_ids, ("spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7", "spark8", "spark9", "sparka", "sparkb", "sparkc"))
         self.assertEqual(kimi.kv_cache["connector_id"], "lmcache")
         self.assertEqual(kimi.kv_cache["external_backend"], "lmcache_hma")
         self.assertEqual(kimi.kv_cache["gpu_memory_utilization"], 0.7)
-        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["dispatch_window"], 128)
-        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_cohort_max"], 128)
-        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_pp_safe_cohort_max"], 128)
-        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_chunk_concurrency"], 2)
+        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["dispatch_window"], 256)
+        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_cohort_max"], 256)
+        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_pp_safe_cohort_max"], 256)
+        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_chunk_concurrency"], 4)
+        self.assertEqual(_batch_limits_by_service(topology)["kimi27_pp13"], 256)
+        self.assertEqual(_topology_dispatch_window(KIMI27_TOPOLOGY), 256)
+        self.assertEqual(_topology_dispatch_cohort_workers(KIMI27_TOPOLOGY), 256)
 
     def test_kimi27_dedicated_readiness_has_gpu_budget(self) -> None:
         topology = SparkTopology.load(KIMI27_TOPOLOGY)
@@ -145,15 +150,17 @@ class StaticSparkTopologyTests(unittest.TestCase):
         try:
             payload = deployment_readiness(
                 topology=topology,
-                dispatcher_window=128,
-                dispatcher_refill_batch=128,
-                dispatcher_cohort_workers=128,
+                dispatcher_window=256,
+                dispatcher_refill_batch=256,
+                dispatcher_cohort_workers=256,
                 resident_multimodel=True,
             )
 
             self.assertTrue(payload["ready"])
             self.assertEqual(payload["resident_gpu_memory_utilization"], {"kimi27_pp13": 0.7})
             self.assertEqual(payload["resident_gpu_memory_utilization_sum"], 0.7)
+            self.assertEqual(payload["resident_service_targets"], {"kimi27_pp13": 128})
+            self.assertEqual(payload["resident_service_queue_depth_targets"], {"kimi27_pp13": 256})
             failed_errors = {item["name"] for item in payload["checks"] if not item["ok"] and item["severity"] == "error"}
             self.assertNotIn("resident_gpu_budget_declared", failed_errors)
 

@@ -462,6 +462,7 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 profile_id="qwen27_bf16_pp12",
                 compute_domain="qwen27_bf16_pp12",
                 target_active=128,
+                queue_depth_target=128,
                 low_watermark=96,
                 max_cohort_size=128,
                 batch_linger_s=0.0,
@@ -470,6 +471,14 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 96}, 0, 192), 32)
             self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 95}, 0, 192), 33)
             self.assertEqual(api._resident_refill_limit(plan, {}, 0, 192), 128)
+            api.dispatcher_refill_batch = 256
+            plan.queue_depth_target = 256
+            plan.low_watermark = 192
+            plan.max_cohort_size = 256
+            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 193}, 0, 256), 0)
+            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 192}, 0, 256), 64)
+            self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 128}, 0, 256), 128)
+            self.assertEqual(api._resident_refill_limit(plan, {}, 0, 256), 256)
 
     def test_rolling_cohort_keeps_service_admitted_until_future_finishes(self) -> None:
         claims = [

@@ -772,7 +772,7 @@ class CoordinatorApi:
 
     def _resident_refill_limit(self, plan: ResidentServicePlan, active_by_service: dict[str, int], submitted: int, global_available: int) -> int:
         active = int(active_by_service.get(plan.service_id, 0))
-        service_available = max(0, int(plan.target_active) - active)
+        service_available = max(0, int(plan.queue_depth_target) - active)
         if service_available <= 0:
             return 0
         if active > int(plan.low_watermark):
@@ -818,6 +818,7 @@ class CoordinatorApi:
             pending_by_service=_pending_claim_count_by_service(pending),
             pending_cohort_details=_pending_cohort_details(pending),
             resident_service_targets={sid: plan.target_active for sid, plan in service_plans.items()},
+            resident_service_queue_depth_targets={sid: plan.queue_depth_target for sid, plan in service_plans.items()},
             resident_service_low_watermarks={sid: plan.low_watermark for sid, plan in service_plans.items()},
             resident_service_admission_modes={sid: plan.admission_mode for sid, plan in service_plans.items()},
             resident_service_deficits={sid: round(plan.deficit, 3) for sid, plan in service_plans.items()},
@@ -970,13 +971,16 @@ def _topology_dispatch_window(topology_path: Path) -> int:
         topology = SparkTopology.load(topology_path)
     except Exception:
         return 64
+    coordinator = topology.routing_policy.get("resident_coordinator_defaults") if isinstance(topology.routing_policy, dict) else {}
+    if isinstance(coordinator, dict) and coordinator.get("dispatch_window") is not None:
+        return max(1, int(coordinator["dispatch_window"]))
     active = _active_resident_service_ids(topology)
     values: list[int] = []
     for service in topology.pipeline_services.values():
         if active is not None and service.service_id not in active:
             continue
         try:
-            values.append(_service_target_active(service))
+            values.append(_service_dispatch_batch_limit(service))
         except Exception:
             continue
     return max(64, sum(values) if values else 0)
@@ -987,6 +991,11 @@ def _topology_dispatch_cohort_workers(topology_path: Path) -> int:
         topology = SparkTopology.load(topology_path)
     except Exception:
         return 4
+    coordinator = topology.routing_policy.get("resident_coordinator_defaults") if isinstance(topology.routing_policy, dict) else {}
+    if isinstance(coordinator, dict):
+        raw = coordinator.get("dispatch_cohort_workers") or coordinator.get("dispatch_window")
+        if raw is not None:
+            return max(1, int(raw))
     active = _active_resident_service_ids(topology)
     count = sum(1 for service in topology.pipeline_services.values() if active is None or service.service_id in active)
     return max(4, min(32, count * 4))
@@ -1537,7 +1546,7 @@ def _pipeline_base_urls(topology: SparkTopology) -> dict[str, str]:
 
 
 def _batch_limits_by_service(topology: SparkTopology) -> dict[str, int]:
-    limits = {service.service_id: pipeline_service_batch_limit(service) for service in topology.pipeline_services.values()}
+    limits = {service.service_id: _service_dispatch_batch_limit(service) for service in topology.pipeline_services.values()}
     overrides = {}
     raw_overrides = os.environ.get("DS4_API_BATCH_LIMITS_JSON")
     if raw_overrides:
@@ -1554,6 +1563,16 @@ def _batch_limits_by_service(topology: SparkTopology) -> dict[str, int]:
                 limits[service.service_id] = max(1, int(overrides[key]))
                 break
     return limits
+
+
+def _service_dispatch_batch_limit(service: Any) -> int:
+    scheduler = getattr(service, "scheduler", {}) or {}
+    if isinstance(scheduler, dict):
+        for key in ("dispatch_batch_limit", "max_dispatch_cohort", "queue_depth_target", "vllm_queue_depth_target"):
+            value = scheduler.get(key)
+            if value is not None:
+                return max(1, int(value))
+    return pipeline_service_batch_limit(service)
 
 
 def _refill_low_watermarks_by_service(topology: SparkTopology) -> dict[str, int]:

@@ -39,8 +39,11 @@ def deployment_readiness(
     active_ids = active_resident_service_ids(topology)
     services = _active_services(topology, active_ids)
     targets = {service.service_id: service_target_active(service) for service in services}
+    queue_depth_targets = {service.service_id: _service_queue_depth_target(service) for service in services}
     largest = max(targets.values(), default=0)
     target_sum = sum(targets.values())
+    largest_queue_depth = max(queue_depth_targets.values(), default=0)
+    queue_depth_sum = sum(queue_depth_targets.values())
     checks: list[dict[str, Any]] = []
     _active_service_checks(checks, topology=topology, active_ids=active_ids, services=services, targets=targets)
     _scheduler_checks(
@@ -52,6 +55,8 @@ def deployment_readiness(
         service_count=len(services),
         largest=largest,
         target_sum=target_sum,
+        largest_queue_depth=largest_queue_depth,
+        queue_depth_sum=queue_depth_sum,
     )
     for service in services:
         _pipeline_checks(checks, service)
@@ -64,8 +69,11 @@ def deployment_readiness(
         strict=strict,
         services=services,
         targets=targets,
+        queue_depth_targets=queue_depth_targets,
         target_sum=target_sum,
         largest=largest,
+        queue_depth_sum=queue_depth_sum,
+        largest_queue_depth=largest_queue_depth,
         dispatcher_window=dispatcher_window,
         dispatcher_refill_batch=dispatcher_refill_batch,
         dispatcher_cohort_workers=dispatcher_cohort_workers,
@@ -98,14 +106,50 @@ def _scheduler_checks(
     service_count: int,
     largest: int,
     target_sum: int,
+    largest_queue_depth: int,
+    queue_depth_sum: int,
 ) -> None:
+    _scheduler_window_checks(
+        checks,
+        dispatcher_window=dispatcher_window,
+        largest=largest,
+        target_sum=target_sum,
+        largest_queue_depth=largest_queue_depth,
+        queue_depth_sum=queue_depth_sum,
+    )
+    _scheduler_refill_checks(
+        checks,
+        dispatcher_refill_batch=dispatcher_refill_batch,
+        largest=largest,
+        largest_queue_depth=largest_queue_depth,
+    )
     _check(
         checks,
-        int(dispatcher_window) >= max(1, largest),
-        "dispatcher_window_covers_largest_service",
-        "dispatcher window covers the largest resident target",
-        details={"window": int(dispatcher_window), "largest_target_active": largest},
+        bool(resident_multimodel) or service_count <= 1,
+        "resident_multimodel_enabled",
+        "resident multimodel scheduler is enabled for multi-service deployment",
+        details={"service_count": service_count, "resident_multimodel": bool(resident_multimodel)},
     )
+    _scheduler_worker_checks(
+        checks,
+        dispatcher_cohort_workers=dispatcher_cohort_workers,
+        service_count=service_count,
+        largest=largest,
+        target_sum=target_sum,
+        largest_queue_depth=largest_queue_depth,
+    )
+
+
+def _scheduler_window_checks(
+    checks: list[dict[str, Any]],
+    *,
+    dispatcher_window: int,
+    largest: int,
+    target_sum: int,
+    largest_queue_depth: int,
+    queue_depth_sum: int,
+) -> None:
+    _check(checks, int(dispatcher_window) >= max(1, largest), "dispatcher_window_covers_largest_service", "dispatcher window covers the largest resident target", details={"window": int(dispatcher_window), "largest_target_active": largest})
     _check(
         checks,
         int(dispatcher_window) >= target_sum,
@@ -116,6 +160,30 @@ def _scheduler_checks(
     )
     _check(
         checks,
+        int(dispatcher_window) >= max(1, largest_queue_depth),
+        "dispatcher_window_covers_largest_service_queue_depth",
+        "dispatcher window covers the largest resident submit queue depth",
+        details={"window": int(dispatcher_window), "largest_queue_depth_target": largest_queue_depth},
+    )
+    _check(
+        checks,
+        int(dispatcher_window) >= queue_depth_sum,
+        "dispatcher_window_covers_sum_queue_depths",
+        "dispatcher window can hold every active resident submit queue depth at once",
+        details={"window": int(dispatcher_window), "queue_depth_target_sum": queue_depth_sum},
+        severity="warning",
+    )
+
+
+def _scheduler_refill_checks(
+    checks: list[dict[str, Any]],
+    *,
+    dispatcher_refill_batch: int,
+    largest: int,
+    largest_queue_depth: int,
+) -> None:
+    _check(
+        checks,
         int(dispatcher_refill_batch) >= max(1, largest),
         "refill_batch_covers_largest_service",
         "refill batch covers the largest resident cohort",
@@ -123,11 +191,22 @@ def _scheduler_checks(
     )
     _check(
         checks,
-        bool(resident_multimodel) or service_count <= 1,
-        "resident_multimodel_enabled",
-        "resident multimodel scheduler is enabled for multi-service deployment",
-        details={"service_count": service_count, "resident_multimodel": bool(resident_multimodel)},
+        int(dispatcher_refill_batch) >= max(1, largest_queue_depth),
+        "refill_batch_covers_largest_queue_depth",
+        "refill batch covers the largest resident submit queue depth",
+        details={"refill_batch": int(dispatcher_refill_batch), "largest_queue_depth_target": largest_queue_depth},
     )
+
+
+def _scheduler_worker_checks(
+    checks: list[dict[str, Any]],
+    *,
+    dispatcher_cohort_workers: int,
+    service_count: int,
+    largest: int,
+    target_sum: int,
+    largest_queue_depth: int,
+) -> None:
     _check(
         checks,
         int(dispatcher_cohort_workers) >= min(max(1, service_count), 4),
@@ -145,6 +224,13 @@ def _scheduler_checks(
     )
     _check(
         checks,
+        int(dispatcher_cohort_workers) >= max(1, largest_queue_depth),
+        "cohort_workers_cover_largest_queue_depth",
+        "cohort worker pool can feed the largest resident submit queue depth",
+        details={"cohort_workers": int(dispatcher_cohort_workers), "largest_queue_depth_target": largest_queue_depth},
+    )
+    _check(
+        checks,
         int(dispatcher_cohort_workers) >= target_sum,
         "cohort_workers_cover_sum_targets",
         "cohort worker pool can feed every active resident target at once",
@@ -159,8 +245,11 @@ def _readiness_payload(
     strict: bool,
     services: list[Any],
     targets: dict[str, int],
+    queue_depth_targets: dict[str, int],
     target_sum: int,
     largest: int,
+    queue_depth_sum: int,
+    largest_queue_depth: int,
     dispatcher_window: int,
     dispatcher_refill_batch: int,
     dispatcher_cohort_workers: int,
@@ -174,8 +263,11 @@ def _readiness_payload(
         "strict": strict,
         "active_resident_service_ids": [service.service_id for service in services],
         "resident_service_targets": targets,
+        "resident_service_queue_depth_targets": queue_depth_targets,
         "target_active_sum": target_sum,
         "largest_target_active": largest,
+        "queue_depth_target_sum": queue_depth_sum,
+        "largest_queue_depth_target": largest_queue_depth,
         "dispatcher_window": int(dispatcher_window),
         "dispatcher_refill_batch": int(dispatcher_refill_batch),
         "dispatcher_cohort_workers": int(dispatcher_cohort_workers),
@@ -191,13 +283,14 @@ def _readiness_payload(
 
 def default_dispatch_window(topology: SparkTopology) -> int:
     services = _active_services(topology, active_resident_service_ids(topology))
-    values = [service_target_active(service) for service in services]
+    values = [_service_queue_depth_target(service) for service in services]
     return max(64, sum(values) if values else 0)
 
 
 def default_cohort_workers(topology: SparkTopology) -> int:
     services = _active_services(topology, active_resident_service_ids(topology))
-    return max(4, min(32, len(services) * 4))
+    values = [_service_queue_depth_target(service) for service in services]
+    return max(4, sum(values) if values else 0)
 
 
 def _active_services(topology: SparkTopology, active_ids: set[str] | None) -> list[Any]:
@@ -207,6 +300,17 @@ def _active_services(topology: SparkTopology, active_ids: set[str] | None) -> li
             continue
         services.append(service)
     return services
+
+
+def _service_queue_depth_target(service: Any) -> int:
+    target = service_target_active(service)
+    scheduler = getattr(service, "scheduler", {}) or {}
+    if isinstance(scheduler, dict):
+        for key in ("queue_depth_target", "vllm_queue_depth_target", "submit_queue_depth_target"):
+            value = scheduler.get(key)
+            if value is not None:
+                return max(target, int(value))
+    return target
 
 
 def _pipeline_checks(checks: list[dict[str, Any]], service: Any) -> None:

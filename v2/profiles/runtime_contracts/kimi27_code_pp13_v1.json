@@ -15,7 +15,8 @@
   "admission": {
     "max_num_batched_tokens": 65536,
     "max_num_seqs": 128,
-    "power_policy": "one active Kimi batch per compute domain; batch 128 is the next qualification cap after batch 64 showed about 1.3% live KV usage and DSAPI replay throughput near 98 tok/s with no resource-governor throttle"
+    "power_policy": "one active Kimi batch per compute domain; vLLM max_num_seqs stays 128 while DSAPI may submit up to the declared queue_depth_target to keep vLLM's own wait queue warm without increasing GPU KV residency",
+    "queue_depth_target": 256
   },
   "launch": {
     "api_base_url": "http://127.0.0.1:8138",
