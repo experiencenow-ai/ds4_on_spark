@@ -113,7 +113,7 @@
   },
   "master_addr": "10.10.100.10",
   "master_port": 29664,
-  "max_batch_size": 64,
+  "max_batch_size": 128,
   "model_id": "/home/{node}/models/hf/moonshotai/Kimi-K2.7-Code",
   "pipeline_nodes": [
     "spark0",

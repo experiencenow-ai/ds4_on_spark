@@ -115,7 +115,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         capacity = topology.estimate_capacity_by_profile()
 
         self.assertEqual(len(topology.nodes), 13)
-        self.assertEqual(capacity[KIMI27_PP13], 64)
+        self.assertEqual(capacity[KIMI27_PP13], 128)
         self.assertEqual(topology.routing_policy["active_resident_service_ids"], ["kimi27_pp13"])
         kimi = topology.pipeline_service_by_id("kimi27_pp13")
         self.assertEqual(kimi.profile_id, KIMI27_PP13)
@@ -124,16 +124,16 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(topology.routing_policy["pipeline_services"]["kimi27_pp13"]["api_base_url"], "http://127.0.0.1:8138")
         self.assertEqual(kimi.layer_partition, (4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4))
         self.assertEqual(kimi.scheduler["admission_mode"], "resident_multimodel_rolling_refill")
-        self.assertEqual(kimi.scheduler["refill_low_watermark"], 56)
-        self.assertEqual(kimi.scheduler["vllm_max_num_seqs"], 64)
+        self.assertEqual(kimi.scheduler["refill_low_watermark"], 112)
+        self.assertEqual(kimi.scheduler["vllm_max_num_seqs"], 128)
         self.assertEqual(kimi.entry_node_id, "spark0")
         self.assertEqual(kimi.node_ids, ("spark0", "spark1", "spark2", "spark3", "spark4", "spark5", "spark6", "spark7", "spark8", "spark9", "sparka", "sparkb", "sparkc"))
         self.assertEqual(kimi.kv_cache["connector_id"], "lmcache")
         self.assertEqual(kimi.kv_cache["external_backend"], "lmcache_hma")
         self.assertEqual(kimi.kv_cache["gpu_memory_utilization"], 0.7)
         self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["dispatch_window"], 128)
-        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_cohort_max"], 64)
-        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_pp_safe_cohort_max"], 64)
+        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_cohort_max"], 128)
+        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_pp_safe_cohort_max"], 128)
         self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_chunk_concurrency"], 2)
 
     def test_kimi27_dedicated_readiness_has_gpu_budget(self) -> None:
@@ -147,7 +147,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
                 topology=topology,
                 dispatcher_window=128,
                 dispatcher_refill_batch=128,
-                dispatcher_cohort_workers=64,
+                dispatcher_cohort_workers=128,
                 resident_multimodel=True,
             )
 
@@ -161,7 +161,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
                 topology=topology,
                 dispatcher_window=128,
                 dispatcher_refill_batch=128,
-                dispatcher_cohort_workers=32,
+                dispatcher_cohort_workers=64,
                 resident_multimodel=True,
             )
         finally:
