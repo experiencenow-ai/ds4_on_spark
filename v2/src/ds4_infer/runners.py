@@ -16,6 +16,7 @@ from urllib import error, request as urlrequest
 from .builders import model_batch_payload, request_messages, request_prompt
 from .chat_streaming import run_parallel_chat_stream
 from .cohort_safety import coalesced_completion_token_budget, coalesced_failure_should_bisect, mark_coalesced_split, prompt_token_estimate
+from .coalesced_groups import plan_compatible_payload_groups
 from .jit_kv import build_prefetch_payload, disable_strict_kv, run_prefetch
 from .kv_cache import kv_cache_extra_body, kv_cache_vllm_request_fields
 from .profiles import ModelProfile
@@ -656,7 +657,12 @@ class OpenAICompatibleRunner:
             return None
         max_cohort = _completion_effective_max_cohort(profile)
         token_budget = coalesced_completion_token_budget()
-        planned = _coalesced_completion_payload_groups(request_list, profile, self.default_extra_body, max_cohort=max_cohort, token_budget=token_budget, minimum=minimum)
+        planned = plan_compatible_payload_groups(
+            request_list,
+            payload_for_chunk=lambda chunk: _coalesced_completion_payload(chunk, profile, self.default_extra_body),
+            chunk_items=lambda group: _completion_cohort_chunks(group, max_cohort=max_cohort, token_budget=token_budget),
+            minimum=minimum,
+        )
         if planned is None:
             return None
         chunks, payloads = planned
@@ -720,7 +726,12 @@ class OpenAICompatibleRunner:
             return None
         max_cohort = _completion_effective_max_cohort(profile)
         token_budget = coalesced_completion_token_budget()
-        planned = _coalesced_completion_payload_groups(request_list, profile, self.default_extra_body, max_cohort=max_cohort, token_budget=token_budget, minimum=minimum)
+        planned = plan_compatible_payload_groups(
+            request_list,
+            payload_for_chunk=lambda chunk: _coalesced_completion_payload(chunk, profile, self.default_extra_body),
+            chunk_items=lambda group: _completion_cohort_chunks(group, max_cohort=max_cohort, token_budget=token_budget),
+            minimum=minimum,
+        )
         if planned is None:
             return None
         chunks, payloads = planned
@@ -1147,48 +1158,6 @@ def _coalesced_completion_payload(requests: list[InferenceRequest], profile: Mod
     if auto_kv_suppressed:
         payload[AUTO_KV_BATCH_SUPPRESSED_KEY] = True
     return payload
-
-
-def _coalesced_completion_payload_groups(
-    requests: list[InferenceRequest],
-    profile: ModelProfile,
-    default_extra_body: dict[str, Any],
-    *,
-    max_cohort: int,
-    token_budget: int,
-    minimum: int,
-) -> tuple[list[list[InferenceRequest]], list[tuple[list[InferenceRequest], dict[str, Any]]]] | None:
-    groups: dict[str, list[InferenceRequest]] = {}
-    for item in requests:
-        key = _coalesced_completion_compat_key(item, profile, default_extra_body)
-        if key is None:
-            return None
-        groups.setdefault(key, []).append(item)
-    chunks: list[list[InferenceRequest]] = []
-    payloads: list[tuple[list[InferenceRequest], dict[str, Any]]] = []
-    for group in groups.values():
-        if len(group) < minimum:
-            return None
-        for chunk in _completion_cohort_chunks(group, max_cohort=max_cohort, token_budget=token_budget):
-            payload = _coalesced_completion_payload(chunk, profile, default_extra_body)
-            if payload is None:
-                return None
-            chunks.append(chunk)
-            payloads.append((chunk, payload))
-    return chunks, payloads
-
-
-def _coalesced_completion_compat_key(item: InferenceRequest, profile: ModelProfile, default_extra_body: dict[str, Any]) -> str | None:
-    if item.chat:
-        return None
-    payload = _openai_payload(item, profile)
-    _merge_extra_body(payload, default_extra_body)
-    if not isinstance(payload.get("prompt"), str):
-        return None
-    payload, _ = maybe_suppress_generated_auto_kv_for_cohort(payload)
-    comparable = dict(payload)
-    comparable.pop("prompt", None)
-    return json.dumps(comparable, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def _coalesced_chat_payload(requests: list[InferenceRequest], profile: ModelProfile, default_extra_body: dict[str, Any]) -> dict[str, Any] | None:
