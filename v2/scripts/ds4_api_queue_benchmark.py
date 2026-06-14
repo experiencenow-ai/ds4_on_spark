@@ -21,8 +21,24 @@ def main() -> int:
         summary = {"format": "ds4-api-queue-benchmark-plan-v1", "batch_id": batch_id, "request_count": len(requests_payload), "out_dir": str(out_dir) if out_dir else None}
         print(json.dumps(summary, sort_keys=True))
         return 0
+    vllm_metrics_before = _maybe_read_vllm_metrics(args)
+    if out_dir is not None and vllm_metrics_before is not None:
+        _write_json(out_dir / "vllm_metrics_before.json", vllm_metrics_before)
     submit_s, run_s, collected = _submit_and_collect(args, batch_id, out_dir, requests_payload)
-    summary = _benchmark_summary(args, batch_id, out_dir, requests_payload, submit_s, run_s, collected)
+    vllm_metrics_after = _maybe_read_vllm_metrics(args)
+    if out_dir is not None and vllm_metrics_after is not None:
+        _write_json(out_dir / "vllm_metrics_after.json", vllm_metrics_after)
+    summary = _benchmark_summary(
+        args,
+        batch_id,
+        out_dir,
+        requests_payload,
+        submit_s,
+        run_s,
+        collected,
+        vllm_metrics_before=vllm_metrics_before,
+        vllm_metrics_after=vllm_metrics_after,
+    )
     if out_dir is not None:
         _write_json(out_dir / "summary.json", summary)
     print(json.dumps(summary, sort_keys=True))
@@ -93,6 +109,9 @@ def _benchmark_summary(
     submit_s: float,
     run_s: float,
     collected: dict[str, Any],
+    *,
+    vllm_metrics_before: dict[str, Any] | None = None,
+    vllm_metrics_after: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     metrics = _benchmark_metrics(args, requests_payload, run_s, collected)
     summary = {
@@ -116,6 +135,10 @@ def _benchmark_summary(
         "run_s": round(run_s, 6),
     }
     summary.update(metrics)
+    vllm_metrics = _vllm_metrics_delta_summary(vllm_metrics_before, vllm_metrics_after)
+    if vllm_metrics is not None:
+        summary["vllm_metrics_url"] = args.vllm_metrics_url
+        summary["vllm_metrics"] = vllm_metrics
     return summary
 
 
@@ -184,6 +207,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--pipeline-stages", type=int, default=8)
     parser.add_argument("--equivalent-sparks", type=int, default=2)
     parser.add_argument("--reference-tok-s", type=float, default=144.6, help="Known-good two-Spark-equivalent DSV4 c16 aggregate target.")
+    parser.add_argument("--vllm-metrics-url", help="Snapshot this vLLM Prometheus metrics URL before and after the benchmark and include cache/token-source deltas in summary.json.")
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--job-class", default="analysis")
     parser.add_argument("--priority", type=int, default=None)
@@ -436,6 +460,146 @@ def _get(base_url: str, endpoint: str, params: dict[str, Any]) -> dict[str, Any]
     query = parse.urlencode({key: value for key, value in params.items() if value is not None})
     with request.urlopen(base_url.rstrip("/") + endpoint + ("?" + query if query else ""), timeout=60) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def _maybe_read_vllm_metrics(args: argparse.Namespace) -> dict[str, Any] | None:
+    metrics_url = getattr(args, "vllm_metrics_url", None)
+    if not metrics_url:
+        return None
+    with request.urlopen(str(metrics_url), timeout=30) as response:
+        text = response.read().decode("utf-8", errors="replace")
+    return _parse_vllm_prometheus_metrics(text)
+
+
+def _parse_vllm_prometheus_metrics(text: str) -> dict[str, Any]:
+    parsed: dict[str, Any] = {
+        "format": "vllm-prometheus-snapshot-v1",
+        "counters": {},
+        "gauges": {},
+        "prompt_tokens_by_source_total": {},
+    }
+    for line in text.splitlines():
+        raw = line.strip()
+        if not raw or raw.startswith("#") or " " not in raw:
+            continue
+        head, raw_value = raw.split(None, 1)
+        try:
+            value = float(raw_value.split()[0])
+        except (IndexError, ValueError):
+            continue
+        metric_name, labels = _prometheus_metric_head(head)
+        if metric_name == "prompt_tokens_by_source_total":
+            source = labels.get("source") or "unknown"
+            _add_metric_value(parsed["prompt_tokens_by_source_total"], source, value)
+        elif metric_name in {"prompt_tokens_cached_total", "generation_tokens_total"}:
+            _add_metric_value(parsed["counters"], metric_name, value)
+        elif metric_name in {"num_requests_running", "num_requests_waiting"}:
+            _add_metric_value(parsed["gauges"], metric_name, value)
+        elif metric_name == "kv_cache_usage_perc":
+            old_value = parsed["gauges"].get(metric_name)
+            parsed["gauges"][metric_name] = round(max(float(old_value or 0.0), value), 6)
+    return parsed
+
+
+def _prometheus_metric_head(head: str) -> tuple[str, dict[str, str]]:
+    labels: dict[str, str] = {}
+    metric = head
+    if "{" in head and head.endswith("}"):
+        metric, label_text = head.split("{", 1)
+        labels = _parse_prometheus_labels(label_text[:-1])
+    if metric.startswith("vllm:"):
+        metric = metric.split(":", 1)[1]
+    return metric, labels
+
+
+def _parse_prometheus_labels(label_text: str) -> dict[str, str]:
+    labels: dict[str, str] = {}
+    index = 0
+    while index < len(label_text):
+        equals = label_text.find("=", index)
+        if equals < 0:
+            break
+        key = label_text[index:equals].strip()
+        index = equals + 1
+        if index >= len(label_text) or label_text[index] != '"':
+            comma = label_text.find(",", index)
+            if comma < 0:
+                break
+            index = comma + 1
+            continue
+        index += 1
+        chars: list[str] = []
+        while index < len(label_text):
+            char = label_text[index]
+            if char == "\\" and index + 1 < len(label_text):
+                chars.append(label_text[index + 1])
+                index += 2
+                continue
+            if char == '"':
+                index += 1
+                break
+            chars.append(char)
+            index += 1
+        if key:
+            labels[key] = "".join(chars)
+        if index < len(label_text) and label_text[index] == ",":
+            index += 1
+    return labels
+
+
+def _add_metric_value(values: dict[str, Any], key: str, value: float) -> None:
+    values[key] = round(float(values.get(key) or 0.0) + float(value), 6)
+
+
+def _vllm_metrics_delta_summary(before: dict[str, Any] | None, after: dict[str, Any] | None) -> dict[str, Any] | None:
+    if before is None and after is None:
+        return None
+    before = before or {}
+    after = after or {}
+    source_delta = _dict_metric_delta(
+        before.get("prompt_tokens_by_source_total") if isinstance(before.get("prompt_tokens_by_source_total"), dict) else {},
+        after.get("prompt_tokens_by_source_total") if isinstance(after.get("prompt_tokens_by_source_total"), dict) else {},
+    )
+    counter_delta = _dict_metric_delta(
+        before.get("counters") if isinstance(before.get("counters"), dict) else {},
+        after.get("counters") if isinstance(after.get("counters"), dict) else {},
+    )
+    total_prompt_tokens = round(sum(source_delta.values()), 6)
+    external_tokens = source_delta.get("external_kv_transfer", 0.0)
+    local_cache_tokens = source_delta.get("local_cache_hit", 0.0)
+    local_compute_tokens = source_delta.get("local_compute", 0.0)
+    cache_hit_tokens = round(external_tokens + local_cache_tokens, 6)
+    return {
+        "before": before,
+        "after": after,
+        "delta": {
+            "prompt_tokens_by_source_total": source_delta,
+            "counters": counter_delta,
+        },
+        "derived": {
+            "prompt_token_source_total_delta": total_prompt_tokens,
+            "local_compute_token_delta": local_compute_tokens,
+            "local_cache_hit_token_delta": local_cache_tokens,
+            "external_kv_transfer_token_delta": external_tokens,
+            "cache_hit_token_delta": cache_hit_tokens,
+            "cache_hit_token_ratio": round(cache_hit_tokens / total_prompt_tokens, 6) if total_prompt_tokens > 0 else 0.0,
+            "generation_token_delta": counter_delta.get("generation_tokens_total", 0.0),
+            "prompt_tokens_cached_delta": counter_delta.get("prompt_tokens_cached_total", 0.0),
+        },
+    }
+
+
+def _dict_metric_delta(before: dict[str, Any], after: dict[str, Any]) -> dict[str, float]:
+    keys = sorted(set(before) | set(after))
+    delta: dict[str, float] = {}
+    for key in keys:
+        try:
+            value = float(after.get(key) or 0.0) - float(before.get(key) or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if abs(value) > 0.0000001:
+            delta[str(key)] = round(value, 6)
+    return delta
 
 
 def _prompt(args: argparse.Namespace, idx: int, *, shape: dict[str, Any] | None = None) -> str:
