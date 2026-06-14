@@ -480,7 +480,7 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 128}, 0, 256), 128)
             self.assertEqual(api._resident_refill_limit(plan, {}, 0, 256), 256)
 
-    def test_rolling_cohort_keeps_service_admitted_until_future_finishes(self) -> None:
+    def test_rolling_cohort_reports_partial_completion_for_refill(self) -> None:
         claims = [
             QueueClaim(
                 request_id=f"r{index}",
@@ -497,11 +497,15 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             for index in range(2)
         ]
         cohort = PendingDispatcherCohort.from_claims(claims, admission_mode="rolling_refill")
-        cohort.mark_finished("r0")
-        cohort.mark_finished("r1")
         self.assertEqual(cohort.active_count(), 2)
+        cohort.mark_finished("r0")
+        self.assertEqual(cohort.active_count(), 1)
+        self.assertEqual(cohort.status()["initial_unfinished_count"], 1)
+        self.assertEqual(cohort.status()["active_count"], 1)
+        cohort.mark_finished("r1")
+        self.assertEqual(cohort.active_count(), 0)
         self.assertEqual(cohort.status()["initial_unfinished_count"], 0)
-        self.assertEqual(cohort.status()["active_count"], 2)
+        self.assertEqual(cohort.status()["active_count"], 0)
 
     def test_worker_force_cancel_releases_incremental_batch_without_runner_tail(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
