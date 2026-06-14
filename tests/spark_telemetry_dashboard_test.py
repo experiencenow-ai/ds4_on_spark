@@ -98,6 +98,22 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertFalse(snap["summary_stale"])
         self.assertEqual(snap["nodes"][0]["state"], "idle")
 
+    def test_snapshot_marks_gpu_only_pipeline_stage_busy(self):
+        payload = {
+            "updated_iso": "2026-05-26T00:00:00+00:00",
+            "updated_unix": 1,
+            "nodes": {
+                "spark3": {"sample_count": 1, "last_gpu_util_pct": 46, "last_vllm_metrics_up": 0},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "summary.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            snap = dashboard.build_snapshot(str(path))
+        self.assertEqual(snap["nodes"][0]["state"], "busy")
+        self.assertEqual(snap["nodes"][0]["state_label"], "gpu")
+        self.assertEqual(snap["active_nodes"], 1)
+
     def test_snapshot_preserves_all_thirteen_spark_labels(self):
         labels = ["spark0","spark1","spark2","spark3","spark4","spark5","spark6","spark7","spark8","spark9","sparka","sparkb","sparkc"]
         payload = {
@@ -388,6 +404,44 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["nodes"][0]["token_scope"],"allocated")
         self.assertEqual(snap["nodes"][0]["output_tok_s"],4)
         self.assertEqual(snap["nodes"][1]["output_tok_s"],5)
+
+    def test_snapshot_merges_installed_and_repo_layer_partitions(self):
+        payload = {
+            "updated_iso": "2026-05-26T00:00:00+00:00",
+            "updated_unix": 1,
+            "nodes": {
+                "spark0": {
+                    "sample_count": 1,
+                    "last_vllm_metrics_up": 1,
+                    "last_vllm_generation_tokens_per_s_by_model": "repo-pp13:65",
+                    "last_vllm_requests_running_by_model": "repo-pp13:13",
+                    "last_vllm_pipeline_stage_models": "repo-pp13",
+                    "last_vllm_pipeline_stage_pp_by_model": "repo-pp13:13",
+                    "last_vllm_pipeline_stage_rank_by_model": "repo-pp13:0",
+                },
+                "spark1": {
+                    "sample_count": 1,
+                    "last_vllm_pipeline_stage_models": "repo-pp13",
+                    "last_vllm_pipeline_stage_pp_by_model": "repo-pp13:13",
+                    "last_vllm_pipeline_stage_rank_by_model": "repo-pp13:1",
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            summary = Path(tmp) / "summary.json"
+            installed = Path(tmp) / "model_layer_partitions.json"
+            (root / "v2" / "profiles" / "kv_cache").mkdir(parents=True)
+            summary.write_text(json.dumps(payload),encoding="utf-8")
+            installed.write_text(json.dumps({"model_layer_partitions":{"old-pp8":[1,1,1,1,1,1,1,1]}}),encoding="utf-8")
+            (root / "v2" / "profiles" / "kv_cache" / "repo_pp13.json").write_text(json.dumps({"served_model_name":"repo-pp13","layer_partition":[4,4,4,5,5,5,5,5,5,5,5,5,4]}),encoding="utf-8")
+            dashboard.REPO_ROOT_OVERRIDE = str(root)
+            dashboard.MODEL_LAYER_PARTITIONS_JSON_OVERRIDE = str(installed)
+            dashboard.MODEL_LAYER_PARTITIONS = None
+            snap = dashboard.build_snapshot(str(summary))
+        self.assertEqual(snap["nodes"][0]["token_scope"],"allocated")
+        self.assertEqual(snap["nodes"][0]["output_tok_s"],4.262)
+        self.assertEqual(snap["nodes"][1]["output_tok_s"],4.262)
 
     def test_snapshot_ignores_ds4_stage_payload_for_node_telemetry(self):
         payload = {
