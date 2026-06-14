@@ -62,7 +62,8 @@ def deployment_readiness(
         _pipeline_checks(checks, service)
     _external_kv_checks(checks, services=services)
     gpu_budget = _gpu_budget_by_service(services)
-    _resident_gpu_budget_checks(checks, services=services, gpu_budget=gpu_budget)
+    fixed_kv_bytes = _fixed_kv_bytes_by_service(services)
+    _resident_gpu_budget_checks(checks, services=services, gpu_budget=gpu_budget, fixed_kv_bytes=fixed_kv_bytes)
     _jit_kv_checks(checks, services=services, strict=strict)
     return _readiness_payload(
         checks=checks,
@@ -78,6 +79,7 @@ def deployment_readiness(
         dispatcher_refill_batch=dispatcher_refill_batch,
         dispatcher_cohort_workers=dispatcher_cohort_workers,
         gpu_budget=gpu_budget,
+        fixed_kv_bytes=fixed_kv_bytes,
     )
 
 
@@ -254,6 +256,7 @@ def _readiness_payload(
     dispatcher_refill_batch: int,
     dispatcher_cohort_workers: int,
     gpu_budget: dict[str, float],
+    fixed_kv_bytes: dict[str, int],
 ) -> dict[str, Any]:
     errors = [item for item in checks if item["severity"] == "error" and not item["ok"]]
     warnings = [item for item in checks if item["severity"] == "warning" and not item["ok"]]
@@ -273,6 +276,8 @@ def _readiness_payload(
         "dispatcher_cohort_workers": int(dispatcher_cohort_workers),
         "resident_gpu_memory_utilization": gpu_budget,
         "resident_gpu_memory_utilization_sum": round(sum(gpu_budget.values()), 6),
+        "resident_fixed_kv_cache_memory_bytes": fixed_kv_bytes,
+        "resident_fixed_kv_cache_memory_bytes_sum": sum(fixed_kv_bytes.values()),
         "resident_kv_backends": {service.service_id: str(service.kv_cache.get("external_backend") or "") for service in services},
         "resident_kv_connectors": {service.service_id: str(service.kv_cache.get("connector_id") or "") for service in services},
         "hard_error_count": len(errors),
@@ -444,7 +449,7 @@ def _external_kv_auto_plan_checks(checks: list[dict[str, Any]], *, services: lis
     )
 
 
-def _resident_gpu_budget_checks(checks: list[dict[str, Any]], *, services: list[Any], gpu_budget: dict[str, float]) -> None:
+def _resident_gpu_budget_checks(checks: list[dict[str, Any]], *, services: list[Any], gpu_budget: dict[str, float], fixed_kv_bytes: dict[str, int]) -> None:
     missing = [service.service_id for service in services if service.service_id not in gpu_budget]
     _check(
         checks,
@@ -453,13 +458,20 @@ def _resident_gpu_budget_checks(checks: list[dict[str, Any]], *, services: list[
         "active resident services declare GPU memory utilization caps",
         details={"missing": missing, "budget": gpu_budget},
     )
-    total = sum(gpu_budget.values())
+    percentage_budget = {service_id: value for service_id, value in gpu_budget.items() if service_id not in fixed_kv_bytes}
+    total = sum(percentage_budget.values())
     _check(
         checks,
         total <= FIRST3_GPU_UTILIZATION_HARD_CAP,
         "first3_gpu_budget_under_hard_cap",
         "first-three resident GPU memory utilization leaves deployment headroom",
-        details={"sum": round(total, 6), "hard_cap": FIRST3_GPU_UTILIZATION_HARD_CAP},
+        details={
+            "sum": round(total, 6),
+            "hard_cap": FIRST3_GPU_UTILIZATION_HARD_CAP,
+            "fixed_kv_cache_memory_bytes": fixed_kv_bytes,
+            "fixed_kv_cache_memory_bytes_sum": sum(fixed_kv_bytes.values()),
+            "percentage_budget_services": sorted(percentage_budget),
+        },
     )
     for service in services:
         value = gpu_budget.get(service.service_id)
@@ -494,9 +506,25 @@ def _gpu_budget_by_service(services: list[Any]) -> dict[str, float]:
     return out
 
 
+def _fixed_kv_bytes_by_service(services: list[Any]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for service in services:
+        value = _int_or_none(dict(getattr(service, "kv_cache", {}) or {}).get("kv_cache_memory_bytes"))
+        if value is not None and value > 0:
+            out[service.service_id] = value
+    return out
+
+
 def _float_or_none(value: Any) -> float | None:
     try:
         return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value)
     except (TypeError, ValueError):
         return None
 
