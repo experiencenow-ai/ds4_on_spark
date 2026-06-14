@@ -246,6 +246,63 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
         self.assertEqual([results[f"r{index}"]["output"]["text"] for index in range(4)], ["out-0", "out-1", "out-2", "out-3"])
         self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_batch"] for index in range(4)))
 
+    def test_auto_kv_does_not_prevent_coalesced_completion_batches_by_default(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
+        runner = RecordingOpenAIRunner()
+        requests = [completion_request(f"r{index}", f"prompt-{index}") for index in range(4)]
+        old_values = {
+            "DS4_PIPELINE_AUTO_KV_CACHE": os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE"),
+            "DS4_PIPELINE_AUTO_KV_BATCH_POLICY": os.environ.get("DS4_PIPELINE_AUTO_KV_BATCH_POLICY"),
+            "DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS": os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"),
+        }
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = "1"
+        os.environ["DS4_PIPELINE_AUTO_KV_BATCH_POLICY"] = "prefer_batch"
+        os.environ.pop("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS", None)
+        try:
+            results = runner.run_many_completion(requests, profile)
+        finally:
+            for key, value in old_values.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.assertIsNotNone(results)
+        assert results is not None
+        self.assertEqual(len(runner.calls), 1)
+        _, payload = runner.calls[0]
+        self.assertEqual(payload["prompt"], ["prompt-0", "prompt-1", "prompt-2", "prompt-3"])
+        self.assertNotIn("kv_transfer_params", payload)
+        self.assertNotIn("ds4_kv_cache", payload.get("extra_body") or {})
+        self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_batch"] for index in range(4)))
+        self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_auto_kv_suppressed"] for index in range(4)))
+
+    def test_auto_kv_strict_cache_policy_keeps_distinct_cache_refs_unbatched(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
+        runner = RecordingOpenAIRunner()
+        requests = [completion_request(f"r{index}", f"prompt-{index}") for index in range(2)]
+        old_values = {
+            "DS4_PIPELINE_AUTO_KV_CACHE": os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE"),
+            "DS4_PIPELINE_AUTO_KV_BATCH_POLICY": os.environ.get("DS4_PIPELINE_AUTO_KV_BATCH_POLICY"),
+            "DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS": os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"),
+        }
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = "1"
+        os.environ["DS4_PIPELINE_AUTO_KV_BATCH_POLICY"] = "strict_cache"
+        os.environ.pop("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS", None)
+        try:
+            results = runner.run_many_completion(requests, profile)
+        finally:
+            for key, value in old_values.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.assertIsNone(results)
+        self.assertEqual(runner.calls, [])
+
     def test_runner_splits_coalesced_completion_requests_by_token_budget(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
