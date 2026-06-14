@@ -126,7 +126,12 @@ PY
 }
 
 if [ "${#nodes[@]}" -eq 0 ]; then
-	mapfile -t nodes < <(load_default_nodes)
+	while IFS= read -r node
+	do
+		if [ "$node" != "" ]; then
+			nodes+=("$node")
+		fi
+	done < <(load_default_nodes)
 	if [ "${#nodes[@]}" -eq 0 ]; then
 		echo "no default Spark nodes found in topology: $topology_path" >&2
 		exit 15

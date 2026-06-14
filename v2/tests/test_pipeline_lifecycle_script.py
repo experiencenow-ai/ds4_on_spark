@@ -373,7 +373,8 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
 
         self.assertIn("topology_path=", script)
         self.assertIn("load_default_nodes()", script)
-        self.assertIn("mapfile -t nodes < <(load_default_nodes)", script)
+        self.assertIn("while IFS= read -r node", script)
+        self.assertNotIn("mapfile", script)
         self.assertIn("node_ssh_target()", script)
         self.assertNotIn("nodes=(spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7)", script)
 
