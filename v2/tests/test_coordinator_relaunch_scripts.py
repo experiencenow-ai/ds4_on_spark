@@ -188,9 +188,9 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
 
         self.assertEqual(args.topology, str(KIMI_QWEN_GEMMA_TOPOLOGY.relative_to(ROOT)))
         self.assertEqual(defaults["DS4_API_RESIDENT_SERVICE_IDS"], "kimi27_pp13,qwen27_bf16_pp13,gemma4_26b_a4b_pp13")
-        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "560")
-        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "560")
-        self.assertEqual(defaults["DS4_API_DISPATCH_COHORT_WORKERS"], "560")
+        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "704")
+        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "704")
+        self.assertEqual(defaults["DS4_API_DISPATCH_COHORT_WORKERS"], "704")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "256")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "131072")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "256")
