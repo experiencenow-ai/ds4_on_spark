@@ -326,10 +326,10 @@ class InferenceQueue:
                 self._refresh_batch(conn, touched_batch_id)
         return made_ready
 
-    def claim_ready_batch(self, *, node_id: str | None, batch_id: str | None, limit: int, leased_by: str, lease_ttl_s: int, batch_linger_s: float = 0.0, kv_shard_layouts_by_profile: Mapping[str, Any] | None = None, batch_limits_by_service: Mapping[str, int] | None = None, compute_lease_id: str | None = None, selected_service_id: str | None = None, share_compute_domain: bool = False) -> list[QueueClaim]:
+    def claim_ready_batch(self, *, node_id: str | None, batch_id: str | None, limit: int, leased_by: str, lease_ttl_s: int, batch_linger_s: float = 0.0, kv_shard_layouts_by_profile: Mapping[str, Any] | None = None, batch_limits_by_service: Mapping[str, int] | None = None, compute_lease_id: str | None = None, selected_service_id: str | None = None, share_compute_domain: bool = False, ready_shape_bucketing: bool = False, ready_shape_lookahead: int = 1) -> list[QueueClaim]:
         now = time.time()
         with closing(self._connect()) as conn, conn:
-            rows = _ready_rows(conn, node_id=node_id, batch_id=batch_id, limit=limit, batch_limits_by_service=batch_limits_by_service or {}, selected_service_id=selected_service_id, ignore_compute_lease=share_compute_domain)
+            rows = _ready_rows(conn, node_id=node_id, batch_id=batch_id, limit=limit, batch_limits_by_service=batch_limits_by_service or {}, selected_service_id=selected_service_id, ignore_compute_lease=share_compute_domain, ready_shape_bucketing=ready_shape_bucketing, ready_shape_lookahead=ready_shape_lookahead)
             if not rows:
                 return []
             linger_limit = _service_batch_limit(rows[0]["selected_service_id"], batch_limits_by_service or {}, limit)
@@ -1537,7 +1537,7 @@ def _next_queued(conn: sqlite3.Connection, *, node_id: str | None, eligible: tup
     return conn.execute(f"select * from requests where {' and '.join(clauses)} order by priority, created_at, request_id limit 1", tuple(params)).fetchone()
 
 
-def _ready_rows(conn: sqlite3.Connection, *, node_id: str | None, batch_id: str | None, limit: int, batch_limits_by_service: Mapping[str, int] | None = None, selected_service_id: str | None = None, ignore_compute_lease: bool = False) -> list[sqlite3.Row]:
+def _ready_rows(conn: sqlite3.Connection, *, node_id: str | None, batch_id: str | None, limit: int, batch_limits_by_service: Mapping[str, int] | None = None, selected_service_id: str | None = None, ignore_compute_lease: bool = False, ready_shape_bucketing: bool = False, ready_shape_lookahead: int = 1) -> list[sqlite3.Row]:
     clauses = ["state='ready'"]
     params: list[Any] = []
     if node_id is not None:
@@ -1562,6 +1562,19 @@ def _ready_rows(conn: sqlite3.Connection, *, node_id: str | None, batch_id: str 
     first = conn.execute(f"select * from requests where {' and '.join(clauses)} order by priority, ready_at, created_at, request_id limit 1", tuple(params)).fetchone()
     if first is None:
         return []
+    service_id = _ready_row_scope(clauses, params, first, shape_bucket=ready_shape_bucketing)
+    service_limit = _service_batch_limit(service_id, batch_limits_by_service or {}, limit)
+    query_limit = service_limit
+    if ready_shape_bucketing:
+        query_limit = max(service_limit, service_limit * max(1, int(ready_shape_lookahead)))
+    params.append(query_limit)
+    rows = conn.execute(f"select * from requests where {' and '.join(clauses)} order by priority, ready_at, created_at, request_id limit ?", tuple(params)).fetchall()
+    if ready_shape_bucketing:
+        return _ready_shape_bucket(rows, service_limit)
+    return rows
+
+
+def _ready_row_scope(clauses: list[str], params: list[Any], first: sqlite3.Row, *, shape_bucket: bool) -> Any:
     clauses.append("selected_profile_id=?")
     params.append(first["selected_profile_id"])
     service_id = first["selected_service_id"]
@@ -1576,9 +1589,49 @@ def _ready_rows(conn: sqlite3.Connection, *, node_id: str | None, batch_id: str 
     else:
         clauses.append("selected_compute_domain=?")
         params.append(compute_domain)
-    service_limit = _service_batch_limit(service_id, batch_limits_by_service or {}, limit)
-    params.append(service_limit)
-    return conn.execute(f"select * from requests where {' and '.join(clauses)} order by priority, ready_at, created_at, request_id limit ?", tuple(params)).fetchall()
+    if shape_bucket:
+        clauses.append("priority=?")
+        params.append(first["priority"])
+    return service_id
+
+
+def _ready_shape_bucket(rows: list[sqlite3.Row], limit: int) -> list[sqlite3.Row]:
+    buckets: dict[str, list[sqlite3.Row]] = {}
+    first_indexes: dict[str, int] = {}
+    for index, row in enumerate(rows):
+        key = _ready_shape_key(row)
+        if key not in buckets:
+            buckets[key] = []
+            first_indexes[key] = index
+        buckets[key].append(row)
+    if not buckets:
+        return []
+    best = max(buckets, key=lambda key: (min(len(buckets[key]), limit), -first_indexes[key]))
+    return buckets[best][:limit]
+
+
+def _ready_shape_key(row: sqlite3.Row) -> str:
+    try:
+        raw = json.loads(str(row["request_json"]))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return "_invalid"
+    if not isinstance(raw, dict):
+        return "_invalid"
+    input_data = raw.get("input") if isinstance(raw.get("input"), dict) else {}
+    openai = input_data.get("openai") if isinstance(input_data.get("openai"), dict) else {}
+    extra_body = input_data.get("openai_extra_body") if isinstance(input_data.get("openai_extra_body"), dict) else {}
+    benchmark_shape = input_data.get("benchmark_shape") if isinstance(input_data.get("benchmark_shape"), dict) else {}
+    shape = {
+        "benchmark_output_tokens": benchmark_shape.get("output_tokens"),
+        "chat": raw.get("chat"),
+        "max_output_tokens": raw.get("max_output_tokens"),
+        "openai": openai,
+        "openai_extra_body": extra_body,
+        "temperature": raw.get("temperature"),
+        "thinking_budget_tokens": raw.get("thinking_budget_tokens"),
+        "top_p": raw.get("top_p"),
+    }
+    return json.dumps(shape, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def _service_batch_limit(service_id: Any, batch_limits_by_service: Mapping[str, int], default_limit: int) -> int:

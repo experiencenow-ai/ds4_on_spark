@@ -127,6 +127,30 @@ class InferenceQueueTests(unittest.TestCase):
             self.assertEqual(worked["batch_dispatch_mode"], "batch")
             self.assertEqual(runner.calls, [("spark0", [f"cohort-{idx:03d}" for idx in range(12)], 12)])
 
+    def test_ready_shape_bucketing_claims_uniform_output_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            requests = []
+            for idx in range(256):
+                output_tokens = 64 if idx % 2 == 0 else 192
+                requests.append(req(f"shape-{idx:03d}", priority=5, output_tokens=output_tokens))
+            queue.submit_requests(requests=requests, registry=registry, batch_id="shape-bucket")
+            conn = queue._connect()
+            try:
+                with conn:
+                    conn.execute("update requests set selected_service_id='kimi27_pp13', selected_compute_domain='fleet' where batch_id='shape-bucket'")
+            finally:
+                conn.close()
+            prepared = queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=256, leased_by="worker", lease_ttl_s=30, selected_service_id="kimi27_pp13", share_compute_domain=True)
+            self.assertEqual(prepared, 256)
+
+            claims = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=128, leased_by="worker", lease_ttl_s=30, selected_service_id="kimi27_pp13", share_compute_domain=True, ready_shape_bucketing=True, ready_shape_lookahead=4)
+
+            self.assertEqual(len(claims), 128)
+            self.assertEqual({claim.request.max_output_tokens for claim in claims if claim.request is not None}, {64})
+            self.assertEqual([claim.request_id for claim in claims[:4]], ["shape-000", "shape-002", "shape-004", "shape-006"])
+
     def test_compute_lease_quantum_drains_when_another_service_waits(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             old = os.environ.get("DS4_COMPUTE_LEASE_QUANTUM_S")
