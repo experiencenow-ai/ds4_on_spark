@@ -1,0 +1,9 @@
+[Unit]
+Description=DS4 Spark Mac fast internet gateway route
+Wants=network-online.target
+After=network-online.target ds4-ring-control-iface.service ds4-ring-200g.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/ds4-mac-fast-internet-gateway.env
+ExecStart=/usr/local/sbin/ds4-mac-fast-internet-gateway

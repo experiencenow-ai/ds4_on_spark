@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh DS4 Spark Mac fast internet gateway route
+
+[Timer]
+OnBootSec=20s
+OnUnitActiveSec=60s
+AccuracySec=10s
+Unit=ds4-mac-fast-internet-gateway.service
+
+[Install]
+WantedBy=timers.target
