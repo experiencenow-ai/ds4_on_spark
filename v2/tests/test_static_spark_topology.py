@@ -184,6 +184,46 @@ class StaticSparkTopologyTests(unittest.TestCase):
         failed_errors = {item["name"] for item in underfilled["checks"] if not item["ok"] and item["severity"] == "error"}
         self.assertIn("cohort_workers_cover_largest_service", failed_errors)
 
+    def test_kimi_qwen_readiness_counts_fixed_kv_bytes_as_headroom(self) -> None:
+        topology = SparkTopology.load(KIMI_TOPOLOGY)
+        old_active = os.environ.get("DS4_API_RESIDENT_SERVICE_IDS")
+        old_auto = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE")
+        old_services = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS")
+        os.environ["DS4_API_RESIDENT_SERVICE_IDS"] = "kimi27_pp13,qwen27_bf16_pp13"
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = "1"
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = "kimi27_pp13,qwen27_bf16_pp13"
+        try:
+            payload = deployment_readiness(
+                topology=topology,
+                dispatcher_window=128,
+                dispatcher_refill_batch=128,
+                dispatcher_cohort_workers=80,
+                resident_multimodel=True,
+            )
+        finally:
+            if old_active is None:
+                os.environ.pop("DS4_API_RESIDENT_SERVICE_IDS", None)
+            else:
+                os.environ["DS4_API_RESIDENT_SERVICE_IDS"] = old_active
+            if old_auto is None:
+                os.environ.pop("DS4_PIPELINE_AUTO_KV_CACHE", None)
+            else:
+                os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = old_auto
+            if old_services is None:
+                os.environ.pop("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS", None)
+            else:
+                os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = old_services
+        self.assertTrue(payload["ready"])
+        self.assertEqual(payload["active_resident_service_ids"], ["kimi27_pp13", "qwen27_bf16_pp13"])
+        self.assertEqual(payload["resident_gpu_memory_utilization"], {"kimi27_pp13": 0.7, "qwen27_bf16_pp13": 0.25})
+        self.assertAlmostEqual(payload["resident_gpu_memory_utilization_sum"], 0.95)
+        self.assertEqual(payload["resident_fixed_kv_cache_memory_bytes"], {"kimi27_pp13": 8589934592, "qwen27_bf16_pp13": 8589934592})
+        self.assertEqual(payload["resident_fixed_kv_cache_memory_bytes_sum"], 17179869184)
+        checks = {item["name"]: item for item in payload["checks"]}
+        self.assertTrue(checks["first3_gpu_budget_under_hard_cap"]["ok"])
+        self.assertEqual(checks["first3_gpu_budget_under_hard_cap"]["details"]["sum"], 0)
+        self.assertEqual(checks["first3_gpu_budget_under_hard_cap"]["details"]["percentage_budget_services"], [])
+
     def test_qwen_gemma_pp12_topology_leaves_sparkc_for_qualification(self) -> None:
         topology = SparkTopology.load(QWEN_GEMMA_PP12_TOPOLOGY)
         capacity = topology.estimate_capacity_by_profile()
