@@ -71,10 +71,10 @@ def deployment_readiness(
     )
     for service in services:
         _pipeline_checks(checks, service)
-    _external_kv_checks(checks, services=services)
+    _external_kv_checks(checks, topology=topology, services=services)
     gpu_budget = _gpu_budget_by_service(services)
     fixed_kv_bytes = _fixed_kv_bytes_by_service(services)
-    _resident_gpu_budget_checks(checks, services=services, gpu_budget=gpu_budget, fixed_kv_bytes=fixed_kv_bytes)
+    _resident_gpu_budget_checks(checks, topology=topology, services=services, gpu_budget=gpu_budget, fixed_kv_bytes=fixed_kv_bytes)
     _jit_kv_checks(checks, services=services, strict=strict)
     return _readiness_payload(
         checks=checks,
@@ -95,16 +95,18 @@ def deployment_readiness(
 
 
 def _active_service_checks(checks: list[dict[str, Any]], *, topology: SparkTopology, active_ids: set[str] | None, services: list[Any], targets: dict[str, int]) -> None:
+    expectations = dict(topology.routing_policy.get("resident_service_expectations") or {})
+    expected_services = tuple(str(item) for item in expectations.get("service_ids") or DEFAULT_FIRST3_SERVICES)
     _check(checks, bool(services), "active_resident_services_present", "at least one active resident service is configured")
     if active_ids is not None:
         missing = sorted(active_ids - set(topology.pipeline_services))
         _check(checks, not missing, "active_resident_services_known", "active resident services exist in topology", details={"missing": missing})
     _check(
         checks,
-        set(targets) == set(DEFAULT_FIRST3_SERVICES),
+        set(targets) == set(expected_services),
         "first3_resident_service_set",
-        "first 3x resident set is Qwen BF16, Gemma4 26B-A4B, and DSV4",
-        details={"expected": list(DEFAULT_FIRST3_SERVICES), "actual": sorted(targets)},
+        "resident service set matches the topology expectation",
+        details={"expected": list(expected_services), "actual": sorted(targets)},
         severity="warning",
     )
 
@@ -371,19 +373,22 @@ def _pipeline_checks(checks: list[dict[str, Any]], service: Any) -> None:
     )
 
 
-def _external_kv_checks(checks: list[dict[str, Any]], *, services: list[Any]) -> None:
+def _external_kv_checks(checks: list[dict[str, Any]], *, topology: SparkTopology, services: list[Any]) -> None:
+    expectations = dict(topology.routing_policy.get("resident_service_expectations") or {})
+    expected_connectors = dict(expectations.get("cache_connectors") or FIRST3_CACHE_CONNECTORS)
+    expected_backends = dict(expectations.get("cache_backends") or FIRST3_CACHE_BACKENDS)
     for service in services:
-        _external_kv_service_checks(checks, service)
+        _external_kv_service_checks(checks, service, expected_connectors=expected_connectors, expected_backends=expected_backends)
     _external_kv_auto_plan_checks(checks, services=services)
 
 
-def _external_kv_service_checks(checks: list[dict[str, Any]], service: Any) -> None:
+def _external_kv_service_checks(checks: list[dict[str, Any]], service: Any, *, expected_connectors: dict[str, str], expected_backends: dict[str, str]) -> None:
     kv_cache = dict(getattr(service, "kv_cache", {}) or {})
     connector_id = str(kv_cache.get("connector_id") or "")
     cache_root = str(kv_cache.get("cache_root") or kv_cache.get("storage_root") or "")
     backend = str(kv_cache.get("external_backend") or "")
     _external_kv_root_connector_checks(checks, service, cache_root, connector_id)
-    _external_kv_backend_checks(checks, service, backend, connector_id)
+    _external_kv_backend_checks(checks, service, backend, connector_id, expected_connectors=expected_connectors, expected_backends=expected_backends)
     _external_kv_sharding_checks(checks, service, kv_cache)
 
 
@@ -407,10 +412,16 @@ def _external_kv_root_connector_checks(
 
 
 def _external_kv_backend_checks(
-    checks: list[dict[str, Any]], service: Any, backend: str, connector_id: str
+    checks: list[dict[str, Any]],
+    service: Any,
+    backend: str,
+    connector_id: str,
+    *,
+    expected_connectors: dict[str, str],
+    expected_backends: dict[str, str],
 ) -> None:
-    expected_connector = FIRST3_CACHE_CONNECTORS.get(service.service_id)
-    expected_backend = FIRST3_CACHE_BACKENDS.get(service.service_id)
+    expected_connector = expected_connectors.get(service.service_id)
+    expected_backend = expected_backends.get(service.service_id)
     if expected_connector is not None:
         _check(
             checks,
@@ -471,7 +482,11 @@ def _external_kv_auto_plan_checks(checks: list[dict[str, Any]], *, services: lis
     )
 
 
-def _resident_gpu_budget_checks(checks: list[dict[str, Any]], *, services: list[Any], gpu_budget: dict[str, float], fixed_kv_bytes: dict[str, int]) -> None:
+def _resident_gpu_budget_checks(checks: list[dict[str, Any]], *, topology: SparkTopology, services: list[Any], gpu_budget: dict[str, float], fixed_kv_bytes: dict[str, int]) -> None:
+    expectations = dict(topology.routing_policy.get("resident_service_expectations") or {})
+    hard_cap = _float_or_none(expectations.get("gpu_utilization_hard_cap")) or FIRST3_GPU_UTILIZATION_HARD_CAP
+    floors = dict(expectations.get("gpu_utilization_floors") or FIRST3_GPU_UTILIZATION_FLOORS)
+    dsv4_service_id = str(expectations.get("dsv4_service_id") or "dsv4_flash_pp8")
     missing = [service.service_id for service in services if service.service_id not in gpu_budget]
     _check(
         checks,
@@ -484,12 +499,12 @@ def _resident_gpu_budget_checks(checks: list[dict[str, Any]], *, services: list[
     total = sum(percentage_budget.values())
     _check(
         checks,
-        total <= FIRST3_GPU_UTILIZATION_HARD_CAP,
+        total <= hard_cap,
         "first3_gpu_budget_under_hard_cap",
         "first-three resident GPU memory utilization leaves deployment headroom",
         details={
             "sum": round(total, 6),
-            "hard_cap": FIRST3_GPU_UTILIZATION_HARD_CAP,
+            "hard_cap": hard_cap,
             "fixed_kv_cache_memory_bytes": fixed_kv_bytes,
             "fixed_kv_cache_memory_bytes_sum": sum(fixed_kv_bytes.values()),
             "percentage_budget_services": sorted(percentage_budget),
@@ -497,7 +512,7 @@ def _resident_gpu_budget_checks(checks: list[dict[str, Any]], *, services: list[
     )
     for service in services:
         value = gpu_budget.get(service.service_id)
-        floor = FIRST3_GPU_UTILIZATION_FLOORS.get(service.service_id)
+        floor = _float_or_none(floors.get(service.service_id))
         if value is None or floor is None:
             continue
         _check(
@@ -508,7 +523,7 @@ def _resident_gpu_budget_checks(checks: list[dict[str, Any]], *, services: list[
             details={"value": value, "floor": floor},
             severity="warning",
         )
-    dsv4 = gpu_budget.get("dsv4_flash_pp8")
+    dsv4 = gpu_budget.get(dsv4_service_id) if dsv4_service_id else None
     if dsv4 is not None:
         _check(
             checks,
@@ -517,7 +532,6 @@ def _resident_gpu_budget_checks(checks: list[dict[str, Any]], *, services: list[
             "DSV4 GPU cap stays below the observed co-resident no-headroom startup failure point",
             details={"value": dsv4, "failed_startup_point": 0.33},
         )
-
 
 def _gpu_budget_by_service(services: list[Any]) -> dict[str, float]:
     out: dict[str, float] = {}
