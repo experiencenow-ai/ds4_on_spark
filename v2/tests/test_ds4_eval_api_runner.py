@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -144,6 +145,31 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
                 "vllm:prompt_tokens_total{source=\"local_cache_hit\"}": 8.0,
             },
         )
+
+    def test_cache_metric_snapshot_uses_dsapi_status_when_render_is_deferred(self) -> None:
+        parser = self.runner._build_parser()
+        args = parser.parse_args(["run", "--out-dir", "/tmp/ds4-eval-test", "--base-url", "http://dsapi", "--vllm-url", "none", "--cache-metrics"])
+        calls: list[tuple[str, str]] = []
+
+        def fake_get_json(base_url: str, endpoint: str, query=None):
+            calls.append((base_url, endpoint))
+            self.assertIsNone(query)
+            return {
+                "claimed_count": 10,
+                "completed_count": 7,
+                "jit_kv_prefetch_submitted_count": 3,
+                "resident_rolling_batch_count": 2,
+                "resource_governor": {"max_temp_c": 61.0, "total_power_w": 480.0},
+            }
+
+        with patch.object(self.runner, "_get_json", fake_get_json):
+            snapshot = self.runner._cache_metrics_snapshot(args)
+
+        self.assertEqual(calls, [("http://dsapi", "/ds4/dispatcher/status")])
+        self.assertTrue(snapshot["ok"])
+        self.assertEqual(snapshot["source"], "dsapi-dispatcher-status")
+        self.assertEqual(snapshot["metrics"]["dsapi:jit_kv_prefetch_submitted_count"], 3.0)
+        self.assertEqual(snapshot["metrics"]["dsapi:resource_governor:total_power_w"], 480.0)
 
     def test_disabled_thinking_zeros_request_budget(self) -> None:
         args = argparse.Namespace(
