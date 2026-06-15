@@ -1130,6 +1130,82 @@ class PipelineApiTests(unittest.TestCase):
             else:
                 os.environ["DS4_API_JIT_KV_PREFETCH_TIMEOUT_S"] = old_timeout
 
+    def test_generated_auto_kv_prefetch_disabled_endpoint_fails_open_without_poisoning_circuit(self) -> None:
+        old_prestage_auto = os.environ.get("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX")
+        old_prefetch_api = os.environ.get("DS4_API_JIT_KV_PREFETCH_API")
+        os.environ["DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX"] = "1"
+        os.environ["DS4_API_JIT_KV_PREFETCH_API"] = "1"
+        try:
+            plan = {
+                "format": "ds4-kv-cache-plan-v1",
+                "backend": "lmcache_hma",
+                "cache_id": "ds4-auto:qwen27:disabled-endpoint",
+                "load": {"mode": "prefer", "transport": "local_store", "cache_key": "ds4-auto:qwen27:disabled-endpoint"},
+                "store": {"mode": "write_back", "transport": "local_store", "cache_key": "ds4-auto:qwen27:disabled-endpoint"},
+                "miss_policy": "compute_and_store",
+                "route_affinity": "preferred",
+                "model_fingerprint": {},
+                "operation": "load_store",
+                "batch_key_hash": "sha256:disabled",
+            }
+            prefix = "auto disabled prefetch prefix " * 80
+            requests = [
+                InferenceRequest.from_json(
+                    {
+                        "format": "ds4-inference-request-v1",
+                        "request_id": f"auto-disabled-{idx}",
+                        "capability": "efficient",
+                        "chat": False,
+                        "immediate": False,
+                        "job_class": "analysis",
+                        "max_output_tokens": 8,
+                        "thinking_budget_tokens": 0,
+                        "temperature": 0,
+                        "input": {"prompt": f"{prefix}item {idx}", "shared_prefix": prefix},
+                        "output_contract": {"format": "text"},
+                    }
+                )
+                for idx in range(2)
+            ]
+            circuit = JitKvCircuitBreaker(enabled=True, min_samples=1, failure_ratio=1.0, cooldown_s=60)
+            runner = OpenAICompatibleRunner(base_url="http://disabled-prefetch.invalid", jit_kv_circuit=circuit)
+            calls: list[str] = []
+
+            def disabled_post(endpoint, body, **kwargs):
+                calls.append(endpoint)
+                return {"error": "DS4 KV prefetch API is disabled"}
+
+            runner._post_json = disabled_post  # type: ignore[method-assign]
+
+            def make_payload() -> dict[str, object]:
+                return {"model": "qwen27-disabled-prefetch", "prompt": [request.input["prompt"] for request in requests], "extra_body": {"ds4_kv_cache": dict(plan)}, "kv_transfer_params": {"ds4_kv_cache": dict(plan)}}
+
+            payload = make_payload()
+            info = _maybe_prestage_common_kv_prefix(runner, payload, requests)
+            self.assertIsNotNone(info)
+            assert info is not None
+            self.assertTrue(info["cold_dispatch"])
+            self.assertEqual(info["strategy"], "jit-kv-prefetch-disabled-auto-cold-dispatch")
+            self.assertIn("kv_transfer_params", payload)
+            self.assertIn("extra_body", payload)
+            status = circuit.status()
+            self.assertFalse(status["jit_kv_circuit_open"])
+            self.assertEqual(status["jit_kv_prefetch_failed_count"], 0)
+            self.assertEqual(calls, ["/ds4/kv/prefetch"])
+
+            second = _maybe_prestage_common_kv_prefix(runner, make_payload(), requests)
+            self.assertIsNotNone(second)
+            self.assertEqual(calls, ["/ds4/kv/prefetch"])
+        finally:
+            if old_prestage_auto is None:
+                os.environ.pop("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX", None)
+            else:
+                os.environ["DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX"] = old_prestage_auto
+            if old_prefetch_api is None:
+                os.environ.pop("DS4_API_JIT_KV_PREFETCH_API", None)
+            else:
+                os.environ["DS4_API_JIT_KV_PREFETCH_API"] = old_prefetch_api
+
 
 if __name__ == "__main__":
     unittest.main()
