@@ -9,8 +9,8 @@
   "performance": {
     "latency_rank": 0.85,
     "max_num_batched_tokens": 32768,
-    "max_num_seqs": 32,
-    "measurement_notes": "PP13 co-resident candidate derived from the stable Qwen27 BF16 PP8 profile; batch limit reduced for initial power-safe three-pipeline residency.",
+    "max_num_seqs": 16,
+    "measurement_notes": "PP13 co-resident candidate derived from the stable Qwen27 BF16 PP8 profile. Pulled-main DSAPI validation on 2026-06-15 after PR #1807: C16 completed 16/16 at 13.49 tok/s; C24/C32 produced SSE first-event stalls or partial split recovery and are quarantined until the Qwen vLLM stream path is fixed.",
     "target": "13-stage Qwen27 BF16 efficient pipeline with FP8 KV and LMCache HMA."
   },
   "production_eligible": false,
