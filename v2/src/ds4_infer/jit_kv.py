@@ -195,6 +195,9 @@ def _post_prefetch(runner: Any, payload: dict[str, Any]) -> dict[str, Any] | Non
     if _prefetch_response_endpoint_disabled(response):
         _mark_prefetch_endpoint_disabled(runner, payload)
         raise PrefetchEndpointDisabled(json.dumps(response, sort_keys=True)[-4000:])
+    if _prefetch_response_endpoint_unavailable(response):
+        _mark_prefetch_endpoint_disabled(runner, payload)
+        raise PrefetchEndpointUnavailable(json.dumps(response, sort_keys=True)[-4000:])
     if response.get("error") is not None or str(response.get("status") or "").lower() in {"failed", "error"}:
         raise RuntimeError(json.dumps(response, sort_keys=True)[-4000:])
     return response
@@ -231,6 +234,13 @@ def _prefetch_response_endpoint_disabled(response: dict[str, Any]) -> bool:
     status = str(response.get("status") or "").strip().lower()
     error = str(response.get("error") or response.get("message") or "").strip().lower()
     return status in {"disabled", "unavailable"} or ("prefetch" in error and "disabled" in error)
+
+
+def _prefetch_response_endpoint_unavailable(response: dict[str, Any]) -> bool:
+    status = str(response.get("status") or "").strip().lower()
+    error = str(response.get("error") or response.get("message") or "").strip().lower()
+    text = f"{status} {error}"
+    return status in {"timeout", "timed_out"} or "timed out" in text or "timeout" in text or "deadline exceeded" in text
 
 
 def _prefetch_timeout_s(runner: Any) -> float:
