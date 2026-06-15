@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from typing import Any
 
@@ -8,6 +10,7 @@ from .profiles import ModelProfile
 from .schemas import InferenceRequest
 
 AUTO_KV_BATCH_SUPPRESSED_KEY = "_ds4_auto_kv_suppressed_for_cohort"
+AUTO_KV_PRESTAGE_PLAN_KEY = "_ds4_auto_kv_prestage_plan"
 VLLM_CHAT_TOP_LEVEL_EXTRA_FIELDS = {
     "chat_template_kwargs",
     "thinking",
@@ -68,3 +71,88 @@ def maybe_suppress_generated_auto_kv_for_cohort(payload: dict[str, Any]) -> tupl
     else:
         cleaned.pop("extra_body", None)
     return cleaned, True
+
+
+def coalesced_auto_kv_prestage_material(requests: list[InferenceRequest], payload: dict[str, Any], profile: ModelProfile, *, prefix: str, service_id: str | None) -> dict[str, Any]:
+    return {
+        "format": "ds4-auto-kv-cache-key-v1",
+        "chat": False,
+        "messages": None,
+        "prompt": prefix,
+        "model": payload.get("model"),
+        "profile_id": profile.profile_id,
+        "runtime_contract_id": profile.runtime_contract_id,
+        "service_id": service_id,
+        "thinking_budget_tokens": requests[0].thinking_budget_tokens,
+        "extra_body": dict(payload.get("extra_body") or {}),
+    }
+
+
+def auto_kv_cache_plan_from_material(material: dict[str, Any], payload: dict[str, Any], profile: ModelProfile, *, service_id: str | None, backend: str, cache_kind: str = "") -> dict[str, Any]:
+    digest = hashlib.sha256(_json_dumps_canonical(material).encode("utf-8")).hexdigest()
+    cache_scope = service_id or profile.profile_id
+    kind = f"{cache_kind}:" if cache_kind else ""
+    cache_id = f"ds4-auto:{kind}{cache_scope}:{digest[:32]}"
+    plan = {
+        "format": "ds4-kv-cache-plan-v1",
+        "backend": backend,
+        "cache_id": cache_id,
+        "prefix_hash": "sha256:" + digest,
+        "load": {"mode": "prefer", "transport": "local_store", "cache_key": cache_id},
+        "store": {"mode": "write_back", "transport": "local_store", "cache_key": cache_id, "on_error": "warn"},
+        "miss_policy": "compute_and_store",
+        "route_affinity": "preferred",
+        "model_fingerprint": {
+            "model_id": str(payload.get("model") or profile.model_id),
+            "profile_id": profile.profile_id,
+            "runtime_contract_id": profile.runtime_contract_id,
+            "service_id": service_id,
+        },
+        "operation": "load_store",
+    }
+    plan["batch_key_hash"] = "sha256:" + hashlib.sha256(_json_dumps_canonical(_auto_kv_batch_key_material(plan)).encode("utf-8")).hexdigest()
+    return plan
+
+
+def kv_plan_has_strict_load(plan: dict[str, Any] | None) -> bool:
+    if plan is None:
+        return False
+    load = plan.get("load")
+    if not isinstance(load, dict):
+        return False
+    if str(load.get("mode") or "skip") not in {"prefer", "require"}:
+        return False
+    miss_policy = str(plan.get("miss_policy") or "")
+    return str(load.get("mode") or "") == "require" or miss_policy == "fail"
+
+
+def kv_plan_is_prestageable_auto(plan: dict[str, Any] | None) -> bool:
+    if plan is None:
+        return False
+    cache_id = plan.get("cache_id")
+    load = plan.get("load")
+    store = plan.get("store")
+    if not isinstance(cache_id, str) or not cache_id.startswith("ds4-auto:"):
+        return False
+    if not isinstance(load, dict) or str(load.get("mode") or "") != "prefer":
+        return False
+    if not isinstance(store, dict) or str(store.get("mode") or "") != "write_back":
+        return False
+    return str(plan.get("miss_policy") or "") == "compute_and_store"
+
+
+def _auto_kv_batch_key_material(plan: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "backend": plan["backend"],
+        "cache_id": plan["cache_id"],
+        "prefix_hash": plan["prefix_hash"],
+        "load": plan["load"],
+        "store": plan["store"],
+        "miss_policy": plan["miss_policy"],
+        "route_affinity": plan["route_affinity"],
+        "model_fingerprint": plan["model_fingerprint"],
+    }
+
+
+def _json_dumps_canonical(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)

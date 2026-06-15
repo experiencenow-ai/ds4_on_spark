@@ -11,7 +11,8 @@ from ds4_infer.api import CoordinatorApi, _resolve_profile
 from ds4_infer.api_stream import _drain_completion_stream_events, openai_chat_stream_events, openai_completion_stream_events
 from ds4_infer.jit_kv import JitKvCircuitBreaker, run_prefetch
 from ds4_infer.profiles import ProfileRegistry
-from ds4_infer.runners import OpenAICompatibleRunner, PipelineOpenAIRunner, _maybe_prestage_common_kv_prefix, _openai_payload
+from ds4_infer.runner_payloads import AUTO_KV_PRESTAGE_PLAN_KEY
+from ds4_infer.runners import OpenAICompatibleRunner, PipelineOpenAIRunner, _coalesced_completion_payload, _maybe_prestage_common_kv_prefix, _openai_payload
 from ds4_infer.schemas import InferenceRequest, make_result
 from ds4_infer.topology import SparkTopology
 
@@ -940,6 +941,130 @@ class PipelineApiTests(unittest.TestCase):
                 os.environ.pop("DS4_API_JIT_KV_PREFETCH_API", None)
             else:
                 os.environ["DS4_API_JIT_KV_PREFETCH_API"] = old_prefetch_api
+
+    def test_coalesced_completion_prestages_suppressed_auto_kv_prefix(self) -> None:
+        old_auto = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE")
+        old_services = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS")
+        old_policy = os.environ.get("DS4_PIPELINE_AUTO_KV_BATCH_POLICY")
+        old_prestage = os.environ.get("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX")
+        old_prefetch_api = os.environ.get("DS4_API_JIT_KV_PREFETCH_API")
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = "1"
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = "kimi27_pp13"
+        os.environ["DS4_PIPELINE_AUTO_KV_BATCH_POLICY"] = "prefer_batch"
+        os.environ["DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX"] = "1"
+        os.environ["DS4_API_JIT_KV_PREFETCH_API"] = "0"
+        try:
+            registry = ProfileRegistry.load(PROFILES)
+            profile = registry.get("kimi27_code_pp13_smart_v1")
+            prefix = "batch-compatible automatic prestage prefix " * 40
+            requests = [
+                InferenceRequest.from_json(
+                    {
+                        "format": "ds4-inference-request-v1",
+                        "request_id": f"auto-cohort-{idx}",
+                        "capability": "smart",
+                        "chat": False,
+                        "immediate": False,
+                        "job_class": "analysis",
+                        "max_output_tokens": 8,
+                        "thinking_budget_tokens": 0,
+                        "temperature": 0,
+                        "input": {"prompt": f"{prefix}tail {idx}", "shared_prefix": prefix},
+                        "output_contract": {"format": "text"},
+                    }
+                )
+                for idx in range(2)
+            ]
+            payload = _coalesced_completion_payload(requests, profile, {})
+            self.assertIsNotNone(payload)
+            assert payload is not None
+            self.assertNotIn("kv_transfer_params", payload)
+            self.assertNotIn("ds4_kv_cache", dict(payload.get("extra_body") or {}))
+
+            calls: list[dict] = []
+            runner = OpenAICompatibleRunner(base_url="http://127.0.0.1:9")
+
+            def fake_post(endpoint, body, **kwargs):
+                calls.append({"endpoint": endpoint, "payload": body})
+                return {"choices": [{"index": 0, "text": "warm"}], "usage": {"completion_tokens": 1}}
+
+            runner._post_json = fake_post  # type: ignore[method-assign]
+            info = _maybe_prestage_common_kv_prefix(runner, payload, requests)
+
+            self.assertIsNotNone(info)
+            assert info is not None
+            self.assertEqual(info["strategy"], "single-prefix-load-before-cohort")
+            self.assertEqual(calls[0]["payload"]["prompt"], prefix)
+            plan = calls[0]["payload"]["extra_body"]["ds4_kv_cache"]
+            self.assertTrue(plan["cache_id"].startswith("ds4-auto:prefix:kimi27_pp13:"))
+            self.assertNotIn("kv_transfer_params", payload)
+            self.assertNotIn("ds4_kv_cache", dict(payload.get("extra_body") or {}))
+        finally:
+            for name, old in (
+                ("DS4_PIPELINE_AUTO_KV_CACHE", old_auto),
+                ("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS", old_services),
+                ("DS4_PIPELINE_AUTO_KV_BATCH_POLICY", old_policy),
+                ("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX", old_prestage),
+                ("DS4_API_JIT_KV_PREFETCH_API", old_prefetch_api),
+            ):
+                if old is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = old
+
+    def test_disabled_common_prestage_clears_hidden_auto_kv_plan(self) -> None:
+        old_auto = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE")
+        old_services = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS")
+        old_policy = os.environ.get("DS4_PIPELINE_AUTO_KV_BATCH_POLICY")
+        old_prestage_auto = os.environ.get("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX")
+        old_prestage_common = os.environ.get("DS4_PIPELINE_PRESTAGE_COMMON_KV_PREFIX")
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = "1"
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = "kimi27_pp13"
+        os.environ["DS4_PIPELINE_AUTO_KV_BATCH_POLICY"] = "prefer_batch"
+        os.environ["DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX"] = "1"
+        os.environ["DS4_PIPELINE_PRESTAGE_COMMON_KV_PREFIX"] = "0"
+        try:
+            registry = ProfileRegistry.load(PROFILES)
+            profile = registry.get("kimi27_code_pp13_smart_v1")
+            prefix = "disabled common prestage prefix " * 40
+            requests = [
+                InferenceRequest.from_json(
+                    {
+                        "format": "ds4-inference-request-v1",
+                        "request_id": f"disabled-prestage-{idx}",
+                        "capability": "smart",
+                        "chat": False,
+                        "immediate": False,
+                        "job_class": "analysis",
+                        "max_output_tokens": 8,
+                        "thinking_budget_tokens": 0,
+                        "temperature": 0,
+                        "input": {"prompt": f"{prefix}tail {idx}", "shared_prefix": prefix},
+                        "output_contract": {"format": "text"},
+                    }
+                )
+                for idx in range(2)
+            ]
+            payload = _coalesced_completion_payload(requests, profile, {})
+            self.assertIsNotNone(payload)
+            assert payload is not None
+            self.assertIn(AUTO_KV_PRESTAGE_PLAN_KEY, payload)
+            info = _maybe_prestage_common_kv_prefix(OpenAICompatibleRunner(base_url="http://127.0.0.1:9"), payload, requests)
+            self.assertIsNone(info)
+            self.assertNotIn(AUTO_KV_PRESTAGE_PLAN_KEY, payload)
+            self.assertNotIn("ds4_kv_cache", dict(payload.get("extra_body") or {}))
+        finally:
+            for name, old in (
+                ("DS4_PIPELINE_AUTO_KV_CACHE", old_auto),
+                ("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS", old_services),
+                ("DS4_PIPELINE_AUTO_KV_BATCH_POLICY", old_policy),
+                ("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX", old_prestage_auto),
+                ("DS4_PIPELINE_PRESTAGE_COMMON_KV_PREFIX", old_prestage_common),
+            ):
+                if old is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = old
 
     def test_jit_kv_circuit_breaker_dispatches_cold_after_prefetch_failures(self) -> None:
         plan = {
