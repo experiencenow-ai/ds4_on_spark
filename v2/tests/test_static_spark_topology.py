@@ -109,6 +109,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(qwen.scheduler["refill_low_watermark"], 96)
         self.assertEqual(gemma.scheduler["refill_low_watermark"], 48)
         for service in (kimi, qwen, gemma):
+            self.assertEqual(service.scheduler["max_running_batches_per_compute_domain"], 3)
             self.assertTrue(service.scheduler["ready_shape_bucketing"])
             self.assertEqual(service.scheduler["ready_shape_lookahead"], 4)
         self.assertEqual(kimi.kv_cache["gpu_memory_utilization"], 0.27)
