@@ -112,6 +112,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
             self.assertEqual(service.scheduler["max_running_batches_per_compute_domain"], 3)
             self.assertTrue(service.scheduler["ready_shape_bucketing"])
             self.assertEqual(service.scheduler["ready_shape_lookahead"], 4)
+        self.assertEqual(qwen.scheduler["max_running_batches_per_service"], 1)
         self.assertEqual(kimi.kv_cache["gpu_memory_utilization"], 0.27)
         self.assertEqual(qwen.kv_cache["gpu_memory_utilization"], 0.24)
         self.assertEqual(gemma.kv_cache["gpu_memory_utilization"], 0.15)
