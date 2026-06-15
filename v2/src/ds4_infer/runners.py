@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import socket
 from pathlib import Path
 import shlex
@@ -432,7 +433,7 @@ class OpenAICompatibleRunner:
             workers = _parallel_chat_concurrency(profile, len(chunk), max_cohort)
             with ThreadPoolExecutor(max_workers=workers) as executor:
                 futures = {
-                    executor.submit(self._run_one_chat_completion_parallel_member, item, profile, started, len(chunk)): item
+                    executor.submit(self._run_one_chat_completion_parallel_member, item, profile, started, len(chunk), cancel_event=cancel_event): item
                     for item in chunk
                 }
                 for future in as_completed(futures):
@@ -459,10 +460,14 @@ class OpenAICompatibleRunner:
         profile: ModelProfile,
         started: float,
         batch_size: int,
+        *,
+        cancel_event: Event | None = None,
     ) -> dict:
         try:
             payload = _openai_completion_prompt_payload(request, profile, prompt=_chat_completion_prompt(request))
             _merge_extra_body(payload, self.default_extra_body)
+            if _parallel_completion_prompt_streaming(request):
+                return self._run_one_chat_completion_parallel_member_stream(request, profile, payload, started, batch_size, cancel_event=cancel_event)
             data = self._post_json(self.completion_endpoint, payload)
             text = extract_openai_completion_text(data)
             result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
@@ -486,6 +491,42 @@ class OpenAICompatibleRunner:
                 endpoint=self.completion_endpoint,
                 coalesced_batch_size=batch_size,
             )
+
+    def _run_one_chat_completion_parallel_member_stream(
+        self,
+        request: InferenceRequest,
+        profile: ModelProfile,
+        payload: dict[str, Any],
+        started: float,
+        batch_size: int,
+        *,
+        cancel_event: Event | None = None,
+    ) -> dict:
+        payload = dict(payload)
+        payload["stream"] = True
+        text = ""
+        events = self._post_sse_json(self.completion_endpoint, payload, cancel_event=cancel_event)
+        try:
+            for event in events:
+                choices = event.get("choices")
+                if not isinstance(choices, list):
+                    continue
+                for choice in choices:
+                    if not isinstance(choice, dict):
+                        continue
+                    text += _completion_stream_choice_text(choice)
+                    stop_text = _answer_marker_early_stop_text(text) if _request_stop_on_answer_marker(request) else None
+                    if stop_text is not None:
+                        return _parallel_completion_prompt_stream_result(request, profile, stop_text, base_url=self.base_url, endpoint=self.completion_endpoint, started=started, batch_size=batch_size, early_stop=True)
+                    if choice.get("finish_reason") is not None:
+                        return _parallel_completion_prompt_stream_result(request, profile, text, base_url=self.base_url, endpoint=self.completion_endpoint, started=started, batch_size=batch_size, early_stop=False)
+        finally:
+            close = getattr(events, "close", None)
+            if close is not None:
+                close()
+        if text:
+            return _parallel_completion_prompt_stream_result(request, profile, text, base_url=self.base_url, endpoint=self.completion_endpoint, started=started, batch_size=batch_size, early_stop=False)
+        return self._transport_failure(request, profile, started, "parallel completion prompt stream ended before text", endpoint=self.completion_endpoint, coalesced_batch_size=batch_size)
 
     def _run_many_chat_as_completion(
         self,
@@ -1562,6 +1603,34 @@ def _coalesced_stream_result(
     return result
 
 
+def _parallel_completion_prompt_stream_result(
+    request: InferenceRequest,
+    profile: ModelProfile,
+    text: str,
+    *,
+    base_url: str,
+    endpoint: str,
+    started: float,
+    batch_size: int,
+    early_stop: bool,
+) -> dict[str, Any]:
+    result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
+    result["usage"].update({"completion_tokens": _estimate_text_tokens(text), "completion_tokens_estimated": True})
+    result["transport"] = {
+        "base_url": base_url,
+        "endpoint": endpoint,
+        "duration_s": round(time.time() - started, 6),
+        "chat_as_completion_prompts": True,
+        "coalesced_chat_parallel_completion": True,
+        "parallel_completion_prompt_streaming": True,
+        "coalesced_batch_size": batch_size,
+        "batch_size": batch_size,
+    }
+    if early_stop:
+        result["transport"]["answer_marker_early_stop"] = True
+    return result
+
+
 def _coalesced_failure(request: InferenceRequest, profile: ModelProfile, base_url: str, endpoint: str, started: float, batch_size: int, error: str) -> dict:
     result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=json.dumps({"error": error}, sort_keys=True), status="transport_failed")
     result["transport"] = {"base_url": base_url, "endpoint": endpoint, "duration_s": round(time.time() - started, 6), "coalesced_batch_size": batch_size, "error": error}
@@ -1598,6 +1667,47 @@ def _forced_output_request(request: InferenceRequest) -> bool:
     except (TypeError, ValueError):
         return False
     return min_tokens >= int(request.max_output_tokens)
+
+
+def _request_stop_on_answer_marker(request: InferenceRequest) -> bool:
+    contract = request.output_contract if isinstance(request.output_contract, dict) else {}
+    if bool(contract.get("stop_on_answer_marker")):
+        return True
+    if bool(request.input.get("stop_on_answer_marker")):
+        return True
+    metadata = request.input.get("metadata") if isinstance(request.input.get("metadata"), dict) else {}
+    ds4_eval = metadata.get("ds4_eval") if isinstance(metadata.get("ds4_eval"), dict) else {}
+    return bool(ds4_eval.get("stop_on_answer_marker"))
+
+
+def _parallel_completion_prompt_streaming(request: InferenceRequest) -> bool:
+    if not _request_stop_on_answer_marker(request):
+        return False
+    return _env_bool("DS4_PIPELINE_PARALLEL_COMPLETION_PROMPT_STREAMING", True)
+
+
+def _answer_marker_early_stop_text(text: str) -> str | None:
+    visible_start = text.find("</think>")
+    visible_start = (visible_start + len("</think>")) if visible_start >= 0 else 0
+    visible = text[visible_start:]
+    for match in re.finditer(r"(?im)^[ \t]*(?:final[ \t]+)?answer[ \t]*:[ \t]*([^\r\n]*)", visible):
+        value = match.group(1).strip()
+        if not value or value.startswith("<") or not re.search(r"[A-Za-z0-9]", value):
+            continue
+        rest = visible[match.end():]
+        newline = re.search(r"[\r\n]", rest)
+        if newline is not None:
+            return text[:visible_start + match.end() + newline.start()].rstrip()
+        if len(rest) >= _answer_marker_stop_tail_chars():
+            return text[:visible_start + match.end()].rstrip()
+    return None
+
+
+def _answer_marker_stop_tail_chars() -> int:
+    try:
+        return max(0, int(os.environ.get("DS4_PIPELINE_ANSWER_MARKER_STOP_TAIL_CHARS", "8") or "8"))
+    except ValueError:
+        return 8
 
 
 def _internal_stream_nonclient_cohort(requests: list[InferenceRequest], *, cancel_event: Event | None = None) -> bool:
