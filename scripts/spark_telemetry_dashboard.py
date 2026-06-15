@@ -105,7 +105,7 @@ function drawHistory(data){lastHistory=data;let el=document.getElementById("hist
 function paintChart(data,metrics,colors){let canvas=document.getElementById("chart");if(!canvas)return;metrics=metrics||activeMetrics(data);colors=colors||modeColors[selectedMode]||modeColors.queue;let rect=canvas.getBoundingClientRect();let dpr=window.devicePixelRatio||1;canvas.width=Math.max(1,Math.floor(rect.width*dpr));canvas.height=Math.max(1,Math.floor(rect.height*dpr));let ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);let w=rect.width,h=rect.height,pad=28;ctx.clearRect(0,0,w,h);ctx.strokeStyle="#313943";ctx.lineWidth=1;for(let i=0;i<=4;i++){let y=pad+((h-(pad*2))*i/4);ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(w-pad,y);ctx.stroke()}let points=data.points;metrics.forEach((m,i)=>{let scale=metricScale(m,points);let vals=emaValues(points,m.key);ctx.strokeStyle=colors[i%colors.length];ctx.lineWidth=2.2;ctx.beginPath();vals.forEach((v,idx)=>{let x=pad+((w-(pad*2))*idx/Math.max(1,points.length-1));let y=h-pad-((h-(pad*2))*Math.max(0,Math.min(scale,v))/scale);if(idx===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});ctx.stroke()});ctx.fillStyle="#a8b1bb";ctx.font="12px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif";ctx.fillText("now",w-pad-24,h-8);ctx.fillText("then",pad,h-8)}
 async function refreshHistory(){if(!selectedNode)return;try{let r=await fetch(`/api/history?node=${encodeURIComponent(selectedNode)}`,{cache:"no-store"});drawHistory(await r.json())}catch(e){document.getElementById("history").innerHTML=`<div class="empty">history read failed</div>`}}
 function renderModels(d){let models=d.models||[];let el=document.getElementById("models");if(!models.length){el.innerHTML=`<div class="model-empty">no active model token rate</div>`;return}el.innerHTML=`<table class="model-table"><thead><tr><th>Model</th><th>In/s</th><th>Out/s</th><th>Total/s</th><th>Run</th><th>Wait</th></tr></thead><tbody>${models.map(m=>`<tr><td><div class="model-name">${m.model}</div></td><td>${rate(m.input_tok_s)}</td><td>${rate(m.output_tok_s)}</td><td>${rate(m.tok_s)}</td><td>${rate(m.running)}</td><td>${rate(m.waiting)}</td></tr>`).join("")}</tbody></table>`}
-function renderSummary(d){if(!selectedNode&&d.nodes&&d.nodes.length)selectedNode=d.selected_node||d.nodes[0].node;document.getElementById("updated").textContent="updated "+(d.updated_iso||"unknown");document.getElementById("stale").textContent=d.summary_stale?`STALE telemetry age ${fmt(d.age_s)}s`:"";document.getElementById("source").textContent=d.summary_path||"";document.getElementById("summary").innerHTML=[metric("Active",`${fmt(d.active_nodes)}/${d.reachable_nodes}`),metric("GPU Avg",d.gpu_known?pct(d.avg_gpu_pct):"n/a"),metric("Run/Wait",`${fmt(d.vllm_running)}/${fmt(d.vllm_waiting)}`),metric("Live In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`),metric("Active Svc",d.ds_services_known?`${fmt(d.ds_service_count)} svc`:"n/a"),metric("Queue Depth",fmt(d.queue_depth))].join("");renderModels(d);document.getElementById("nodes").innerHTML=d.nodes.map(card).join("");wireCards()}
+function renderSummary(d){if(!selectedNode&&d.nodes&&d.nodes.length)selectedNode=d.selected_node||d.nodes[0].node;document.getElementById("updated").textContent="updated "+(d.updated_iso||"unknown");document.getElementById("stale").textContent=d.summary_stale?`STALE telemetry age ${fmt(d.age_s)}s`:"";document.getElementById("source").textContent=d.summary_path||"";document.getElementById("summary").innerHTML=[metric("Active",`${fmt(d.active_nodes)}/${d.reachable_nodes}`),metric("GPU Avg",d.gpu_known?pct(d.avg_gpu_pct):"n/a"),metric("GPU Nodes",d.gpu_known?`${fmt(d.active_gpu_nodes||d.busy_gpu_nodes)} active / ${fmt(d.saturated_gpu_nodes)} sat`:"n/a"),metric("Run/Wait",`${fmt(d.vllm_running)}/${fmt(d.vllm_waiting)}`),metric("Live In/Out",`${val(d.input_tok_s)} / ${val(d.output_tok_s)}`),metric("Active Svc",d.ds_services_known?`${fmt(d.ds_service_count)} svc`:"n/a"),metric("Queue Depth",fmt(d.queue_depth))].join("");renderModels(d);document.getElementById("nodes").innerHTML=d.nodes.map(card).join("");wireCards()}
 async function refreshOnce(){try{let r=await fetch("/api/summary",{cache:"no-store"});let d=await r.json();renderSummary(d);await refreshHistory()}catch(e){document.getElementById("updated").textContent="dashboard read failed: "+e}}
 function startTelemetryStream(){if(telemetryStream)telemetryStream.close();if(!window.EventSource){refreshOnce();return}let node=encodeURIComponent(selectedNode||"");telemetryStream=new EventSource(`/api/stream?node=${node}`);telemetryStream.addEventListener("telemetry",event=>{try{let payload=JSON.parse(event.data);if(payload.summary){renderSummary(payload.summary)}if(payload.history){drawHistory(payload.history)}}catch(e){document.getElementById("updated").textContent="stream parse failed: "+e}});telemetryStream.onerror=()=>{document.getElementById("updated").textContent="stream reconnecting"}}
 window.addEventListener("resize",()=>{if(lastHistory)paintChart(lastHistory)});
@@ -250,6 +250,19 @@ def node_is_active(node: dict[str,Any]) -> bool:
         or fnum(node.get("output_tok_s")) > 0.0
         or fnum(node.get("gpu_pct")) >= 20.0
     )
+
+
+def node_has_active_gpu_work(node: dict[str,Any]) -> bool:
+    return(
+        fnum(node.get("vllm_running")) > 0.0
+        or fnum(node.get("input_tok_s")) > 0.0
+        or fnum(node.get("output_tok_s")) > 0.0
+        or fnum(node.get("gpu_pct")) >= 20.0
+    )
+
+
+def node_has_saturated_gpu(node: dict[str,Any]) -> bool:
+    return(fnum(node.get("gpu_pct")) >= 90.0)
 
 
 def node_metric_map(raw: Any) -> dict[str,float]:
@@ -534,7 +547,9 @@ def build_snapshot(summary_path: str, summary_stale_s: float = 0.0) -> dict[str,
         "reachable_nodes": len(reachable),
         "gpu_known": len(gpu_nodes) > 0,
         "avg_gpu_pct": avg_gpu_pct,
-        "busy_gpu_nodes": sum(1 for node in reachable if node["gpu_pct"] >= 90.0),
+        "busy_gpu_nodes": sum(1 for node in reachable if node_has_active_gpu_work(node)),
+        "active_gpu_nodes": sum(1 for node in reachable if node_has_active_gpu_work(node)),
+        "saturated_gpu_nodes": sum(1 for node in reachable if node_has_saturated_gpu(node)),
         "active_nodes": sum(1 for node in reachable if node_is_active(node)),
         "hot_nodes": sum(1 for node in reachable if node["state"] == "hot"),
         "vllm_running": running,
