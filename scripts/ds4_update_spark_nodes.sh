@@ -24,6 +24,10 @@ Important environment knobs:
   DS4_UPDATE_MODE=code-only       code-only only
   DS4_SELF_UPDATE=0               set 1 to fetch/detach this local worktree first
   DS4_UPDATE_REF=origin/main        git ref to deploy on each Spark checkout
+  DS4_UPDATE_ACTIVITY_CHECK=1       refuse updates while DSAPI/vLLM work is active
+  DS4_UPDATE_ALLOW_ACTIVE=0         set 1 only for planned maintenance windows
+  DS4_UPDATE_DSAPI_STATUS_URL=...   dispatcher status URL for active-work guard
+  DS4_UPDATE_TELEMETRY_URL=...      Spark telemetry summary URL for active-work guard
   DS4_REMOTE_REPO=$HOME/src/ds4_on_spark remote repo path on each Spark
   DS4_CONFIGURE_QWEN_RUNTIME=0     set 1 to point Qwen gateways at host-local vLLM
   DS4_RESTART_QWEN=0               restart Qwen model gateways after env update
@@ -158,6 +162,11 @@ remote_repo="${DS4_REMOTE_REPO:-}"
 update_remote="${DS4_UPDATE_REMOTE:-origin}"
 update_branch="${DS4_UPDATE_BRANCH:-main}"
 update_ref="${DS4_UPDATE_REF:-origin/main}"
+activity_check="${DS4_UPDATE_ACTIVITY_CHECK:-1}"
+allow_active_update="${DS4_UPDATE_ALLOW_ACTIVE:-0}"
+dsapi_status_url="${DS4_UPDATE_DSAPI_STATUS_URL:-http://10.20.0.10:8700/ds4/dispatcher/status}"
+telemetry_url="${DS4_UPDATE_TELEMETRY_URL:-http://127.0.0.1:8765/api/summary}"
+telemetry_stale_s="${DS4_UPDATE_TELEMETRY_STALE_S:-60}"
 local_self_update="${DS4_SELF_UPDATE:-$default_self_update}"
 skip_unreachable="${DS4_SKIP_UNREACHABLE:-1}"
 connect_timeout="${DS4_CONNECT_TIMEOUT:-8}"
@@ -180,6 +189,88 @@ if [ "$install_dsv4_local" != "0" ] || [ "$restart_dsv4" != "0" ]; then
 	echo "ERROR: deprecated spark4/spark5 DSV4 unit install/restart is disabled; use v2/scripts/ds4_pipeline_lifecycle.py --service dsv4_flash_pp8 relaunch --execute" >&2
 	exit 64
 fi
+
+check_no_active_work()
+{
+	if [ "$activity_check" != "1" ] || [ "$allow_active_update" = "1" ]; then
+		if [ "$allow_active_update" = "1" ]; then
+			echo "WARN: DS4_UPDATE_ALLOW_ACTIVE=1; bypassing DSAPI/vLLM active-work guard" >&2
+		fi
+		return 0
+	fi
+	python3 - "$dsapi_status_url" "$telemetry_url" "$telemetry_stale_s" <<'PY'
+import json
+import sys
+import urllib.error
+import urllib.request
+
+status_url, telemetry_url, stale_s_text = sys.argv[1:4]
+try:
+    telemetry_stale_s = float(stale_s_text)
+except ValueError:
+    telemetry_stale_s = 60.0
+
+def _num(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+def _sum_mapping(value):
+    if not isinstance(value, dict):
+        return 0.0
+    return sum(_num(item) for item in value.values())
+
+def _read_json(url):
+    if url == "":
+        return None, "disabled"
+    try:
+        with urllib.request.urlopen(url, timeout=3.0) as handle:
+            return json.loads(handle.read().decode("utf-8")), None
+    except (OSError, ValueError, urllib.error.URLError) as exc:
+        return None, str(exc)
+
+active = []
+warnings = []
+status, status_error = _read_json(status_url)
+if status_error is not None and status_error != "disabled":
+    warnings.append(f"DSAPI status unavailable: {status_error}")
+if isinstance(status, dict):
+    for field in ("pending", "pending_cohorts"):
+        value = _num(status.get(field))
+        if value > 0:
+            active.append(f"dispatcher {field}={value:g}")
+    running = _sum_mapping(status.get("queue_running_by_service"))
+    unfinished = _sum_mapping(status.get("queue_unfinished_by_service"))
+    if running > 0:
+        active.append(f"dispatcher queue_running_by_service total={running:g}")
+    if unfinished > 0:
+        active.append(f"dispatcher queue_unfinished_by_service total={unfinished:g}")
+telemetry, telemetry_error = _read_json(telemetry_url)
+if telemetry_error is not None and telemetry_error != "disabled":
+    warnings.append(f"telemetry summary unavailable: {telemetry_error}")
+if isinstance(telemetry, dict):
+    age = telemetry.get("age_s")
+    age_value = None if age is None else _num(age)
+    is_fresh = age_value is None or age_value <= telemetry_stale_s
+    if is_fresh:
+        for field in ("vllm_running", "vllm_waiting", "output_tok_s"):
+            value = _num(telemetry.get(field))
+            if value > 0:
+                active.append(f"telemetry {field}={value:g}")
+    else:
+        warnings.append(f"telemetry summary stale: age_s={age_value:g}")
+if active:
+    print("ERROR: refusing Spark repo update while active DSAPI/vLLM work is visible", file=sys.stderr)
+    for item in active:
+        print(f"  - {item}", file=sys.stderr)
+    print("Set DS4_UPDATE_ALLOW_ACTIVE=1 only for an intentional maintenance window.", file=sys.stderr)
+    raise SystemExit(17)
+for item in warnings:
+    print(f"WARN: active-work guard: {item}", file=sys.stderr)
+print("==> active-work guard: no active DSAPI/vLLM work detected")
+PY
+}
 
 self_update_local_checkout()
 {
@@ -214,6 +305,7 @@ self_update_local_checkout()
 }
 
 self_update_local_checkout "${nodes[@]}"
+check_no_active_work
 
 echo "==> spark update mode: $update_mode"
 echo "==> actions: self_update=$local_self_update qwen_runtime=$configure_qwen_runtime qwen_restart=$restart_qwen dsv4_units=$install_dsv4_local dsv4_restart=$restart_dsv4"
