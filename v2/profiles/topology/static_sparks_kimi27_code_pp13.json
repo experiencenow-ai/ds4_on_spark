@@ -204,12 +204,12 @@
     "resident_coordinator_defaults": {
       "completion_budget_include_output": false,
       "completion_chunk_concurrency": 4,
-      "completion_cohort_max": 256,
-      "completion_pp_safe_cohort_max": 256,
-      "completion_token_budget": 131072,
-      "dispatch_cohort_workers": 512,
-      "dispatch_refill_batch": 512,
-      "dispatch_window": 512
+      "completion_cohort_max": 128,
+      "completion_pp_safe_cohort_max": 128,
+      "completion_token_budget": 65536,
+      "dispatch_cohort_workers": 256,
+      "dispatch_refill_batch": 256,
+      "dispatch_window": 256
     },
     "pipeline_services": {
       "kimi27_pp13": {
@@ -222,8 +222,8 @@
           "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.07692307692307693,
           "external_backend": "lmcache_hma",
-          "gpu_memory_utilization": 0.34,
-          "kv_cache_memory_bytes": 8589934592,
+          "gpu_memory_utilization": 0.30,
+          "kv_cache_memory_bytes": 6442450944,
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
@@ -241,7 +241,7 @@
           5,
           4
         ],
-        "max_batch_size": 256,
+        "max_batch_size": 128,
         "model_id": "moonshotai/Kimi-K2.7-Code",
         "node_ids": [
           "spark0",
@@ -263,13 +263,13 @@
         "scheduler": {
           "admission_mode": "resident_multimodel_rolling_refill",
           "batch_linger_s": 0.05,
-          "dispatch_batch_limit": 256,
+          "dispatch_batch_limit": 128,
           "max_running_batches_per_compute_domain": 1,
-          "queue_depth_target": 512,
-          "queue_limit": 512,
-          "refill_low_watermark": 128,
-          "vllm_max_num_batched_tokens": 131072,
-          "vllm_max_num_seqs": 256
+          "queue_depth_target": 256,
+          "queue_limit": 256,
+          "refill_low_watermark": 64,
+          "vllm_max_num_batched_tokens": 65536,
+          "vllm_max_num_seqs": 128
         },
         "served_model_name": "kimi27-code-pp13",
         "service_id": "kimi27_pp13",
