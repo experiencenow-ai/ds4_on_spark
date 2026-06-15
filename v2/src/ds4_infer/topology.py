@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Iterable
+from urllib.parse import urlparse, urlunparse
 
 from .pipelines import (
     PipelineService,
@@ -17,6 +18,7 @@ from .pipelines import (
 from .profiles import ModelProfile
 
 TOPOLOGY_FORMAT = "ds4-spark-topology-v1"
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
 @dataclass(frozen=True)
@@ -257,6 +259,36 @@ def _load_profile_node_groups(routing_policy: dict[str, Any], nodes_by_id: dict[
                 raise ValueError(f"profile node group {profile_id!r} references node {node_id!r} that does not list the profile")
         groups[str(profile_id)] = node_ids
     return groups
+
+
+def pipeline_service_client_base_url(service: PipelineService) -> str:
+    raw = service.api_base_url.rstrip("/")
+    if not _resolve_loopback_entry_node_enabled():
+        return raw
+    parsed = urlparse(raw)
+    if parsed.hostname not in LOOPBACK_HOSTS:
+        return raw
+    host = _entry_node_client_host(service.entry_node_id)
+    if not host:
+        return raw
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    netloc = f"{host}:{parsed.port}" if parsed.port is not None else host
+    if parsed.username:
+        auth = parsed.username
+        if parsed.password:
+            auth = f"{auth}:{parsed.password}"
+        netloc = f"{auth}@{netloc}"
+    return urlunparse(parsed._replace(netloc=netloc)).rstrip("/")
+
+
+def _resolve_loopback_entry_node_enabled() -> bool:
+    raw = os.environ.get("DS4_PIPELINE_RESOLVE_LOOPBACK_ENTRY_NODE", "1").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _entry_node_client_host(entry_node_id: str) -> str:
+    return os.environ.get("DS4_PIPELINE_ENTRY_HOST_TEMPLATE", "{node}").replace("{node}", entry_node_id).strip()
 
 
 def _load_profile_group_ingress(routing_policy: dict[str, Any], groups: dict[str, tuple[str, ...]]) -> dict[str, str]:
