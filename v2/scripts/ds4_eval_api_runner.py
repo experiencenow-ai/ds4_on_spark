@@ -1056,6 +1056,8 @@ def _cache_metrics_snapshot(args: argparse.Namespace) -> dict:
     if not bool(getattr(args, "cache_metrics", False)):
         return {"format": "ds4-eval-cache-metrics-snapshot-v1", "enabled": False}
     vllm_url = str(getattr(args, "vllm_url", "") or "")
+    if _skip_prompt_render(vllm_url):
+        return _dsapi_metrics_snapshot(args)
     try:
         text = _get_text(vllm_url, "/metrics", timeout=float(getattr(args, "cache_metrics_timeout_s", 10.0) or 10.0))
     except Exception as exc:
@@ -1072,6 +1074,31 @@ def _cache_metrics_snapshot(args: argparse.Namespace) -> dict:
         "enabled": True,
         "ok": True,
         "vllm_url": vllm_url,
+        "selected_metric_count": len(metrics),
+        "metrics": metrics,
+    }
+
+
+def _dsapi_metrics_snapshot(args: argparse.Namespace) -> dict:
+    base_url = str(getattr(args, "base_url", "") or "")
+    try:
+        status = _get_json(base_url, "/ds4/dispatcher/status")
+    except Exception as exc:
+        return {
+            "format": "ds4-eval-cache-metrics-snapshot-v1",
+            "enabled": True,
+            "ok": False,
+            "source": "dsapi-dispatcher-status",
+            "base_url": base_url,
+            "error": str(exc),
+        }
+    metrics = _selected_dsapi_metrics(status)
+    return {
+        "format": "ds4-eval-cache-metrics-snapshot-v1",
+        "enabled": True,
+        "ok": True,
+        "source": "dsapi-dispatcher-status",
+        "base_url": base_url,
         "selected_metric_count": len(metrics),
         "metrics": metrics,
     }
@@ -1097,6 +1124,39 @@ def _cache_metrics_report(before: dict, after: dict) -> dict:
     report["delta"] = delta
     report["changed_delta"] = {key: value for key, value in delta.items() if value != 0}
     return report
+
+
+def _selected_dsapi_metrics(status: dict) -> dict[str, float]:
+    keys = (
+        "claimed_count",
+        "completed_count",
+        "failed_count",
+        "jit_kv_prefetch_completed_count",
+        "jit_kv_prefetch_failed_count",
+        "jit_kv_prefetch_gate_released_count",
+        "jit_kv_prefetch_submitted_count",
+        "pending",
+        "pending_cohorts",
+        "resident_prefilled_count",
+        "resident_rolling_batch_count",
+        "resident_rolling_refill_stream_count",
+        "resource_governor_throttle_count",
+        "submitted_count",
+    )
+    out: dict[str, float] = {}
+    for key in keys:
+        value = status.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            out[f"dsapi:{key}"] = float(value)
+    resource = status.get("resource_governor")
+    if isinstance(resource, dict):
+        for key in ("max_power_w", "max_temp_c", "max_utilization_pct", "total_power_w"):
+            value = resource.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                out[f"dsapi:resource_governor:{key}"] = float(value)
+    return out
 
 
 def _selected_cache_metrics(text: str) -> dict[str, float]:
