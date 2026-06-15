@@ -52,6 +52,8 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["total_gpu_power_w"], 50.0)
         self.assertTrue(snap["gpu_known"])
         self.assertEqual(snap["avg_gpu_pct"], 67.33)
+        self.assertEqual(snap["active_gpu_nodes"], 2)
+        self.assertEqual(snap["saturated_gpu_nodes"], 2)
         self.assertEqual(snap["active_nodes"], 2)
         self.assertTrue(snap["kv_known"])
         self.assertTrue(snap["cache_known"])
@@ -64,6 +66,24 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(snap["nodes"][0]["cpu_pct"], 800)
         self.assertEqual(snap["nodes"][0]["gpu_power_w"], 37)
         self.assertTrue(snap["nodes"][0]["gpu_power_known"])
+
+    def test_snapshot_counts_pipeline_gpu_work_below_saturation(self):
+        payload = {
+            "updated_iso": "2026-05-26T00:00:00+00:00",
+            "updated_unix": 1,
+            "nodes": {
+                "spark0": {"sample_count": 2, "last_gpu_util_pct": 47, "last_vllm_metrics_up": 1, "last_vllm_requests_running": 0.5, "last_vllm_generation_tokens_per_s": 1.1},
+                "spark1": {"sample_count": 2, "last_gpu_util_pct": 18, "last_vllm_metrics_up": 0, "last_vllm_requests_running": 0, "last_vllm_generation_tokens_per_s": 0},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "summary.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            snap = dashboard.build_snapshot(str(path))
+        self.assertEqual(snap["busy_gpu_nodes"], 1)
+        self.assertEqual(snap["active_gpu_nodes"], 1)
+        self.assertEqual(snap["saturated_gpu_nodes"], 0)
+        self.assertEqual(snap["active_nodes"], 1)
 
     def test_snapshot_marks_old_summary_stale_when_threshold_enabled(self):
         payload = {
