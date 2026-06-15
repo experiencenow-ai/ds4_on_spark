@@ -178,10 +178,15 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
 
         self.assertIn('launch_dir="${launch_dir/#\\$HOME/$HOME}"', script)
         self.assertIn('log_dir="${log_dir/#\\$HOME/$HOME}"', script)
+        self.assertIn('write_log="$log_dir/write_scripts_', script)
+        self.assertIn('> "$write_log" 2>&1', script)
+        self.assertIn('printf "wrote gemma4_12b_pp8 launch_dir=%s log=%s\\n"', script)
         self.assertIn('install="$launch_dir/00_install_kv_cache_deps.sh"', script)
-        self.assertIn('DS4_NODE_ID=spark0 bash "$install"', script)
+        self.assertIn('install_log="$log_dir/install_rank0_', script)
+        self.assertIn('DS4_NODE_ID=spark0 bash "$install" > "$install_log" 2>&1', script)
+        self.assertIn('printf "installed gemma4_12b_pp8 rank=0 node=spark0 log=%s\\n"', script)
         self.assertIn('nohup bash "$script" > "$log"', script)
-        self.assertLess(script.index('DS4_NODE_ID=spark0 bash "$install"'), script.index('nohup bash "$script"'))
+        self.assertLess(script.index('DS4_NODE_ID=spark0 bash "$install" > "$install_log" 2>&1'), script.index('nohup bash "$script"'))
         self.assertIn('log=%s\\n" "$!" "$log"', script)
 
     def test_remote_launch_exports_prefetch_env_before_nohup(self) -> None:

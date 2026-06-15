@@ -303,8 +303,10 @@ def _emit_rows(rows: list[dict[str, object]], args: argparse.Namespace) -> None:
 
 
 def _remote_write(entry: dict[str, object], args: argparse.Namespace) -> str:
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     launch_dir = _remote_path_assign("launch_dir", args.launch_root, str(entry["service_id"]))
-    return _repo(args) + f'\n{launch_dir}\nmkdir -p "$launch_dir"\nDS4_PIPELINE_LIFECYCLE=1 PYTHONPATH=src python3 -m ds4_kvcache.cli write-scripts --deployment {shlex.quote(str(entry["deployment_rel"]))} --output-dir "$launch_dir"'
+    log_dir = _remote_path_assign("log_dir", args.log_dir, str(entry["service_id"]))
+    return _repo(args) + f'\n{launch_dir}\n{log_dir}\nwrite_log="$log_dir/write_scripts_{stamp}.log"\nmkdir -p "$launch_dir" "$log_dir"\nif DS4_PIPELINE_LIFECYCLE=1 PYTHONPATH=src python3 -m ds4_kvcache.cli write-scripts --deployment {shlex.quote(str(entry["deployment_rel"]))} --output-dir "$launch_dir" > "$write_log" 2>&1; then\n    printf "wrote {entry["service_id"]} launch_dir=%s log=%s\\n" "$launch_dir" "$write_log"\nelse\n    rc=$?\n    printf "write-scripts failed {entry["service_id"]} rc=%s log=%s\\n" "$rc" "$write_log" >&2\n    tail -n 40 "$write_log" >&2 || true\n    exit "$rc"\nfi'
 
 
 def _remote_launch(entry: dict[str, object], rank: int, node: str, args: argparse.Namespace) -> str:
@@ -313,7 +315,7 @@ def _remote_launch(entry: dict[str, object], rank: int, node: str, args: argpars
     env_exports = _remote_env_exports(entry, args)
     if env_exports:
         env_exports = "\n" + env_exports
-    return _remote_write(entry, args) + f'\n{log_dir}{env_exports}\ninstall="$launch_dir/00_install_kv_cache_deps.sh"\nscript="$launch_dir/start_vllm_rank{rank}_{node}.sh"\nlog="$log_dir/rank{rank}_{stamp}.log"\nmkdir -p "$log_dir"\ntest -x "$install"\ntest -x "$script"\nDS4_NODE_ID={shlex.quote(node)} bash "$install"\nnohup bash "$script" > "$log" 2>&1 < /dev/null &\nprintf "started {entry["service_id"]} rank={rank} node={node} pid=%s log=%s\\n" "$!" "$log"'
+    return _remote_write(entry, args) + f'\n{log_dir}{env_exports}\ninstall="$launch_dir/00_install_kv_cache_deps.sh"\nscript="$launch_dir/start_vllm_rank{rank}_{node}.sh"\ninstall_log="$log_dir/install_rank{rank}_{stamp}.log"\nlog="$log_dir/rank{rank}_{stamp}.log"\nmkdir -p "$log_dir"\ntest -x "$install"\ntest -x "$script"\nif DS4_NODE_ID={shlex.quote(node)} bash "$install" > "$install_log" 2>&1; then\n    printf "installed {entry["service_id"]} rank={rank} node={node} log=%s\\n" "$install_log"\nelse\n    rc=$?\n    printf "install failed {entry["service_id"]} rank={rank} node={node} rc=%s log=%s\\n" "$rc" "$install_log" >&2\n    tail -n 80 "$install_log" >&2 || true\n    exit "$rc"\nfi\nnohup bash "$script" > "$log" 2>&1 < /dev/null &\nprintf "started {entry["service_id"]} rank={rank} node={node} pid=%s log=%s\\n" "$!" "$log"'
 
 
 def _remote_env_exports(entry: dict[str, object], args: argparse.Namespace) -> str:
