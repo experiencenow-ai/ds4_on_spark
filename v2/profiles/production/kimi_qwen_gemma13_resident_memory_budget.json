@@ -62,9 +62,9 @@
     ]
   },
   "fixed_kv_cache_memory_bytes": {
-    "qwen27_bf16_pp13": 8589934592,
-    "gemma4_26b_a4b_pp13": 6442450944,
-    "kimi27_pp13": 8589934592
+    "qwen27_bf16_pp13": 7516192768,
+    "gemma4_26b_a4b_pp13": 5368709120,
+    "kimi27_pp13": 7516192768
   },
   "resident_batch_token_budget": {
     "qwen27_bf16_pp13": 32768,
@@ -108,7 +108,7 @@
         "lane": "smart",
         "lane_weight": 1.35,
         "pipeline_parallel_size": 13,
-        "gpu_memory_utilization": 0.34,
+        "gpu_memory_utilization": 0.33,
         "batch_size": 256,
         "input_budget_tokens": 8192,
         "output_budget_tokens": 4096,
@@ -122,7 +122,7 @@
         "lane": "fast_reasoning",
         "lane_weight": 1.0,
         "pipeline_parallel_size": 13,
-        "gpu_memory_utilization": 0.25,
+        "gpu_memory_utilization": 0.24,
         "batch_size": 32,
         "input_budget_tokens": 8192,
         "output_budget_tokens": 4096,
@@ -136,14 +136,14 @@
         "lane": "fast_diverse",
         "lane_weight": 0.85,
         "pipeline_parallel_size": 13,
-        "gpu_memory_utilization": 0.16,
+        "gpu_memory_utilization": 0.15,
         "batch_size": 16,
         "input_budget_tokens": 8192,
         "output_budget_tokens": 4096,
         "assumed_decode_tok_s": 0,
         "accuracy_weight": 1.0,
         "kv_resident_input_batches": 3.0,
-        "measurement_status": "2026-06-14 pulled-main triad launch refused Gemma at 0.20 because spark4 had 21.17 GiB free while vLLM required 23.93 GiB; cap lowered to 0.16 for the first clean triad launch gate"
+        "measurement_status": "2026-06-14 pulled-main triad launch refused Gemma at 0.20 because spark4 had 21.17 GiB free while vLLM required 23.93 GiB; cap lowered to 0.16 for the first clean triad launch gate, then to 0.15 with a 5 GiB fixed KV cap after 2026-06-15 telemetry showed resident triad nodes at the edge of system RAM"
       }
     ],
     "pipeline_candidates": [
@@ -222,12 +222,12 @@
     }
   },
   "kimi_batch256_fit_estimate": {
-    "basis": "Live Kimi2.7 PP13 service is launched with an 8 GiB fixed GPU KV cap, max_num_seqs=256, and max_num_batched_tokens=131072. DSAPI Kimi128 short-context probes used under 3% of that cap, and pulled-main qualification raises DSAPI dispatch to the live service cap without increasing fixed KV while holding the refill watermark at 128 to avoid a second full cohort backlog.",
-    "rough_fixed_8gib_token_capacity": 1978027,
+    "basis": "Live Kimi2.7 PP13 service backs off to a 7 GiB fixed GPU KV cap after 2026-06-15 telemetry showed several resident triad nodes at the edge of system RAM. Earlier DSAPI Kimi128 short-context probes used under 3% of the previous 8 GiB cap, and pulled-main qualification keeps DSAPI dispatch at the live service cap while holding the refill watermark at 128 to avoid a second full cohort backlog.",
+    "rough_fixed_7gib_token_capacity": 1730774,
     "batch256_512_context_tokens": 131072,
     "batch256_8192_context_tokens": 2097152,
-    "estimated_capacity_margin_at_512_tokens": 15.09,
-    "notes": "This is an order-of-magnitude fit check, not a substitute for a pulled-main DSAPI benchmark. It says short-context max_num_seqs=256 should fit comfortably with the fixed 8 GiB Kimi KV cap; full 8192-context 256-way admission exceeds the rough resident-token estimate and must rely on strict token-budget admission, eviction, and external cache. The 512-request pressure stall showed DSAPI must not keep another full 256-request Kimi cohort resident at the vLLM gate while the first cohort is still full."
+    "estimated_capacity_margin_at_512_tokens": 13.2,
+    "notes": "This is an order-of-magnitude fit check, not a substitute for a pulled-main DSAPI benchmark. It says short-context max_num_seqs=256 should fit comfortably with the fixed 7 GiB Kimi KV cap; full 8192-context 256-way admission exceeds the rough resident-token estimate and must rely on strict token-budget admission, eviction, and external cache. The 512-request pressure stall showed DSAPI must not keep another full 256-request Kimi cohort resident at the vLLM gate while the first cohort is still full."
   },
   "observed_kimi_pp13_available_gib_before_small_overlay": {
     "spark0": 39.3,
