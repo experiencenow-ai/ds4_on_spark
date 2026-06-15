@@ -785,20 +785,21 @@ class OpenAICompatibleRunner:
         if concurrency > 1 and len(payloads) > 1:
             with ThreadPoolExecutor(max_workers=min(concurrency, len(payloads))) as executor:
                 futures = [
-                    executor.submit(self._run_completion_stream_chunk, chunk, profile, payload, on_result=on_result, on_delta=on_delta, cancel_event=cancel_event)
+                    executor.submit(self._run_completion_stream_chunk, chunk, profile, payload, on_result=on_result, on_delta=on_delta, cancel_event=cancel_event, original_batch_size=len(chunk))
                     for chunk, payload in payloads
                 ]
                 for future in as_completed(futures):
                     out.update(future.result())
         else:
             for chunk, payload in payloads:
-                out.update(self._run_completion_stream_chunk(chunk, profile, payload, on_result=on_result, on_delta=on_delta, cancel_event=cancel_event))
+                out.update(self._run_completion_stream_chunk(chunk, profile, payload, on_result=on_result, on_delta=on_delta, cancel_event=cancel_event, original_batch_size=len(chunk)))
         if len(chunks) > 1:
             _mark_coalesced_planned_split(out, original_batch_size=len(request_list), chunk_count=len(chunks), max_cohort=max_cohort, concurrency=concurrency)
         return out
 
-    def _run_completion_stream_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, on_result: Callable[[str, dict[str, Any]], None], on_delta: Callable[[str, str, dict[str, Any]], None] | None = None, cancel_event: Event | None = None) -> dict[str, dict]:
+    def _run_completion_stream_chunk(self, chunk: list[InferenceRequest], profile: ModelProfile, payload: dict[str, Any], *, on_result: Callable[[str, dict[str, Any]], None], on_delta: Callable[[str, str, dict[str, Any]], None] | None = None, cancel_event: Event | None = None, original_batch_size: int | None = None) -> dict[str, dict]:
         started = time.time()
+        original_size = len(chunk) if original_batch_size is None else original_batch_size
         auto_kv_suppressed = bool(payload.pop(AUTO_KV_BATCH_SUPPRESSED_KEY, False))
         stream_timeout_s = _completion_stream_wall_timeout_s()
         stream_deadline = (started + stream_timeout_s) if stream_timeout_s > 0 else 0.0
@@ -851,6 +852,17 @@ class OpenAICompatibleRunner:
                     timeout_error = "coalesced completion stream cancelled"
                     break
         except Exception as exc:
+            if len(chunk) > 1 and _env_bool("DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE", True) and coalesced_failure_should_bisect(str(exc)):
+                midpoint = max(1, len(chunk) // 2)
+                out = {}
+                for subchunk in (chunk[:midpoint], chunk[midpoint:]):
+                    subpayload = _coalesced_completion_payload(subchunk, profile, self.default_extra_body)
+                    if subpayload is None:
+                        break
+                    subpayload["stream"] = True
+                    out.update(self._run_completion_stream_chunk(subchunk, profile, subpayload, on_result=on_result, on_delta=on_delta, cancel_event=cancel_event, original_batch_size=original_size))
+                if len(out) == len(chunk):
+                    return out
             for index, item in enumerate(chunk):
                 if index in completed_indexes:
                     continue
@@ -870,6 +882,8 @@ class OpenAICompatibleRunner:
             out[item.request_id] = result
             completed_indexes.add(index)
             on_result(item.request_id, result)
+        if original_size != len(chunk):
+            mark_coalesced_split(out, original_batch_size=original_size)
         return out
 
     def _transport_failure(self, request: InferenceRequest, profile: ModelProfile, started: float, error: str, *, endpoint: str | None = None, coalesced_batch_size: int | None = None) -> dict:
