@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import select
 import socket
 from pathlib import Path
 import shlex
@@ -907,23 +908,24 @@ class OpenAICompatibleRunner:
             detail = exc.read().decode("utf-8", errors="replace")[-4000:]
             raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
         with response:
+            poll_timeout = 0.0
             if cancel_event is not None:
                 poll_timeout = _env_float("DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S", 1.0)
-                if poll_timeout > 0:
-                    fp = getattr(response, "fp", None); raw = getattr(fp, "raw", None)
-                    for item in (response, fp, raw, getattr(raw, "_fp", None)):
-                        settimeout = getattr(getattr(item, "_sock", None), "settimeout", None)
-                        if settimeout is not None: settimeout(max(0.05, poll_timeout)); break
             event_data: list[str] = []
             while True:
                 if cancel_event is not None and cancel_event.is_set(): break
                 try:
+                    if cancel_event is not None and poll_timeout > 0:
+                        try:
+                            readable, _, _ = select.select([response.fileno()], [], [], max(0.05, float(poll_timeout)))
+                        except (AttributeError, OSError, ValueError):
+                            readable = [response]
+                        if not readable:
+                            continue
                     raw_line = response.readline()
                 except (TimeoutError, socket.timeout, OSError) as exc:
-                    if not isinstance(exc, (TimeoutError, socket.timeout)) and "cannot read from timed out object" not in str(exc).lower():
-                        raise
                     if cancel_event is not None and cancel_event.is_set(): break
-                    continue
+                    raise RuntimeError(f"SSE stream read failed: {exc}") from exc
                 if not raw_line: break
                 line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
                 if line == "":

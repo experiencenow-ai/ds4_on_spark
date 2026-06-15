@@ -1136,15 +1136,11 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(seen, [("r", "completed")])
         self.assertEqual(results["r"]["output"]["text"], "first done")
 
-    def test_sse_reader_treats_python_timed_out_object_as_poll_timeout(self) -> None:
+    def test_sse_reader_fails_python_timed_out_object(self) -> None:
         class FakeResponse:
             def __init__(self) -> None:
                 self.lines = [
                     OSError("cannot read from timed out object"),
-                    b'data: {"choices":[{"text":"ok","finish_reason":"stop"}]}\n',
-                    b"\n",
-                    b"data: [DONE]\n",
-                    b"\n",
                 ]
 
             def __enter__(self):
@@ -1161,8 +1157,42 @@ class LlmRunnersWebChatTests(unittest.TestCase):
 
         runner = OpenAICompatibleRunner(base_url="http://unused")
         with patch("ds4_infer.runners.urlrequest.urlopen", return_value=FakeResponse()):
-            events = list(runner._post_sse_json("/v1/completions", {"model": "served"}, cancel_event=threading.Event()))
+            with self.assertRaisesRegex(RuntimeError, "SSE stream read failed"):
+                list(runner._post_sse_json("/v1/completions", {"model": "served"}, cancel_event=threading.Event()))
+
+    def test_sse_reader_polls_readiness_before_reading_cancelable_stream(self) -> None:
+        class FakeResponse:
+            def __init__(self) -> None:
+                self.reads = 0
+                self.lines = [
+                    b'data: {"choices":[{"text":"ok","finish_reason":"stop"}]}\n',
+                    b"\n",
+                    b"data: [DONE]\n",
+                    b"\n",
+                ]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def fileno(self):
+                return 42
+
+            def readline(self):
+                self.reads += 1
+                return self.lines.pop(0)
+
+        response = FakeResponse()
+        runner = OpenAICompatibleRunner(base_url="http://unused")
+        with patch("ds4_infer.runners.urlrequest.urlopen", return_value=response):
+            readiness = [([], [], []), ([42], [], []), ([42], [], []), ([42], [], []), ([42], [], [])]
+            with patch("ds4_infer.runners.select.select", side_effect=readiness) as ready:
+                events = list(runner._post_sse_json("/v1/completions", {"model": "served"}, cancel_event=threading.Event()))
         self.assertEqual(events, [{"choices": [{"text": "ok", "finish_reason": "stop"}]}])
+        self.assertEqual(response.reads, 4)
+        self.assertGreaterEqual(ready.call_count, 4)
 
     def test_sse_reader_can_leave_cancel_socket_timeout_disabled(self) -> None:
         class FakeSock:
