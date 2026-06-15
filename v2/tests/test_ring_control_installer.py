@@ -43,6 +43,17 @@ class RingControlInstallerTests(unittest.TestCase):
         self.assertIn("else /usr/local/sbin/ds4-ring-200g; fi", text)
         self.assertIn("fi && /usr/local/sbin/ds4-ring-control-iface", text)
 
+    def test_local_installer_installs_canonical_13_node_route_helpers(self) -> None:
+        text = (REPO_ROOT / "scripts/ds4_install_ring_control_iface_local.sh").read_text()
+
+        self.assertIn("tmp_route_apply=", text)
+        self.assertIn("while [ \"\\$target_rank\" -lt 13 ]", text)
+        self.assertIn("target_ip=\"10.10.100.\\$((10 + target_rank))\"", text)
+        self.assertIn("dev=\"enP2p1s0f1np1\"", text)
+        self.assertIn("dev=\"enP2p1s0f0np0\"", text)
+        self.assertIn("install -m 0755 \"$tmp_route_apply\" /usr/local/sbin/ds4-ring-200g-apply", text)
+        self.assertIn("install -m 0755 \"$tmp_route_extend\" /usr/local/sbin/ds4-ring-200g-extend13", text)
+
 
 if __name__ == "__main__":
     unittest.main()
