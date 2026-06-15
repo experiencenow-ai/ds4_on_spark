@@ -9,7 +9,7 @@ import threading
 import time
 import unittest
 
-from ds4_infer.api import CoordinatorApi
+from ds4_infer.api import CoordinatorApi, DispatcherRuntime
 from ds4_infer.dispatcher_resident import PendingDispatcherCohort, ResidentServicePlan, resident_service_plans
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.queue import QueueClaim
@@ -763,6 +763,51 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual(sorted(runner.calls), [f"dsv4-roll-{index}" for index in range(5)])
             self.assertEqual(api.dispatcher_status()["last_summary"]["dispatch_mode"], "rolling_refill")
             self.assertEqual(api.dispatcher_status()["last_summary"]["claimed"], 5)
+
+    def test_dispatcher_tick_refreshes_pending_by_service_after_partial_completion(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            registry = ProfileRegistry.load(PROFILES)
+            topology = SparkTopology.load(TOPOLOGY)
+            worker = BatchWorker(queue=api.queue, registry=registry, runner=RecordingPerRequestRunner(), worker_id="test-dispatcher", lease_ttl_s=30, heartbeat_interval_s=1.0)
+            claims = [
+                QueueClaim(
+                    request_id=f"active-{index}",
+                    batch_id="status",
+                    request_kind="model",
+                    selected_profile_id="dsv4_vllm_mtp_pp8_smartest_v1",
+                    selected_node_id="spark0",
+                    lease_id=f"lease-{index}",
+                    attempt_count=1,
+                    request=dsv4_chat_request(f"active-{index}"),
+                    selected_service_id="dsv4_flash_pp8",
+                    selected_compute_domain="spark-fleet-0",
+                )
+                for index in range(3)
+            ]
+            cohort = PendingDispatcherCohort.from_claims(claims, admission_mode="rolling_refill")
+            cohort.mark_finished("active-0")
+            release = threading.Event()
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(release.wait, 5.0)
+                runtime = DispatcherRuntime(
+                    worker=worker,
+                    executor=executor,
+                    pending={future: cohort},
+                    entry_node_id="spark0",
+                    node_profile_ids=tuple(topology.pipeline_profiles),
+                    batch_limits_by_service={"dsv4_flash_pp8": 3},
+                    kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                    service_plans={},
+                    next_heartbeat_at=time.time() + 100.0,
+                    last_credit_at=time.time(),
+                )
+                try:
+                    self.assertFalse(api._dispatcher_tick(runtime))
+                    self.assertEqual(api.dispatcher_status()["pending"], 2)
+                    self.assertEqual(api.dispatcher_status()["pending_by_service"], {"dsv4_flash_pp8": 2})
+                finally:
+                    release.set()
 
     def test_resident_rolling_admission_defaults_to_refill_stream(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
