@@ -4,6 +4,7 @@ import threading
 import time
 import unittest
 import urllib.request
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
 from scripts import spark_telemetry_dashboard as dashboard
@@ -578,6 +579,54 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertIn("STALE telemetry age", dashboard.DASHBOARD_HTML)
         self.assertNotIn("const REFRESH_MS", dashboard.DASHBOARD_HTML)
         self.assertNotIn("setInterval(", dashboard.DASHBOARD_HTML)
+
+    def test_dashboard_includes_dsapi_chat_console(self):
+        self.assertIn('id="chat-console"', dashboard.DASHBOARD_HTML)
+        self.assertIn('id="chat-model"', dashboard.DASHBOARD_HTML)
+        self.assertIn('fetch("/api/chat/completions"', dashboard.DASHBOARD_HTML)
+        self.assertIn("kimi27_pp13", dashboard.DASHBOARD_HTML)
+        self.assertIn("qwen27_bf16_pp13", dashboard.DASHBOARD_HTML)
+        self.assertIn("gemma4_26b_a4b_pp13", dashboard.DASHBOARD_HTML)
+        self.assertIn('String(m.content||"").trim()!==""', dashboard.DASHBOARD_HTML)
+
+    def test_dashboard_chat_proxy_forwards_to_dsapi(self):
+        seen = []
+        class FakeDsapi(BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length","0"))
+                body = json.loads(self.rfile.read(length).decode("utf-8"))
+                seen.append({"path": self.path, "body": body})
+                payload = json.dumps({"choices":[{"message":{"role":"assistant","content":"ok"}}],"usage":{"completion_tokens":1}},sort_keys=True).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type","application/json")
+                self.send_header("Content-Length",str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+            def log_message(self, fmt, *args):
+                return
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "summary.json"
+            nodes = Path(tmp) / "nodes"
+            nodes.mkdir()
+            summary.write_text(json.dumps({"updated_iso":"2026-05-26T00:00:00+00:00","updated_unix":1,"nodes":{}}),encoding="utf-8")
+            dsapi = dashboard.ReusableThreadingHTTPServer(("127.0.0.1",0),FakeDsapi)
+            dsapi_thread = threading.Thread(target=dsapi.serve_forever,daemon=True)
+            dsapi_thread.start()
+            server = dashboard.ReusableThreadingHTTPServer(("127.0.0.1",0),dashboard.make_handler(str(summary),str(nodes),0.0,"http://127.0.0.1:%d" % dsapi.server_port))
+            server_thread = threading.Thread(target=server.serve_forever,daemon=True)
+            server_thread.start()
+            try:
+                request = urllib.request.Request("http://127.0.0.1:%d/api/chat/completions" % server.server_port,data=json.dumps({"model":"qwen27_bf16_pp13","messages":[{"role":"user","content":"hi"}],"stream":False}).encode("utf-8"),headers={"Content-Type":"application/json"},method="POST")
+                with urllib.request.urlopen(request,timeout=2) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+            finally:
+                server.shutdown()
+                server.server_close()
+                dsapi.shutdown()
+                dsapi.server_close()
+        self.assertEqual(payload["choices"][0]["message"]["content"],"ok")
+        self.assertEqual(seen[0]["path"],"/v1/chat/completions")
+        self.assertEqual(seen[0]["body"]["model"],"qwen27_bf16_pp13")
 
     def test_stream_payload_includes_summary_and_selected_history(self):
         payload = {
