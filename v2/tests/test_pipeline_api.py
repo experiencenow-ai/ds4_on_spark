@@ -9,7 +9,7 @@ import unittest
 from ds4_infer import api as api_module
 from ds4_infer.api import CoordinatorApi, _resolve_profile
 from ds4_infer.api_stream import _drain_completion_stream_events, openai_chat_stream_events, openai_completion_stream_events
-from ds4_infer.jit_kv import JitKvCircuitBreaker
+from ds4_infer.jit_kv import JitKvCircuitBreaker, run_prefetch
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.runners import OpenAICompatibleRunner, PipelineOpenAIRunner, _maybe_prestage_common_kv_prefix, _openai_payload
 from ds4_infer.schemas import InferenceRequest, make_result
@@ -1132,6 +1132,47 @@ class PipelineApiTests(unittest.TestCase):
                 os.environ.pop("DS4_API_JIT_KV_PREFETCH_TIMEOUT_S", None)
             else:
                 os.environ["DS4_API_JIT_KV_PREFETCH_TIMEOUT_S"] = old_timeout
+
+    def test_jit_kv_prefetch_timeout_response_fails_open_without_poisoning_circuit(self) -> None:
+        old_prefetch_api = os.environ.get("DS4_API_JIT_KV_PREFETCH_API")
+        os.environ["DS4_API_JIT_KV_PREFETCH_API"] = "1"
+        try:
+            circuit = JitKvCircuitBreaker(enabled=True, min_samples=1, failure_ratio=1.0, cooldown_s=60)
+            runner = OpenAICompatibleRunner(base_url="http://prefetch-timeout.invalid", jit_kv_circuit=circuit)
+            calls: list[str] = []
+
+            def timeout_response(endpoint, body, **kwargs):
+                calls.append(endpoint)
+                return {"status": "failed", "error": "timed out"}
+
+            runner._post_json = timeout_response  # type: ignore[method-assign]
+
+            def make_payload() -> dict[str, object]:
+                plan = {"format": "ds4-kv-cache-plan-v1", "cache_id": "timeout-response"}
+                return {"model": "qwen27-timeout-response", "prompt": ["prefix item"], "extra_body": {"ds4_kv_cache": dict(plan)}, "kv_transfer_params": {"ds4_kv_cache": dict(plan)}}
+
+            prefetch_payload = {"model": "qwen27-timeout-response", "prompt": "prefix", "max_tokens": 1, "stream": False}
+            payload = make_payload()
+            info = run_prefetch(runner=runner, payload=payload, prefetch_payload=prefetch_payload, prefix_len=6, max_tokens=1, started=0.0, circuit=circuit, fail_open=True)
+
+            self.assertTrue(info["cold_dispatch"])
+            self.assertEqual(info["strategy"], "jit-kv-prefetch-unavailable-auto-cold-dispatch")
+            self.assertNotIn("kv_transfer_params", payload)
+            status = circuit.status()
+            self.assertFalse(status["jit_kv_circuit_open"])
+            self.assertEqual(status["jit_kv_prefetch_failed_count"], 0)
+            self.assertEqual(status["jit_kv_prefetch_submitted_count"], 1)
+            self.assertEqual(calls, ["/ds4/kv/prefetch"])
+
+            second = run_prefetch(runner=runner, payload=make_payload(), prefetch_payload=prefetch_payload, prefix_len=6, max_tokens=1, started=0.0, circuit=circuit, fail_open=True)
+            self.assertEqual(second["strategy"], "jit-kv-prefetch-disabled-auto-cold-dispatch")
+            self.assertEqual(calls, ["/ds4/kv/prefetch"])
+            self.assertEqual(circuit.status()["jit_kv_prefetch_submitted_count"], 1)
+        finally:
+            if old_prefetch_api is None:
+                os.environ.pop("DS4_API_JIT_KV_PREFETCH_API", None)
+            else:
+                os.environ["DS4_API_JIT_KV_PREFETCH_API"] = old_prefetch_api
 
     def test_generated_auto_kv_prefetch_disabled_endpoint_fails_open_without_poisoning_circuit(self) -> None:
         old_prestage_auto = os.environ.get("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX")
