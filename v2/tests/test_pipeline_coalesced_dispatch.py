@@ -683,7 +683,7 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
         self.assertEqual(cohort.status()["initial_unfinished_count"], 0)
         self.assertEqual(cohort.status()["active_count"], 0)
 
-    def test_worker_force_cancel_releases_incremental_batch_without_runner_tail(self) -> None:
+    def test_worker_force_cancel_waits_for_incremental_transport_ack(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
             registry = ProfileRegistry.load(PROFILES)
@@ -707,17 +707,23 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 try:
                     self.assertTrue(runner.started.wait(1.0))
                     api.queue.cancel(batch_id="cancel-tail", reason="operator cancel", force_running=True)
-                    started = time.time()
-                    summary = future.result(timeout=1.0)
-                    self.assertLess(time.time() - started, 0.5)
                     self.assertTrue(runner.cancel_seen.wait(1.0))
+                    self.assertFalse(future.done())
+                    self.assertEqual(api.queue.status(request_id="q0")["state"], "running")
+                    self.assertTrue(api.queue.status(request_id="q0")["cancel_requested"])
+                    self.assertEqual(api.queue.status(request_id="q1")["state"], "running")
+                    self.assertTrue(api.queue.status(request_id="q1")["cancel_requested"])
+                    runner.release.set()
+                    summary = future.result(timeout=1.0)
                 finally:
                     runner.release.set()
             self.assertEqual(summary["claimed_count"], 2)
+            self.assertEqual(summary["completed_count"], 0)
+            self.assertEqual(summary["failed_count"], 0)
             self.assertEqual(api.queue.status(batch_id="cancel-tail")["state"], "cancelled")
             self.assertEqual(api.queue.status(request_id="q0")["state"], "cancelled")
             self.assertEqual(api.queue.status(request_id="q1")["state"], "cancelled")
-            self.assertEqual(notices, [])
+            self.assertEqual(notices, ["q0", "q1"])
 
     def test_resident_rolling_admission_refills_until_service_queue_drains(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1017,15 +1023,13 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 )
                 self.assertEqual(submitted, 2)
                 completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
-            self.assertGreaterEqual(completed, 1)
-            self.assertLessEqual(completed, 2)
-            self.assertEqual((failed, retried), (0, 0))
+            self.assertEqual((completed, failed, retried), (0, 0, 0))
             self.assertLessEqual(len(runner.calls), 2)
             self.assertEqual(api.queue.status(batch_id="roll-cancel")["state"], "cancelled")
             self.assertEqual(api.dispatcher_status()["last_summary"]["dispatch_mode"], "rolling_refill")
             self.assertEqual(api.dispatcher_status()["last_summary"]["claimed"], 2)
 
-    def test_worker_force_cancel_releases_rolling_refill_without_runner_tail(self) -> None:
+    def test_worker_force_cancel_waits_for_rolling_refill_transport_ack(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
             registry = ProfileRegistry.load(PROFILES)
@@ -1046,12 +1050,14 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 self.assertEqual(submitted, 2)
                 self.assertTrue(runner.wait_started(2))
                 api.queue.cancel(batch_id="roll-force-cancel", reason="operator cancel", force_running=True)
-                started = time.time()
-                try:
-                    completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
-                    self.assertLess(time.time() - started, 0.5)
-                finally:
-                    runner.release.set()
+                completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=False)
+                self.assertEqual((completed, failed, retried), (0, 0, 0))
+                self.assertEqual(len(pending), 1)
+                for request_id in ("dsv4-force-cancel-0", "dsv4-force-cancel-1"):
+                    self.assertEqual(api.queue.status(request_id=request_id)["state"], "running")
+                    self.assertTrue(api.queue.status(request_id=request_id)["cancel_requested"])
+                runner.release.set()
+                completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
             self.assertEqual((completed, failed, retried), (0, 0, 0))
             self.assertEqual(pending, {})
             self.assertEqual(api.queue.status(batch_id="roll-force-cancel")["state"], "cancelled")
