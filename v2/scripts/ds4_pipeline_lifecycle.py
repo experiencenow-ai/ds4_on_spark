@@ -153,9 +153,7 @@ def _run_action(action: str, entries: list[dict[str, object]], args: argparse.Na
     elif action == "pull":
         _local([str(REPO / "scripts" / "ds4_update_spark_nodes.sh"), "--code-only", *_nodes(entries)])
     elif action == "stop":
-        for entry in entries:
-            for node in entry["node_ids"]:
-                _ssh(str(node), _remote_kill(entry), args)
+        _stop(entries, args)
     elif action == "write-scripts":
         for entry in entries:
             for node in entry["node_ids"]:
@@ -171,6 +169,17 @@ def _run_action(action: str, entries: list[dict[str, object]], args: argparse.Na
         _probe(entries, args)
     else:
         raise AssertionError(action)
+
+
+def _stop(entries: list[dict[str, object]], args: argparse.Namespace) -> None:
+    rows = []
+    for entry in entries:
+        for node in entry["node_ids"]:
+            result = _ssh(str(node), _remote_kill(entry), args, capture=True)
+            rows.append({"service_id": entry["service_id"], "node_id": node, "ok": result.returncode == 0, "out": result.stdout.strip(), "err": result.stderr.strip()})
+    _emit_rows(rows, args)
+    if any(not row["ok"] for row in rows):
+        raise SystemExit(1)
 
 
 def _emit(entries: list[dict[str, object]], args: argparse.Namespace) -> None:

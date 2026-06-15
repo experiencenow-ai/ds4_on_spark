@@ -136,6 +136,33 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertTrue(all(call[1] for call in calls))
         self.assertTrue(all("Kimi-K2.7-Code" in call[2] for call in calls))
 
+    def test_stop_attempts_every_declared_node_before_failing(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        entry = {
+            "service_id": "kimi27_pp13",
+            "profile_id": "kimi27_code_pp13_v1",
+            "model_id": "moonshotai/Kimi-K2.7-Code",
+            "node_ids": ["spark0", "spark1", "spark2"],
+            "deployment": {"model_id": "/home/{node}/models/hf/moonshotai/Kimi-K2.7-Code", "served_model_name": "kimi27-code-pp13"},
+        }
+        args = type("Args", (), {"connect_timeout_s": 1, "json": True})()
+        calls = []
+        old_ssh = lifecycle._ssh
+        try:
+            def fake_ssh(node, script, call_args, *, capture=False):
+                calls.append((node, capture, script))
+                return lifecycle.subprocess.CompletedProcess(["ssh"], 255 if node == "spark0" else 0, stdout='{"killed":[1]}\n' if node != "spark0" else "", stderr="timeout" if node == "spark0" else "")
+
+            lifecycle._ssh = fake_ssh
+            with self.assertRaises(SystemExit):
+                lifecycle._stop([entry], args)
+        finally:
+            lifecycle._ssh = old_ssh
+
+        self.assertEqual([call[0] for call in calls], ["spark0", "spark1", "spark2"])
+        self.assertTrue(all(call[1] for call in calls))
+        self.assertTrue(all("Kimi-K2.7-Code" in call[2] for call in calls))
+
     def test_remote_launch_expands_home_paths_before_quoting(self) -> None:
         lifecycle = load_script(SCRIPT)
         entries = lifecycle._load_entries(str(ROOT / "profiles" / "topology" / "static_sparks.json"), str(ROOT / "profiles" / "models"))
