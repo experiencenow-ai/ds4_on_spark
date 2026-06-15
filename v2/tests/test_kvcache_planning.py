@@ -244,7 +244,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(rank12["argv"][8], "/home/sparkc/models/hf/moonshotai/Kimi-K2.7-Code")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--max-num-seqs") + 1], "128")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--max-num-batched-tokens") + 1], "65536")
-        self.assertEqual(rank0["argv"][rank0["argv"].index("--gpu-memory-utilization") + 1], "0.30")
+        self.assertEqual(rank0["argv"][rank0["argv"].index("--gpu-memory-utilization") + 1], "0.27")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--kv-cache-memory-bytes") + 1], "6442450944")
         self.assertIn("--served-model-name", rank0["argv"])
         self.assertEqual(rank0["argv"][rank0["argv"].index("--served-model-name") + 1], "kimi27-code-pp13")
