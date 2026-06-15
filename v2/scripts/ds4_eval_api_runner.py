@@ -289,6 +289,10 @@ def render_prompt(vllm_url: str, model: str, question_prompt: str, max_tokens: i
     return prompt
 
 
+def _skip_prompt_render(vllm_url: str) -> bool:
+    return str(vllm_url or "").strip().lower() in {"", "none", "off", "skip", "dsapi"}
+
+
 def write_requests(args: argparse.Namespace) -> None:
     cases = parse_eval_cases(Path(args.source_c))
     cases = _filter_cases(cases, _source_filters(args))
@@ -305,14 +309,16 @@ def write_requests(args: argparse.Namespace) -> None:
 
 def _eval_request_payload(args: argparse.Namespace, idx: int, case: dict) -> dict:
     question_prompt = build_question_prompt(case, response_style=str(args.response_style))
-    rendered = render_prompt(
-        args.vllm_url,
-        args.served_model,
-        question_prompt,
-        args.max_output_tokens,
-        enable_thinking=bool(args.enable_thinking),
-        thinking_key=str(args.chat_template_thinking_key),
-    )
+    rendered = None
+    if not _skip_prompt_render(args.vllm_url):
+        rendered = render_prompt(
+            args.vllm_url,
+            args.served_model,
+            question_prompt,
+            args.max_output_tokens,
+            enable_thinking=bool(args.enable_thinking),
+            thinking_key=str(args.chat_template_thinking_key),
+        )
     return {
         "format": REQUEST_FORMAT,
         "request_id": f"ds4-eval-{idx:03d}-{case['id']}",
@@ -333,20 +339,22 @@ def _effective_thinking_budget_tokens(args: argparse.Namespace) -> int:
     return int(args.thinking_budget_tokens) if bool(args.enable_thinking) else 0
 
 
-def _request_input_payload(case: dict, question_prompt: str, rendered: str, idx: int) -> dict:
-    return {
+def _request_input_payload(case: dict, question_prompt: str, rendered: str | None, idx: int) -> dict:
+    payload = {
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": question_prompt},
         ],
-        "rendered_prompt": rendered,
-        "prompt": question_prompt,
         "metadata": {
-            "rendered_prompt": rendered,
             "ds4_eval": _eval_metadata(case, idx),
         },
-        "estimated_prompt_tokens": len(rendered.split()),
+        "estimated_prompt_tokens": len((rendered or question_prompt).split()),
     }
+    if rendered is not None:
+        payload["rendered_prompt"] = rendered
+        payload["prompt"] = question_prompt
+        payload["metadata"]["rendered_prompt"] = rendered
+    return payload
 
 
 def _eval_metadata(case: dict, idx: int) -> dict:
