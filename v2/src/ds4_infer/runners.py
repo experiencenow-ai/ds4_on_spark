@@ -1347,7 +1347,7 @@ def _maybe_prestage_common_kv_prefix(runner: OpenAICompatibleRunner, payload: di
     prefetch_payload = build_prefetch_payload(payload, prefix=prefix, max_tokens=max_tokens)
     if isinstance(prestage_only_plan, dict):
         prefetch_payload["extra_body"] = {**dict(prefetch_payload.get("extra_body") or {}), "ds4_kv_cache": prestage_only_plan}
-    return run_prefetch(
+    info = run_prefetch(
         runner=runner,
         payload=payload,
         prefetch_payload=prefetch_payload,
@@ -1358,6 +1358,14 @@ def _maybe_prestage_common_kv_prefix(runner: OpenAICompatibleRunner, payload: di
         fail_open=auto_kv and not strict_kv,
         disable_kv_on_cold=strict_kv,
     )
+    strategy = str(info.get("strategy") or "")
+    prefetch_succeeded = not bool(info.get("cold_dispatch")) and info.get("error") is None and "failed" not in strategy and "disabled" not in strategy and "unavailable" not in strategy
+    if isinstance(prestage_only_plan, dict) and prefetch_succeeded and _env_bool("DS4_PIPELINE_ATTACH_PRESTAGED_AUTO_KV_PREFIX", True):
+        payload.update(kv_cache_vllm_request_fields({"kv_cache_plan": prestage_only_plan}))
+        payload["extra_body"] = {**dict(payload.get("extra_body") or {}), "ds4_kv_cache": dict(prestage_only_plan)}
+        info = dict(info)
+        info["adopted_for_batch"] = True
+    return info
 
 
 def _payload_ds4_kv_cache_plan(payload: dict[str, Any]) -> dict[str, Any] | None:
