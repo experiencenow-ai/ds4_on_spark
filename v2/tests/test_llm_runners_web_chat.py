@@ -675,6 +675,56 @@ class LlmRunnersWebChatTests(unittest.TestCase):
             self.assertEqual(runner.calls[0][1]["prompt"], "<|im_assistant|>assistant<|im_middle|><think></think>")
             self.assertTrue(result["transport"]["chat_as_completion_prompts"])
 
+    def test_kimi_queued_chat_renders_completion_prompt_when_missing(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("kimi27_code_pp13_smart_v1")
+        raw = make_request(chat=True).raw
+        raw["input"] = {
+            "messages": [
+                {"role": "system", "content": "Answer exactly."},
+                {"role": "user", "content": "What line fails?"},
+            ],
+            "metadata": {"chat_template_kwargs": {"thinking": False}},
+        }
+        runner = CapturingRunner()
+
+        result = runner.run_one(InferenceRequest.from_json(raw), profile)
+
+        prompt = runner.calls[0][1]["prompt"]
+        self.assertEqual(runner.calls[0][0], "/v1/completions")
+        self.assertIn("<|im_system|>system<|im_middle|>Answer exactly.<|im_end|>", prompt)
+        self.assertIn("<|im_user|>user<|im_middle|>What line fails?<|im_end|>", prompt)
+        self.assertTrue(prompt.endswith("<|im_assistant|>assistant<|im_middle|><think></think>"))
+        self.assertNotIn("user:", prompt.lower())
+        self.assertTrue(result["transport"]["chat_as_completion_prompts"])
+
+    def test_kimi_queued_chat_parallel_prompts_render_when_missing(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        profile = registry.get("kimi27_code_pp13_smart_v1")
+        first_raw = make_request(chat=True).raw
+        first_raw["input"] = {
+            "messages": [{"role": "user", "content": "first target"}],
+            "metadata": {"chat_template_kwargs": {"thinking": False}},
+        }
+        second_raw = make_request(chat=True).raw
+        second_raw["request_id"] = "r2"
+        second_raw["input"] = {
+            "messages": [{"role": "user", "content": "second target"}],
+            "metadata": {"chat_template_kwargs": {"thinking": False}},
+        }
+        runner = CapturingRunner()
+
+        result = runner.run_many_chat([InferenceRequest.from_json(first_raw), InferenceRequest.from_json(second_raw)], profile)
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        prompts = [call[1]["prompt"] for call in runner.calls]
+        self.assertEqual([call[0] for call in runner.calls], ["/v1/completions", "/v1/completions"])
+        self.assertIn("<|im_user|>user<|im_middle|>first target<|im_end|>", prompts[0])
+        self.assertIn("<|im_user|>user<|im_middle|>second target<|im_end|>", prompts[1])
+        self.assertTrue(all(prompt.endswith("<|im_assistant|>assistant<|im_middle|><think></think>") for prompt in prompts))
+        self.assertTrue(result["r"]["transport"]["chat_as_completion_prompts"])
+
     def test_dsv4_profile_uses_native_chat_even_when_rendered_prompt_is_present(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")

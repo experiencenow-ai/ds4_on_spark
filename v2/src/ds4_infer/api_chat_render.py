@@ -29,6 +29,15 @@ def anthropic_messages_input_payload(body: dict[str, Any], *, profile: ModelProf
     return payload
 
 
+def rendered_chat_prompt_from_input(profile: ModelProfile, input_payload: dict[str, Any], *, thinking_budget_tokens: int) -> str:
+    metadata = input_payload.get("metadata") if isinstance(input_payload.get("metadata"), dict) else {}
+    prompt = _explicit_rendered_prompt(input_payload, metadata)
+    if prompt:
+        return prompt
+    messages = _normalize_openai_messages(input_payload.get("messages"))
+    return _render_chat_prompt(profile, messages, body=input_payload, metadata=metadata, thinking_budget_tokens=thinking_budget_tokens)
+
+
 def _attach_rendered_prompt(payload: dict[str, Any], body: dict[str, Any], profile: ModelProfile, messages: list[dict[str, Any]], metadata: dict[str, Any], thinking_budget_tokens: int) -> None:
     prompt = _explicit_rendered_prompt(body, metadata)
     if not prompt and _env_bool("DS4_API_RENDER_CHAT_PROMPTS", True):

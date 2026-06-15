@@ -15,6 +15,7 @@ from typing import Any, Callable, Iterator, Protocol
 from urllib import error, request as urlrequest
 
 from .builders import model_batch_payload, request_messages, request_prompt
+from .api_chat_render import rendered_chat_prompt_from_input
 from .chat_streaming import run_parallel_chat_stream
 from .cohort_safety import coalesced_completion_token_budget, coalesced_failure_should_bisect, mark_coalesced_split, prompt_token_estimate
 from .coalesced_groups import plan_compatible_payload_groups
@@ -289,7 +290,7 @@ class OpenAICompatibleRunner:
         started = time.time()
         try:
             if request.chat and _chat_cohort_transport(profile) in {"completion_prompts", "parallel_completion_prompts"}:
-                payload = _openai_completion_prompt_payload(request, profile, prompt=_chat_completion_prompt(request))
+                payload = _openai_completion_prompt_payload(request, profile, prompt=_chat_completion_prompt(request, profile))
                 _merge_extra_body(payload, self.default_extra_body)
                 data = self._post_json(self.completion_endpoint, payload)
                 text = extract_openai_completion_text(data)
@@ -464,7 +465,7 @@ class OpenAICompatibleRunner:
         cancel_event: Event | None = None,
     ) -> dict:
         try:
-            payload = _openai_completion_prompt_payload(request, profile, prompt=_chat_completion_prompt(request))
+            payload = _openai_completion_prompt_payload(request, profile, prompt=_chat_completion_prompt(request, profile))
             _merge_extra_body(payload, self.default_extra_body)
             if _parallel_completion_prompt_streaming(request):
                 return self._run_one_chat_completion_parallel_member_stream(request, profile, payload, started, batch_size, cancel_event=cancel_event)
@@ -1250,7 +1251,7 @@ def _coalesced_chat_completion_payload(requests: list[InferenceRequest], profile
             return None
         if item.input.get("tools") is not None or item.input.get("tool_choice") is not None:
             return None
-        prompt = _chat_completion_prompt(item)
+        prompt = _chat_completion_prompt(item, profile)
         if not prompt:
             return None
         payload = _openai_completion_prompt_payload(item, profile, prompt=prompt)
@@ -1848,7 +1849,7 @@ def _apply_openai_payload_extras(payload: dict[str, Any], request: InferenceRequ
         payload["extra_body"] = {**dict(payload.get("extra_body") or {}), **extra_body}
 
 
-def _chat_completion_prompt(request: InferenceRequest) -> str:
+def _chat_completion_prompt(request: InferenceRequest, profile: ModelProfile) -> str:
     data = request.input
     metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
     for container in (data, metadata):
@@ -1856,6 +1857,8 @@ def _chat_completion_prompt(request: InferenceRequest) -> str:
             value = container.get(key) if isinstance(container, dict) else None
             if isinstance(value, str) and value:
                 return value
+    if data.get("messages") is not None:
+        return rendered_chat_prompt_from_input(profile, data, thinking_budget_tokens=request.thinking_budget_tokens)
     return request_prompt(request)
 
 
