@@ -195,7 +195,9 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["vllm_nodes"][-1]["env"]["VLLM_HOST_IP"], "10.10.100.17")
         self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["path"], "/tmp/lmcache_qwen27_bf16_pp8_fp8kv.yaml")
         self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["data"]["local_disk"], "/home/spark0/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv/p7_8_7_9_9_9_8_7")
+        self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["data"]["lookup_server_worker_ids"], [0])
         self.assertEqual(plan["vllm_nodes"][-1]["lmcache_config"]["data"]["local_disk"], "/home/spark7/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv/p7_8_7_9_9_9_8_7")
+        self.assertEqual(plan["vllm_nodes"][-1]["lmcache_config"]["data"]["lookup_server_worker_ids"], [0])
         self.assertIn("--dtype", plan["vllm_nodes"][0]["argv"])
         self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--dtype") + 1], "bfloat16")
         self.assertIn("--kv-cache-dtype", plan["vllm_nodes"][0]["argv"])
@@ -225,7 +227,9 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(rank0["argv"][rank0["argv"].index("--default-chat-template-kwargs") + 1], "{\"thinking\": true}")
         self.assertIn("LMCacheConnectorV1", rank0["command"])
         self.assertEqual(rank0["lmcache_config"]["data"]["local_disk"], "/home/spark0/ds4_nvme/ds4_lmcache/kimi26_pp13_fp8kv/p4_4_4_5_5_5_5_5_5_5_5_5_4")
+        self.assertEqual(rank0["lmcache_config"]["data"]["lookup_server_worker_ids"], [0])
         self.assertEqual(rank12["lmcache_config"]["data"]["local_disk"], "/home/sparkc/ds4_nvme/ds4_lmcache/kimi26_pp13_fp8kv/p4_4_4_5_5_5_5_5_5_5_5_5_4")
+        self.assertEqual(rank12["lmcache_config"]["data"]["lookup_server_worker_ids"], [0])
         self.assertIn("--headless", rank12["argv"])
 
     def test_kimi27_pp13_lmcache_plan_uses_uniform_local_directory_and_source_guard(self) -> None:
@@ -250,7 +254,9 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(rank0["argv"][rank0["argv"].index("--served-model-name") + 1], "kimi27-code-pp13")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--default-chat-template-kwargs") + 1], "{\"thinking\": true}")
         self.assertEqual(rank0["lmcache_config"]["data"]["local_disk"], "/home/spark0/ds4_nvme/ds4_lmcache/kimi27_code_pp13_fp8kv/p4_4_4_5_5_5_5_5_5_5_5_5_4")
+        self.assertEqual(rank0["lmcache_config"]["data"]["lookup_server_worker_ids"], [0])
         self.assertEqual(rank12["lmcache_config"]["data"]["local_disk"], "/home/sparkc/ds4_nvme/ds4_lmcache/kimi27_code_pp13_fp8kv/p4_4_4_5_5_5_5_5_5_5_5_5_4")
+        self.assertEqual(rank12["lmcache_config"]["data"]["lookup_server_worker_ids"], [0])
         self.assertIn("--headless", rank12["argv"])
 
     def test_pp13_lmcache_services_enable_private_cache_admin(self) -> None:
@@ -260,6 +266,7 @@ class KvCachePlanningTests(unittest.TestCase):
                 plan = plan_deployment(KvCacheDeployment.load(path))
                 for node in plan["vllm_nodes"]:
                     self.assertEqual(node["env"]["VLLM_DS4_ENABLE_CACHE_ADMIN"], "1")
+                    self.assertEqual(node["lmcache_config"]["data"]["lookup_server_worker_ids"], [0])
 
     def test_write_qwen_bf16_pp8_scripts_materialize_lmcache_config(self) -> None:
         deployment = KvCacheDeployment.load(QWEN_PP_DEPLOYMENT)
@@ -270,9 +277,12 @@ class KvCachePlanningTests(unittest.TestCase):
 
             self.assertIn("cat > /tmp/lmcache_qwen27_bf16_pp8_fp8kv.yaml", rank0)
             self.assertIn("local_disk: \"/home/spark0/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv/p7_8_7_9_9_9_8_7\"", rank0)
+            self.assertIn("lookup_server_worker_ids:", rank0)
+            self.assertIn("- 0", rank0)
             self.assertIn("max_local_disk_size: 64", rank0)
             self.assertIn("--gpu-memory-utilization 0.25", rank0)
             self.assertIn("local_disk: \"/home/spark7/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_fp8kv/p7_8_7_9_9_9_8_7\"", rank7)
+            self.assertIn("lookup_server_worker_ids:", rank7)
             self.assertIn("VLLM_DS4_PP_TCP_ADVERTISE_HOST=10.10.100.17", rank7)
 
     def test_qwen_bf16_pp8_bf16kv_plan_is_pipeline_sharded(self) -> None:
@@ -287,7 +297,9 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["layer_partition"], [7, 8, 8, 8, 9, 9, 8, 7])
         self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["path"], "/tmp/lmcache_qwen27_bf16_pp8_bf16kv.yaml")
         self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["data"]["local_disk"], "/home/spark0/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_bf16kv")
+        self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["data"]["lookup_server_worker_ids"], [0])
         self.assertEqual(plan["vllm_nodes"][-1]["lmcache_config"]["data"]["local_disk"], "/home/spark7/ds4_nvme/ds4_lmcache/qwen27_bf16_pp8_bf16kv")
+        self.assertEqual(plan["vllm_nodes"][-1]["lmcache_config"]["data"]["lookup_server_worker_ids"], [0])
         self.assertIn("--kv-cache-dtype", plan["vllm_nodes"][0]["argv"])
         self.assertEqual(plan["vllm_nodes"][0]["argv"][plan["vllm_nodes"][0]["argv"].index("--kv-cache-dtype") + 1], "auto")
         self.assertIn("--gpu-memory-utilization", plan["vllm_nodes"][0]["argv"])
@@ -321,7 +333,9 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["path"], "/tmp/lmcache_gemma4_26b_a4b_pp8_bf16kv.yaml")
         self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["data"]["local_disk"], "/home/spark0/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv/p3_4_4_4_3_4_4_4")
         self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["data"]["max_local_cpu_size"], 1)
+        self.assertEqual(plan["vllm_nodes"][0]["lmcache_config"]["data"]["lookup_server_worker_ids"], [0])
         self.assertEqual(plan["vllm_nodes"][-1]["lmcache_config"]["data"]["local_disk"], "/home/spark7/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv/p3_4_4_4_3_4_4_4")
+        self.assertEqual(plan["vllm_nodes"][-1]["lmcache_config"]["data"]["lookup_server_worker_ids"], [0])
         self.assertIn("--kv-transfer-config", plan["vllm_nodes"][0]["argv"])
 
     def test_write_gemma26_lmcache_scripts_materialize_config(self) -> None:
@@ -340,8 +354,11 @@ class KvCachePlanningTests(unittest.TestCase):
             self.assertIn("cat > /tmp/lmcache_gemma4_26b_a4b_pp8_bf16kv.yaml", rank0)
             self.assertIn("LMCACHE_ROOT=/home/spark0/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv/p3_4_4_4_3_4_4_4", rank0)
             self.assertIn("local_disk: \"/home/spark0/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv/p3_4_4_4_3_4_4_4\"", rank0)
+            self.assertIn("lookup_server_worker_ids:", rank0)
+            self.assertIn("- 0", rank0)
             self.assertIn("--kv-transfer-config", rank0)
             self.assertIn("local_disk: \"/home/spark7/ds4_nvme/ds4_lmcache/gemma4_26b_a4b_pp8_bf16kv/p3_4_4_4_3_4_4_4\"", rank7)
+            self.assertIn("lookup_server_worker_ids:", rank7)
 
     def test_dsv4_flash_pp8_simple_offload_plan_is_pipeline_sharded(self) -> None:
         deployment = KvCacheDeployment.load(DSV4_PP_DEPLOYMENT)
