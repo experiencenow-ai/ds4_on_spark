@@ -19,6 +19,21 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE_C = ROOT / "fixtures" / "ds4_eval" / "ds4_eval.c"
 TERMINAL = {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled", "failed"}
 RESPONSE_STYLES = ("official", "concise", "answer_only", "answer_first", "compsec_strict")
+SOURCE_AWARE_POLICIES = ("none", "centaur92")
+CENTAUR92_SOURCE_LIMITS = {
+    "AIME2025": 2048,
+    "COMPSEC": 1024,
+    "GPQA Diamond": 512,
+    "GPQA Diamond (modified)": 512,
+    "SuperGPQA": 512,
+}
+CENTAUR92_SOURCE_STYLES = {
+    "AIME2025": "concise",
+    "COMPSEC": "compsec_strict",
+    "GPQA Diamond": "answer_first",
+    "GPQA Diamond (modified)": "answer_first",
+    "SuperGPQA": "answer_first",
+}
 
 
 def _post_json(base_url: str, endpoint: str, payload: dict, *, timeout: float = 120) -> dict:
@@ -309,14 +324,16 @@ def write_requests(args: argparse.Namespace) -> None:
 
 
 def _eval_request_payload(args: argparse.Namespace, idx: int, case: dict) -> dict:
-    question_prompt = build_question_prompt(case, response_style=str(args.response_style))
+    max_output_tokens = _case_max_output_tokens(args, case)
+    response_style = _case_response_style(args, case)
+    question_prompt = build_question_prompt(case, response_style=response_style)
     rendered = None
     if not _skip_prompt_render(args.vllm_url):
         rendered = render_prompt(
             args.vllm_url,
             args.served_model,
             question_prompt,
-            args.max_output_tokens,
+            max_output_tokens,
             enable_thinking=bool(args.enable_thinking),
             thinking_key=str(args.chat_template_thinking_key),
         )
@@ -327,13 +344,27 @@ def _eval_request_payload(args: argparse.Namespace, idx: int, case: dict) -> dic
         "chat": True,
         "immediate": False,
         "job_class": "analysis",
-        "max_output_tokens": int(args.max_output_tokens),
+        "max_output_tokens": max_output_tokens,
         "thinking_budget_tokens": _effective_thinking_budget_tokens(args),
         "temperature": float(args.temperature),
-        "input": _request_input_payload(case, question_prompt, rendered, idx),
+        "input": _request_input_payload(case, question_prompt, rendered, idx, max_output_tokens, response_style),
         "output_contract": _eval_output_contract(args),
         "model_pin": {"profile_id": args.model},
     }
+
+
+def _case_max_output_tokens(args: argparse.Namespace, case: dict) -> int:
+    fallback = max(1, int(args.max_output_tokens))
+    if str(getattr(args, "source_aware_policy", "none")) != "centaur92":
+        return fallback
+    return max(1, min(fallback, int(CENTAUR92_SOURCE_LIMITS.get(str(case.get("source") or ""), fallback))))
+
+
+def _case_response_style(args: argparse.Namespace, case: dict) -> str:
+    fallback = str(args.response_style)
+    if str(getattr(args, "source_aware_policy", "none")) != "centaur92":
+        return fallback
+    return str(CENTAUR92_SOURCE_STYLES.get(str(case.get("source") or ""), fallback))
 
 
 def _eval_output_contract(args: argparse.Namespace) -> dict:
@@ -347,7 +378,7 @@ def _effective_thinking_budget_tokens(args: argparse.Namespace) -> int:
     return int(args.thinking_budget_tokens) if bool(args.enable_thinking) else 0
 
 
-def _request_input_payload(case: dict, question_prompt: str, rendered: str | None, idx: int) -> dict:
+def _request_input_payload(case: dict, question_prompt: str, rendered: str | None, idx: int, max_output_tokens: int, response_style: str) -> dict:
     payload = {
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -357,6 +388,12 @@ def _request_input_payload(case: dict, question_prompt: str, rendered: str | Non
             "ds4_eval": _eval_metadata(case, idx),
         },
         "estimated_prompt_tokens": len((rendered or question_prompt).split()),
+        "benchmark_shape": {
+            "format": "ds4-eval-shape-v1",
+            "source": case["source"],
+            "output_tokens": int(max_output_tokens),
+            "response_style": response_style,
+        },
     }
     if rendered is not None:
         payload["rendered_prompt"] = rendered
@@ -385,6 +422,7 @@ def _write_request_manifest(args: argparse.Namespace, out: Path, request_count: 
         "requests_jsonl": str(out),
         "request_count": request_count,
         "max_output_tokens": int(args.max_output_tokens),
+        "source_aware_policy": str(getattr(args, "source_aware_policy", "none")),
         "enable_thinking": bool(args.enable_thinking),
         "thinking_budget_tokens": _effective_thinking_budget_tokens(args),
         "temperature": float(args.temperature),
@@ -816,6 +854,7 @@ def _write_direct_manifest(args: argparse.Namespace, out_dir: Path, batch_id: st
         "requests_jsonl": str(requests_path),
         "source_requests_jsonl": str(source_requests),
         "run_s": round(run_s, 6),
+        "source_aware_policy": str(getattr(args, "source_aware_policy", "none")),
     }
     _write_json(out_dir / "manifest.json", manifest)
 
@@ -870,6 +909,7 @@ def _write_args_for_run(args: argparse.Namespace, source_requests: Path) -> argp
         served_model=args.served_model,
         model=args.model,
         max_output_tokens=args.max_output_tokens,
+        source_aware_policy=args.source_aware_policy,
         response_style=args.response_style,
         enable_thinking=args.enable_thinking,
         chat_template_thinking_key=args.chat_template_thinking_key,
@@ -902,6 +942,7 @@ def _write_run_manifest(args: argparse.Namespace, out_dir: Path, batch_id: str, 
         "source_requests_jsonl": str(source_requests),
         "submitted_at": submitted_at,
         "submit_s": round(submit_s, 6),
+        "source_aware_policy": str(getattr(args, "source_aware_policy", "none")),
     }
     _write_json(out_dir / "manifest.json", manifest)
 
@@ -1315,6 +1356,7 @@ def _build_parser() -> argparse.ArgumentParser:
     w.add_argument("--model", default="dsv4_vllm_mtp_pp8_smartest_v1")
     w.add_argument("--max-output-tokens", type=int, default=512)
     w.add_argument("--response-style", choices=RESPONSE_STYLES, default="official")
+    _add_source_aware_policy_arg(w)
     w.add_argument("--enable-thinking", dest="enable_thinking", action="store_true", default=False)
     w.add_argument("--disable-thinking", dest="enable_thinking", action="store_false")
     w.add_argument("--chat-template-thinking-key", default="thinking")
@@ -1337,6 +1379,7 @@ def _build_parser() -> argparse.ArgumentParser:
     d.add_argument("--model", default="dsv4_vllm_mtp_pp8_smartest_v1")
     d.add_argument("--max-output-tokens", type=int, default=512)
     d.add_argument("--response-style", choices=RESPONSE_STYLES, default="official")
+    _add_source_aware_policy_arg(d)
     d.add_argument("--enable-thinking", dest="enable_thinking", action="store_true", default=False)
     d.add_argument("--disable-thinking", dest="enable_thinking", action="store_false")
     d.add_argument("--chat-template-thinking-key", default="thinking")
@@ -1357,6 +1400,7 @@ def _build_parser() -> argparse.ArgumentParser:
     dc.add_argument("--model", default="dsv4_vllm_mtp_pp8_smartest_v1")
     dc.add_argument("--max-output-tokens", type=int, default=512)
     dc.add_argument("--response-style", choices=RESPONSE_STYLES, default="official")
+    _add_source_aware_policy_arg(dc)
     dc.add_argument("--enable-thinking", dest="enable_thinking", action="store_true", default=False)
     dc.add_argument("--disable-thinking", dest="enable_thinking", action="store_false")
     dc.add_argument("--chat-template-thinking-key", default="thinking")
@@ -1379,6 +1423,7 @@ def _build_parser() -> argparse.ArgumentParser:
     r.add_argument("--model", default="dsv4_vllm_mtp_pp8_smartest_v1")
     r.add_argument("--max-output-tokens", type=int, default=512)
     r.add_argument("--response-style", choices=RESPONSE_STYLES, default="official")
+    _add_source_aware_policy_arg(r)
     r.add_argument("--enable-thinking", dest="enable_thinking", action="store_true", default=False)
     r.add_argument("--disable-thinking", dest="enable_thinking", action="store_false")
     r.add_argument("--chat-template-thinking-key", default="thinking")
@@ -1397,6 +1442,15 @@ def _build_parser() -> argparse.ArgumentParser:
     r.add_argument("--show-deltas", action="store_true")
     _add_cache_metric_args(r)
     return parser
+
+
+def _add_source_aware_policy_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--source-aware-policy",
+        choices=SOURCE_AWARE_POLICIES,
+        default="none",
+        help="Apply source-specific prompt style and output-token caps while preserving a single benchmark command.",
+    )
 
 
 def _add_cache_metric_args(parser: argparse.ArgumentParser) -> None:
