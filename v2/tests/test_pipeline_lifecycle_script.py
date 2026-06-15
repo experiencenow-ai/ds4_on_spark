@@ -422,6 +422,7 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
 
         self.assertIn("DS4_UPDATE_ACTIVITY_CHECK", script)
         self.assertIn("DS4_UPDATE_ALLOW_ACTIVE", script)
+        self.assertIn('dsapi_status_url="${DS4_UPDATE_DSAPI_STATUS_URL:-http://127.0.0.1:8700/ds4/dispatcher/status}"', script)
         self.assertIn("check_no_active_work", script)
         self.assertIn("queue_unfinished_by_service", script)
         self.assertIn("vllm_running", script)
