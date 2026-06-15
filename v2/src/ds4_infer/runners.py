@@ -909,24 +909,30 @@ class OpenAICompatibleRunner:
             raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
         with response:
             poll_timeout = 0.0
-            if cancel_event is not None:
+            idle_timeout_s = _sse_idle_timeout_s()
+            if cancel_event is not None or idle_timeout_s > 0:
                 poll_timeout = _env_float("DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S", 1.0)
             event_data: list[str] = []
+            saw_event = False
+            last_progress_at = time.time()
             while True:
                 if cancel_event is not None and cancel_event.is_set(): break
                 try:
-                    if cancel_event is not None and poll_timeout > 0:
+                    if poll_timeout > 0:
                         try:
                             readable, _, _ = select.select([response.fileno()], [], [], max(0.05, float(poll_timeout)))
                         except (AttributeError, OSError, ValueError):
                             readable = [response]
                         if not readable:
+                            if saw_event and idle_timeout_s > 0 and (time.time() - last_progress_at) >= idle_timeout_s:
+                                raise RuntimeError(f"SSE stream idle timeout after {idle_timeout_s:.3f}s")
                             continue
                     raw_line = response.readline()
                 except (TimeoutError, socket.timeout, OSError) as exc:
                     if cancel_event is not None and cancel_event.is_set(): break
                     raise RuntimeError(f"SSE stream read failed: {exc}") from exc
                 if not raw_line: break
+                last_progress_at = time.time()
                 line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
                 if line == "":
                     if not event_data:
@@ -936,6 +942,7 @@ class OpenAICompatibleRunner:
                     if text == "[DONE]":
                         break
                     if text:
+                        saw_event = True
                         yield json.loads(text)
                     continue
                 if line.startswith("data:"): event_data.append(line[5:].strip())
@@ -943,6 +950,7 @@ class OpenAICompatibleRunner:
             if event_data:
                 text = "\n".join(event_data).strip()
                 if text and text != "[DONE]":
+                    saw_event = True
                     yield json.loads(text)
 
 
@@ -1413,6 +1421,10 @@ def _completion_chunk_concurrency(profile: ModelProfile) -> int:
 
 def _completion_stream_wall_timeout_s() -> float:
     return max(0.0, _env_float("DS4_PIPELINE_COMPLETION_STREAM_WALL_TIMEOUT_S", 0.0))
+
+
+def _sse_idle_timeout_s() -> float:
+    return max(0.0, _env_float("DS4_PIPELINE_SSE_IDLE_TIMEOUT_S", 0.0))
 
 
 def _profile_uses_pipeline(profile: ModelProfile) -> bool:

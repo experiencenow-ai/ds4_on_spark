@@ -10,6 +10,14 @@ from typing import Any, Callable
 from .env_utils import env_bool as _env_bool
 
 
+class PrefetchEndpointDisabled(RuntimeError):
+    pass
+
+
+_DISABLED_PREFETCH_ENDPOINTS: set[str] = set()
+_DISABLED_PREFETCH_ENDPOINTS_LOCK = threading.RLock()
+
+
 class JitKvCircuitBreaker:
     def __init__(
         self,
@@ -129,12 +137,21 @@ def run_prefetch(
     disable_kv_on_cold: bool = True,
 ) -> dict[str, Any]:
     try:
+        if _prefetch_endpoint_enabled() and _prefetch_endpoint_disabled(runner, prefetch_payload):
+            raise PrefetchEndpointDisabled(_prefetch_endpoint_disabled_message(runner, prefetch_payload))
         if circuit is not None:
             circuit.record_submission()
         response = _post_prefetch(runner, prefetch_payload)
         if circuit is not None:
             circuit.record_success()
         return _prefetch_result(response, prefix_len=prefix_len, max_tokens=max_tokens, started=started)
+    except PrefetchEndpointDisabled as exc:
+        if fail_open:
+            if disable_kv_on_cold:
+                disable_strict_kv(payload)
+            strategy = "jit-kv-prefetch-disabled-auto-cold-dispatch"
+            return _cold_dispatch_result(exc, prefix_len=prefix_len, started=started, strategy=strategy)
+        raise
     except Exception as exc:
         if circuit is not None:
             circuit.record_failure(str(exc))
@@ -157,16 +174,52 @@ def disable_strict_kv(payload: dict[str, Any]) -> None:
 
 def _post_prefetch(runner: Any, payload: dict[str, Any]) -> dict[str, Any] | None:
     token = os.environ.get("DS4_API_JIT_KV_PREFETCH_TOKEN", "")
-    use_endpoint = _env_bool("DS4_API_JIT_KV_PREFETCH_API", bool(token))
+    use_endpoint = _prefetch_endpoint_enabled()
     timeout_s = _prefetch_timeout_s(runner)
     if not use_endpoint:
         runner._post_json(runner.completion_endpoint, payload, timeout_s=timeout_s)
         return None
     headers = {"x-ds4-kv-prefetch-token": token} if token else {}
     response = runner._post_json("/ds4/kv/prefetch", payload, extra_headers=headers, timeout_s=timeout_s)
-    if str(response.get("status") or "") in {"failed", "error"}:
+    if _prefetch_response_endpoint_disabled(response):
+        _mark_prefetch_endpoint_disabled(runner, payload)
+        raise PrefetchEndpointDisabled(json.dumps(response, sort_keys=True)[-4000:])
+    if response.get("error") is not None or str(response.get("status") or "").lower() in {"failed", "error"}:
         raise RuntimeError(json.dumps(response, sort_keys=True)[-4000:])
     return response
+
+
+def _prefetch_endpoint_enabled() -> bool:
+    token = os.environ.get("DS4_API_JIT_KV_PREFETCH_TOKEN", "")
+    return _env_bool("DS4_API_JIT_KV_PREFETCH_API", bool(token))
+
+
+def _prefetch_endpoint_key(runner: Any, payload: dict[str, Any]) -> str:
+    base_url = str(getattr(runner, "base_url", "") or "").rstrip("/")
+    model = str(payload.get("model") or "")
+    return f"{base_url}|{model}"
+
+
+def _prefetch_endpoint_disabled(runner: Any, payload: dict[str, Any]) -> bool:
+    key = _prefetch_endpoint_key(runner, payload)
+    with _DISABLED_PREFETCH_ENDPOINTS_LOCK:
+        return key in _DISABLED_PREFETCH_ENDPOINTS
+
+
+def _mark_prefetch_endpoint_disabled(runner: Any, payload: dict[str, Any]) -> None:
+    key = _prefetch_endpoint_key(runner, payload)
+    with _DISABLED_PREFETCH_ENDPOINTS_LOCK:
+        _DISABLED_PREFETCH_ENDPOINTS.add(key)
+
+
+def _prefetch_endpoint_disabled_message(runner: Any, payload: dict[str, Any]) -> str:
+    return f"DS4 KV prefetch endpoint disabled for {_prefetch_endpoint_key(runner, payload)}"
+
+
+def _prefetch_response_endpoint_disabled(response: dict[str, Any]) -> bool:
+    status = str(response.get("status") or "").strip().lower()
+    error = str(response.get("error") or response.get("message") or "").strip().lower()
+    return status in {"disabled", "unavailable"} or ("prefetch" in error and "disabled" in error)
 
 
 def _prefetch_timeout_s(runner: Any) -> float:

@@ -1194,6 +1194,60 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(response.reads, 4)
         self.assertGreaterEqual(ready.call_count, 4)
 
+    def test_sse_reader_idle_timeout_after_progress(self) -> None:
+        class FakeResponse:
+            def __init__(self) -> None:
+                self.reads = 0
+                self.lines = [
+                    b'data: {"choices":[{"text":"partial","finish_reason":null}]}\n',
+                    b"\n",
+                ]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def fileno(self):
+                return 42
+
+            def readline(self):
+                self.reads += 1
+                return self.lines.pop(0)
+
+        old_idle = os.environ.get("DS4_PIPELINE_SSE_IDLE_TIMEOUT_S")
+        old_poll = os.environ.get("DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S")
+        response = FakeResponse()
+        calls = {"select": 0}
+
+        def fake_select(*_args):
+            calls["select"] += 1
+            if calls["select"] <= 2:
+                return ([42], [], [])
+            time.sleep(0.002)
+            return ([], [], [])
+
+        runner = OpenAICompatibleRunner(base_url="http://unused")
+        try:
+            os.environ["DS4_PIPELINE_SSE_IDLE_TIMEOUT_S"] = "0.001"
+            os.environ["DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S"] = "0.001"
+            with patch("ds4_infer.runners.urlrequest.urlopen", return_value=response):
+                with patch("ds4_infer.runners.select.select", side_effect=fake_select):
+                    events = runner._post_sse_json("/v1/completions", {"model": "served"})
+                    self.assertEqual(next(events), {"choices": [{"text": "partial", "finish_reason": None}]})
+                    with self.assertRaisesRegex(RuntimeError, "SSE stream idle timeout"):
+                        next(events)
+        finally:
+            if old_idle is None:
+                os.environ.pop("DS4_PIPELINE_SSE_IDLE_TIMEOUT_S", None)
+            else:
+                os.environ["DS4_PIPELINE_SSE_IDLE_TIMEOUT_S"] = old_idle
+            if old_poll is None:
+                os.environ.pop("DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S", None)
+            else:
+                os.environ["DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S"] = old_poll
+
     def test_sse_reader_can_leave_cancel_socket_timeout_disabled(self) -> None:
         class FakeSock:
             def __init__(self) -> None:
