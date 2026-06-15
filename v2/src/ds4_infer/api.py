@@ -38,7 +38,7 @@ from .resource_governor import GpuResourceGovernor, topology_governor_nodes
 from .runners import FakeRunner, PipelineOpenAIRunner, Runner
 from .queue import InferenceQueue, QueueClaim
 from .schemas import InferenceRequest, REQUEST_FORMAT
-from .topology import SparkTopology
+from .topology import SparkTopology, pipeline_service_client_base_url
 from .worker import BatchWorker
 
 
@@ -1594,9 +1594,10 @@ def _telemetry_service(topology: SparkTopology, report: dict[str, Any]):
 def _pipeline_base_urls(topology: SparkTopology) -> dict[str, str]:
     urls: dict[str, str] = {}
     for service in topology.pipeline_services.values():
-        urls[service.profile_id] = service.api_base_url
-        urls[service.model_id] = service.api_base_url
-        urls[service.service_id] = service.api_base_url
+        base_url = pipeline_service_client_base_url(service)
+        urls[service.profile_id] = base_url
+        urls[service.model_id] = base_url
+        urls[service.service_id] = base_url
     return urls
 
 

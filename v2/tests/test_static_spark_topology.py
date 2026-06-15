@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from ds4_infer.profiles import ProfileRegistry
-from ds4_infer.api import _batch_limits_by_service, _resolve_pipeline_service, _topology_dispatch_cohort_workers, _topology_dispatch_window
+from ds4_infer.api import _batch_limits_by_service, _pipeline_base_urls, _resolve_pipeline_service, _topology_dispatch_cohort_workers, _topology_dispatch_window
 from ds4_infer.deployment import deployment_readiness
 from ds4_infer.dispatcher_resident import active_resident_service_ids, resident_service_plans
 from ds4_infer.pipelines import pipeline_service_batch_limit
@@ -16,7 +16,7 @@ from ds4_infer.runners import FakeRunner
 from ds4_infer.schemas import InferenceRequest
 from ds4_infer.service import run_requests
 from ds4_infer.startup import startup_plan, warm_startup_models
-from ds4_infer.topology import SparkTopology
+from ds4_infer.topology import SparkTopology, pipeline_service_client_base_url
 
 ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "profiles" / "models"
@@ -133,6 +133,32 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(coordinator["auto_kv_batch_policy"], "strict_cache")
         self.assertTrue(coordinator["prefer_cohort_batch"])
         self.assertTrue(coordinator["prestage_auto_kv_prefix"])
+
+    def test_pipeline_client_urls_resolve_loopback_to_entry_node(self) -> None:
+        topology = SparkTopology.load(KIMI_TOPOLOGY)
+        kimi = topology.pipeline_service_by_id("kimi27_pp13")
+        old = os.environ.get("DS4_PIPELINE_RESOLVE_LOOPBACK_ENTRY_NODE")
+        try:
+            os.environ.pop("DS4_PIPELINE_RESOLVE_LOOPBACK_ENTRY_NODE", None)
+            self.assertEqual(kimi.api_base_url, "http://127.0.0.1:8138")
+            self.assertEqual(pipeline_service_client_base_url(kimi), "http://spark0:8138")
+            urls = _pipeline_base_urls(topology)
+            self.assertEqual(urls["kimi27_pp13"], "http://spark0:8138")
+            self.assertEqual(urls[KIMI27_PP13], "http://spark0:8138")
+            self.assertEqual(urls["moonshotai/Kimi-K2.7-Code"], "http://spark0:8138")
+        finally:
+            _restore_env("DS4_PIPELINE_RESOLVE_LOOPBACK_ENTRY_NODE", old)
+
+    def test_pipeline_client_url_loopback_resolution_can_be_disabled(self) -> None:
+        topology = SparkTopology.load(KIMI_TOPOLOGY)
+        kimi = topology.pipeline_service_by_id("kimi27_pp13")
+        old = os.environ.get("DS4_PIPELINE_RESOLVE_LOOPBACK_ENTRY_NODE")
+        try:
+            os.environ["DS4_PIPELINE_RESOLVE_LOOPBACK_ENTRY_NODE"] = "0"
+            self.assertEqual(pipeline_service_client_base_url(kimi), "http://127.0.0.1:8138")
+            self.assertEqual(_pipeline_base_urls(topology)["kimi27_pp13"], "http://127.0.0.1:8138")
+        finally:
+            _restore_env("DS4_PIPELINE_RESOLVE_LOOPBACK_ENTRY_NODE", old)
 
     def test_kimi27_pp13_topology_is_dedicated_qualification_service(self) -> None:
         topology = SparkTopology.load(KIMI27_TOPOLOGY)

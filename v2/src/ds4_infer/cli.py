@@ -11,7 +11,7 @@ from .pipelines import pipeline_service_batch_limit
 from .queue import InferenceQueue
 from .runners import AntirezRunner, AutoRunner, CommandRunner, FakeRunner, HmaPersistentRunner, PipelineOpenAIRunner, SparkHttpRunner, VllmOpenAIRunner
 from .service import load_requests_jsonl
-from .topology import SparkTopology
+from .topology import SparkTopology, pipeline_service_client_base_url
 
 RUNNER_CHOICES = ("fake", "command", "vllm", "hma", "antirez", "auto", "spark", "pipeline")
 
@@ -328,9 +328,10 @@ def _pipeline_base_urls(topology_path: str | None) -> dict[str, str]:
     for pipeline in topology.pipeline_services.values():
         if not pipeline.api_base_url:
             continue
-        urls[pipeline.profile_id] = pipeline.api_base_url
-        urls[pipeline.service_id] = pipeline.api_base_url
-        urls[pipeline.model_id] = pipeline.api_base_url
+        base_url = pipeline_service_client_base_url(pipeline)
+        urls[pipeline.profile_id] = base_url
+        urls[pipeline.service_id] = base_url
+        urls[pipeline.model_id] = base_url
     return urls
 
 
