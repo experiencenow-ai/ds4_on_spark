@@ -41,8 +41,10 @@ def coalesced_failure_should_bisect(error_text: str) -> bool:
     return any(marker in lowered for marker in markers)
 
 
-def mark_coalesced_split(out: dict[str, dict], *, original_batch_size: int) -> None:
+def mark_coalesced_split(out: dict[str, dict], *, original_batch_size: int, reason: str | None = None) -> None:
     for result in out.values():
         transport: dict[str, Any] = result.setdefault("transport", {})
         transport["coalesced_completion_split_retry"] = True
         transport["original_coalesced_batch_size"] = original_batch_size
+        if reason:
+            transport["coalesced_completion_split_retry_reason"] = str(reason)[-4000:]

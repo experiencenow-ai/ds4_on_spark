@@ -587,8 +587,8 @@ def _jit_kv_checks(checks: list[dict[str, Any]], *, services: list[Any], strict:
         checks,
         (not needs_prefetch) or endpoint_enabled,
         "jit_kv_prefetch_gate_enabled",
-        "vLLM DS4 KV prefetch endpoint use is enabled",
-        details={"required": needs_prefetch},
+        "vLLM DS4 KV prefetch endpoint is enabled when required",
+        details={"required": needs_prefetch, "endpoint_enabled": endpoint_enabled},
         severity="error" if strict or needs_prefetch else "warning",
     )
     _check(
@@ -596,7 +596,7 @@ def _jit_kv_checks(checks: list[dict[str, Any]], *, services: list[Any], strict:
         (not needs_prefetch) or bool(token),
         "jit_kv_prefetch_token_present",
         "DS4 has a token for vLLM DS4 KV prefetch",
-        details={"required": needs_prefetch},
+        details={"required": needs_prefetch, "token_present": bool(token)},
         severity="error" if strict or needs_prefetch else "warning",
     )
     block_tokens = max(1, _env_int("DS4_API_JIT_KV_BLOCK_SIZE_TOKENS", 16))

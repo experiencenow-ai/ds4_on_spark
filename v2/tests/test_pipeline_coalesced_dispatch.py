@@ -497,6 +497,7 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
         self.assertEqual([len(call[1]["prompt"]) for call in runner.calls], [2, 2])
         self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_split_retry"] for index in range(4)))
         self.assertTrue(all(results[f"r{index}"]["transport"]["original_coalesced_batch_size"] == 4 for index in range(4)))
+        self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_split_retry_reason"] == "HTTP 413: payload exceeds token budget" for index in range(4)))
 
     def test_pipeline_completion_cohort_uses_concurrent_pp_safe_chunks(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
