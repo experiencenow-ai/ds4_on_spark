@@ -16,6 +16,7 @@
     "status": "profile-pin-only BF16-KV comparison lane; COMPSEC17 and ds4-eval measurement pending; launch requires gpu_memory_utilization=0.35 because 0.25 produced no available KV cache memory"
   },
   "routing": {
+    "chat_template_renderer": "qwen_chatml",
     "chat_template_thinking_key": "enable_thinking",
     "optional_kv_cache_deployments": [
       "profiles/kv_cache/qwen27_bf16_pp8_bf16kv_lmcache_hma.json"

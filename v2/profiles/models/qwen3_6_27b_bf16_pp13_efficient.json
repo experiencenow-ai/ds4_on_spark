@@ -20,6 +20,7 @@
   },
   "routing": {
     "chat_cohort_transport": "parallel_chat_completions",
+    "chat_template_renderer": "qwen_chatml",
     "chat_template_thinking_key": "enable_thinking",
     "default_for": [],
     "optional_kv_cache_deployments": [
