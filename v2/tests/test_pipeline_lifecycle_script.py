@@ -399,6 +399,11 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertIn("urllib.request.urlopen(u,timeout=max(0.2,min(2.0,remaining)))", code)
         self.assertIn("raise SystemExit(1)", code)
 
+    def test_default_probe_timeout_covers_large_pp_services(self) -> None:
+        lifecycle = load_script(SCRIPT)
+
+        self.assertGreaterEqual(lifecycle.DEFAULT_PROBE_TIMEOUT_S, 900.0)
+
     def test_spark_updater_disables_legacy_runtime_config_path(self) -> None:
         script = (ROOT.parent / "scripts" / "ds4_update_spark_nodes.sh").read_text(encoding="utf-8")
 

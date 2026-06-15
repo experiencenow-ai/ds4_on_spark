@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_gemma_pp13.json"
 PROFILES = ROOT / "profiles" / "models"
+DEFAULT_PROBE_TIMEOUT_S = 900.0
 SECRET_ASSIGN_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY)[A-Za-z0-9_]*=)(?:'[^']*'|\"[^\"]*\"|[^ \n]+)")
 
 
@@ -56,7 +57,7 @@ def _args() -> argparse.Namespace:
     parser.add_argument("--launch-root", default="$HOME/.cache/ds4_pipeline_lifecycle")
     parser.add_argument("--log-dir", default="$HOME/ds4_logs/pipeline_lifecycle")
     parser.add_argument("--connect-timeout-s", type=int, default=8)
-    parser.add_argument("--probe-timeout-s", type=float, default=15.0)
+    parser.add_argument("--probe-timeout-s", type=float, default=DEFAULT_PROBE_TIMEOUT_S)
     parser.add_argument("--stagger-s", type=float, default=2.0)
     parser.add_argument("--remote-env", action="append", default=[], metavar="KEY=VALUE", help="export KEY=VALUE before launch scripts on each Spark node")
     parser.add_argument("--prefetch-token-file", default=str(DEFAULT_PREFETCH_TOKEN_FILE), help="Local token file to inject into token-gated vLLM DS4 KV prefetch services; falls back to /tmp on Linux.")
