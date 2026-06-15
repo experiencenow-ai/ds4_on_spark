@@ -84,10 +84,16 @@ class GpuResourceGovernor:
 
     @classmethod
     def from_env(cls, *, nodes: tuple[str, ...], local_node_id: str) -> "GpuResourceGovernor":
+        explicit_local_node = os.environ.get("DS4_API_RESOURCE_LOCAL_NODE_ID")
+        resolved_local_node = (
+            explicit_local_node.strip()
+            if explicit_local_node and explicit_local_node.strip()
+            else socket.gethostname()
+        )
         return cls(
             enabled=_env_bool("DS4_API_RESOURCE_GOVERNOR", False),
             nodes=nodes,
-            local_node_id=os.environ.get("DS4_API_RESOURCE_LOCAL_NODE_ID", local_node_id),
+            local_node_id=resolved_local_node,
             poll_s=_env_float("DS4_API_RESOURCE_POLL_S", 2.0),
             ssh_timeout_s=_env_float("DS4_API_RESOURCE_SSH_TIMEOUT_S", 1.5),
             sample_workers=_env_int("DS4_API_RESOURCE_SAMPLE_WORKERS", min(16, max(1, len(nodes)))),
