@@ -419,7 +419,7 @@ class OpenAICompatibleRunner:
         request_list = list(requests)
         if not request_list or not all(item.chat for item in request_list):
             return None
-        minimum = max(2, int(os.environ.get("DS4_PIPELINE_CHAT_COHORT_MIN", "2") or "2"))
+        minimum = _cancelable_cohort_minimum("DS4_PIPELINE_CHAT_COHORT_MIN", cancel_event=cancel_event)
         if len(request_list) < minimum:
             return None
         max_cohort = _completion_effective_max_cohort(profile)
@@ -570,7 +570,7 @@ class OpenAICompatibleRunner:
         request_list = list(requests)
         if not request_list or not all(item.chat for item in request_list):
             return None
-        minimum = max(2, int(os.environ.get("DS4_PIPELINE_CHAT_COHORT_MIN", "2") or "2"))
+        minimum = _cancelable_cohort_minimum("DS4_PIPELINE_CHAT_COHORT_MIN", cancel_event=cancel_event)
         if len(request_list) < minimum:
             return None
         max_cohort = _completion_effective_max_cohort(profile)
@@ -1394,6 +1394,12 @@ def _completion_effective_max_cohort(profile: ModelProfile) -> int:
     if pp_safe <= 0:
         return max_cohort
     return max(1, min(max_cohort, pp_safe))
+
+
+def _cancelable_cohort_minimum(env_name: str, *, cancel_event: Event | None) -> int:
+    if cancel_event is not None and _env_bool("DS4_PIPELINE_INTERNAL_STREAM_CANCELABLE_SINGLETONS", True):
+        return 1
+    return max(2, int(os.environ.get(env_name, "2") or "2"))
 
 
 def _completion_chunk_concurrency(profile: ModelProfile) -> int:
