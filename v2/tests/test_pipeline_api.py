@@ -847,7 +847,7 @@ class PipelineApiTests(unittest.TestCase):
         calls: list[dict] = []
         original = OpenAICompatibleRunner._post_json
 
-        def fake_post(self, endpoint, payload):
+        def fake_post(self, endpoint, payload, **kwargs):
             calls.append({"endpoint": endpoint, "payload": payload})
             if isinstance(payload.get("prompt"), list):
                 return {
@@ -1046,6 +1046,81 @@ class PipelineApiTests(unittest.TestCase):
                 os.environ.pop("DS4_API_JIT_KV_PREFETCH_API", None)
             else:
                 os.environ["DS4_API_JIT_KV_PREFETCH_API"] = old_prefetch_api
+
+    def test_generated_auto_kv_prefetch_timeout_fails_open(self) -> None:
+        old_prestage_auto = os.environ.get("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX")
+        old_prefetch_api = os.environ.get("DS4_API_JIT_KV_PREFETCH_API")
+        old_timeout = os.environ.get("DS4_API_JIT_KV_PREFETCH_TIMEOUT_S")
+        os.environ["DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX"] = "1"
+        os.environ["DS4_API_JIT_KV_PREFETCH_API"] = "1"
+        os.environ["DS4_API_JIT_KV_PREFETCH_TIMEOUT_S"] = "0.25"
+        try:
+            plan = {
+                "format": "ds4-kv-cache-plan-v1",
+                "backend": "lmcache_hma",
+                "cache_id": "ds4-auto:qwen27:timeout",
+                "load": {"mode": "prefer", "transport": "local_store", "cache_key": "ds4-auto:qwen27:timeout"},
+                "store": {"mode": "write_back", "transport": "local_store", "cache_key": "ds4-auto:qwen27:timeout"},
+                "miss_policy": "compute_and_store",
+                "route_affinity": "preferred",
+                "model_fingerprint": {},
+                "operation": "load_store",
+                "batch_key_hash": "sha256:timeout",
+            }
+            prefix = "auto timeout prefix " * 80
+            requests = [
+                InferenceRequest.from_json(
+                    {
+                        "format": "ds4-inference-request-v1",
+                        "request_id": f"auto-timeout-{idx}",
+                        "capability": "efficient",
+                        "chat": False,
+                        "immediate": False,
+                        "job_class": "analysis",
+                        "max_output_tokens": 8,
+                        "thinking_budget_tokens": 0,
+                        "temperature": 0,
+                        "input": {"prompt": f"{prefix}item {idx}", "shared_prefix": prefix},
+                        "output_contract": {"format": "text"},
+                    }
+                )
+                for idx in range(2)
+            ]
+            payload = {"model": "qwen27-bf16-pp13", "prompt": [request.input["prompt"] for request in requests], "extra_body": {"ds4_kv_cache": dict(plan)}, "kv_transfer_params": {"ds4_kv_cache": dict(plan)}}
+            circuit = JitKvCircuitBreaker(enabled=True, min_samples=1, failure_ratio=1.0, cooldown_s=60)
+            runner = OpenAICompatibleRunner(base_url="http://127.0.0.1:9", timeout_s=3600, jit_kv_circuit=circuit)
+            seen: dict[str, object] = {}
+
+            def timeout_post(endpoint, body, **kwargs):
+                seen["endpoint"] = endpoint
+                seen["timeout_s"] = kwargs.get("timeout_s")
+                raise TimeoutError("prefetch timed out")
+
+            runner._post_json = timeout_post  # type: ignore[method-assign]
+            info = _maybe_prestage_common_kv_prefix(runner, payload, requests)
+
+            self.assertEqual(seen["endpoint"], "/ds4/kv/prefetch")
+            self.assertEqual(seen["timeout_s"], 0.25)
+            self.assertIsNotNone(info)
+            assert info is not None
+            self.assertTrue(info["cold_dispatch"])
+            self.assertEqual(info["strategy"], "jit-kv-prefetch-failed-auto-cold-dispatch")
+            self.assertIn("kv_transfer_params", payload)
+            self.assertIn("extra_body", payload)
+            self.assertTrue(circuit.status()["jit_kv_circuit_open"])
+        finally:
+            if old_prestage_auto is None:
+                os.environ.pop("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX", None)
+            else:
+                os.environ["DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX"] = old_prestage_auto
+            if old_prefetch_api is None:
+                os.environ.pop("DS4_API_JIT_KV_PREFETCH_API", None)
+            else:
+                os.environ["DS4_API_JIT_KV_PREFETCH_API"] = old_prefetch_api
+            if old_timeout is None:
+                os.environ.pop("DS4_API_JIT_KV_PREFETCH_TIMEOUT_S", None)
+            else:
+                os.environ["DS4_API_JIT_KV_PREFETCH_TIMEOUT_S"] = old_timeout
 
 
 if __name__ == "__main__":
