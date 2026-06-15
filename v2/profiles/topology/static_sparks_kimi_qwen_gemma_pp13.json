@@ -461,7 +461,7 @@
       "completion_chunk_concurrency": 4,
       "dispatch_kv_capacity_bytes": 19327352832,
       "auto_kv_batch_policy": "strict_cache",
-      "prefer_cohort_batch": false,
+      "prefer_cohort_batch": true,
       "prestage_auto_kv_prefix": true
     }
   },
