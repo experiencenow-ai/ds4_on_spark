@@ -936,6 +936,11 @@ class OpenAICompatibleRunner:
             last_progress_at = stream_started_at
             while True:
                 if cancel_event is not None and cancel_event.is_set(): break
+                now = time.time()
+                if not saw_event and first_event_timeout_s > 0 and (now - stream_started_at) >= first_event_timeout_s:
+                    raise RuntimeError(f"SSE stream first event timeout after {first_event_timeout_s:.3f}s")
+                if saw_event and idle_timeout_s > 0 and (now - last_progress_at) >= idle_timeout_s:
+                    raise RuntimeError(f"SSE stream idle timeout after {idle_timeout_s:.3f}s")
                 try:
                     if poll_timeout > 0:
                         try:
@@ -943,18 +948,12 @@ class OpenAICompatibleRunner:
                         except (AttributeError, OSError, ValueError):
                             readable = [response]
                         if not readable:
-                            now = time.time()
-                            if not saw_event and first_event_timeout_s > 0 and (now - stream_started_at) >= first_event_timeout_s:
-                                raise RuntimeError(f"SSE stream first event timeout after {first_event_timeout_s:.3f}s")
-                            if saw_event and idle_timeout_s > 0 and (now - last_progress_at) >= idle_timeout_s:
-                                raise RuntimeError(f"SSE stream idle timeout after {idle_timeout_s:.3f}s")
                             continue
                     raw_line = response.readline()
                 except (TimeoutError, socket.timeout, OSError) as exc:
                     if cancel_event is not None and cancel_event.is_set(): break
                     raise RuntimeError(f"SSE stream read failed: {exc}") from exc
                 if not raw_line: break
-                last_progress_at = time.time()
                 line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
                 if line == "":
                     if not event_data:
@@ -965,14 +964,18 @@ class OpenAICompatibleRunner:
                         break
                     if text:
                         saw_event = True
+                        last_progress_at = time.time()
                         yield json.loads(text)
                     continue
-                if line.startswith("data:"): event_data.append(line[5:].strip())
+                if line.startswith("data:"):
+                    event_data.append(line[5:].strip())
+                    last_progress_at = time.time()
             if cancel_event is not None and cancel_event.is_set(): return
             if event_data:
                 text = "\n".join(event_data).strip()
                 if text and text != "[DONE]":
                     saw_event = True
+                    last_progress_at = time.time()
                     yield json.loads(text)
 
 

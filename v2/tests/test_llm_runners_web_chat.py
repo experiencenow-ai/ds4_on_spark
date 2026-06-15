@@ -1312,6 +1312,64 @@ class LlmRunnersWebChatTests(unittest.TestCase):
             else:
                 os.environ["DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S"] = old_poll
 
+    def test_sse_reader_blank_lines_do_not_reset_idle_timeout(self) -> None:
+        class FakeResponse:
+            def __init__(self) -> None:
+                self.reads = 0
+                self.lines = [
+                    b'data: {"choices":[{"text":"partial","finish_reason":null}]}\n',
+                    b"\n",
+                ]
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def fileno(self):
+                return 42
+
+            def readline(self):
+                self.reads += 1
+                if self.lines:
+                    return self.lines.pop(0)
+                return b"\n"
+
+        old_idle = os.environ.get("DS4_PIPELINE_SSE_IDLE_TIMEOUT_S")
+        old_poll = os.environ.get("DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S")
+        response = FakeResponse()
+        calls = {"select": 0}
+
+        def fake_select(*_args):
+            calls["select"] += 1
+            if calls["select"] <= 2:
+                return ([42], [], [])
+            if calls["select"] == 3:
+                time.sleep(0.002)
+                return ([42], [], [])
+            raise AssertionError("blank SSE lines kept the idle stream alive")
+
+        runner = OpenAICompatibleRunner(base_url="http://unused")
+        try:
+            os.environ["DS4_PIPELINE_SSE_IDLE_TIMEOUT_S"] = "0.001"
+            os.environ["DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S"] = "0.001"
+            with patch("ds4_infer.runners.urlrequest.urlopen", return_value=response):
+                with patch("ds4_infer.runners.select.select", side_effect=fake_select):
+                    events = runner._post_sse_json("/v1/completions", {"model": "served"})
+                    self.assertEqual(next(events), {"choices": [{"text": "partial", "finish_reason": None}]})
+                    with self.assertRaisesRegex(RuntimeError, "SSE stream idle timeout"):
+                        next(events)
+        finally:
+            if old_idle is None:
+                os.environ.pop("DS4_PIPELINE_SSE_IDLE_TIMEOUT_S", None)
+            else:
+                os.environ["DS4_PIPELINE_SSE_IDLE_TIMEOUT_S"] = old_idle
+            if old_poll is None:
+                os.environ.pop("DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S", None)
+            else:
+                os.environ["DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S"] = old_poll
+
     def test_sse_reader_first_event_timeout_before_progress(self) -> None:
         class FakeResponse:
             def __enter__(self):
