@@ -9,13 +9,13 @@
     "dtype": "fp8",
     "external_backend": "lmcache_hma",
     "expected_node_fraction": "1/13",
-    "fixed_kv_cache_memory_bytes": 8589934592,
+    "fixed_kv_cache_memory_bytes": 7516192768,
     "sharding": "pipeline_layers"
   },
   "admission": {
     "max_num_batched_tokens": 131072,
     "max_num_seqs": 256,
-    "power_policy": "one active Kimi batch per compute domain; vLLM max_num_seqs moves to 256 after pulled-main DSAPI probes showed 128x512x128 used under 3% of the fixed 8 GiB GPU KV cap with no thermal or power throttle; DSAPI may submit up to queue_depth_target to keep vLLM's own wait queue warm during long tails",
+    "power_policy": "one active Kimi batch per compute domain; vLLM max_num_seqs stays at 256 after pulled-main DSAPI probes showed 128x512x128 used under 3% of the previous fixed 8 GiB GPU KV cap with no thermal or power throttle; the deployed cap is backed off to 7 GiB after 2026-06-15 memory-edge telemetry; DSAPI may submit up to queue_depth_target to keep vLLM's own wait queue warm during long tails",
     "queue_depth_target": 512
   },
   "launch": {
