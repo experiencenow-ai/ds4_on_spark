@@ -80,7 +80,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
 
         self.assertEqual(len(topology.nodes), 13)
         self.assertEqual(capacity[KIMI27_PP13], 128)
-        self.assertEqual(capacity[QWEN_PP13], 16)
+        self.assertEqual(capacity[QWEN_PP13], 32)
         self.assertEqual(capacity[GEMMA26_PP13], 16)
         self.assertEqual(
             topology.routing_policy["active_resident_service_ids"],
@@ -100,7 +100,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(qwen.layer_partition, (5, 5, 5, 5, 5, 5, 5, 4, 5, 5, 5, 5, 5))
         self.assertEqual(gemma.layer_partition, (2, 2, 3, 3, 2, 3, 2, 2, 2, 2, 3, 2, 2))
         self.assertEqual(kimi.scheduler["dispatch_batch_limit"], 128)
-        self.assertEqual(qwen.scheduler["dispatch_batch_limit"], 16)
+        self.assertEqual(qwen.scheduler["dispatch_batch_limit"], 32)
         self.assertEqual(gemma.scheduler["dispatch_batch_limit"], 16)
         self.assertEqual(kimi.scheduler["queue_depth_target"], 256)
         self.assertEqual(qwen.scheduler["queue_depth_target"], 64)
@@ -268,7 +268,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertTrue(payload["ready"])
         self.assertEqual(payload["active_resident_service_ids"], ["kimi27_pp13", "qwen27_bf16_pp13"])
         self.assertEqual(payload["resident_gpu_memory_utilization"], {"kimi27_pp13": 0.254, "qwen27_bf16_pp13": 0.226})
-        self.assertEqual(payload["resident_service_targets"], {"kimi27_pp13": 128, "qwen27_bf16_pp13": 16})
+        self.assertEqual(payload["resident_service_targets"], {"kimi27_pp13": 128, "qwen27_bf16_pp13": 32})
         self.assertEqual(payload["resident_service_queue_depth_targets"], {"kimi27_pp13": 256, "qwen27_bf16_pp13": 64})
         self.assertAlmostEqual(payload["resident_gpu_memory_utilization_sum"], 0.48)
         self.assertEqual(payload["resident_fixed_kv_cache_memory_bytes"], {"kimi27_pp13": 6060769280, "qwen27_bf16_pp13": 7070547968})
