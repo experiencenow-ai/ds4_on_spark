@@ -453,6 +453,15 @@ class InferenceQueue:
                     skipped[state] = skipped.get(state, 0) + 1
                     continue
                 if state == "running":
+                    if force_running:
+                        result = {"format": "ds4-inference-cancelled-v1", "request_id": rid, "status": "cancelled", "reason": reason, "forced": True}
+                        conn.execute("update requests set state='cancelled', result_json=?, error=?, completed_at=?, updated_at=?, lease_id=null, compute_lease_id=null, leased_by=null, lease_expires_at=null, heartbeat_at=null where request_id=?", (json.dumps(result, sort_keys=True), reason, now, now, rid))
+                        self._delete_request_kv(conn, rid)
+                        self._release_unused_compute_lease(conn, row["compute_lease_id"])
+                        self._event(conn, rid, "cancelled", "cancelled", {"batch_id": row["batch_id"], "reason": reason, "forced": True})
+                        self._write_notice(rid, "cancelled", result)
+                        cancelled.append(rid)
+                        continue
                     conn.execute("update requests set cancel_requested=1, updated_at=? where request_id=?", (now, rid))
                     cancel_requested.append(rid)
                     continue

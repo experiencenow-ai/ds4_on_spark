@@ -237,7 +237,7 @@ class BatchWorker:
 
     def _cancel_requested(self, claims: list[QueueClaim]) -> bool:
         for claim in claims:
-            if bool(self.queue.status(request_id=claim.request_id, refresh=False).get("cancel_requested")):
+            if self._claim_cancelled_or_terminal(claim):
                 return True
         return False
 
