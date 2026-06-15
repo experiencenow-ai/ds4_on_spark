@@ -66,6 +66,51 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         self.assertFalse(args.enable_thinking)
         self.assertEqual(args.thinking_budget_tokens, 1024)
         self.assertFalse(args.cancel_on_timeout)
+        self.assertEqual(args.source_aware_policy, "none")
+
+    def test_centaur92_policy_sets_source_aware_shape_and_caps(self) -> None:
+        args = argparse.Namespace(
+            vllm_url="none",
+            served_model="model",
+            max_output_tokens=2048,
+            enable_thinking=False,
+            chat_template_thinking_key="thinking",
+            thinking_budget_tokens=1024,
+            response_style="compsec_strict",
+            source_aware_policy="centaur92",
+            temperature=0.0,
+            model="profile",
+        )
+        mc = {
+            "id": "gpqa-x",
+            "question": "Pick one.",
+            "source": "GPQA Diamond",
+            "domain": "science",
+            "title": "case",
+            "answer": "B",
+            "choices": ["a", "b", "c"],
+        }
+        compsec = {
+            "id": "compsec-x",
+            "question": "Find the bug.",
+            "source": "COMPSEC",
+            "domain": "kernel",
+            "title": "case",
+            "answer": "3",
+            "choices": [],
+        }
+
+        mc_payload = self.runner._eval_request_payload(args, 0, mc)
+        compsec_payload = self.runner._eval_request_payload(args, 1, compsec)
+
+        self.assertEqual(mc_payload["max_output_tokens"], 512)
+        self.assertEqual(mc_payload["input"]["benchmark_shape"]["output_tokens"], 512)
+        self.assertEqual(mc_payload["input"]["benchmark_shape"]["response_style"], "answer_first")
+        self.assertIn("first line", mc_payload["input"]["messages"][1]["content"])
+        self.assertEqual(compsec_payload["max_output_tokens"], 1024)
+        self.assertEqual(compsec_payload["input"]["benchmark_shape"]["output_tokens"], 1024)
+        self.assertEqual(compsec_payload["input"]["benchmark_shape"]["response_style"], "compsec_strict")
+        self.assertIn("exact executable line", compsec_payload["input"]["messages"][1]["content"])
 
     def test_run_can_explicitly_cancel_batch_on_timeout(self) -> None:
         parser = self.runner._build_parser()
