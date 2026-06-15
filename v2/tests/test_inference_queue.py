@@ -255,7 +255,7 @@ class InferenceQueueTests(unittest.TestCase):
             queue.finish_request(request_id="run", lease_id=claims[0].lease_id, state="completed", result=result)
             self.assertEqual(queue.status(request_id="run")["state"], "cancelled")
 
-    def test_force_cancel_job_keeps_running_until_transport_ack(self) -> None:
+    def test_force_cancel_job_terminal_cancels_running_request(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             queue = InferenceQueue(tmp)
             registry = ProfileRegistry.load(PROFILES)
@@ -263,15 +263,17 @@ class InferenceQueueTests(unittest.TestCase):
             queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id="job", limit=2, leased_by="worker", lease_ttl_s=30)
             claims = queue.claim_ready_batch(node_id="spark0", batch_id="job", limit=1, leased_by="worker", lease_ttl_s=30)
             cancelled = queue.cancel(job_id="job", reason="operator force", force_running=True)
-            self.assertEqual(cancelled["cancelled_request_ids"], ["wait"])
-            self.assertEqual(cancelled["running_cancel_requested_ids"], ["run"])
-            self.assertEqual(cancelled["running_cancel_requested_count"], 1)
+            self.assertEqual(cancelled["cancelled_request_ids"], ["run", "wait"])
+            self.assertEqual(cancelled["running_cancel_requested_ids"], [])
+            self.assertEqual(cancelled["running_cancel_requested_count"], 0)
             self.assertEqual(cancelled["skipped_state_counts"], {})
-            self.assertEqual(queue.status(request_id="run")["state"], "running")
-            self.assertTrue(queue.status(request_id="run")["cancel_requested"])
+            self.assertEqual(queue.status(request_id="run")["state"], "cancelled")
+            self.assertFalse(queue.status(request_id="run")["cancel_requested"])
             self.assertEqual(queue.status(request_id="wait")["state"], "cancelled")
+            self.assertEqual(queue.status(job_id="job")["state"], "cancelled")
+            self.assertEqual(queue.status()["active_compute_leases"], [])
             result = make_result(request=claims[0].request, profile_id=QWEN, model_id="m", backend="fake", text="late")
-            self.assertTrue(queue.finish_request(request_id="run", lease_id=claims[0].lease_id, state="completed", result=result))
+            self.assertFalse(queue.finish_request(request_id="run", lease_id=claims[0].lease_id, state="completed", result=result))
             self.assertEqual(queue.status(request_id="run")["state"], "cancelled")
 
     def test_batch_status_can_skip_write_refresh(self) -> None:
