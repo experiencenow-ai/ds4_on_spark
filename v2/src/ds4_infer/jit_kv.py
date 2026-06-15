@@ -190,13 +190,15 @@ def _post_prefetch(runner: Any, payload: dict[str, Any]) -> dict[str, Any] | Non
     try:
         response = runner._post_json("/ds4/kv/prefetch", payload, extra_headers=headers, timeout_s=timeout_s)
     except (TimeoutError, OSError) as exc:
-        _mark_prefetch_endpoint_disabled(runner, payload)
         raise PrefetchEndpointUnavailable(f"DS4 KV prefetch endpoint unavailable for {_prefetch_endpoint_key(runner, payload)}: {exc}") from exc
+    except RuntimeError as exc:
+        if _prefetch_exception_endpoint_unavailable(exc):
+            raise PrefetchEndpointUnavailable(f"DS4 KV prefetch endpoint unavailable for {_prefetch_endpoint_key(runner, payload)}: {exc}") from exc
+        raise
     if _prefetch_response_endpoint_disabled(response):
         _mark_prefetch_endpoint_disabled(runner, payload)
         raise PrefetchEndpointDisabled(json.dumps(response, sort_keys=True)[-4000:])
     if _prefetch_response_endpoint_unavailable(response):
-        _mark_prefetch_endpoint_disabled(runner, payload)
         raise PrefetchEndpointUnavailable(json.dumps(response, sort_keys=True)[-4000:])
     if response.get("error") is not None or str(response.get("status") or "").lower() in {"failed", "error"}:
         raise RuntimeError(json.dumps(response, sort_keys=True)[-4000:])
@@ -233,14 +235,32 @@ def _prefetch_endpoint_disabled_message(runner: Any, payload: dict[str, Any]) ->
 def _prefetch_response_endpoint_disabled(response: dict[str, Any]) -> bool:
     status = str(response.get("status") or "").strip().lower()
     error = str(response.get("error") or response.get("message") or "").strip().lower()
-    return status in {"disabled", "unavailable"} or ("prefetch" in error and "disabled" in error)
+    return status == "disabled" or ("prefetch" in error and "disabled" in error)
 
 
 def _prefetch_response_endpoint_unavailable(response: dict[str, Any]) -> bool:
     status = str(response.get("status") or "").strip().lower()
     error = str(response.get("error") or response.get("message") or "").strip().lower()
     text = f"{status} {error}"
-    return status in {"timeout", "timed_out"} or "timed out" in text or "timeout" in text or "deadline exceeded" in text
+    return (
+        status in {"unavailable", "timeout", "timed_out", "too_many_requests", "rate_limited"}
+        or "timed out" in text
+        or "timeout" in text
+        or "deadline exceeded" in text
+        or "too many" in text
+        or "429" in text
+    )
+
+
+def _prefetch_exception_endpoint_unavailable(exc: Exception) -> bool:
+    text = str(exc).strip().lower()
+    return (
+        "timed out" in text
+        or "timeout" in text
+        or "deadline exceeded" in text
+        or "too many" in text
+        or "429" in text
+    )
 
 
 def _prefetch_timeout_s(runner: Any) -> float:

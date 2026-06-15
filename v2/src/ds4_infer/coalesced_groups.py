@@ -3,7 +3,12 @@ from __future__ import annotations
 import json
 from typing import Any, Callable, TypeVar
 
+from .runner_payloads import AUTO_KV_PRESTAGE_PLAN_KEY
+
 T = TypeVar("T")
+_GROUP_COMPATIBILITY_IGNORED_KEYS = {
+    AUTO_KV_PRESTAGE_PLAN_KEY,
+}
 
 
 def plan_compatible_payload_groups(
@@ -20,6 +25,8 @@ def plan_compatible_payload_groups(
             return None
         comparable = dict(payload)
         comparable.pop("prompt", None)
+        for key in _GROUP_COMPATIBILITY_IGNORED_KEYS:
+            comparable.pop(key, None)
         key = json.dumps(comparable, sort_keys=True, separators=(",", ":"), default=str)
         groups.setdefault(key, []).append(item)
     chunks: list[list[T]] = []
