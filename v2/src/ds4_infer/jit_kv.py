@@ -158,14 +158,29 @@ def disable_strict_kv(payload: dict[str, Any]) -> None:
 def _post_prefetch(runner: Any, payload: dict[str, Any]) -> dict[str, Any] | None:
     token = os.environ.get("DS4_API_JIT_KV_PREFETCH_TOKEN", "")
     use_endpoint = _env_bool("DS4_API_JIT_KV_PREFETCH_API", bool(token))
+    timeout_s = _prefetch_timeout_s(runner)
     if not use_endpoint:
-        runner._post_json(runner.completion_endpoint, payload)
+        runner._post_json(runner.completion_endpoint, payload, timeout_s=timeout_s)
         return None
     headers = {"x-ds4-kv-prefetch-token": token} if token else {}
-    response = runner._post_json("/ds4/kv/prefetch", payload, extra_headers=headers)
+    response = runner._post_json("/ds4/kv/prefetch", payload, extra_headers=headers, timeout_s=timeout_s)
     if str(response.get("status") or "") in {"failed", "error"}:
         raise RuntimeError(json.dumps(response, sort_keys=True)[-4000:])
     return response
+
+
+def _prefetch_timeout_s(runner: Any) -> float:
+    raw = os.environ.get("DS4_API_JIT_KV_PREFETCH_TIMEOUT_S", "")
+    try:
+        value = float(raw) if raw else 10.0
+    except ValueError:
+        value = 10.0
+    runner_timeout = getattr(runner, "timeout_s", None)
+    try:
+        runner_timeout_f = float(runner_timeout)
+    except (TypeError, ValueError):
+        runner_timeout_f = value
+    return max(0.05, min(value, runner_timeout_f))
 
 
 def _prefetch_result(response: dict[str, Any] | None, *, prefix_len: int, max_tokens: int, started: float) -> dict[str, Any]:

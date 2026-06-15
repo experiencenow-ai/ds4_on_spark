@@ -880,7 +880,7 @@ class OpenAICompatibleRunner:
             result["transport"]["coalesced_batch_size"] = coalesced_batch_size
         return result
 
-    def _post_json(self, endpoint: str, payload: dict[str, Any], *, extra_headers: dict[str, str] | None = None) -> dict[str, Any]:
+    def _post_json(self, endpoint: str, payload: dict[str, Any], *, extra_headers: dict[str, str] | None = None, timeout_s: float | None = None) -> dict[str, Any]:
         body = json.dumps(payload).encode("utf-8")
         headers = {"content-type": "application/json"}
         if self.api_key:
@@ -888,7 +888,7 @@ class OpenAICompatibleRunner:
         headers.update(extra_headers or {})
         req = urlrequest.Request(self.base_url + endpoint, data=body, headers=headers, method="POST")
         try:
-            with urlrequest.urlopen(req, timeout=self.timeout_s) as response:
+            with urlrequest.urlopen(req, timeout=self.timeout_s if timeout_s is None else max(0.05, float(timeout_s))) as response:
                 text = response.read().decode("utf-8")
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")[-4000:]
