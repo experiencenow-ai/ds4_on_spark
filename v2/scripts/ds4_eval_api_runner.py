@@ -213,35 +213,36 @@ def build_question_prompt(case: dict, *, response_style: str = "official") -> st
 
 
 def _answer_instruction(response_style: str, answer_type: str) -> str:
+    literal_marker = f"the literal text `Answer:` followed by the {answer_type}"
+    placeholder_warning = "Do not print angle brackets or placeholder text."
     if response_style == "official":
         if answer_type == "letter":
             return (
-                "\nSolve the question. At the end, write exactly one final line in this "
-                "format and do not write anything after it:\n"
-                "Answer: <letter>"
+                "\nSolve the question. At the end, write exactly one final line beginning "
+                f"with {literal_marker}. Do not write anything after that line. "
+                f"{placeholder_warning}"
             )
         return (
-            "\nSolve the problem. At the end, write exactly one final line in this "
-            "format and do not write anything after it:\n"
-            f"Answer: <{answer_type}>"
+            "\nSolve the problem. At the end, write exactly one final line beginning "
+            f"with {literal_marker}. Do not write anything after that line. "
+            f"{placeholder_warning}"
         )
     if response_style == "answer_first":
         return (
-            "\nSolve the problem silently. Put the final answer on the first line in "
-            "exactly this format:\n"
-            f"Answer: <{answer_type}>\n"
+            "\nSolve the problem silently. Put the final answer on the first line, beginning "
+            f"with {literal_marker}. {placeholder_warning}\n"
             "After that line you may add a brief explanation."
         )
     if response_style == "concise":
         return (
             "\nSolve the problem. Keep visible reasoning to at most three short "
-            "sentences. End with exactly one final line and nothing after it:\n"
-            f"Answer: <{answer_type}>"
+            f"sentences. End with exactly one final line beginning with {literal_marker}. "
+            f"Do not write anything after that line. {placeholder_warning}"
         )
     if response_style == "answer_only":
         return (
-            "\nSolve the problem silently. Output exactly one line and nothing else:\n"
-            f"Answer: <{answer_type}>"
+            "\nSolve the problem silently. Output exactly one line beginning with "
+            f"{literal_marker}, and nothing else. {placeholder_warning}"
         )
     if response_style == "compsec_strict":
         if "line number" in answer_type:
@@ -253,13 +254,13 @@ def _answer_instruction(response_style: str, answer_type: str) -> str:
                 "or loop-control lines unless those lines themselves perform the "
                 "invalid operation. If a later use is required to make the bug real, "
                 "include that use. Keep visible reasoning to at most three short "
-                "sentences. End with exactly one final line and nothing after it:\n"
-                f"Answer: <{answer_type}>"
+                f"sentences. End with exactly one final line beginning with {literal_marker}. "
+                f"Do not write anything after that line. {placeholder_warning}"
             )
         return (
             "\nSolve the problem carefully. Keep visible reasoning to at most three "
-            "short sentences. End with exactly one final line and nothing after it:\n"
-            f"Answer: <{answer_type}>"
+            f"short sentences. End with exactly one final line beginning with {literal_marker}. "
+            f"Do not write anything after that line. {placeholder_warning}"
         )
     raise ValueError(f"unsupported response style: {response_style}")
 
