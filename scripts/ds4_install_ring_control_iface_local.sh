@@ -42,9 +42,11 @@ esac
 ip="10.10.100.$((10 + rank))"
 install -d -m 0755 /usr/local/sbin
 tmp_script="$(mktemp)"
+tmp_route_apply="$(mktemp)"
+tmp_route_extend="$(mktemp)"
 tmp_unit="$(mktemp)"
 tmp_override="$(mktemp)"
-trap 'rm -f "$tmp_script" "$tmp_unit" "$tmp_override"' EXIT
+trap 'rm -f "$tmp_script" "$tmp_route_apply" "$tmp_route_extend" "$tmp_unit" "$tmp_override"' EXIT
 override_dir="/etc/systemd/system/ds4-ring-200g.service.d"
 override_file="$override_dir/zz-ds4-ring-control-iface.conf"
 
@@ -60,6 +62,38 @@ ip -4 addr flush dev "\$dev" scope global 2>/dev/null || true
 ip -4 addr replace $ip/32 dev "\$dev"
 sysctl -w "net.ipv4.conf.\$dev.rp_filter=0" >/dev/null 2>&1 || true
 echo "control-iface-ok \$dev $ip/32"
+EOF
+
+cat >"$tmp_route_apply" <<EOF
+#!/bin/sh
+set -eu
+rank=$rank
+src_ip="$ip"
+target_rank=0
+while [ "\$target_rank" -lt 13 ]
+do
+	if [ "\$target_rank" -ne "\$rank" ]
+	then
+		target_ip="10.10.100.\$((10 + target_rank))"
+		if [ "\$target_rank" -gt "\$rank" ]
+		then
+			via="10.10.\$(((rank + 1) * 2)).2"
+			dev="enP2p1s0f1np1"
+		else
+			via="10.10.\$((rank * 2)).1"
+			dev="enP2p1s0f0np0"
+		fi
+		ip route replace "\$target_ip" via "\$via" dev "\$dev" src "\$src_ip"
+	fi
+	target_rank=\$((target_rank + 1))
+done
+echo "ring-routes-ok spark$rank $ip/32"
+EOF
+
+cat >"$tmp_route_extend" <<'EOF'
+#!/bin/sh
+set -eu
+echo "ring-extend13-ok"
 EOF
 
 cat >"$tmp_unit" <<'EOF'
@@ -90,6 +124,8 @@ ExecStart=/bin/sh -c '/usr/local/sbin/ds4-ring-control-iface && if [ -x /usr/loc
 EOF
 
 install -m 0755 "$tmp_script" /usr/local/sbin/ds4-ring-control-iface
+install -m 0755 "$tmp_route_apply" /usr/local/sbin/ds4-ring-200g-apply
+install -m 0755 "$tmp_route_extend" /usr/local/sbin/ds4-ring-200g-extend13
 install -m 0644 "$tmp_unit" /etc/systemd/system/ds4-ring-control-iface.service
 install -d -m 0755 "$override_dir"
 rm -f "$override_dir/control-iface.conf"
