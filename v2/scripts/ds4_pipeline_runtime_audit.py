@@ -456,6 +456,10 @@ def _check_spark_update_scripts(errors: list[str], checks: list[str]) -> None:
         "default_self_update=0": "Spark updater code-only avoids local self-update",
         "default_configure_qwen_runtime=0": "Spark updater code-only avoids Qwen runtime edits",
         "default_install_dsv4_local=0": "Spark updater code-only avoids DSV4 unit installs",
+        "DS4_UPDATE_ACTIVITY_CHECK": "Spark updater has active-work guard knob",
+        "DS4_UPDATE_ALLOW_ACTIVE": "Spark updater has explicit active-work override",
+        "queue_unfinished_by_service": "Spark updater blocks unfinished DSAPI service work",
+        "vllm_running": "Spark updater blocks live vLLM telemetry activity",
     }
     for needle, label in required.items():
         if needle not in update_script:

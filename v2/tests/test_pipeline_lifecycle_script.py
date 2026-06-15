@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -388,6 +389,30 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertNotIn("mapfile", script)
         self.assertIn("node_ssh_target()", script)
         self.assertNotIn("nodes=(spark0 spark1 spark2 spark3 spark4 spark5 spark6 spark7)", script)
+
+    def test_spark_updater_refuses_active_dsapi_work_by_default(self) -> None:
+        script = (ROOT.parent / "scripts" / "ds4_update_spark_nodes.sh").read_text(encoding="utf-8")
+
+        self.assertIn("DS4_UPDATE_ACTIVITY_CHECK", script)
+        self.assertIn("DS4_UPDATE_ALLOW_ACTIVE", script)
+        self.assertIn("check_no_active_work", script)
+        self.assertIn("queue_unfinished_by_service", script)
+        self.assertIn("vllm_running", script)
+        self.assertIn("refusing Spark repo update while active DSAPI/vLLM work is visible", script)
+
+    def test_spark_updater_active_guard_exits_before_ssh(self) -> None:
+        script = ROOT.parent / "scripts" / "ds4_update_spark_nodes.sh"
+        env = dict(os.environ)
+        env.update({
+            "DS4_UPDATE_DSAPI_STATUS_URL": "data:application/json,%7B%22pending%22%3A1%7D",
+            "DS4_UPDATE_TELEMETRY_URL": "",
+        })
+
+        proc = subprocess.run([str(script), "spark0"], env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        self.assertEqual(proc.returncode, 17)
+        self.assertIn("dispatcher pending=1", proc.stderr)
+        self.assertNotIn("probe ssh", proc.stdout + proc.stderr)
 
 
 if __name__ == "__main__":
