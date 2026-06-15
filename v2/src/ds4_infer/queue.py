@@ -442,6 +442,7 @@ class InferenceQueue:
             raise ValueError("exactly one of request_id, batch_id, or job_id is required")
         now = time.time()
         cancelled: list[str] = []
+        cancel_requested: list[str] = []
         skipped: dict[str, int] = {}
         with closing(self._connect()) as conn, conn:
             rows = conn.execute("select * from requests where request_id=?" if request_id else "select * from requests where batch_id=? order by request_id", (request_id or batch_id,)).fetchall()
@@ -453,7 +454,7 @@ class InferenceQueue:
                     continue
                 if state == "running":
                     conn.execute("update requests set cancel_requested=1, updated_at=? where request_id=?", (now, rid))
-                    skipped["running"] = skipped.get("running", 0) + 1
+                    cancel_requested.append(rid)
                     continue
                 result = {"format": "ds4-inference-cancelled-v1", "request_id": rid, "status": "cancelled", "reason": reason}
                 conn.execute("update requests set state='cancelled', result_json=?, error=?, completed_at=?, updated_at=? where request_id=?", (json.dumps(result, sort_keys=True), reason, now, now, rid))
@@ -464,7 +465,19 @@ class InferenceQueue:
                 cancelled.append(rid)
             for bid in {str(row["batch_id"]) for row in rows}:
                 self._refresh_batch(conn, bid)
-        return {"format": QUEUE_FORMAT, "state": "cancelled" if cancelled and not skipped else "partial" if cancelled else "unchanged", "request_id": request_id, "batch_id": batch_id, "job_id": batch_id, "cancelled_count": len(cancelled), "cancelled_request_ids": cancelled, "skipped_state_counts": skipped}
+        state = "cancelled" if cancelled and not skipped and not cancel_requested else "partial" if cancelled or cancel_requested else "unchanged"
+        return {
+            "format": QUEUE_FORMAT,
+            "state": state,
+            "request_id": request_id,
+            "batch_id": batch_id,
+            "job_id": batch_id,
+            "cancelled_count": len(cancelled),
+            "cancelled_request_ids": cancelled,
+            "running_cancel_requested_count": len(cancel_requested),
+            "running_cancel_requested_ids": cancel_requested,
+            "skipped_state_counts": skipped,
+        }
 
     def requeue_expired_leases(self, *, max_attempts: int = 3, now: float | None = None) -> dict[str, Any]:
         now = time.time() if now is None else now
