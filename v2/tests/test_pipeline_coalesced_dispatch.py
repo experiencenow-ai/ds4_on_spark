@@ -1380,6 +1380,53 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 else:
                     os.environ[key] = value
 
+    def test_resource_governor_host_memory_delays_dispatcher_refill(self) -> None:
+        old_values = {
+            "DS4_API_RESOURCE_GOVERNOR": os.environ.get("DS4_API_RESOURCE_GOVERNOR"),
+            "DS4_API_RESOURCE_SAMPLE_JSON": os.environ.get("DS4_API_RESOURCE_SAMPLE_JSON"),
+            "DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT": os.environ.get("DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT"),
+            "DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT": os.environ.get("DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT"),
+            "DS4_API_RESOURCE_THROTTLE_STEP_S": os.environ.get("DS4_API_RESOURCE_THROTTLE_STEP_S"),
+        }
+        os.environ["DS4_API_RESOURCE_GOVERNOR"] = "1"
+        os.environ["DS4_API_RESOURCE_SAMPLE_JSON"] = json.dumps({"nodes": {"spark0": {"temperature_c": 55, "power_w": 95, "utilization_pct": 72, "host_memory_used_mib": 91, "host_memory_total_mib": 100}}})
+        os.environ["DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT"] = "90"
+        os.environ["DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT"] = "95"
+        os.environ["DS4_API_RESOURCE_THROTTLE_STEP_S"] = "0.1"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+                registry = ProfileRegistry.load(PROFILES)
+                topology = SparkTopology.load(TOPOLOGY)
+                requests = [completion_request("mem0")]
+                api.queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id="mem", priority=10)
+                worker = BatchWorker(queue=api.queue, registry=registry, runner=RecordingBatchRunner(), worker_id="test-dispatcher", lease_ttl_s=30, heartbeat_interval_s=1.0)
+                pending = {}
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    submitted = api._dispatcher_refill(
+                        worker=worker,
+                        executor=executor,
+                        pending=pending,
+                        entry_node_id="spark0",
+                        node_profile_ids=tuple(topology.pipeline_profiles),
+                        batch_limits_by_service={"qwen27_bf16_pp8": 64, "dsv4_flash_pp8": 64},
+                        kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                    )
+                status = api.dispatcher_status()
+                self.assertEqual(submitted, 0)
+                self.assertEqual(len(pending), 0)
+                self.assertTrue(status["resource_governor"]["throttle_active"])
+                self.assertIn("host_memory_soft", status["resource_governor"]["throttle_reasons"])
+                self.assertEqual(status["resource_governor"]["max_host_memory_node"], "spark0")
+                self.assertEqual(status["resource_governor"]["max_host_memory_used_pct"], 91.0)
+                self.assertEqual(status["resource_governor_throttle_count"], 1)
+        finally:
+            for key, value in old_values.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
     def test_resource_governor_does_not_sample_when_queue_is_idle(self) -> None:
         old_values = {
             "DS4_API_RESOURCE_GOVERNOR": os.environ.get("DS4_API_RESOURCE_GOVERNOR"),

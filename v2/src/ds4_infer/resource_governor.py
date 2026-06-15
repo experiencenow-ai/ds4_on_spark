@@ -20,6 +20,9 @@ class GpuResourceReading:
     utilization_pct: float | None = None
     memory_used_mib: float | None = None
     memory_total_mib: float | None = None
+    host_memory_used_mib: float | None = None
+    host_memory_total_mib: float | None = None
+    host_memory_used_pct: float | None = None
     error: str | None = None
 
     def to_public_dict(self) -> dict[str, Any]:
@@ -31,6 +34,9 @@ class GpuResourceReading:
             "utilization_pct": self.utilization_pct,
             "memory_used_mib": self.memory_used_mib,
             "memory_total_mib": self.memory_total_mib,
+            "host_memory_used_mib": self.host_memory_used_mib,
+            "host_memory_total_mib": self.host_memory_total_mib,
+            "host_memory_used_pct": self.host_memory_used_pct,
             "error": self.error,
         }
 
@@ -58,6 +64,8 @@ class GpuResourceGovernor:
         power_hard_w: float,
         total_power_soft_w: float,
         total_power_hard_w: float,
+        host_memory_soft_pct: float,
+        host_memory_hard_pct: float,
         throttle_step_s: float,
         throttle_max_s: float,
         sample_json: str = "",
@@ -74,6 +82,8 @@ class GpuResourceGovernor:
         self.power_hard_w = float(power_hard_w)
         self.total_power_soft_w = float(total_power_soft_w)
         self.total_power_hard_w = float(total_power_hard_w)
+        self.host_memory_soft_pct = float(host_memory_soft_pct)
+        self.host_memory_hard_pct = float(host_memory_hard_pct)
         self.throttle_step_s = max(0.0, float(throttle_step_s))
         self.throttle_max_s = max(0.0, float(throttle_max_s))
         self.sample_json = sample_json
@@ -103,6 +113,8 @@ class GpuResourceGovernor:
             power_hard_w=_env_float("DS4_API_RESOURCE_POWER_HARD_W", 140.0),
             total_power_soft_w=_env_float("DS4_API_RESOURCE_TOTAL_POWER_SOFT_W", 1350.0),
             total_power_hard_w=_env_float("DS4_API_RESOURCE_TOTAL_POWER_HARD_W", 1550.0),
+            host_memory_soft_pct=_env_float("DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT", 90.0),
+            host_memory_hard_pct=_env_float("DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT", 94.0),
             throttle_step_s=_env_float("DS4_API_RESOURCE_THROTTLE_STEP_S", 0.5),
             throttle_max_s=_env_float("DS4_API_RESOURCE_THROTTLE_MAX_S", 4.0),
             sample_json=os.environ.get("DS4_API_RESOURCE_SAMPLE_JSON", ""),
@@ -189,6 +201,7 @@ class GpuResourceGovernor:
         if not rows:
             return GpuResourceReading(node_id=node_id, ok=False, error="empty nvidia-smi output")
         parsed = [_parse_nvidia_smi_row(row) for row in rows]
+        host_memory = self._sample_host_memory(node_id)
         return GpuResourceReading(
             node_id=node_id,
             ok=True,
@@ -197,7 +210,22 @@ class GpuResourceGovernor:
             utilization_pct=max(_values(parsed, "utilization_pct"), default=None),
             memory_used_mib=max(_values(parsed, "memory_used_mib"), default=None),
             memory_total_mib=max(_values(parsed, "memory_total_mib"), default=None),
+            host_memory_used_mib=host_memory.get("host_memory_used_mib"),
+            host_memory_total_mib=host_memory.get("host_memory_total_mib"),
+            host_memory_used_pct=host_memory.get("host_memory_used_pct"),
         )
+
+    def _sample_host_memory(self, node_id: str) -> dict[str, float | None]:
+        argv = ["free", "-m"]
+        if node_id != self.local_node_id:
+            argv = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=2", node_id] + argv
+        try:
+            proc = subprocess.run(argv, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=self.ssh_timeout_s, check=False)
+        except Exception:
+            return {}
+        if proc.returncode != 0:
+            return {}
+        return _parse_free_m(proc.stdout)
 
     def _status_from_readings(self, readings: list[GpuResourceReading], *, sampled_at: float) -> dict[str, Any]:
         ok = [reading for reading in readings if reading.ok]
@@ -205,8 +233,10 @@ class GpuResourceGovernor:
         temps = [reading.temperature_c for reading in ok if reading.temperature_c is not None]
         powers = [reading.power_w for reading in ok if reading.power_w is not None]
         utils = [reading.utilization_pct for reading in ok if reading.utilization_pct is not None]
+        host_mem_pcts = [reading.host_memory_used_pct for reading in ok if reading.host_memory_used_pct is not None]
         max_temp = max(temps, default=None)
         max_power = max(powers, default=None)
+        max_host_mem_pct = max(host_mem_pcts, default=None)
         total_power = sum(powers)
         reasons: list[str] = []
         if max_temp is not None and self.temp_hard_c > 0 and max_temp >= self.temp_hard_c:
@@ -221,8 +251,13 @@ class GpuResourceGovernor:
             reasons.append("total_power_hard")
         elif powers and self.total_power_soft_w > 0 and total_power >= self.total_power_soft_w:
             reasons.append("total_power_soft")
+        if max_host_mem_pct is not None and self.host_memory_hard_pct > 0 and max_host_mem_pct >= self.host_memory_hard_pct:
+            reasons.append("host_memory_hard")
+        elif max_host_mem_pct is not None and self.host_memory_soft_pct > 0 and max_host_mem_pct >= self.host_memory_soft_pct:
+            reasons.append("host_memory_soft")
         hottest = max((reading for reading in ok if reading.temperature_c is not None), key=lambda item: float(item.temperature_c), default=None)
         power_peak = max((reading for reading in ok if reading.power_w is not None), key=lambda item: float(item.power_w), default=None)
+        host_mem_peak = max((reading for reading in ok if reading.host_memory_used_pct is not None), key=lambda item: float(item.host_memory_used_pct), default=None)
         return {
             "enabled": self.enabled,
             "node_count": len(self.nodes),
@@ -235,6 +270,8 @@ class GpuResourceGovernor:
             "max_power_node": power_peak.node_id if power_peak is not None else None,
             "total_power_w": round(total_power, 3) if powers else None,
             "max_utilization_pct": max(utils, default=None),
+            "max_host_memory_used_pct": round(max_host_mem_pct, 3) if max_host_mem_pct is not None else None,
+            "max_host_memory_node": host_mem_peak.node_id if host_mem_peak is not None else None,
             "thresholds": {
                 "temp_soft_c": self.temp_soft_c,
                 "temp_hard_c": self.temp_hard_c,
@@ -242,6 +279,8 @@ class GpuResourceGovernor:
                 "power_hard_w": self.power_hard_w,
                 "total_power_soft_w": self.total_power_soft_w,
                 "total_power_hard_w": self.total_power_hard_w,
+                "host_memory_soft_pct": self.host_memory_soft_pct,
+                "host_memory_hard_pct": self.host_memory_hard_pct,
             },
             "throttle_reasons": reasons,
             "readings": [reading.to_public_dict() for reading in readings],
@@ -270,6 +309,8 @@ class GpuResourceGovernor:
             "max_power_node": None,
             "total_power_w": None,
             "max_utilization_pct": None,
+            "max_host_memory_used_pct": None,
+            "max_host_memory_node": None,
             "throttle_active": False,
             "throttle_sleep_s": 0.0,
             "throttle_sleep_remaining_s": 0.0,
@@ -314,6 +355,11 @@ def _readings_from_json(raw: str, nodes: tuple[str, ...]) -> list[GpuResourceRea
             continue
         if not isinstance(item, dict):
             continue
+        host_used = _optional_float(item.get("host_memory_used_mib", item.get("host_mem_used_mib")))
+        host_total = _optional_float(item.get("host_memory_total_mib", item.get("host_mem_total_mib")))
+        host_pct = _optional_float(item.get("host_memory_used_pct", item.get("host_mem_pct", item.get("mem_pct"))))
+        if host_pct is None:
+            host_pct = _host_memory_pct(host_used, host_total)
         readings.append(
             GpuResourceReading(
                 node_id=node,
@@ -323,10 +369,33 @@ def _readings_from_json(raw: str, nodes: tuple[str, ...]) -> list[GpuResourceRea
                 utilization_pct=_optional_float(item.get("utilization_pct", item.get("gpu_util"))),
                 memory_used_mib=_optional_float(item.get("memory_used_mib")),
                 memory_total_mib=_optional_float(item.get("memory_total_mib")),
+                host_memory_used_mib=host_used,
+                host_memory_total_mib=host_total,
+                host_memory_used_pct=host_pct,
                 error=str(item.get("error")) if item.get("error") is not None else None,
             )
         )
     return readings
+
+
+def _parse_free_m(text: str) -> dict[str, float | None]:
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and parts[0] == "Mem:":
+            total = _optional_float(parts[1])
+            used = _optional_float(parts[2])
+            return {
+                "host_memory_used_mib": used,
+                "host_memory_total_mib": total,
+                "host_memory_used_pct": _host_memory_pct(used, total),
+            }
+    return {}
+
+
+def _host_memory_pct(used: float | None, total: float | None) -> float | None:
+    if used is None or total is None or total <= 0:
+        return None
+    return (float(used) / float(total)) * 100.0
 
 
 def _parse_nvidia_smi_row(row: str) -> dict[str, float | None]:
