@@ -21,6 +21,7 @@ from .dispatcher_resident import PendingDispatcherCohort, ResidentServicePlan
 from .dispatcher_resident import active_resident_service_ids as _active_resident_service_ids
 from .dispatcher_resident import pending_claim_count as _pending_claim_count
 from .dispatcher_resident import pending_claim_count_by_service as _pending_claim_count_by_service
+from .dispatcher_resident import pending_cohort_count_by_compute_domain as _pending_cohort_count_by_compute_domain
 from .dispatcher_resident import pending_cohort_details as _pending_cohort_details
 from .dispatcher_resident import pending_claims as _pending_claims
 from .dispatcher_resident import pending_cohort as _pending_cohort
@@ -489,6 +490,8 @@ class CoordinatorApi:
         state.setdefault("resident_service_targets", {sid: plan.target_active for sid, plan in service_plans.items()})
         state.setdefault("resident_service_queue_depth_targets", {sid: plan.queue_depth_target for sid, plan in service_plans.items()})
         state.setdefault("resident_service_low_watermarks", {sid: plan.low_watermark for sid, plan in service_plans.items()})
+        state.setdefault("resident_compute_domain_active_batches", {})
+        state.setdefault("resident_compute_domain_batch_limits", _resident_compute_domain_batch_limits(service_plans))
         state.setdefault("resident_service_admission_modes", {sid: plan.admission_mode for sid, plan in service_plans.items()})
 
     def _dispatcher_is_active(self) -> bool:
@@ -506,6 +509,8 @@ class CoordinatorApi:
             "pending_cohorts": 0,
             "pending_by_service": {},
             "pending_cohort_details": [],
+            "resident_compute_domain_active_batches": {},
+            "resident_compute_domain_batch_limits": {},
             "started_at": None,
             "last_work_at": None,
             "last_error": None,
@@ -768,12 +773,15 @@ class CoordinatorApi:
             return 0
         self.queue.requeue_expired_leases()
         active_by_service = _pending_claim_count_by_service(pending)
+        active_batches_by_domain = _pending_cohort_count_by_compute_domain(pending)
         submitted = 0
         made_ready = 0
         attempted = 0
         for plan in _resident_service_order(service_plans, active_by_service):
             if global_available <= 0 or submitted >= self.dispatcher_refill_batch:
                 break
+            if _resident_compute_domain_limit_reached(plan, active_batches_by_domain):
+                continue
             limit = self._resident_refill_limit(plan, active_by_service, submitted, global_available)
             if limit <= 0:
                 continue
@@ -799,6 +807,8 @@ class CoordinatorApi:
             submitted += claimed
             global_available -= claimed
             active_by_service[plan.service_id] = int(active_by_service.get(plan.service_id, 0)) + claimed
+            if plan.compute_domain:
+                active_batches_by_domain[plan.compute_domain] = int(active_batches_by_domain.get(plan.compute_domain, 0)) + 1
         self._dispatcher_note_resident(pending, service_plans, attempted=attempted, made_ready=made_ready)
         return submitted
 
@@ -862,6 +872,8 @@ class CoordinatorApi:
     def _dispatcher_note_resident(self, pending: dict[Any, Any], service_plans: dict[str, ResidentServicePlan], *, attempted: int, made_ready: int) -> None:
         self._dispatcher_note(
             pending_by_service=_pending_claim_count_by_service(pending),
+            resident_compute_domain_active_batches=_pending_cohort_count_by_compute_domain(pending),
+            resident_compute_domain_batch_limits=_resident_compute_domain_batch_limits(service_plans),
             pending_cohort_details=_pending_cohort_details(pending),
             resident_service_targets={sid: plan.target_active for sid, plan in service_plans.items()},
             resident_service_queue_depth_targets={sid: plan.queue_depth_target for sid, plan in service_plans.items()},
@@ -1861,6 +1873,28 @@ def _resident_parallel_cohorts_enabled(plan: ResidentServicePlan) -> bool:
     if not service_ids:
         return False
     return "*" in service_ids or str(plan.service_id) in service_ids or str(plan.profile_id) in service_ids
+
+
+def _resident_compute_domain_limit_reached(plan: ResidentServicePlan, active_batches_by_domain: dict[str, int]) -> bool:
+    limit = int(getattr(plan, "max_running_batches_per_compute_domain", 0) or 0)
+    if limit <= 0:
+        return False
+    domain = str(plan.compute_domain or "")
+    if not domain:
+        return False
+    return int(active_batches_by_domain.get(domain, 0)) >= limit
+
+
+def _resident_compute_domain_batch_limits(service_plans: dict[str, ResidentServicePlan]) -> dict[str, int]:
+    limits: dict[str, int] = {}
+    for plan in service_plans.values():
+        domain = str(plan.compute_domain or "")
+        limit = int(getattr(plan, "max_running_batches_per_compute_domain", 0) or 0)
+        if not domain or limit <= 0:
+            continue
+        existing = limits.get(domain)
+        limits[domain] = limit if existing is None else min(existing, limit)
+    return limits
 
 
 def _dispatcher_batch_ineligible_reason(worker: BatchWorker, claims: list[QueueClaim]) -> str:

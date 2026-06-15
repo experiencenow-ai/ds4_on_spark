@@ -24,25 +24,26 @@ PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 
 
-def completion_request(request_id: str, prompt: str = "prompt", *, max_output_tokens: int = 32, input_extra: dict | None = None) -> InferenceRequest:
+def completion_request(request_id: str, prompt: str = "prompt", *, max_output_tokens: int = 32, input_extra: dict | None = None, profile_id: str | None = None) -> InferenceRequest:
     input_payload = {"prompt": prompt, "openai": {"ignore_eos": True, "min_tokens": max_output_tokens}}
     if input_extra:
         input_payload.update(input_extra)
-    return InferenceRequest.from_json(
-        {
-            "format": "ds4-inference-request-v1",
-            "request_id": request_id,
-            "capability": "efficient",
-            "chat": False,
-            "immediate": False,
-            "job_class": "summary",
-            "max_output_tokens": max_output_tokens,
-            "thinking_budget_tokens": 0,
-            "temperature": 0.0,
-            "input": input_payload,
-            "output_contract": {"format": "text"},
-        }
-    )
+    payload = {
+        "format": "ds4-inference-request-v1",
+        "request_id": request_id,
+        "capability": "efficient",
+        "chat": False,
+        "immediate": False,
+        "job_class": "summary",
+        "max_output_tokens": max_output_tokens,
+        "thinking_budget_tokens": 0,
+        "temperature": 0.0,
+        "input": input_payload,
+        "output_contract": {"format": "text"},
+    }
+    if profile_id:
+        payload["model_pin"] = {"profile_id": profile_id}
+    return InferenceRequest.from_json(payload)
 
 
 def dsv4_chat_request(request_id: str) -> InferenceRequest:
@@ -937,6 +938,68 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 os.environ.pop("DS4_API_RESIDENT_ALLOW_PARALLEL_COHORTS", None)
             else:
                 os.environ["DS4_API_RESIDENT_ALLOW_PARALLEL_COHORTS"] = old
+
+    def test_resident_multimodel_honors_compute_domain_batch_cap(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            registry = ProfileRegistry.load(PROFILES)
+            topology = SparkTopology.load(TOPOLOGY)
+            plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+            service_plans = {
+                "qwen27_bf16_pp8": plans["qwen27_bf16_pp8"],
+                "gemma4_26b_a4b_pp8": plans["gemma4_26b_a4b_pp8"],
+            }
+            for plan in service_plans.values():
+                plan.admission_mode = "resident_multimodel_rolling_refill"
+                plan.target_active = 1
+                plan.queue_depth_target = 4
+                plan.low_watermark = 1
+                plan.max_cohort_size = 1
+                plan.max_running_batches_per_compute_domain = 1
+                plan.batch_linger_s = 0.0
+            api.queue.submit_requests(
+                requests=[
+                    completion_request("domain-qwen", "prompt-qwen", profile_id="qwen3_6_27b_bf16_pp8_efficient_v1"),
+                    completion_request("domain-gemma", "prompt-gemma", profile_id="gemma4_26b_a4b_it_pp8_peer_v1"),
+                ],
+                registry=registry,
+                topology=topology,
+                batch_id="domain-cap",
+                priority=10,
+            )
+            runner = BlockingRefillIncrementalRunner()
+            worker = BatchWorker(queue=api.queue, registry=registry, runner=runner, worker_id="test-dispatcher", lease_ttl_s=30, heartbeat_interval_s=0.01)
+            pending = {}
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                submitted = api._dispatcher_refill_resident_multimodel(
+                    worker=worker,
+                    executor=executor,
+                    pending=pending,
+                    entry_node_id="spark0",
+                    node_profile_ids=tuple(topology.pipeline_profiles),
+                    batch_limits_by_service={"qwen27_bf16_pp8": 1, "gemma4_26b_a4b_pp8": 1},
+                    kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                    service_plans=service_plans,
+                )
+                self.assertEqual(submitted, 1)
+                self.assertEqual(len(pending), 1)
+                self.assertTrue(runner.wait_started(1))
+                submitted = api._dispatcher_refill_resident_multimodel(
+                    worker=worker,
+                    executor=executor,
+                    pending=pending,
+                    entry_node_id="spark0",
+                    node_profile_ids=tuple(topology.pipeline_profiles),
+                    batch_limits_by_service={"qwen27_bf16_pp8": 1, "gemma4_26b_a4b_pp8": 1},
+                    kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                    service_plans=service_plans,
+                )
+                self.assertEqual(submitted, 0)
+                self.assertEqual(api.dispatcher_status()["resident_compute_domain_active_batches"], {"spark-fleet-0": 1})
+                self.assertEqual(api.dispatcher_status()["resident_compute_domain_batch_limits"], {"spark-fleet-0": 1})
+                api.queue.cancel(batch_id="domain-cap", reason="test shutdown", force_running=True)
+                completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
+            self.assertEqual((completed, failed, retried), (0, 0, 0))
 
     def test_resident_rolling_admission_can_force_refill_stream_for_service(self) -> None:
         old = os.environ.get("DS4_API_RESIDENT_FORCE_REFILL_STREAM_SERVICE_IDS")

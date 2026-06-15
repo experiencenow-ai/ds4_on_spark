@@ -89,6 +89,7 @@ class ResidentServicePlan:
     low_watermark: int
     max_cohort_size: int
     batch_linger_s: float
+    max_running_batches_per_compute_domain: int = 0
     ready_shape_bucketing: bool = False
     ready_shape_lookahead: int = 1
     weight: float = 1.0
@@ -189,6 +190,19 @@ def pending_claim_count_by_service(pending: dict[Any, Any]) -> dict[str, int]:
     return counts
 
 
+def pending_cohort_count_by_compute_domain(pending: dict[Any, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in pending.values():
+        cohort = pending_cohort(value)
+        if cohort.active_count() <= 0:
+            continue
+        domain = str(cohort.compute_domain or "")
+        if not domain:
+            continue
+        counts[domain] = counts.get(domain, 0) + 1
+    return counts
+
+
 def pending_cohort_details(pending: dict[Any, Any]) -> list[dict[str, Any]]:
     return [pending_cohort(value).status() for value in pending.values()]
 
@@ -213,6 +227,7 @@ def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weigh
         low = max(1, int(queue_target * 0.75))
     max_cohort_default = _scheduler_int(service, ("dispatch_batch_limit", "max_dispatch_cohort", "queue_depth_target", "vllm_queue_depth_target"), pipeline_service_batch_limit(service))
     max_cohort = max(1, int(cohort_sizes.get(service_id, cohort_sizes.get(service.profile_id, max_cohort_default))))
+    max_domain_batches = max(0, _scheduler_int(service, ("max_running_batches_per_compute_domain",), 0))
     service_linger = float(linger.get(service_id, linger.get(service.profile_id, _scheduler_linger(service, default_batch_linger_s))))
     admission_mode = str(admission_modes.get(service_id, admission_modes.get(service.profile_id, default_admission_mode or service.scheduler.get("admission_mode") or "resident_multimodel_weighted_deficit")))
     shape_bucketing = bool(service.scheduler.get("ready_shape_bucketing", False))
@@ -225,6 +240,7 @@ def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weigh
         queue_depth_target=queue_target,
         low_watermark=min(queue_target, max(1, low)),
         max_cohort_size=max_cohort,
+        max_running_batches_per_compute_domain=max_domain_batches,
         batch_linger_s=max(0.0, service_linger),
         ready_shape_bucketing=shape_bucketing,
         ready_shape_lookahead=shape_lookahead,
