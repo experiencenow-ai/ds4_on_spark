@@ -491,7 +491,7 @@ class CoordinatorApi:
         state.setdefault("resident_service_queue_depth_targets", {sid: plan.queue_depth_target for sid, plan in service_plans.items()})
         state.setdefault("resident_service_low_watermarks", {sid: plan.low_watermark for sid, plan in service_plans.items()})
         state.setdefault("resident_compute_domain_active_batches", {})
-        state.setdefault("resident_compute_domain_batch_limits", _resident_compute_domain_batch_limits(service_plans))
+        state["resident_compute_domain_batch_limits"] = _resident_compute_domain_batch_limits(service_plans)
         state.setdefault("resident_service_admission_modes", {sid: plan.admission_mode for sid, plan in service_plans.items()})
 
     def _dispatcher_is_active(self) -> bool:
