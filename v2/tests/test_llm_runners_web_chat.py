@@ -621,6 +621,45 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertTrue(results["r"]["transport"]["parallel_completion_prompt_streaming"])
         self.assertTrue(results["r"]["transport"]["answer_marker_early_stop"])
 
+    def test_cancelable_singleton_chat_completion_prompt_streams_and_stops_on_answer_marker(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "rendered-completion-parallel",
+                "model_id": "served-model",
+                "backend": "vllm_pipeline",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["tool_chat"],
+                "supports_chat": True,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {
+                    "chat_cohort_transport": "parallel_completion_prompts",
+                    "parallel_chat_concurrency": 1,
+                    "served_model_name": "served-model",
+                },
+            }
+        )
+        raw = make_request(chat=True).raw
+        raw["input"]["rendered_prompt"] = "rendered chat one"
+        raw["output_contract"]["stop_on_answer_marker"] = True
+        seen = []
+        runner = AnswerMarkerStreamingCompletionPromptPipelineRunner()
+
+        results = runner.run_many_on_node_incremental(
+            [InferenceRequest.from_json(raw)],
+            profile,
+            None,
+            concurrency=1,
+            on_result=lambda request_id, result: seen.append((request_id, result["output"]["text"])),
+            cancel_event=threading.Event(),
+        )
+
+        self.assertEqual(seen, [("r", "Reason.\nAnswer: 18")])
+        self.assertEqual(runner.backend.tail_events_read, 0)
+        self.assertEqual(len(runner.backend.calls), 1)
+        self.assertTrue(results["r"]["transport"]["parallel_completion_prompt_streaming"])
+        self.assertTrue(results["r"]["transport"]["answer_marker_early_stop"])
+
     def test_kimi_profiles_use_rendered_completion_prompt_transport(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         for profile_id in ("kimi26_pp13_smart_v1", "kimi27_code_pp13_smart_v1"):
