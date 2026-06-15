@@ -998,8 +998,73 @@ class PipelineApiTests(unittest.TestCase):
             self.assertEqual(calls[0]["payload"]["prompt"], prefix)
             plan = calls[0]["payload"]["extra_body"]["ds4_kv_cache"]
             self.assertTrue(plan["cache_id"].startswith("ds4-auto:prefix:kimi27_pp13:"))
+            self.assertTrue(info["adopted_for_batch"])
+            self.assertEqual(payload["extra_body"]["ds4_kv_cache"], plan)
+            self.assertEqual(payload["kv_transfer_params"]["ds4_kv_cache"], plan)
+        finally:
+            for name, old in (
+                ("DS4_PIPELINE_AUTO_KV_CACHE", old_auto),
+                ("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS", old_services),
+                ("DS4_PIPELINE_AUTO_KV_BATCH_POLICY", old_policy),
+                ("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX", old_prestage),
+                ("DS4_API_JIT_KV_PREFETCH_API", old_prefetch_api),
+            ):
+                if old is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = old
+
+    def test_generated_auto_kv_prefetch_failure_does_not_attach_hidden_prestage_plan(self) -> None:
+        old_auto = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE")
+        old_services = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS")
+        old_policy = os.environ.get("DS4_PIPELINE_AUTO_KV_BATCH_POLICY")
+        old_prestage = os.environ.get("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX")
+        old_prefetch_api = os.environ.get("DS4_API_JIT_KV_PREFETCH_API")
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = "1"
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = "kimi27_pp13"
+        os.environ["DS4_PIPELINE_AUTO_KV_BATCH_POLICY"] = "prefer_batch"
+        os.environ["DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX"] = "1"
+        os.environ["DS4_API_JIT_KV_PREFETCH_API"] = "1"
+        try:
+            registry = ProfileRegistry.load(PROFILES)
+            profile = registry.get("kimi27_code_pp13_smart_v1")
+            prefix = "failed automatic prestage prefix " * 40
+            requests = [
+                InferenceRequest.from_json(
+                    {
+                        "format": "ds4-inference-request-v1",
+                        "request_id": f"auto-fail-hidden-{idx}",
+                        "capability": "smart",
+                        "chat": False,
+                        "immediate": False,
+                        "job_class": "analysis",
+                        "max_output_tokens": 8,
+                        "thinking_budget_tokens": 0,
+                        "temperature": 0,
+                        "input": {"prompt": f"{prefix}tail {idx}", "shared_prefix": prefix},
+                        "output_contract": {"format": "text"},
+                    }
+                )
+                for idx in range(2)
+            ]
+            payload = _coalesced_completion_payload(requests, profile, {})
+            self.assertIsNotNone(payload)
+            assert payload is not None
+            runner = OpenAICompatibleRunner(base_url="http://127.0.0.1:9")
+
+            def fail_post(endpoint, body, **kwargs):
+                raise TimeoutError("prefetch endpoint timed out")
+
+            runner._post_json = fail_post  # type: ignore[method-assign]
+            info = _maybe_prestage_common_kv_prefix(runner, payload, requests)
+
+            self.assertIsNotNone(info)
+            assert info is not None
+            self.assertTrue(info["cold_dispatch"])
+            self.assertNotIn("adopted_for_batch", info)
             self.assertNotIn("kv_transfer_params", payload)
             self.assertNotIn("ds4_kv_cache", dict(payload.get("extra_body") or {}))
+            self.assertNotIn(AUTO_KV_PRESTAGE_PLAN_KEY, payload)
         finally:
             for name, old in (
                 ("DS4_PIPELINE_AUTO_KV_CACHE", old_auto),
