@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import json
 import os
+import socket
 import tempfile
 import threading
 import time
@@ -13,6 +14,7 @@ from ds4_infer.api import CoordinatorApi, DispatcherRuntime
 from ds4_infer.dispatcher_resident import PendingDispatcherCohort, ResidentServicePlan, resident_service_plans
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.queue import QueueClaim
+from ds4_infer.resource_governor import GpuResourceGovernor
 from ds4_infer.runners import OpenAICompatibleRunner
 from ds4_infer.schemas import InferenceRequest, make_result
 from ds4_infer.topology import SparkTopology
@@ -1251,6 +1253,21 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual(service_counts["running"], 1)
             self.assertEqual(status["queue_unfinished_by_service"]["dsv4_flash_pp8"], 1)
             self.assertEqual(status["queue_running_by_service"]["dsv4_flash_pp8"], 1)
+
+    def test_resource_governor_defaults_to_host_for_local_sampling(self) -> None:
+        old_value = os.environ.get("DS4_API_RESOURCE_LOCAL_NODE_ID")
+        os.environ.pop("DS4_API_RESOURCE_LOCAL_NODE_ID", None)
+        try:
+            governor = GpuResourceGovernor.from_env(nodes=("spark0",), local_node_id="spark0")
+            self.assertEqual(governor.local_node_id, socket.gethostname())
+            os.environ["DS4_API_RESOURCE_LOCAL_NODE_ID"] = "spark0"
+            explicit = GpuResourceGovernor.from_env(nodes=("spark0",), local_node_id="ignored")
+            self.assertEqual(explicit.local_node_id, "spark0")
+        finally:
+            if old_value is None:
+                os.environ.pop("DS4_API_RESOURCE_LOCAL_NODE_ID", None)
+            else:
+                os.environ["DS4_API_RESOURCE_LOCAL_NODE_ID"] = old_value
 
     def test_resource_governor_hot_sample_delays_dispatcher_refill(self) -> None:
         old_values = {
