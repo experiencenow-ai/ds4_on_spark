@@ -431,6 +431,7 @@
           "batch_linger_s": 0.05,
           "dispatch_batch_limit": 16,
           "max_running_batches_per_compute_domain": 3,
+          "max_running_batches_per_service": 1,
           "queue_depth_target": 64,
           "queue_limit": 64,
           "ready_shape_bucketing": true,

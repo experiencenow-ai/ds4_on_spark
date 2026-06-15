@@ -1003,6 +1003,71 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
             self.assertEqual((completed, failed, retried), (0, 0, 0))
 
+    def test_resident_multimodel_honors_service_batch_cap_without_blocking_peers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            registry = ProfileRegistry.load(PROFILES)
+            topology = SparkTopology.load(TOPOLOGY)
+            plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+            service_plans = {
+                "qwen27_bf16_pp8": plans["qwen27_bf16_pp8"],
+                "gemma4_26b_a4b_pp8": plans["gemma4_26b_a4b_pp8"],
+            }
+            for plan in service_plans.values():
+                plan.admission_mode = "resident_multimodel_rolling_refill"
+                plan.target_active = 1
+                plan.queue_depth_target = 2
+                plan.low_watermark = 1
+                plan.max_cohort_size = 1
+                plan.max_running_batches_per_compute_domain = 3
+                plan.batch_linger_s = 0.0
+            service_plans["qwen27_bf16_pp8"].max_running_batches_per_service = 1
+            api.queue.submit_requests(
+                requests=[
+                    completion_request("service-cap-qwen-1", "prompt-qwen-1", profile_id="qwen3_6_27b_bf16_pp8_efficient_v1"),
+                    completion_request("service-cap-qwen-2", "prompt-qwen-2", profile_id="qwen3_6_27b_bf16_pp8_efficient_v1"),
+                    completion_request("service-cap-gemma", "prompt-gemma", profile_id="gemma4_26b_a4b_it_pp8_peer_v1"),
+                ],
+                registry=registry,
+                topology=topology,
+                batch_id="service-cap",
+                priority=10,
+            )
+            runner = BlockingRefillIncrementalRunner()
+            worker = BatchWorker(queue=api.queue, registry=registry, runner=runner, worker_id="test-dispatcher", lease_ttl_s=30, heartbeat_interval_s=0.01)
+            pending = {}
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                try:
+                    submitted = api._dispatcher_refill_resident_multimodel(
+                        worker=worker,
+                        executor=executor,
+                        pending=pending,
+                        entry_node_id="spark0",
+                        node_profile_ids=tuple(topology.pipeline_profiles),
+                        batch_limits_by_service={"qwen27_bf16_pp8": 1, "gemma4_26b_a4b_pp8": 1},
+                        kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                        service_plans=service_plans,
+                    )
+                    self.assertEqual(submitted, 2)
+                    self.assertEqual(api.dispatcher_status()["resident_service_active_batches"], {"qwen27_bf16_pp8": 1, "gemma4_26b_a4b_pp8": 1})
+                    self.assertEqual(api.dispatcher_status()["resident_service_batch_limits"], {"qwen27_bf16_pp8": 1})
+                    self.assertTrue(runner.wait_started(2))
+                    submitted = api._dispatcher_refill_resident_multimodel(
+                        worker=worker,
+                        executor=executor,
+                        pending=pending,
+                        entry_node_id="spark0",
+                        node_profile_ids=tuple(topology.pipeline_profiles),
+                        batch_limits_by_service={"qwen27_bf16_pp8": 1, "gemma4_26b_a4b_pp8": 1},
+                        kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                        service_plans=service_plans,
+                    )
+                    self.assertEqual(submitted, 0)
+                finally:
+                    api.queue.cancel(batch_id="service-cap", reason="test shutdown", force_running=True)
+                    completed, failed, retried = api._dispatcher_finish_done(worker, pending, block=True)
+            self.assertEqual((completed, failed, retried), (0, 0, 0))
+
     def test_resident_rolling_admission_can_force_refill_stream_for_service(self) -> None:
         old = os.environ.get("DS4_API_RESIDENT_FORCE_REFILL_STREAM_SERVICE_IDS")
         os.environ["DS4_API_RESIDENT_FORCE_REFILL_STREAM_SERVICE_IDS"] = "dsv4_flash_pp8"

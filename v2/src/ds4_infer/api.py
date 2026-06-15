@@ -22,6 +22,7 @@ from .dispatcher_resident import active_resident_service_ids as _active_resident
 from .dispatcher_resident import pending_claim_count as _pending_claim_count
 from .dispatcher_resident import pending_claim_count_by_service as _pending_claim_count_by_service
 from .dispatcher_resident import pending_cohort_count_by_compute_domain as _pending_cohort_count_by_compute_domain
+from .dispatcher_resident import pending_cohort_count_by_service as _pending_cohort_count_by_service
 from .dispatcher_resident import pending_cohort_details as _pending_cohort_details
 from .dispatcher_resident import pending_claims as _pending_claims
 from .dispatcher_resident import pending_cohort as _pending_cohort
@@ -490,6 +491,9 @@ class CoordinatorApi:
         state.setdefault("resident_service_targets", {sid: plan.target_active for sid, plan in service_plans.items()})
         state.setdefault("resident_service_queue_depth_targets", {sid: plan.queue_depth_target for sid, plan in service_plans.items()})
         state.setdefault("resident_service_low_watermarks", {sid: plan.low_watermark for sid, plan in service_plans.items()})
+        state["resident_service_active_batches"] = _resident_active_service_batches_from_status(state)
+        if not state.get("resident_service_batch_limits"):
+            state["resident_service_batch_limits"] = _resident_service_batch_limits(service_plans)
         state["resident_compute_domain_active_batches"] = _resident_active_domain_batches_from_status(state)
         state["resident_compute_domain_batch_limits"] = _resident_compute_domain_batch_limits(service_plans)
         state.setdefault("resident_service_admission_modes", {sid: plan.admission_mode for sid, plan in service_plans.items()})
@@ -509,6 +513,8 @@ class CoordinatorApi:
             "pending_cohorts": 0,
             "pending_by_service": {},
             "pending_cohort_details": [],
+            "resident_service_active_batches": {},
+            "resident_service_batch_limits": {},
             "resident_compute_domain_active_batches": {},
             "resident_compute_domain_batch_limits": {},
             "started_at": None,
@@ -766,6 +772,7 @@ class CoordinatorApi:
             return 0
         self.queue.requeue_expired_leases()
         active_by_service = _pending_claim_count_by_service(pending)
+        active_batches_by_service = _pending_cohort_count_by_service(pending)
         active_batches_by_domain = _pending_cohort_count_by_compute_domain(pending)
         submitted = 0
         made_ready = 0
@@ -773,6 +780,8 @@ class CoordinatorApi:
         for plan in _resident_service_order(service_plans, active_by_service):
             if global_available <= 0 or submitted >= self.dispatcher_refill_batch:
                 break
+            if _resident_service_limit_reached(plan, active_batches_by_service):
+                continue
             if _resident_compute_domain_limit_reached(plan, active_batches_by_domain):
                 continue
             limit = self._resident_refill_limit(plan, active_by_service, submitted, global_available)
@@ -797,6 +806,7 @@ class CoordinatorApi:
             submitted += claimed
             global_available -= claimed
             active_by_service[plan.service_id] = int(active_by_service.get(plan.service_id, 0)) + claimed
+            active_batches_by_service[plan.service_id] = int(active_batches_by_service.get(plan.service_id, 0)) + 1
             if plan.compute_domain:
                 active_batches_by_domain[plan.compute_domain] = int(active_batches_by_domain.get(plan.compute_domain, 0)) + 1
         self._dispatcher_note_resident(pending, service_plans, attempted=attempted, made_ready=made_ready)
@@ -893,6 +903,8 @@ class CoordinatorApi:
     def _dispatcher_note_resident(self, pending: dict[Any, Any], service_plans: dict[str, ResidentServicePlan], *, attempted: int, made_ready: int) -> None:
         self._dispatcher_note(
             pending_by_service=_pending_claim_count_by_service(pending),
+            resident_service_active_batches=_pending_cohort_count_by_service(pending),
+            resident_service_batch_limits=_resident_service_batch_limits(service_plans),
             resident_compute_domain_active_batches=_pending_cohort_count_by_compute_domain(pending),
             resident_compute_domain_batch_limits=_resident_compute_domain_batch_limits(service_plans),
             pending_cohort_details=_pending_cohort_details(pending),
@@ -1906,6 +1918,25 @@ def _resident_compute_domain_limit_reached(plan: ResidentServicePlan, active_bat
     return int(active_batches_by_domain.get(domain, 0)) >= limit
 
 
+def _resident_service_limit_reached(plan: ResidentServicePlan, active_batches_by_service: dict[str, int]) -> bool:
+    limit = int(getattr(plan, "max_running_batches_per_service", 0) or 0)
+    if limit <= 0:
+        return False
+    service_id = str(plan.service_id or "")
+    if not service_id:
+        return False
+    return int(active_batches_by_service.get(service_id, 0)) >= limit
+
+
+def _resident_service_batch_limits(service_plans: dict[str, ResidentServicePlan]) -> dict[str, int]:
+    limits: dict[str, int] = {}
+    for sid, plan in service_plans.items():
+        limit = int(getattr(plan, "max_running_batches_per_service", 0) or 0)
+        if limit > 0:
+            limits[str(sid)] = limit
+    return limits
+
+
 def _resident_compute_domain_batch_limits(service_plans: dict[str, ResidentServicePlan]) -> dict[str, int]:
     limits: dict[str, int] = {}
     for plan in service_plans.values():
@@ -1916,6 +1947,20 @@ def _resident_compute_domain_batch_limits(service_plans: dict[str, ResidentServi
         existing = limits.get(domain)
         limits[domain] = limit if existing is None else min(existing, limit)
     return limits
+
+
+def _resident_active_service_batches_from_status(state: dict[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    details = state.get("pending_cohort_details")
+    if not isinstance(details, list):
+        return counts
+    for item in details:
+        if not isinstance(item, dict) or int(item.get("active_count") or 0) <= 0:
+            continue
+        service_id = str(item.get("service_id") or "")
+        if service_id:
+            counts[service_id] = counts.get(service_id, 0) + 1
+    return counts
 
 
 def _resident_active_domain_batches_from_status(state: dict[str, Any]) -> dict[str, int]:
