@@ -246,8 +246,8 @@
           "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.07692307692307693,
           "external_backend": "lmcache_hma",
-          "gpu_memory_utilization": 0.15,
-          "kv_cache_memory_bytes": 5368709120,
+          "gpu_memory_utilization": 0.146,
+          "kv_cache_memory_bytes": 5207228416,
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
@@ -317,8 +317,8 @@
           "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.07692307692307693,
           "external_backend": "lmcache_hma",
-          "gpu_memory_utilization": 0.27,
-          "kv_cache_memory_bytes": 6442450944,
+          "gpu_memory_utilization": 0.262,
+          "kv_cache_memory_bytes": 6248464384,
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
@@ -388,8 +388,8 @@
           "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.07692307692307693,
           "external_backend": "lmcache_hma",
-          "gpu_memory_utilization": 0.24,
-          "kv_cache_memory_bytes": 7516192768,
+          "gpu_memory_utilization": 0.233,
+          "kv_cache_memory_bytes": 7289700352,
           "sharding": "pipeline_layers"
         },
         "layer_partition": [
@@ -460,7 +460,7 @@
       "completion_budget_include_output": false,
       "completion_pp_safe_cohort_max": 128,
       "completion_chunk_concurrency": 4,
-      "dispatch_kv_capacity_bytes": 19327352832,
+      "dispatch_kv_capacity_bytes": 18745393152,
       "auto_kv_batch_policy": "prefer_batch",
       "prefer_cohort_batch": true,
       "prestage_auto_kv_prefix": true
