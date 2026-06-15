@@ -64,18 +64,18 @@
   "fixed_kv_cache_memory_bytes": {
     "qwen27_bf16_pp13": 7516192768,
     "gemma4_26b_a4b_pp13": 5368709120,
-    "kimi27_pp13": 7516192768
+    "kimi27_pp13": 6442450944
   },
   "resident_batch_token_budget": {
     "qwen27_bf16_pp13": 32768,
     "gemma4_26b_a4b_pp13": 16384,
-    "notes": "Kimi2.7 triad admission follows the live model service cap of max_num_seqs=256 with a 131072-token service gate. Pulled-main DSAPI probes showed 128x512x128 reached 143.5 tok/s, a mixed round-robin 256-request run recovered from 75.7 to 161.8 tok/s after ready-shape bucketing, and vLLM KV use stayed low with no resource-governor throttle. A 512-request Kimi pressure probe stalled after DSAPI submitted two 256-request cohorts, so Kimi keeps a 256 dispatch cap but refills only after active work falls to 128. Qwen uses its live max_num_seqs=32 service cap and Gemma stays at batch 16 until a separate relaunch gate.",
-    "kimi27_pp13": 131072
+    "notes": "Kimi2.7 triad admission uses the safe resident service cap of max_num_seqs=128 with a 65536-token service gate after the 2026-06-15 pulled-main launch showed the 256/131072 envelope can push multiple 13-node stages into the high-90% system-RAM band during model init/profiling. Pulled-main DSAPI probes still record 128x512x128 reaching 143.5 tok/s; the 256-way measurements remain stretch data until the 14-node memory margin is available. Qwen uses its live max_num_seqs=32 service cap and Gemma stays at batch 16 until a separate relaunch gate.",
+    "kimi27_pp13": 65536
   },
   "resident_batch_size": {
     "qwen27_bf16_pp13": 32,
     "gemma4_26b_a4b_pp13": 16,
-    "kimi27_pp13": 256
+    "kimi27_pp13": 128
   },
   "throughput_utility_metric": {
     "format": "ds4-centaur-throughput-utility-v1",
@@ -108,8 +108,8 @@
         "lane": "smart",
         "lane_weight": 1.35,
         "pipeline_parallel_size": 13,
-        "gpu_memory_utilization": 0.33,
-        "batch_size": 256,
+        "gpu_memory_utilization": 0.30,
+        "batch_size": 128,
         "input_budget_tokens": 8192,
         "output_budget_tokens": 4096,
         "assumed_decode_tok_s": 16.207321,
@@ -221,13 +221,13 @@
       "SuperGPQA": "21/25"
     }
   },
-  "kimi_batch256_fit_estimate": {
-    "basis": "Live Kimi2.7 PP13 service backs off to a 7 GiB fixed GPU KV cap after 2026-06-15 telemetry showed several resident triad nodes at the edge of system RAM. Earlier DSAPI Kimi128 short-context probes used under 3% of the previous 8 GiB cap, and pulled-main qualification keeps DSAPI dispatch at the live service cap while holding the refill watermark at 128 to avoid a second full cohort backlog.",
-    "rough_fixed_7gib_token_capacity": 1730774,
-    "batch256_512_context_tokens": 131072,
-    "batch256_8192_context_tokens": 2097152,
-    "estimated_capacity_margin_at_512_tokens": 13.2,
-    "notes": "This is an order-of-magnitude fit check, not a substitute for a pulled-main DSAPI benchmark. It says short-context max_num_seqs=256 should fit comfortably with the fixed 7 GiB Kimi KV cap; full 8192-context 256-way admission exceeds the rough resident-token estimate and must rely on strict token-budget admission, eviction, and external cache. The 512-request pressure stall showed DSAPI must not keep another full 256-request Kimi cohort resident at the vLLM gate while the first cohort is still full."
+  "kimi_batch128_fit_estimate": {
+    "basis": "Live Kimi2.7 PP13 service backs off to a 6 GiB fixed GPU KV cap and 128-sequence launch envelope after 2026-06-15 pulled-main telemetry showed the 256/131072 envelope could push several resident triad nodes into the high-90% system-RAM band. Earlier DSAPI Kimi128 short-context probes used under 3% of the previous 8 GiB cap, so the immediate risk is launch/profiling and resident headroom rather than steady-state short-context KV.",
+    "rough_fixed_6gib_token_capacity": 1483523,
+    "batch128_512_context_tokens": 65536,
+    "batch128_8192_context_tokens": 1048576,
+    "estimated_capacity_margin_at_512_tokens": 22.6,
+    "notes": "This is an order-of-magnitude fit check, not a substitute for a pulled-main DSAPI benchmark. The 128-way resident default leaves about 1.4x rough fixed-KV capacity at full 8192-token inputs and much more margin for short-context batches; 256-way Kimi admission stays a stretch target for a later memory-margin gate."
   },
   "observed_kimi_pp13_available_gib_before_small_overlay": {
     "spark0": 39.3,
@@ -276,7 +276,7 @@
   },
   "power_policy": {
     "hardware_power_limit_status": "No reliable per-Spark 150W NVML/powercap limit was exposed by nvidia-smi or /sys/class/powercap during the 2026-06-11 probe.",
-    "initial_control": "Use DSAPI service batch limits, token budgets, one-running-batch-per-compute-domain admission, and conservative refill watermarks until a hardware power cap is proven. Qwen batch 32 and Kimi dispatch batch 256 match live max-num-seqs caps, but Kimi refills at 128 active requests after the 512-request pressure stall; Gemma stays at batch 16 until a separate relaunch gate.",
+    "initial_control": "Use DSAPI service batch limits, token budgets, one-running-batch-per-compute-domain admission, and conservative refill watermarks until a hardware power cap is proven. Qwen batch 32 and Kimi dispatch batch 128 match the safe resident launch caps; Gemma stays at batch 16 until a separate relaunch gate.",
     "target_watts_per_spark": 150
   },
   "promotion_gates": [
@@ -284,6 +284,6 @@
     "Kimi2.7, Qwen27 PP13, and Gemma4 PP13 services are all launched from pulled main checkouts and pass DSAPI smoke through the triad topology.",
     "LMCache canaries prove cache load/store does not change answers for each resident service.",
     "DSAPI readiness passes with profiles/topology/static_sparks_kimi_qwen_gemma_pp13.json.",
-    "Run a metric-scored batch sweep starting at Kimi/Qwen/Gemma 256/32/16; only raise Gemma after the pulled-main launch passes the memory floor, readiness, accuracy, and cache gates."
+    "Run a metric-scored batch sweep starting at Kimi/Qwen/Gemma 128/32/16; only raise Kimi or Gemma after the pulled-main launch passes the memory floor, readiness, accuracy, and cache gates."
   ]
 }
