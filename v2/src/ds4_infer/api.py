@@ -621,9 +621,9 @@ class CoordinatorApi:
         )
         if submitted:
             self._dispatcher_count(worked_count=1, claimed_count=submitted, submitted_count=submitted)
-            self._dispatcher_note(last_work_at=time.time(), pending=_pending_claim_count(runtime.pending), pending_cohorts=len(runtime.pending), pending_cohort_details=_pending_cohort_details(runtime.pending), last_error=None)
+            self._dispatcher_note(last_work_at=time.time(), pending=_pending_claim_count(runtime.pending), pending_by_service=_pending_claim_count_by_service(runtime.pending), pending_cohorts=len(runtime.pending), pending_cohort_details=_pending_cohort_details(runtime.pending), last_error=None)
             return True
-        self._dispatcher_note(pending=_pending_claim_count(runtime.pending), pending_cohorts=len(runtime.pending), pending_cohort_details=_pending_cohort_details(runtime.pending), last_error=None)
+        self._dispatcher_note(pending=_pending_claim_count(runtime.pending), pending_by_service=_pending_claim_count_by_service(runtime.pending), pending_cohorts=len(runtime.pending), pending_cohort_details=_pending_cohort_details(runtime.pending), last_error=None)
         return bool(completed or failed or retried)
 
     def _dispatcher_shutdown(self, runtime: DispatcherRuntime) -> None:
@@ -632,7 +632,7 @@ class CoordinatorApi:
             completed, failed, retried = self._dispatcher_finish_done(runtime.worker, runtime.pending, block=True)
             self._dispatcher_count(completed_count=completed, failed_count=failed, retried_count=retried, requeued_count=retried)
         runtime.executor.shutdown(wait=True, cancel_futures=False)
-        self._dispatcher_note(running=False, pending=0, pending_cohorts=0, pending_cohort_details=[])
+        self._dispatcher_note(running=False, pending=0, pending_by_service={}, pending_cohorts=0, pending_cohort_details=[])
 
     def _release_jit_kv_waits_if_circuit_open(self) -> None:
         status = self.jit_kv_circuit.status()
