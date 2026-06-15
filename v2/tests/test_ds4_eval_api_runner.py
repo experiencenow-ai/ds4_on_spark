@@ -176,6 +176,44 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         self.assertEqual(payload["thinking_budget_tokens"], 0)
         self.assertEqual(payload["input"]["rendered_prompt"], "rendered")
 
+    def test_eval_request_payload_can_defer_chat_rendering_to_dsapi(self) -> None:
+        args = argparse.Namespace(
+            vllm_url="none",
+            served_model="model",
+            max_output_tokens=64,
+            enable_thinking=False,
+            chat_template_thinking_key="thinking",
+            thinking_budget_tokens=1024,
+            response_style="compsec_strict",
+            temperature=0.0,
+            model="profile",
+        )
+        case = {
+            "id": "compsec-x",
+            "question": "Find the bug.",
+            "source": "COMPSEC",
+            "domain": "kernel",
+            "title": "case",
+            "answer": "3",
+            "choices": [],
+        }
+        original_render_prompt = self.runner.render_prompt
+
+        def fail_render(*args, **kwargs):
+            raise AssertionError("render should be skipped")
+
+        self.runner.render_prompt = fail_render
+        try:
+            payload = self.runner._eval_request_payload(args, 0, case)
+        finally:
+            self.runner.render_prompt = original_render_prompt
+
+        self.assertEqual(payload["thinking_budget_tokens"], 0)
+        self.assertNotIn("rendered_prompt", payload["input"])
+        self.assertNotIn("prompt", payload["input"])
+        self.assertEqual(payload["input"]["messages"][0]["role"], "system")
+        self.assertEqual(payload["input"]["metadata"]["ds4_eval"]["id"], "compsec-x")
+
     def test_render_prompt_sends_explicit_disabled_thinking_kwarg(self) -> None:
         calls = []
         original_post_json = self.runner._post_json
