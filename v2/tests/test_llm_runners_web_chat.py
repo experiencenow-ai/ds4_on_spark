@@ -114,6 +114,24 @@ class StreamingCompletionBackend(OpenAICompatibleRunner):
         raise AssertionError("streaming test should not use non-streaming post")
 
 
+class FirstEventTimeoutStreamingCompletionBackend(OpenAICompatibleRunner):
+    def __init__(self) -> None:
+        super().__init__(base_url="http://unused")
+        self.calls: list[int] = []
+
+    def _post_sse_json(self, endpoint: str, payload: dict, **kwargs):
+        self.calls.append(len(payload["prompt"]))
+        assert endpoint == self.completion_endpoint
+        assert payload["stream"] is True
+        if len(payload["prompt"]) > 2:
+            raise RuntimeError("SSE stream first event timeout after 60.000s")
+        for index in range(len(payload["prompt"])):
+            yield {"choices": [{"index": index, "text": f"ok-{index}", "finish_reason": "stop"}]}
+
+    def _post_json(self, endpoint: str, payload: dict) -> dict:
+        raise AssertionError("streaming split retry test should not use non-streaming post")
+
+
 class AnswerMarkerStreamingCompletionPromptBackend(OpenAICompatibleRunner):
     def __init__(self) -> None:
         super().__init__(base_url="http://unused")
@@ -244,6 +262,15 @@ class StreamingPipelineRunner(PipelineOpenAIRunner):
         self.backend = StreamingCompletionBackend()
 
     def _runner_for(self, profile: ModelProfile, node_id: str | None) -> StreamingCompletionBackend:
+        return self.backend
+
+
+class FirstEventTimeoutStreamingPipelineRunner(PipelineOpenAIRunner):
+    def __init__(self) -> None:
+        super().__init__(base_urls={"svc": "http://unused"})
+        self.backend = FirstEventTimeoutStreamingCompletionBackend()
+
+    def _runner_for(self, profile: ModelProfile, node_id: str | None) -> FirstEventTimeoutStreamingCompletionBackend:
         return self.backend
 
 
@@ -855,6 +882,42 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(seen, [("r2", "second done"), ("r", "first done")])
         self.assertEqual(results["r"]["transport"]["coalesced_completion_streaming"], True)
         self.assertEqual(results["r2"]["transport"]["coalesced_batch_size"], 2)
+
+    def test_pipeline_runner_bisects_streaming_first_event_timeout(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": False,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {"served_model_name": "served-model"},
+            }
+        )
+        requests = []
+        for index in range(4):
+            raw = make_request(chat=False).raw
+            raw["request_id"] = f"r{index}"
+            requests.append(InferenceRequest.from_json(raw))
+        seen = []
+        runner = FirstEventTimeoutStreamingPipelineRunner()
+
+        results = runner.run_many_on_node_incremental(
+            requests,
+            profile,
+            None,
+            concurrency=4,
+            on_result=lambda request_id, result: seen.append((request_id, result["status"])),
+        )
+
+        self.assertEqual(runner.backend.calls, [4, 2, 2])
+        self.assertEqual(len(seen), 4)
+        self.assertTrue(all(status == "completed" for _, status in seen))
+        self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_split_retry"] for index in range(4)))
+        self.assertTrue(all(results[f"r{index}"]["transport"]["original_coalesced_batch_size"] == 4 for index in range(4)))
 
     def test_pipeline_runner_stops_coalesced_completion_on_answer_marker(self) -> None:
         profile = ModelProfile.from_json(
