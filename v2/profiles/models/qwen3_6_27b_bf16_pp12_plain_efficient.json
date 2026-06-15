@@ -21,6 +21,7 @@
   },
   "routing": {
     "chat_cohort_transport": "parallel_chat_completions",
+    "chat_template_renderer": "qwen_chatml",
     "chat_template_thinking_key": "enable_thinking",
     "optional_kv_cache_deployments": [
       "profiles/kv_cache/qwen27_bf16_pp12_plain.json"

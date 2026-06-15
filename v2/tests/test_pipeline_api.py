@@ -554,28 +554,36 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(chunks[0]["ds4"]["event_type"], "delta")
         self.assertEqual(streamed, {"stream-delta"})
 
-    def test_openai_chat_request_gets_rendered_prompt_for_coalescing(self) -> None:
+    def test_openai_chat_request_gets_qwen_builtin_rendered_prompt_for_coalescing(self) -> None:
         old = os.environ.get("DS4_API_RENDER_CHAT_WITH_TOKENIZER")
         os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = "0"
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
-                with self.assertRaisesRegex(ValueError, "refuse fallback prompt"):
-                    api.handle_post(
-                        "/v1/chat/completions",
-                        {
-                            "model": "qwen27_bf16_pp8",
-                            "messages": [{"role": "user", "content": "hello"}],
-                            "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
-                            "ds4_async": True,
-                            "batch_id": "rendered-chat",
-                        },
-                    )
+                api.handle_post(
+                    "/v1/chat/completions",
+                    {
+                        "model": "qwen27_bf16_pp8",
+                        "messages": [{"role": "user", "content": "hello"}],
+                        "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+                        "ds4_async": True,
+                        "batch_id": "rendered-chat",
+                    },
+                )
+                with api.queue._connect() as conn:
+                    row = conn.execute("select request_json from requests where batch_id=?", ("rendered-chat",)).fetchone()
+                request_json = json.loads(str(row["request_json"]))
         finally:
             if old is None:
                 os.environ.pop("DS4_API_RENDER_CHAT_WITH_TOKENIZER", None)
             else:
                 os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = old
+        self.assertEqual(
+            request_json["input"]["rendered_prompt"],
+            "<|im_start|>user\nhello<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+        )
+        self.assertEqual(request_json["input"]["prompt"], request_json["input"]["rendered_prompt"])
+        self.assertEqual(request_json["input"]["openai_extra_body"]["chat_template_kwargs"], {"enable_thinking": False})
 
     def test_openai_chat_request_preserves_explicit_rendered_prompt_for_coalescing(self) -> None:
         old = os.environ.get("DS4_API_RENDER_CHAT_WITH_TOKENIZER")

@@ -116,6 +116,8 @@ def _render_chat_prompt_with_builtin(profile: ModelProfile, messages: list[dict[
         return _deepseek_v4_chat_prompt(profile, messages, body=body, metadata=metadata, thinking_budget_tokens=thinking_budget_tokens)
     if renderer == "kimi_k2":
         return _kimi_k2_chat_prompt(profile, messages, body=body, metadata=metadata, thinking_budget_tokens=thinking_budget_tokens)
+    if renderer == "qwen_chatml":
+        return _qwen_chatml_prompt(profile, messages, body=body, metadata=metadata, thinking_budget_tokens=thinking_budget_tokens)
     return ""
 
 
@@ -175,6 +177,24 @@ def _kimi_k2_chat_prompt(profile: ModelProfile, messages: list[dict[str, Any]], 
     thinking = _chat_template_kwargs_for_body(profile, body, metadata, thinking_budget_tokens).get("thinking")
     parts.append("<|im_assistant|>assistant<|im_middle|>")
     parts.append("<think>" if bool(thinking) else "<think></think>")
+    return "".join(parts)
+
+
+def _qwen_chatml_prompt(profile: ModelProfile, messages: list[dict[str, Any]], *, body: dict[str, Any], metadata: dict[str, Any], thinking_budget_tokens: int) -> str:
+    if body.get("tools") is not None or body.get("tool_choice") is not None:
+        raise ValueError("Qwen DS API chat renderer does not support tool template rendering yet")
+    parts: list[str] = []
+    for message in messages:
+        role = str(message.get("role") or "user")
+        content = str(message.get("content") or "")
+        if role not in {"system", "user", "assistant"}:
+            raise ValueError(f"Qwen DS API chat renderer does not support role={role!r}")
+        parts.append(f"<|im_start|>{role}\n")
+        parts.append(content)
+        parts.append("<|im_end|>\n")
+    thinking = _chat_template_kwargs_for_body(profile, body, metadata, thinking_budget_tokens).get("enable_thinking")
+    parts.append("<|im_start|>assistant\n")
+    parts.append("<think>\n" if bool(thinking) else "<think>\n\n</think>\n\n")
     return "".join(parts)
 
 
