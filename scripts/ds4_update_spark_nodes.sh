@@ -29,6 +29,8 @@ Important environment knobs:
   DS4_UPDATE_DSAPI_STATUS_URL=...   dispatcher status URL for active-work guard
   DS4_UPDATE_TELEMETRY_URL=...      Spark telemetry summary URL for active-work guard
   DS4_REMOTE_REPO=$HOME/src/ds4_on_spark remote repo path on each Spark
+  DS4_SKIP_UNREACHABLE=0            fail closed if any selected Spark is unreachable
+                                    set 1 only for intentional partial maintenance
   DS4_CONFIGURE_QWEN_RUNTIME=0     set 1 to point Qwen gateways at host-local vLLM
   DS4_RESTART_QWEN=0               restart Qwen model gateways after env update
   DS4_QWEN_RUNTIME_TARGET=...      trim-capable target for ~/ds4-vllm-local
@@ -168,7 +170,7 @@ dsapi_status_url="${DS4_UPDATE_DSAPI_STATUS_URL:-http://10.20.0.10:8700/ds4/disp
 telemetry_url="${DS4_UPDATE_TELEMETRY_URL:-http://127.0.0.1:8765/api/summary}"
 telemetry_stale_s="${DS4_UPDATE_TELEMETRY_STALE_S:-60}"
 local_self_update="${DS4_SELF_UPDATE:-$default_self_update}"
-skip_unreachable="${DS4_SKIP_UNREACHABLE:-1}"
+skip_unreachable="${DS4_SKIP_UNREACHABLE:-0}"
 connect_timeout="${DS4_CONNECT_TIMEOUT:-8}"
 ssh_opts="${DS4_SSH_OPTS:-}"
 configure_qwen_runtime="${DS4_CONFIGURE_QWEN_RUNTIME:-$default_configure_qwen_runtime}"
