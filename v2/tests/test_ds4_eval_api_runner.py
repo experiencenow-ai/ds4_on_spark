@@ -239,6 +239,7 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         self.assertNotIn("prompt", payload["input"])
         self.assertEqual(payload["input"]["messages"][0]["role"], "system")
         self.assertEqual(payload["input"]["metadata"]["ds4_eval"]["id"], "compsec-x")
+        self.assertTrue(payload["output_contract"]["stop_on_answer_marker"])
 
     def test_render_prompt_sends_explicit_disabled_thinking_kwarg(self) -> None:
         calls = []

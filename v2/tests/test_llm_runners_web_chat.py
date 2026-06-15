@@ -114,6 +114,25 @@ class StreamingCompletionBackend(OpenAICompatibleRunner):
         raise AssertionError("streaming test should not use non-streaming post")
 
 
+class AnswerMarkerStreamingCompletionPromptBackend(OpenAICompatibleRunner):
+    def __init__(self) -> None:
+        super().__init__(base_url="http://unused")
+        self.calls: list[tuple[str, dict]] = []
+        self.tail_events_read = 0
+
+    def _post_sse_json(self, endpoint: str, payload: dict, **kwargs):
+        self.calls.append((endpoint, payload))
+        assert endpoint == self.completion_endpoint
+        assert payload["stream"] is True
+        yield {"choices": [{"text": "Reason.\nAnswer: 18", "finish_reason": None}]}
+        yield {"choices": [{"text": "\nThis long tail should be cut.", "finish_reason": None}]}
+        self.tail_events_read += 1
+        yield {"choices": [{"text": " unreachable tail", "finish_reason": "stop"}]}
+
+    def _post_json(self, endpoint: str, payload: dict) -> dict:
+        raise AssertionError("answer-marker streaming test should not use non-streaming post")
+
+
 class SlowTailStreamingBackend(OpenAICompatibleRunner):
     def __init__(self) -> None:
         super().__init__(base_url="http://unused")
@@ -207,6 +226,15 @@ class StreamingPipelineRunner(PipelineOpenAIRunner):
         self.backend = StreamingCompletionBackend()
 
     def _runner_for(self, profile: ModelProfile, node_id: str | None) -> StreamingCompletionBackend:
+        return self.backend
+
+
+class AnswerMarkerStreamingCompletionPromptPipelineRunner(PipelineOpenAIRunner):
+    def __init__(self) -> None:
+        super().__init__(base_urls={"svc": "http://unused"})
+        self.backend = AnswerMarkerStreamingCompletionPromptBackend()
+
+    def _runner_for(self, profile: ModelProfile, node_id: str | None) -> AnswerMarkerStreamingCompletionPromptBackend:
         return self.backend
 
 
@@ -523,6 +551,48 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual({call[1]["prompt"] for call in runner.calls}, {"rendered chat one", "rendered chat two"})
         self.assertTrue(result["r"]["transport"]["coalesced_chat_parallel_completion"])
         self.assertTrue(result["r2"]["transport"]["chat_as_completion_prompts"])
+
+    def test_parallel_completion_prompts_stream_and_stop_on_answer_marker(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "rendered-completion-parallel",
+                "model_id": "served-model",
+                "backend": "vllm_pipeline",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["tool_chat"],
+                "supports_chat": True,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {
+                    "chat_cohort_transport": "parallel_completion_prompts",
+                    "parallel_chat_concurrency": 1,
+                    "served_model_name": "served-model",
+                },
+            }
+        )
+        first_raw = make_request(chat=True).raw
+        first_raw["input"]["rendered_prompt"] = "rendered chat one"
+        first_raw["output_contract"]["stop_on_answer_marker"] = True
+        second_raw = make_request(chat=True).raw
+        second_raw["request_id"] = "r2"
+        second_raw["input"]["rendered_prompt"] = "rendered chat two"
+        second_raw["output_contract"]["stop_on_answer_marker"] = True
+        seen = []
+        runner = AnswerMarkerStreamingCompletionPromptPipelineRunner()
+
+        results = runner.run_many_on_node_incremental(
+            [InferenceRequest.from_json(first_raw), InferenceRequest.from_json(second_raw)],
+            profile,
+            None,
+            concurrency=2,
+            on_result=lambda request_id, result: seen.append((request_id, result["output"]["text"])),
+        )
+
+        self.assertEqual(seen, [("r", "Reason.\nAnswer: 18"), ("r2", "Reason.\nAnswer: 18")])
+        self.assertEqual(runner.backend.tail_events_read, 0)
+        self.assertEqual(len(runner.backend.calls), 2)
+        self.assertTrue(results["r"]["transport"]["parallel_completion_prompt_streaming"])
+        self.assertTrue(results["r"]["transport"]["answer_marker_early_stop"])
 
     def test_kimi_profiles_use_rendered_completion_prompt_transport(self) -> None:
         registry = ProfileRegistry.load(PROFILES)

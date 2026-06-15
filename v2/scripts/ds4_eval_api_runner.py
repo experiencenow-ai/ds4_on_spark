@@ -330,9 +330,16 @@ def _eval_request_payload(args: argparse.Namespace, idx: int, case: dict) -> dic
         "thinking_budget_tokens": _effective_thinking_budget_tokens(args),
         "temperature": float(args.temperature),
         "input": _request_input_payload(case, question_prompt, rendered, idx),
-        "output_contract": {"format": "text"},
+        "output_contract": _eval_output_contract(args),
         "model_pin": {"profile_id": args.model},
     }
+
+
+def _eval_output_contract(args: argparse.Namespace) -> dict:
+    contract = {"format": "text"}
+    if str(args.response_style) in {"official", "answer_first", "concise", "answer_only", "compsec_strict"}:
+        contract["stop_on_answer_marker"] = True
+    return contract
 
 
 def _effective_thinking_budget_tokens(args: argparse.Namespace) -> int:
