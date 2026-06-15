@@ -12,7 +12,9 @@ from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
 
 
 DEFAULT_SUMMARY_JSON = "/tmp/ds4_telemetry/mac/cluster_summary.json"
@@ -21,6 +23,8 @@ DEFAULT_HISTORY_LIMIT = 720
 DEFAULT_SUMMARY_STALE_S = 60.0
 DEFAULT_REPO_ROOT = "/Users/mac/Documents/New project 4"
 DEFAULT_MODEL_LAYER_PARTITIONS_JSON = "/Users/mac/.local/share/ds4_telemetry/model_layer_partitions.json"
+DEFAULT_DSAPI_URL = os.environ.get("DS4_DASHBOARD_DSAPI_URL","http://127.0.0.1:8700")
+MAX_CHAT_BODY_BYTES = 1024 * 1024
 NODE_DOWN_ERROR_THRESHOLD = 3
 NODE_ERROR_STREAKS: dict[str,dict[str,Any]] = {}
 MODEL_LAYER_PARTITIONS: dict[str,list[int]] | None = None
@@ -60,14 +64,19 @@ h1{font-size:22px;line-height:1.1;margin:0}.meta{color:var(--muted);text-align:r
 .node{font-size:18px;font-weight:700}.pill{border-radius:999px;padding:3px 8px;font-size:12px;font-weight:700;color:#111316;background:var(--muted)}.busy .pill{background:var(--busy)}.idle .pill{background:var(--ok)}.warn .pill,.hot .pill{background:var(--warn)}.down .pill{background:var(--bad)}
 .bars{display:grid;gap:8px}.barrow{display:grid;grid-template-columns:54px 1fr 48px;align-items:center;gap:8px;color:var(--muted)}.track{height:8px;background:#0d0f12;border-radius:999px;overflow:hidden}.fill{height:100%;width:0;background:var(--ok)}.busy .gpu .fill,.busy .kv .fill{background:var(--busy)}.warn .fill,.hot .fill{background:var(--warn)}.down .fill{background:var(--bad)}
 .details{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin-top:10px;color:var(--muted)}.details b{color:var(--text);font-weight:600}.error{margin-top:8px;color:var(--bad);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-console{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:14px;overflow:hidden}.chat-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-bottom:1px solid var(--line)}.chat-title{font-size:17px;font-weight:700}.chat-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.chat-controls select,.chat-controls input{background:#101318;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:6px 8px;font:inherit}.chat-controls input[type=number]{width:86px}.chat-controls label{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:5px}.chat-body{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:0;min-height:250px}.chat-log{padding:12px;max-height:360px;overflow:auto;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:8px}.chat-msg{border:1px solid var(--line);border-radius:8px;padding:8px 10px;white-space:pre-wrap;line-height:1.45}.chat-msg.user{background:#101318}.chat-msg.assistant{background:#151a20}.chat-msg .role{color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:4px}.chat-compose{padding:12px;display:flex;flex-direction:column;gap:8px}.chat-compose textarea{width:100%;min-height:150px;resize:vertical;background:#101318;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:8px;font:inherit;line-height:1.4}.chat-actions{display:flex;gap:8px}.chat-actions button{appearance:none;border:1px solid var(--line);background:#101318;color:var(--text);border-radius:7px;padding:7px 10px;font:inherit;font-weight:700;cursor:pointer}.chat-actions button.primary{background:var(--busy);border-color:var(--busy);color:#071018}.chat-actions button:disabled{opacity:.5;cursor:not-allowed}.chat-status{color:var(--muted);font-size:12px;min-height:16px}
 .history{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}.history-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}.history-title{font-size:17px;font-weight:700}.modes{display:flex;gap:6px}.modes button{appearance:none;border:1px solid var(--line);background:#101318;color:var(--muted);border-radius:7px;padding:5px 10px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}.modes button.active{background:var(--busy);border-color:var(--busy);color:#071018}.legend{display:flex;flex-wrap:wrap;gap:8px 14px;color:var(--muted);font-size:12px}.legend span{white-space:nowrap}.swatch{display:inline-block;width:9px;height:9px;border-radius:999px;margin-right:5px}.chart-wrap{height:270px;min-height:270px}.chart-wrap canvas{display:block;width:100%;height:100%}.empty{color:var(--muted);padding:24px 0;text-align:center}
-@media (max-width:720px){main{padding:12px}.top{align-items:flex-start;flex-direction:column}.meta{text-align:left}.summary{grid-template-columns:repeat(2,minmax(120px,1fr))}}
+@media (max-width:720px){main{padding:12px}.top{align-items:flex-start;flex-direction:column}.meta{text-align:left}.summary{grid-template-columns:repeat(2,minmax(120px,1fr))}.chat-body{grid-template-columns:1fr}.chat-log{border-right:0;border-bottom:1px solid var(--line)}}
 </style>
 </head>
 <body><main>
 <div class="top"><h1>Spark Telemetry</h1><div class="meta"><div id="updated">loading</div><div id="stale"></div><div id="source"></div></div></div>
 <section class="summary" id="summary"></section>
 <section class="models" id="models"></section>
+<section class="chat-console" id="chat-console">
+<div class="chat-head"><div><div class="chat-title">DSAPI Chat</div><div class="label">manual model test console</div></div><div class="chat-controls"><select id="chat-model"><option value="kimi27_pp13">Kimi 2.7</option><option value="qwen27_bf16_pp13">Qwen27</option><option value="gemma4_26b_a4b_pp13">Gemma4</option></select><label>max <input id="chat-max" type="number" min="1" max="8192" step="1" value="512"></label><label><input id="chat-stream" type="checkbox" checked>stream</label></div></div>
+<div class="chat-body"><div class="chat-log" id="chat-log"><div class="empty">ask a model something</div></div><div class="chat-compose"><textarea id="chat-input" placeholder="Type a test prompt. Ctrl-Enter sends."></textarea><div class="chat-actions"><button class="primary" id="chat-send">Send</button><button id="chat-reset">Reset</button></div><div class="chat-status" id="chat-status"></div></div></div>
+</section>
 <section class="grid" id="nodes"></section>
 <section class="history" id="history"><div class="empty">select a spark</div></section>
 </main>
@@ -84,6 +93,17 @@ const CPU_PCT_MAX=2000;
 const metricModes={queue:["input_tok_s","output_tok_s","cache_tok_s","cache_hit_pct","vllm_running","vllm_waiting","cpu_pct"],gpu:["gpu_pct","kv_pct","cpu_pct","mem_pct","temp_c"]};
 const modeLabels={queue:"Queue",gpu:"GPU"};
 const modeColors={queue:["#00e5ff","#ff4d4d","#ffe156","#53d18a","#a78bfa","#f4bf5f"],gpu:["#2f80ed","#ff7a00","#f4bf5f","#00c853","#e040fb","#f4d35e"]};
+let chatMessages=[];
+let chatBusy=false;
+function esc(s){return String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function setChatStatus(text){let el=document.getElementById("chat-status");if(el)el.textContent=text||""}
+function renderChat(){let log=document.getElementById("chat-log");if(!log)return;if(!chatMessages.length){log.innerHTML=`<div class="empty">ask a model something</div>`;return}log.innerHTML=chatMessages.map(m=>`<div class="chat-msg ${m.role}"><div class="role">${esc(m.role)}</div>${esc(m.content)}</div>`).join("");log.scrollTop=log.scrollHeight}
+function chatPayload(){let max=Number(document.getElementById("chat-max").value)||512;return {model:document.getElementById("chat-model").value,messages:chatMessages.filter(m=>(m.role==="system"||m.role==="user"||m.role==="assistant")&&String(m.content||"").trim()!==""),max_tokens:max,temperature:0,stream:document.getElementById("chat-stream").checked,ds4_timeout_s:1800,ds4_job_class:"interactive"}}
+function updateAssistant(index,text){chatMessages[index].content=text;renderChat()}
+function chatUsageLine(usage,started){let elapsed=(Date.now()-started)/1000;let c=Number((usage||{}).completion_tokens)||0;let p=Number((usage||{}).prompt_tokens)||0;let t=elapsed>0&&c>0?(c/elapsed).toFixed(2):"0.00";return `done in ${elapsed.toFixed(1)}s · prompt ${p} · output ${c} · ${t} tok/s`}
+async function readChatStream(resp,index,started){let reader=resp.body.getReader();let decoder=new TextDecoder();let buffer="";let text="";let usage={};while(true){let {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let parts=buffer.split("\\n\\n");buffer=parts.pop()||"";for(let part of parts){let lines=part.split("\\n").filter(l=>l.startsWith("data:")).map(l=>l.slice(5).trim());if(!lines.length)continue;let data=lines.join("\\n");if(data==="[DONE]")continue;let event=JSON.parse(data);let choice=(event.choices||[{}])[0]||{};let delta=choice.delta||{};if(delta.content){text+=delta.content;updateAssistant(index,text)}if(event.usage)usage=event.usage}}setChatStatus(chatUsageLine(usage,started))}
+async function sendChat(){if(chatBusy)return;let input=document.getElementById("chat-input");let prompt=input.value.trim();if(!prompt)return;chatBusy=true;document.getElementById("chat-send").disabled=true;input.value="";chatMessages.push({role:"user",content:prompt});let assistantIndex=chatMessages.push({role:"assistant",content:""})-1;renderChat();let started=Date.now();setChatStatus("queued through DSAPI");try{let payload=chatPayload();let resp=await fetch("/api/chat/completions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!resp.ok){let body=await resp.text();throw new Error(`HTTP ${resp.status}: ${body}`)}if(payload.stream&&resp.body){await readChatStream(resp,assistantIndex,started)}else{let data=await resp.json();let choice=(data.choices||[{}])[0]||{};let msg=choice.message||{};updateAssistant(assistantIndex,msg.content||"");setChatStatus(chatUsageLine(data.usage||{},started))}}catch(e){updateAssistant(assistantIndex,`[chat error] ${e}`);setChatStatus("failed")}finally{chatBusy=false;document.getElementById("chat-send").disabled=false}}
+function setupChat(){let send=document.getElementById("chat-send");let reset=document.getElementById("chat-reset");let input=document.getElementById("chat-input");if(send)send.onclick=sendChat;if(reset)reset.onclick=()=>{chatMessages=[];renderChat();setChatStatus("history reset")};if(input)input.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.ctrlKey){e.preventDefault();sendChat()}});renderChat()}
 function metric(label,value){return `<div class="metric"><div class="label">${label}</div><div class="value">${value}</div></div>`}
 function bar(label,value,cls,known=true,text=""){let width=known?Math.max(0,Math.min(100,Number(value)||0)):0;return `<div class="barrow ${cls}"><span>${label}</span><div class="track"><div class="fill" style="width:${width}%"></div></div><span>${known?(text||pct(value)):"n/a"}</span></div>`}
 function workKnown(n){return n.vllm_metrics_up||Number(n.local_q_depth)>0||Number(n.input_tok_s)>0||Number(n.output_tok_s)>0||Number(n.vllm_running)>0||Number(n.vllm_waiting)>0}
@@ -109,6 +129,7 @@ function renderSummary(d){if(!selectedNode&&d.nodes&&d.nodes.length)selectedNode
 async function refreshOnce(){try{let r=await fetch("/api/summary",{cache:"no-store"});let d=await r.json();renderSummary(d);await refreshHistory()}catch(e){document.getElementById("updated").textContent="dashboard read failed: "+e}}
 function startTelemetryStream(){if(telemetryStream)telemetryStream.close();if(!window.EventSource){refreshOnce();return}let node=encodeURIComponent(selectedNode||"");telemetryStream=new EventSource(`/api/stream?node=${node}`);telemetryStream.addEventListener("telemetry",event=>{try{let payload=JSON.parse(event.data);if(payload.summary){renderSummary(payload.summary)}if(payload.history){drawHistory(payload.history)}}catch(e){document.getElementById("updated").textContent="stream parse failed: "+e}});telemetryStream.onerror=()=>{document.getElementById("updated").textContent="stream reconnecting"}}
 window.addEventListener("resize",()=>{if(lastHistory)paintChart(lastHistory)});
+setupChat();
 startTelemetryStream();
 </script></body></html>
 """
@@ -122,6 +143,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--repo-root", default=os.environ.get("DS4_TELEMETRY_REPO_ROOT",DEFAULT_REPO_ROOT))
     p.add_argument("--layer-partitions-json", default=os.environ.get("DS4_TELEMETRY_LAYER_PARTITIONS_JSON",DEFAULT_MODEL_LAYER_PARTITIONS_JSON))
+    p.add_argument("--dsapi-url", default=DEFAULT_DSAPI_URL)
     p.add_argument("--summary-stale-s", type=float, default=float(os.environ.get("DS4_TELEMETRY_SUMMARY_STALE_S",DEFAULT_SUMMARY_STALE_S)))
     return(p.parse_args())
 
@@ -619,7 +641,45 @@ def stream_payload(summary_path: str, nodes_dir: str, node: str, limit: int, sum
     return({"summary":summary,"history":history})
 
 
-def make_handler(summary_path: str, nodes_dir: str, summary_stale_s: float = 0.0) -> type[BaseHTTPRequestHandler]:
+def dsapi_chat_url(dsapi_url: str) -> str:
+    return(str(dsapi_url).rstrip("/") + "/v1/chat/completions")
+
+
+def read_json_body(handler: BaseHTTPRequestHandler, max_bytes: int = MAX_CHAT_BODY_BYTES) -> dict[str,Any]:
+    length_text = handler.headers.get("Content-Length","0")
+    try:
+        length = int(length_text)
+    except ValueError as exc:
+        raise ValueError("invalid content length") from exc
+    if length <= 0:
+        raise ValueError("empty request body")
+    if length > max_bytes:
+        raise ValueError("request body too large")
+    raw = handler.rfile.read(length)
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError("request body must be JSON") from exc
+    if not isinstance(payload,dict):
+        raise ValueError("request body must be a JSON object")
+    return(payload)
+
+
+def dsapi_timeout_s(body: dict[str,Any]) -> float:
+    timeout = fnum(body.get("ds4_timeout_s"))
+    if timeout <= 0.0:
+        timeout = 1800.0
+    return(timeout + 10.0)
+
+
+def dsapi_error_body(exc: Exception) -> bytes:
+    if isinstance(exc,HTTPError):
+        body = exc.read().decode("utf-8","replace")
+        return(json.dumps({"error":{"message":body or str(exc),"type":"dsapi_http_error","code":exc.code}},sort_keys=True).encode("utf-8"))
+    return(json.dumps({"error":{"message":str(exc),"type":"dsapi_proxy_error"}},sort_keys=True).encode("utf-8"))
+
+
+def make_handler(summary_path: str, nodes_dir: str, summary_stale_s: float = 0.0, dsapi_url: str = DEFAULT_DSAPI_URL) -> type[BaseHTTPRequestHandler]:
     class DashboardHandler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
         def handle(self) -> None:
@@ -650,6 +710,13 @@ def make_handler(summary_path: str, nodes_dir: str, summary_stale_s: float = 0.0
                 self._send(200,"text/plain; charset=utf-8",b"ok\n")
             else:
                 self._send(404,"text/plain; charset=utf-8",b"not found\n")
+        def do_POST(self) -> None:
+            parsed = urlparse(self.path)
+            path = parsed.path
+            if path == "/api/chat/completions":
+                self._proxy_chat()
+            else:
+                self._send(404,"text/plain; charset=utf-8",b"not found\n")
         def log_message(self, fmt: str, *args: Any) -> None:
             return
         def _send(self, status: int, content_type: str, body: bytes) -> None:
@@ -674,6 +741,46 @@ def make_handler(summary_path: str, nodes_dir: str, summary_stale_s: float = 0.0
                     time.sleep(STREAM_INTERVAL_S)
                 except (BrokenPipeError,ConnectionResetError,OSError):
                     return
+        def _proxy_chat(self) -> None:
+            try:
+                body = read_json_body(self)
+                if bool(body.get("stream")):
+                    self._proxy_chat_stream(body)
+                else:
+                    self._proxy_chat_json(body)
+            except Exception as exc:
+                self._send(400,"application/json",dsapi_error_body(exc))
+        def _proxy_chat_json(self, body: dict[str,Any]) -> None:
+            request = Request(dsapi_chat_url(dsapi_url),data=json.dumps(body,separators=(",",":"),sort_keys=True).encode("utf-8"),headers={"Content-Type":"application/json","Accept":"application/json"},method="POST")
+            try:
+                with urlopen(request,timeout=dsapi_timeout_s(body)) as response:
+                    payload = response.read()
+                    content_type = response.headers.get("Content-Type","application/json")
+                    self._send(response.status,content_type,payload)
+            except HTTPError as exc:
+                self._send(exc.code,"application/json",dsapi_error_body(exc))
+            except URLError as exc:
+                self._send(502,"application/json",dsapi_error_body(exc))
+        def _proxy_chat_stream(self, body: dict[str,Any]) -> None:
+            request = Request(dsapi_chat_url(dsapi_url),data=json.dumps(body,separators=(",",":"),sort_keys=True).encode("utf-8"),headers={"Content-Type":"application/json","Accept":"text/event-stream"},method="POST")
+            try:
+                with urlopen(request,timeout=dsapi_timeout_s(body)) as response:
+                    self.close_connection = True
+                    self.send_response(response.status)
+                    self.send_header("Content-Type",response.headers.get("Content-Type","text/event-stream"))
+                    self.send_header("Cache-Control","no-store")
+                    self.send_header("Connection","close")
+                    self.end_headers()
+                    while True:
+                        chunk = response.read(4096)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                        self.wfile.flush()
+            except HTTPError as exc:
+                self._send(exc.code,"application/json",dsapi_error_body(exc))
+            except URLError as exc:
+                self._send(502,"application/json",dsapi_error_body(exc))
     return(DashboardHandler)
 
 
@@ -688,8 +795,8 @@ def main() -> int:
     MODEL_LAYER_PARTITIONS_JSON_OVERRIDE = str(args.layer_partitions_json or "")
     MODEL_LAYER_PARTITIONS = None
     partitions = load_model_layer_partitions()
-    server = ReusableThreadingHTTPServer((args.host,args.port),make_handler(args.summary_json,args.nodes_dir,args.summary_stale_s))
-    print("serving Spark telemetry dashboard on http://%s:%d repo_root=%s layer_partitions=%d summary_stale_s=%.1f" % (args.host,args.port,repo_root(),len(partitions),args.summary_stale_s),flush=True)
+    server = ReusableThreadingHTTPServer((args.host,args.port),make_handler(args.summary_json,args.nodes_dir,args.summary_stale_s,args.dsapi_url))
+    print("serving Spark telemetry dashboard on http://%s:%d repo_root=%s layer_partitions=%d summary_stale_s=%.1f dsapi_url=%s" % (args.host,args.port,repo_root(),len(partitions),args.summary_stale_s,args.dsapi_url),flush=True)
     server.serve_forever()
     return(0)
 
