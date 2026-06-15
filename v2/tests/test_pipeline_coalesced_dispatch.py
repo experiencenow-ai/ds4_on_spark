@@ -1187,6 +1187,7 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertTrue(status["resident_multimodel"])
             self.assertEqual(status["resident_service_targets"]["dsv4_flash_pp8"], 64)
             self.assertEqual(status["resident_service_queue_depth_targets"]["dsv4_flash_pp8"], 64)
+            self.assertEqual(status["resident_compute_domain_batch_limits"], {"spark-fleet-0": 1})
             self.assertIn("dsv4_flash_pp8", status["resident_service_admission_modes"])
 
     def test_dispatcher_status_reports_live_queue_counts_by_service(self) -> None:
