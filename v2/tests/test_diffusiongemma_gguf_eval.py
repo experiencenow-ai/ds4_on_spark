@@ -43,7 +43,8 @@ class DiffusionGemmaGgufEvalTests(unittest.TestCase):
         self.assertEqual(rows[0]["max_output_tokens"], 2048)
         messages = rows[0]["input"]["messages"]
         self.assertIn("reasoning channel", messages[0]["content"])
-        self.assertIn("Answer: <line number", messages[1]["content"])
+        self.assertIn("literal text `Answer:`", messages[1]["content"])
+        self.assertIn("line number or comma-separated line numbers", messages[1]["content"])
         self.assertEqual(rows[0]["input"]["metadata"]["ds4_eval"]["answer"], "17-20")
 
     def test_grade_accepts_diffusiongemma_collect_shape(self) -> None:

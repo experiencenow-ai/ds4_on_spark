@@ -818,9 +818,22 @@ class OpenAICompatibleRunner:
                     if index < 0 or index >= len(chunk) or index in completed_indexes:
                         continue
                     delta = _completion_stream_choice_text(choice)
-                    text_by_index[index] += delta
+                    previous_text = text_by_index[index]
+                    next_text = previous_text + delta
+                    stop_text = _answer_marker_early_stop_text(next_text) if _request_stop_on_answer_marker(chunk[index]) else None
+                    text_by_index[index] = stop_text if stop_text is not None else next_text
                     if delta and on_delta is not None:
-                        on_delta(chunk[index].request_id, delta, {"coalesced_batch_size": len(chunk), "choice_index": index})
+                        published_delta = delta
+                        if stop_text is not None:
+                            published_delta = stop_text[len(previous_text):] if stop_text.startswith(previous_text) else ""
+                        if published_delta:
+                            on_delta(chunk[index].request_id, published_delta, {"coalesced_batch_size": len(chunk), "choice_index": index})
+                    if stop_text is not None:
+                        result = _coalesced_stream_result(chunk[index], profile, stop_text, base_url=self.base_url, endpoint=self.completion_endpoint, started=started, batch_size=len(chunk), prefetch_info=_copy_optional_dict(prefetch_info), auto_kv_suppressed=auto_kv_suppressed, answer_marker_early_stop=True)
+                        out[chunk[index].request_id] = result
+                        completed_indexes.add(index)
+                        on_result(chunk[index].request_id, result)
+                        continue
                     if choice.get("finish_reason") is None:
                         continue
                     result = _coalesced_stream_result(chunk[index], profile, text_by_index[index], base_url=self.base_url, endpoint=self.completion_endpoint, started=started, batch_size=len(chunk), prefetch_info=_copy_optional_dict(prefetch_info), auto_kv_suppressed=auto_kv_suppressed)
@@ -1581,6 +1594,7 @@ def _coalesced_stream_result(
     batch_size: int,
     prefetch_info: dict[str, Any] | None = None,
     auto_kv_suppressed: bool = False,
+    answer_marker_early_stop: bool = False,
 ) -> dict[str, Any]:
     result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=text)
     if _forced_output_request(request):
@@ -1600,6 +1614,8 @@ def _coalesced_stream_result(
         result["transport"]["kv_prestage"] = dict(prefetch_info)
     if auto_kv_suppressed:
         result["transport"]["coalesced_auto_kv_suppressed"] = True
+    if answer_marker_early_stop:
+        result["transport"]["answer_marker_early_stop"] = True
     return result
 
 

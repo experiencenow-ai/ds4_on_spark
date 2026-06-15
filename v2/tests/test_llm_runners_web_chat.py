@@ -133,6 +133,24 @@ class AnswerMarkerStreamingCompletionPromptBackend(OpenAICompatibleRunner):
         raise AssertionError("answer-marker streaming test should not use non-streaming post")
 
 
+class AnswerMarkerCoalescedStreamingBackend(OpenAICompatibleRunner):
+    def __init__(self) -> None:
+        super().__init__(base_url="http://unused")
+        self.calls: list[tuple[str, dict]] = []
+        self.tail_events_read = 0
+
+    def _post_sse_json(self, endpoint: str, payload: dict, **kwargs):
+        self.calls.append((endpoint, payload))
+        assert endpoint == self.completion_endpoint
+        assert payload["stream"] is True
+        yield {"choices": [{"index": 0, "text": "Reason.\nAnswer: 20\n", "finish_reason": None}]}
+        self.tail_events_read += 1
+        yield {"choices": [{"index": 0, "text": "This tail should not be read.", "finish_reason": "stop"}]}
+
+    def _post_json(self, endpoint: str, payload: dict) -> dict:
+        raise AssertionError("answer-marker coalesced streaming test should not use non-streaming post")
+
+
 class SlowTailStreamingBackend(OpenAICompatibleRunner):
     def __init__(self) -> None:
         super().__init__(base_url="http://unused")
@@ -235,6 +253,15 @@ class AnswerMarkerStreamingCompletionPromptPipelineRunner(PipelineOpenAIRunner):
         self.backend = AnswerMarkerStreamingCompletionPromptBackend()
 
     def _runner_for(self, profile: ModelProfile, node_id: str | None) -> AnswerMarkerStreamingCompletionPromptBackend:
+        return self.backend
+
+
+class AnswerMarkerCoalescedStreamingPipelineRunner(PipelineOpenAIRunner):
+    def __init__(self) -> None:
+        super().__init__(base_urls={"svc": "http://unused"})
+        self.backend = AnswerMarkerCoalescedStreamingBackend()
+
+    def _runner_for(self, profile: ModelProfile, node_id: str | None) -> AnswerMarkerCoalescedStreamingBackend:
         return self.backend
 
 
@@ -739,6 +766,40 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(seen, [("r2", "second done"), ("r", "first done")])
         self.assertEqual(results["r"]["transport"]["coalesced_completion_streaming"], True)
         self.assertEqual(results["r2"]["transport"]["coalesced_batch_size"], 2)
+
+    def test_pipeline_runner_stops_coalesced_completion_on_answer_marker(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": False,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {"served_model_name": "served-model"},
+            }
+        )
+        raw = make_request(chat=False).raw
+        raw["output_contract"]["stop_on_answer_marker"] = True
+        request = InferenceRequest.from_json(raw)
+        seen = []
+        runner = AnswerMarkerCoalescedStreamingPipelineRunner()
+
+        results = runner.run_many_on_node_incremental(
+            [request],
+            profile,
+            None,
+            concurrency=1,
+            on_result=lambda request_id, result: seen.append((request_id, result["output"]["text"])),
+            cancel_event=threading.Event(),
+        )
+
+        self.assertEqual(seen, [("r", "Reason.\nAnswer: 20")])
+        self.assertEqual(results["r"]["transport"]["coalesced_completion_streaming"], True)
+        self.assertTrue(results["r"]["transport"]["answer_marker_early_stop"])
+        self.assertEqual(runner.backend.tail_events_read, 0)
 
     def test_pipeline_runner_batches_mixed_completion_subgroups_incrementally(self) -> None:
         profile = ModelProfile.from_json(

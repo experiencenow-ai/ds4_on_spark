@@ -325,7 +325,8 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         )
 
         self.assertIn("At the end", prompt)
-        self.assertIn("Answer: <letter>", prompt)
+        self.assertIn("literal text `Answer:`", prompt)
+        self.assertNotIn("Answer: <letter>", prompt)
         self.assertNotIn("Output exactly one line", prompt)
 
     def test_concise_eval_prompt_requests_short_reasoning(self) -> None:
@@ -335,7 +336,8 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         )
 
         self.assertIn("at most three short sentences", prompt)
-        self.assertIn("Answer: <letter>", prompt)
+        self.assertIn("literal text `Answer:`", prompt)
+        self.assertIn("Do not print angle brackets", prompt)
 
     def test_answer_only_eval_prompt_requests_single_line(self) -> None:
         prompt = self.runner.build_question_prompt(
@@ -344,7 +346,8 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         )
 
         self.assertIn("Output exactly one line", prompt)
-        self.assertIn("Answer: <letter>", prompt)
+        self.assertIn("literal text `Answer:`", prompt)
+        self.assertFalse(prompt.rstrip().endswith("Answer: <letter>"))
 
     def test_compsec_strict_prompt_focuses_on_executable_bug_lines(self) -> None:
         prompt = self.runner.build_question_prompt(
@@ -354,7 +357,9 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
 
         self.assertIn("exact executable line", prompt)
         self.assertIn("smallest adjacent set of lines", prompt)
-        self.assertIn("Answer: <line number or comma-separated line numbers>", prompt)
+        self.assertIn("literal text `Answer:`", prompt)
+        self.assertIn("line number or comma-separated line numbers", prompt)
+        self.assertFalse(prompt.rstrip().endswith("Answer: <line number or comma-separated line numbers>"))
 
     def test_official_eval_prompt_keeps_legacy_end_marker_contract(self) -> None:
         prompt = self.runner.build_question_prompt(
@@ -363,7 +368,7 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         )
 
         self.assertIn("At the end", prompt)
-        self.assertIn("Answer: <letter>", prompt)
+        self.assertIn("literal text `Answer:`", prompt)
 
     def test_grades_choice_integer_and_compsec_answers(self) -> None:
         got, ok = self.runner._grade_one({"choices": ["x", "y", "z"], "answer": "B"}, "Reasoning.\nAnswer: B")
