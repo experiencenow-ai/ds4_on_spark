@@ -202,7 +202,13 @@ def run_ssh(host: str, command: str, timeout_s: int) -> subprocess.CompletedProc
     )
 
 
-def route_get(spec: RouteSpec, timeout_s: int, *, strict_next_hop: bool) -> tuple[bool, str]:
+def route_get(
+    spec: RouteSpec,
+    timeout_s: int,
+    *,
+    strict_next_hop: bool,
+    dev_state_cache: dict[tuple[str, str], bool] | None = None,
+) -> tuple[bool, str]:
     completed = run_ssh(
         spec.source_host or f"spark{spec.source_rank}",
         "ip route get " + shlex.quote(spec.target_ip),
@@ -215,7 +221,16 @@ def route_get(spec: RouteSpec, timeout_s: int, *, strict_next_hop: bool) -> tupl
     dev = _extract_field(first, "dev")
     via = _extract_field(first, "via")
     has_dev = dev in RAIL_DEVS
-    dev_up = _dev_is_up(spec.source_host or f"spark{spec.source_rank}", dev, timeout_s) if has_dev and dev is not None else False
+    dev_up = (
+        _dev_is_up(
+            spec.source_host or f"spark{spec.source_rank}",
+            dev,
+            timeout_s,
+            dev_state_cache,
+        )
+        if has_dev and dev is not None
+        else False
+    )
     has_via = via is not None
     has_src = f" src {spec.source_ip} " in f" {first} "
     has_expected_next_hop = (dev == spec.dev and via == spec.via)
@@ -328,21 +343,38 @@ def _parse_rank_filter(raw: str | None, nodes: int | list[NodeInfo]) -> list[int
     return ranks
 
 
-def _dev_is_up(host: str, dev: str | None, timeout_s: int) -> bool:
+def _dev_is_up(
+    host: str,
+    dev: str | None,
+    timeout_s: int,
+    cache: dict[tuple[str, str], bool] | None = None,
+) -> bool:
     if dev is None:
         return False
+    key = (host, dev)
+    if cache is not None and key in cache:
+        return cache[key]
     completed = run_ssh(
         host,
         "cat " + shlex.quote(f"/sys/class/net/{dev}/operstate"),
         timeout_s,
     )
-    return completed.returncode == 0 and completed.stdout.strip() == "up"
+    up = completed.returncode == 0 and completed.stdout.strip() == "up"
+    if cache is not None:
+        cache[key] = up
+    return up
 
 
 def check_specs(specs: list[RouteSpec], sudo: bool, timeout_s: int, *, strict_next_hop: bool) -> int:
     failures: list[RouteSpec] = []
+    dev_state_cache: dict[tuple[str, str], bool] = {}
     for spec in specs:
-        ok, route = route_get(spec, timeout_s, strict_next_hop=strict_next_hop)
+        ok, route = route_get(
+            spec,
+            timeout_s,
+            strict_next_hop=strict_next_hop,
+            dev_state_cache=dev_state_cache,
+        )
         status = "PASS" if ok else "FAIL"
         print(f"{status} {spec.label:<15} {spec.target_ip:<13} :: {route}")
         if not ok:

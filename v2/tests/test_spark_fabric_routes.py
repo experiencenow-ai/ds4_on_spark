@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import subprocess
 import sys
 import unittest
 
@@ -39,6 +40,45 @@ class SparkFabricRouteTests(unittest.TestCase):
         commands = spec.ip_cmds(sudo=False, remove_loopback=True)
         self.assertEqual(commands[1], "ip addr del 10.10.100.16/32 dev lo 2>/dev/null || true")
         self.assertEqual(commands[2], "ip addr replace 10.10.100.16/32 dev ds4ring0")
+
+    def test_route_check_caches_operstate_per_host_dev(self) -> None:
+        module = load_module()
+        calls: list[tuple[str, str]] = []
+
+        def fake_run_ssh(host: str, command: str, timeout_s: int) -> subprocess.CompletedProcess[str]:
+            calls.append((host, command))
+            if "ip route get" in command:
+                return subprocess.CompletedProcess(
+                    ["ssh"],
+                    0,
+                    stdout="10.10.100.12 via 10.10.2.2 dev enP2p1s0f1np1 src 10.10.100.10 uid 1000\n",
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(["ssh"], 0, stdout="up\n", stderr="")
+
+        module.run_ssh = fake_run_ssh
+        spec_a = module.RouteSpec(
+            source_rank=0,
+            target_rank=1,
+            target_ip="10.10.100.11",
+            via="10.10.2.2",
+            dev="enP2p1s0f1np1",
+            source_ip="10.10.100.10",
+            source_host="spark0",
+        )
+        spec_b = module.RouteSpec(
+            source_rank=0,
+            target_rank=2,
+            target_ip="10.10.100.12",
+            via="10.10.2.2",
+            dev="enP2p1s0f1np1",
+            source_ip="10.10.100.10",
+            source_host="spark0",
+        )
+        failures = module.check_specs([spec_a, spec_b], sudo=True, timeout_s=8, strict_next_hop=True)
+        operstate_calls = [command for _, command in calls if "operstate" in command]
+        self.assertEqual(failures, 0)
+        self.assertEqual(len(operstate_calls), 1)
 
 
 if __name__ == "__main__":
