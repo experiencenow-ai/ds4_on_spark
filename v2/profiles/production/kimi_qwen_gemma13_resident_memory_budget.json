@@ -108,7 +108,7 @@
         "lane": "smart",
         "lane_weight": 1.35,
         "pipeline_parallel_size": 13,
-        "gpu_memory_utilization": 0.30,
+        "gpu_memory_utilization": 0.27,
         "batch_size": 128,
         "input_budget_tokens": 8192,
         "output_budget_tokens": 4096,
