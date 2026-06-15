@@ -89,6 +89,7 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_API_JIT_KV_CIRCUIT_BREAKER"], "1")
         self.assertEqual(defaults["DS4_PIPELINE_INTERNAL_STREAM_ALL_COHORTS"], "1")
         self.assertEqual(defaults["DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S"], "0.25")
+        self.assertEqual(defaults["DS4_PIPELINE_SSE_FIRST_EVENT_TIMEOUT_S"], "60")
         self.assertEqual(defaults["DS4_PIPELINE_SSE_IDLE_TIMEOUT_S"], "30")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_USE_TOKEN_HINTS"], "1")
         self.assertEqual(json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])[DSV4_PRODUCTION["service_id"]], DSV4_PRODUCTION["max_num_seqs"])

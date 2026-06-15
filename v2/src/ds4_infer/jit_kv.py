@@ -14,6 +14,10 @@ class PrefetchEndpointDisabled(RuntimeError):
     pass
 
 
+class PrefetchEndpointUnavailable(PrefetchEndpointDisabled):
+    pass
+
+
 _DISABLED_PREFETCH_ENDPOINTS: set[str] = set()
 _DISABLED_PREFETCH_ENDPOINTS_LOCK = threading.RLock()
 
@@ -149,7 +153,10 @@ def run_prefetch(
         if fail_open:
             if disable_kv_on_cold:
                 disable_strict_kv(payload)
-            strategy = "jit-kv-prefetch-disabled-auto-cold-dispatch"
+            if isinstance(exc, PrefetchEndpointUnavailable):
+                strategy = "jit-kv-prefetch-unavailable-auto-cold-dispatch"
+            else:
+                strategy = "jit-kv-prefetch-disabled-auto-cold-dispatch"
             return _cold_dispatch_result(exc, prefix_len=prefix_len, started=started, strategy=strategy)
         raise
     except Exception as exc:
@@ -180,7 +187,11 @@ def _post_prefetch(runner: Any, payload: dict[str, Any]) -> dict[str, Any] | Non
         runner._post_json(runner.completion_endpoint, payload, timeout_s=timeout_s)
         return None
     headers = {"x-ds4-kv-prefetch-token": token} if token else {}
-    response = runner._post_json("/ds4/kv/prefetch", payload, extra_headers=headers, timeout_s=timeout_s)
+    try:
+        response = runner._post_json("/ds4/kv/prefetch", payload, extra_headers=headers, timeout_s=timeout_s)
+    except (TimeoutError, OSError) as exc:
+        _mark_prefetch_endpoint_disabled(runner, payload)
+        raise PrefetchEndpointUnavailable(f"DS4 KV prefetch endpoint unavailable for {_prefetch_endpoint_key(runner, payload)}: {exc}") from exc
     if _prefetch_response_endpoint_disabled(response):
         _mark_prefetch_endpoint_disabled(runner, payload)
         raise PrefetchEndpointDisabled(json.dumps(response, sort_keys=True)[-4000:])
