@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -275,6 +276,21 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
 
         self.assertEqual(relaunch._coordinator_python(args, default_path=Path("/definitely/missing/ds4-python")), sys.executable)
 
+    def test_relaunch_validates_env_before_stopping_existing_coordinator(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+        old_argv = list(sys.argv)
+        calls = []
+        sys.argv = [str(RELAUNCH_SCRIPT), "--skip-pull", "--skip-build", "--env", "DS4_API_JIT_KV_PREFETCH_API=1"]
+        try:
+            with unittest.mock.patch.object(relaunch, "load_prefetch_token", return_value=""):
+                with unittest.mock.patch.object(relaunch, "_run", side_effect=lambda argv, **kwargs: calls.append(argv)):
+                    with self.assertRaisesRegex(ValueError, "DS4_API_JIT_KV_PREFETCH_API=1"):
+                        relaunch.main()
+        finally:
+            sys.argv = old_argv
+
+        self.assertEqual(calls, [])
+
     def test_relaunch_arg_parser_defaults_to_source_owned_resident128_profile(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
         old_argv = list(sys.argv)
@@ -342,6 +358,10 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         os.environ["DS4_API_RESIDENT_MULTIMODEL"] = "0"
         os.environ["DS4_API_RESIDENT_SERVICE_IDS"] = "all-the-things"
         os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = "0"
+        old_host_soft = os.environ.get("DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT")
+        old_host_hard = os.environ.get("DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT")
+        os.environ["DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT"] = "99"
+        os.environ["DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT"] = "100"
         try:
             args = type("Args", (), {
                 "profile": DSV4_PRODUCTION["coordinator_profile"],
@@ -365,10 +385,20 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
                 os.environ.pop("DS4_PIPELINE_AUTO_KV_CACHE", None)
             else:
                 os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = old_auto_kv
+            if old_host_soft is None:
+                os.environ.pop("DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT", None)
+            else:
+                os.environ["DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT"] = old_host_soft
+            if old_host_hard is None:
+                os.environ.pop("DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT", None)
+            else:
+                os.environ["DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT"] = old_host_hard
         self.assertEqual(env["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(FIRST3_MEMORY_BUDGET["coordinator"]["dispatch_kv_capacity_bytes"]))
         self.assertEqual(env["DS4_API_RESIDENT_MULTIMODEL"], "1")
         self.assertEqual(env["DS4_API_RESIDENT_SERVICE_IDS"], "qwen27_bf16_pp8,gemma4_26b_a4b_pp8,dsv4_flash_pp8")
         self.assertEqual(env["DS4_PIPELINE_AUTO_KV_CACHE"], "1")
+        self.assertEqual(env["DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT"], "90")
+        self.assertEqual(env["DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT"], "94")
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import subprocess
 import sys
 import unittest
 from unittest.mock import patch
@@ -145,6 +146,41 @@ class GithubPrScriptTests(unittest.TestCase):
             runs,
         )
         self.assertIn(["gh", "api", "-X", "DELETE", "repos/experiencenow-ai/ds4_on_spark/git/refs/heads/codex/test"], outs)
+
+    def test_merge_retries_transient_api_failure(self) -> None:
+        gh = load_script()
+        runs: list[list[str]] = []
+        merge_attempts = 0
+
+        def fake_out(argv: list[str], *, check: bool = True):
+            if argv[:3] == ["gh", "pr", "checks"]:
+                return ('[{"name": "audit", "bucket": "pass"}]', 0, "")
+            if argv[:3] == ["gh", "repo", "view"]:
+                return ('{"nameWithOwner": "experiencenow-ai/ds4_on_spark"}', 0, "")
+            if argv[:3] == ["gh", "pr", "view"]:
+                return (
+                    '{"number": 9, "title": "Merge me", "headRefName": "codex/test", '
+                    '"headRepository": {"nameWithOwner": "experiencenow-ai/ds4_on_spark"}, '
+                    '"state": "OPEN", "url": "https://example.invalid/pr/9"}',
+                    0,
+                    "",
+                )
+            if argv[:4] == ["gh", "api", "-X", "DELETE"]:
+                return ("", 0, "")
+            raise AssertionError(argv)
+
+        def fake_run(argv: list[str]) -> None:
+            nonlocal merge_attempts
+            runs.append(argv)
+            if argv[:5] == ["gh", "api", "-X", "PUT", "repos/experiencenow-ai/ds4_on_spark/pulls/9/merge"]:
+                merge_attempts += 1
+                if merge_attempts == 1:
+                    raise subprocess.CalledProcessError(1, argv)
+
+        with patch.object(gh, "_run", fake_run), patch.object(gh, "_out", fake_out), patch.object(gh.time, "sleep", lambda _: None):
+            self.assertEqual(gh.main(["merge", "9"]), 0)
+
+        self.assertEqual(merge_attempts, 2)
 
 
 if __name__ == "__main__":
