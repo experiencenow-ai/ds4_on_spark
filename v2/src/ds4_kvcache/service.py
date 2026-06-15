@@ -365,10 +365,24 @@ def _lmcache_config_plan(
     config_path = rank_env.get("LMCACHE_CONFIG_FILE")
     if not config_path:
         raise ValueError("lmcache_config requires LMCACHE_CONFIG_FILE in extra_env")
+    data = _expand_rank_data(deployment.lmcache_config, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node)
+    data = _lmcache_rank_zero_lookup_default(deployment, data)
     return {
         "path": config_path,
-        "data": _expand_rank_data(deployment.lmcache_config, spark_node=spark_node, node_rank=node_rank, fabric_node=fabric_node),
+        "data": data,
     }
+
+
+def _lmcache_rank_zero_lookup_default(deployment: KvCacheDeployment, data: dict[str, Any]) -> dict[str, Any]:
+    if "lookup_server_worker_ids" in data:
+        return data
+    if deployment.connector.connector_id != "lmcache":
+        return data
+    if not deployment.is_pipeline or deployment.cache_sharding != "pipeline_layers":
+        return data
+    out = dict(data)
+    out["lookup_server_worker_ids"] = [0]
+    return out
 
 
 def _expand_rank_data(data: Any, *, spark_node: str, node_rank: int, fabric_node: TransferNode | None = None) -> Any:
