@@ -526,7 +526,18 @@ def _parse_vllm_prometheus_metrics(text: str) -> dict[str, Any]:
         if metric_name == "prompt_tokens_by_source_total":
             source = labels.get("source") or "unknown"
             _add_metric_value(parsed["prompt_tokens_by_source_total"], source, value)
-        elif metric_name in {"prompt_tokens_cached_total", "generation_tokens_total"}:
+        elif metric_name in {
+            "prompt_tokens_cached_total",
+            "generation_tokens_total",
+            "prefix_cache_query_total",
+            "prefix_cache_queries_total",
+            "prefix_cache_hit_total",
+            "prefix_cache_hits_total",
+            "external_prefix_cache_query_total",
+            "external_prefix_cache_queries_total",
+            "external_prefix_cache_hit_total",
+            "external_prefix_cache_hits_total",
+        }:
             _add_metric_value(parsed["counters"], metric_name, value)
         elif metric_name in {"num_requests_running", "num_requests_waiting"}:
             _add_metric_value(parsed["gauges"], metric_name, value)
@@ -599,11 +610,7 @@ def _vllm_metrics_delta_summary(before: dict[str, Any] | None, after: dict[str, 
         before.get("counters") if isinstance(before.get("counters"), dict) else {},
         after.get("counters") if isinstance(after.get("counters"), dict) else {},
     )
-    total_prompt_tokens = round(sum(source_delta.values()), 6)
-    external_tokens = source_delta.get("external_kv_transfer", 0.0)
-    local_cache_tokens = source_delta.get("local_cache_hit", 0.0)
-    local_compute_tokens = source_delta.get("local_compute", 0.0)
-    cache_hit_tokens = round(external_tokens + local_cache_tokens, 6)
+    derived = _vllm_metrics_derived_summary(source_delta, counter_delta)
     return {
         "before": before,
         "after": after,
@@ -611,17 +618,52 @@ def _vllm_metrics_delta_summary(before: dict[str, Any] | None, after: dict[str, 
             "prompt_tokens_by_source_total": source_delta,
             "counters": counter_delta,
         },
-        "derived": {
-            "prompt_token_source_total_delta": total_prompt_tokens,
-            "local_compute_token_delta": local_compute_tokens,
-            "local_cache_hit_token_delta": local_cache_tokens,
-            "external_kv_transfer_token_delta": external_tokens,
-            "cache_hit_token_delta": cache_hit_tokens,
-            "cache_hit_token_ratio": round(cache_hit_tokens / total_prompt_tokens, 6) if total_prompt_tokens > 0 else 0.0,
-            "generation_token_delta": counter_delta.get("generation_tokens_total", 0.0),
-            "prompt_tokens_cached_delta": counter_delta.get("prompt_tokens_cached_total", 0.0),
-        },
+        "derived": derived,
     }
+
+
+def _vllm_metrics_derived_summary(source_delta: dict[str, float], counter_delta: dict[str, float]) -> dict[str, float]:
+    total_prompt_tokens = round(sum(source_delta.values()), 6)
+    external_tokens = source_delta.get("external_kv_transfer", 0.0)
+    local_cache_tokens = source_delta.get("local_cache_hit", 0.0)
+    local_compute_tokens = source_delta.get("local_compute", 0.0)
+    cache_hit_tokens = round(external_tokens + local_cache_tokens, 6)
+    prefix_queries = _counter_delta_value(counter_delta, "prefix_cache_queries_total", "prefix_cache_query_total")
+    prefix_hits = _counter_delta_value(counter_delta, "prefix_cache_hits_total", "prefix_cache_hit_total")
+    external_prefix_queries = _counter_delta_value(
+        counter_delta,
+        "external_prefix_cache_queries_total",
+        "external_prefix_cache_query_total",
+    )
+    external_prefix_hits = _counter_delta_value(
+        counter_delta,
+        "external_prefix_cache_hits_total",
+        "external_prefix_cache_hit_total",
+    )
+    return {
+        "prompt_token_source_total_delta": total_prompt_tokens,
+        "local_compute_token_delta": local_compute_tokens,
+        "local_cache_hit_token_delta": local_cache_tokens,
+        "external_kv_transfer_token_delta": external_tokens,
+        "cache_hit_token_delta": cache_hit_tokens,
+        "cache_hit_token_ratio": round(cache_hit_tokens / total_prompt_tokens, 6) if total_prompt_tokens > 0 else 0.0,
+        "generation_token_delta": counter_delta.get("generation_tokens_total", 0.0),
+        "prompt_tokens_cached_delta": counter_delta.get("prompt_tokens_cached_total", 0.0),
+        "prefix_cache_query_delta": prefix_queries,
+        "prefix_cache_hit_delta": prefix_hits,
+        "prefix_cache_hit_ratio": round(prefix_hits / prefix_queries, 6) if prefix_queries > 0 else 0.0,
+        "external_prefix_cache_query_delta": external_prefix_queries,
+        "external_prefix_cache_hit_delta": external_prefix_hits,
+        "external_prefix_cache_hit_ratio": (
+            round(external_prefix_hits / external_prefix_queries, 6)
+            if external_prefix_queries > 0
+            else 0.0
+        ),
+    }
+
+
+def _counter_delta_value(counters: dict[str, float], *names: str) -> float:
+    return round(sum(float(counters.get(name) or 0.0) for name in names), 6)
 
 
 def _dict_metric_delta(before: dict[str, Any], after: dict[str, Any]) -> dict[str, float]:

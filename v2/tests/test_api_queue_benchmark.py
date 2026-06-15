@@ -421,6 +421,10 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
                     'vllm:prompt_tokens_by_source_total{engine="0",model_name="kimi",source="external_kv_transfer"} 256.0',
                     'vllm:prompt_tokens_cached_total{engine="0",model_name="kimi"} 384.0',
                     'vllm:generation_tokens_total{engine="0",model_name="kimi"} 1024.0',
+                    'vllm:prefix_cache_queries_total{engine="0",model_name="kimi"} 10.0',
+                    'vllm:prefix_cache_hits_total{engine="0",model_name="kimi"} 7.0',
+                    'vllm:external_prefix_cache_queries_total{engine="0",model_name="kimi"} 4.0',
+                    'vllm:external_prefix_cache_hits_total{engine="0",model_name="kimi"} 1.0',
                     'vllm:num_requests_running{engine="0",model_name="kimi"} 2.0',
                     'vllm:kv_cache_usage_perc{engine="0",model_name="kimi"} 0.25',
                 ]
@@ -432,6 +436,10 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         self.assertEqual(metrics["prompt_tokens_by_source_total"]["external_kv_transfer"], 256.0)
         self.assertEqual(metrics["counters"]["prompt_tokens_cached_total"], 384.0)
         self.assertEqual(metrics["counters"]["generation_tokens_total"], 1024.0)
+        self.assertEqual(metrics["counters"]["prefix_cache_queries_total"], 10.0)
+        self.assertEqual(metrics["counters"]["prefix_cache_hits_total"], 7.0)
+        self.assertEqual(metrics["counters"]["external_prefix_cache_queries_total"], 4.0)
+        self.assertEqual(metrics["counters"]["external_prefix_cache_hits_total"], 1.0)
         self.assertEqual(metrics["gauges"]["num_requests_running"], 2.0)
         self.assertEqual(metrics["gauges"]["kv_cache_usage_perc"], 0.25)
 
@@ -439,13 +447,27 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         before = {
             "format": "vllm-prometheus-snapshot-v1",
             "prompt_tokens_by_source_total": {"local_compute": 100.0, "external_kv_transfer": 0.0},
-            "counters": {"prompt_tokens_cached_total": 10.0, "generation_tokens_total": 20.0},
+            "counters": {
+                "prompt_tokens_cached_total": 10.0,
+                "generation_tokens_total": 20.0,
+                "prefix_cache_queries_total": 100.0,
+                "prefix_cache_hits_total": 20.0,
+                "external_prefix_cache_queries_total": 30.0,
+                "external_prefix_cache_hits_total": 0.0,
+            },
             "gauges": {},
         }
         after = {
             "format": "vllm-prometheus-snapshot-v1",
             "prompt_tokens_by_source_total": {"local_compute": 100.0, "local_cache_hit": 128.0, "external_kv_transfer": 512.0},
-            "counters": {"prompt_tokens_cached_total": 650.0, "generation_tokens_total": 276.0},
+            "counters": {
+                "prompt_tokens_cached_total": 650.0,
+                "generation_tokens_total": 276.0,
+                "prefix_cache_queries_total": 140.0,
+                "prefix_cache_hits_total": 50.0,
+                "external_prefix_cache_queries_total": 42.0,
+                "external_prefix_cache_hits_total": 3.0,
+            },
             "gauges": {},
         }
 
@@ -456,6 +478,45 @@ class ApiQueueBenchmarkTests(unittest.TestCase):
         self.assertEqual(summary["derived"]["cache_hit_token_delta"], 640.0)
         self.assertEqual(summary["derived"]["cache_hit_token_ratio"], 1.0)
         self.assertEqual(summary["derived"]["generation_token_delta"], 256.0)
+        self.assertEqual(summary["derived"]["prefix_cache_query_delta"], 40.0)
+        self.assertEqual(summary["derived"]["prefix_cache_hit_delta"], 30.0)
+        self.assertEqual(summary["derived"]["prefix_cache_hit_ratio"], 0.75)
+        self.assertEqual(summary["derived"]["external_prefix_cache_query_delta"], 12.0)
+        self.assertEqual(summary["derived"]["external_prefix_cache_hit_delta"], 3.0)
+        self.assertEqual(summary["derived"]["external_prefix_cache_hit_ratio"], 0.25)
+
+    def test_vllm_metrics_delta_summary_accepts_singular_cache_counter_names(self) -> None:
+        before = {
+            "format": "vllm-prometheus-snapshot-v1",
+            "prompt_tokens_by_source_total": {},
+            "counters": {
+                "prefix_cache_query_total": 5.0,
+                "prefix_cache_hit_total": 1.0,
+                "external_prefix_cache_query_total": 6.0,
+                "external_prefix_cache_hit_total": 0.0,
+            },
+            "gauges": {},
+        }
+        after = {
+            "format": "vllm-prometheus-snapshot-v1",
+            "prompt_tokens_by_source_total": {},
+            "counters": {
+                "prefix_cache_query_total": 15.0,
+                "prefix_cache_hit_total": 6.0,
+                "external_prefix_cache_query_total": 10.0,
+                "external_prefix_cache_hit_total": 2.0,
+            },
+            "gauges": {},
+        }
+
+        summary = bench._vllm_metrics_delta_summary(before, after)
+
+        self.assertEqual(summary["derived"]["prefix_cache_query_delta"], 10.0)
+        self.assertEqual(summary["derived"]["prefix_cache_hit_delta"], 5.0)
+        self.assertEqual(summary["derived"]["prefix_cache_hit_ratio"], 0.5)
+        self.assertEqual(summary["derived"]["external_prefix_cache_query_delta"], 4.0)
+        self.assertEqual(summary["derived"]["external_prefix_cache_hit_delta"], 2.0)
+        self.assertEqual(summary["derived"]["external_prefix_cache_hit_ratio"], 0.5)
 
     def test_benchmark_summary_embeds_vllm_metric_deltas(self) -> None:
         args = argparse.Namespace(
