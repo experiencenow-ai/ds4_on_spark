@@ -112,6 +112,50 @@ class Ds4EvalApiRunnerTests(unittest.TestCase):
         self.assertEqual(compsec_payload["input"]["benchmark_shape"]["response_style"], "compsec_strict")
         self.assertIn("exact executable line", compsec_payload["input"]["messages"][1]["content"])
 
+    def test_centaur92_quality_policy_keeps_larger_caps_with_smaller_shape_buckets(self) -> None:
+        args = argparse.Namespace(
+            vllm_url="none",
+            served_model="model",
+            max_output_tokens=2048,
+            enable_thinking=False,
+            chat_template_thinking_key="thinking",
+            thinking_budget_tokens=1024,
+            response_style="answer_first",
+            source_aware_policy="centaur92_quality",
+            temperature=0.0,
+            model="profile",
+        )
+        mc = {
+            "id": "super-x",
+            "question": "Pick one.",
+            "source": "SuperGPQA",
+            "domain": "science",
+            "title": "case",
+            "answer": "B",
+            "choices": ["a", "b", "c"],
+        }
+        aime = {
+            "id": "aime-x",
+            "question": "Compute.",
+            "source": "AIME2025",
+            "domain": "math",
+            "title": "case",
+            "answer": "42",
+            "choices": [],
+        }
+
+        mc_payload = self.runner._eval_request_payload(args, 0, mc)
+        aime_payload = self.runner._eval_request_payload(args, 1, aime)
+
+        self.assertEqual(mc_payload["max_output_tokens"], 1536)
+        self.assertEqual(mc_payload["input"]["benchmark_shape"]["output_tokens"], 768)
+        self.assertEqual(mc_payload["input"]["benchmark_shape"]["max_output_tokens"], 1536)
+        self.assertEqual(mc_payload["input"]["benchmark_shape"]["response_style"], "compsec_strict")
+        self.assertIn("at most three short sentences", mc_payload["input"]["messages"][1]["content"])
+        self.assertEqual(aime_payload["max_output_tokens"], 2048)
+        self.assertEqual(aime_payload["input"]["benchmark_shape"]["output_tokens"], 1536)
+        self.assertEqual(aime_payload["input"]["benchmark_shape"]["max_output_tokens"], 2048)
+
     def test_run_can_explicitly_cancel_batch_on_timeout(self) -> None:
         parser = self.runner._build_parser()
         args = parser.parse_args(["run", "--out-dir", "/tmp/ds4-eval-test", "--cancel-on-timeout"])

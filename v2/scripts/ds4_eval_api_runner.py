@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE_C = ROOT / "fixtures" / "ds4_eval" / "ds4_eval.c"
 TERMINAL = {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled", "failed"}
 RESPONSE_STYLES = ("official", "concise", "answer_only", "answer_first", "compsec_strict")
-SOURCE_AWARE_POLICIES = ("none", "centaur92")
+SOURCE_AWARE_POLICIES = ("none", "centaur92", "centaur92_quality")
 CENTAUR92_SOURCE_LIMITS = {
     "AIME2025": 2048,
     "COMPSEC": 1024,
@@ -33,6 +33,27 @@ CENTAUR92_SOURCE_STYLES = {
     "GPQA Diamond": "answer_first",
     "GPQA Diamond (modified)": "answer_first",
     "SuperGPQA": "answer_first",
+}
+CENTAUR92_QUALITY_SOURCE_LIMITS = {
+    "AIME2025": 2048,
+    "COMPSEC": 2048,
+    "GPQA Diamond": 1536,
+    "GPQA Diamond (modified)": 1536,
+    "SuperGPQA": 1536,
+}
+CENTAUR92_QUALITY_SHAPE_OUTPUT_TOKENS = {
+    "AIME2025": 1536,
+    "COMPSEC": 1024,
+    "GPQA Diamond": 768,
+    "GPQA Diamond (modified)": 768,
+    "SuperGPQA": 768,
+}
+CENTAUR92_QUALITY_SOURCE_STYLES = {
+    "AIME2025": "compsec_strict",
+    "COMPSEC": "compsec_strict",
+    "GPQA Diamond": "compsec_strict",
+    "GPQA Diamond (modified)": "compsec_strict",
+    "SuperGPQA": "compsec_strict",
 }
 
 
@@ -326,6 +347,7 @@ def write_requests(args: argparse.Namespace) -> None:
 def _eval_request_payload(args: argparse.Namespace, idx: int, case: dict) -> dict:
     max_output_tokens = _case_max_output_tokens(args, case)
     response_style = _case_response_style(args, case)
+    shape_output_tokens = _case_shape_output_tokens(args, case, max_output_tokens)
     question_prompt = build_question_prompt(case, response_style=response_style)
     rendered = None
     if not _skip_prompt_render(args.vllm_url):
@@ -347,7 +369,7 @@ def _eval_request_payload(args: argparse.Namespace, idx: int, case: dict) -> dic
         "max_output_tokens": max_output_tokens,
         "thinking_budget_tokens": _effective_thinking_budget_tokens(args),
         "temperature": float(args.temperature),
-        "input": _request_input_payload(case, question_prompt, rendered, idx, max_output_tokens, response_style),
+        "input": _request_input_payload(case, question_prompt, rendered, idx, max_output_tokens, response_style, shape_output_tokens),
         "output_contract": _eval_output_contract(args),
         "model_pin": {"profile_id": args.model},
     }
@@ -355,16 +377,32 @@ def _eval_request_payload(args: argparse.Namespace, idx: int, case: dict) -> dic
 
 def _case_max_output_tokens(args: argparse.Namespace, case: dict) -> int:
     fallback = max(1, int(args.max_output_tokens))
-    if str(getattr(args, "source_aware_policy", "none")) != "centaur92":
-        return fallback
-    return max(1, min(fallback, int(CENTAUR92_SOURCE_LIMITS.get(str(case.get("source") or ""), fallback))))
+    source = str(case.get("source") or "")
+    policy = str(getattr(args, "source_aware_policy", "none"))
+    if policy == "centaur92":
+        return max(1, min(fallback, int(CENTAUR92_SOURCE_LIMITS.get(source, fallback))))
+    if policy == "centaur92_quality":
+        return max(1, min(fallback, int(CENTAUR92_QUALITY_SOURCE_LIMITS.get(source, fallback))))
+    return fallback
 
 
 def _case_response_style(args: argparse.Namespace, case: dict) -> str:
     fallback = str(args.response_style)
-    if str(getattr(args, "source_aware_policy", "none")) != "centaur92":
-        return fallback
-    return str(CENTAUR92_SOURCE_STYLES.get(str(case.get("source") or ""), fallback))
+    source = str(case.get("source") or "")
+    policy = str(getattr(args, "source_aware_policy", "none"))
+    if policy == "centaur92":
+        return str(CENTAUR92_SOURCE_STYLES.get(source, fallback))
+    if policy == "centaur92_quality":
+        return str(CENTAUR92_QUALITY_SOURCE_STYLES.get(source, fallback))
+    return fallback
+
+
+def _case_shape_output_tokens(args: argparse.Namespace, case: dict, max_output_tokens: int) -> int:
+    source = str(case.get("source") or "")
+    policy = str(getattr(args, "source_aware_policy", "none"))
+    if policy == "centaur92_quality":
+        return max(1, min(max_output_tokens, int(CENTAUR92_QUALITY_SHAPE_OUTPUT_TOKENS.get(source, max_output_tokens))))
+    return max(1, int(max_output_tokens))
 
 
 def _eval_output_contract(args: argparse.Namespace) -> dict:
@@ -378,7 +416,7 @@ def _effective_thinking_budget_tokens(args: argparse.Namespace) -> int:
     return int(args.thinking_budget_tokens) if bool(args.enable_thinking) else 0
 
 
-def _request_input_payload(case: dict, question_prompt: str, rendered: str | None, idx: int, max_output_tokens: int, response_style: str) -> dict:
+def _request_input_payload(case: dict, question_prompt: str, rendered: str | None, idx: int, max_output_tokens: int, response_style: str, shape_output_tokens: int) -> dict:
     payload = {
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -391,7 +429,8 @@ def _request_input_payload(case: dict, question_prompt: str, rendered: str | Non
         "benchmark_shape": {
             "format": "ds4-eval-shape-v1",
             "source": case["source"],
-            "output_tokens": int(max_output_tokens),
+            "output_tokens": int(shape_output_tokens),
+            "max_output_tokens": int(max_output_tokens),
             "response_style": response_style,
         },
     }
