@@ -172,6 +172,7 @@ _SAFETY_PROFILE_DEFAULTS = {
     "DS4_API_JIT_KV_CIRCUIT_FAILURE_RATIO",
     "DS4_API_JIT_KV_CIRCUIT_COOLDOWN_S",
     "DS4_COMPUTE_LEASE_QUANTUM_S",
+    "DS4_API_RESIDENT_PREFER_COHORT_BATCH",
     "DS4_PIPELINE_INTERNAL_STREAM_ALL_COHORTS",
     "DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET",
     "DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE",
@@ -184,6 +185,8 @@ _SAFETY_PROFILE_DEFAULTS = {
     "DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S",
     "DS4_PIPELINE_AUTO_KV_CACHE",
     "DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS",
+    "DS4_PIPELINE_AUTO_KV_BATCH_POLICY",
+    "DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX",
 }
 
 
@@ -303,6 +306,8 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str, *, topology_pa
         "DS4_PIPELINE_AUTO_KV_CACHE": "1" if auto_kv_enabled else "0",
         "DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS": ",".join(topology_services) if topology_services else "qwen27_bf16_pp8,gemma4_26b_a4b_pp8,dsv4_flash_pp8",
         "DS4_PIPELINE_AUTO_KV_BATCH_POLICY": str(coordinator.get("auto_kv_batch_policy") or "prefer_batch"),
+        "DS4_API_RESIDENT_PREFER_COHORT_BATCH": _env_bool_value(coordinator.get("prefer_cohort_batch"), default=False),
+        "DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX": _env_bool_value(coordinator.get("prestage_auto_kv_prefix"), default=False),
     }
 
 
