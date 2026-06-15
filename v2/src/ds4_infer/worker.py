@@ -104,6 +104,7 @@ class BatchWorker:
         return _summary(len(claims), completed, failed, reap, prefilled_count=prefilled, retried_count=retried, batch_dispatch_count=1, batch_dispatch_mode=mode)
 
     def _finish_pair(self, claim: QueueClaim, result: dict[str, Any], on_result: FinishHook | None) -> tuple[int, int, int]:
+        cancel_requested = bool(self.queue.status(request_id=claim.request_id, refresh=False).get("cancel_requested"))
         if result.get("status") == "transport_failed":
             retry_state = self.queue.retry_transport_failure(request_id=claim.request_id, lease_id=claim.lease_id, result=result, max_attempts=self.transport_max_attempts)
             if retry_state == "requeued":
@@ -112,7 +113,7 @@ class BatchWorker:
                 on_result(claim, result)
             return (0, 1, 0) if retry_state == "failed" else (0, 0, 0)
         result_status = str(result.get("status") or "")
-        if result_status == "cancelled":
+        if cancel_requested or result_status == "cancelled":
             state = "cancelled"
         else:
             state = "completed" if result_status == "completed" else "failed"
@@ -508,7 +509,7 @@ def _finish_cancelled_or_terminal_pending(worker: BatchWorker, claims: list[Queu
             continue
         status = worker.queue.status(request_id=claim.request_id, refresh=False)
         state = str(status.get("state") or "")
-        if not bool(status.get("cancel_requested")) and state not in _TERMINAL_STATES:
+        if state not in _TERMINAL_STATES:
             continue
         item_completed, item_failed, item_retried = worker._finish_pair(claim, _cancelled(claim), on_result)
         completed += item_completed
