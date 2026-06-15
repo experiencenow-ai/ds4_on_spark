@@ -757,16 +757,9 @@ class CoordinatorApi:
         return len(claims)
 
     def _dispatcher_refill_resident_multimodel(
-        self,
-        *,
-        worker: BatchWorker,
-        executor: ThreadPoolExecutor,
-        pending: dict[Any, Any],
-        entry_node_id: str,
-        node_profile_ids: tuple[str, ...],
-        batch_limits_by_service: dict[str, int],
-        kv_shard_layouts_by_profile: dict[str, Any],
-        service_plans: dict[str, ResidentServicePlan],
+        self, *, worker: BatchWorker, executor: ThreadPoolExecutor, pending: dict[Any, Any],
+        entry_node_id: str, node_profile_ids: tuple[str, ...], batch_limits_by_service: dict[str, int],
+        kv_shard_layouts_by_profile: dict[str, Any], service_plans: dict[str, ResidentServicePlan],
     ) -> int:
         global_available = self.dispatcher_window - _pending_claim_count(pending)
         if global_available <= 0:
@@ -788,22 +781,19 @@ class CoordinatorApi:
             attempted += 1
             made_ready += self._resident_prepare_ready(worker, plan, entry_node_id, node_profile_ids, limit, kv_shard_layouts_by_profile)
             claims = self._resident_claim_ready(worker, plan, entry_node_id, limit, kv_shard_layouts_by_profile, batch_limits_by_service)
-            if not claims:
-                continue
-            claimed = len(claims)
-            self._dispatcher_submit_cohort(
+            claimed = self._resident_submit_claims(
                 executor=executor,
                 worker=worker,
                 pending=pending,
                 claims=claims,
-                rolling_refill=_plan_uses_rolling_admission(plan),
+                plan=plan,
                 entry_node_id=entry_node_id,
                 node_profile_ids=node_profile_ids,
                 batch_limits_by_service=batch_limits_by_service,
                 kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
-                low_watermark=plan.low_watermark,
             )
-            plan.charge(claimed)
+            if claimed <= 0:
+                continue
             submitted += claimed
             global_available -= claimed
             active_by_service[plan.service_id] = int(active_by_service.get(plan.service_id, 0)) + claimed
@@ -811,6 +801,37 @@ class CoordinatorApi:
                 active_batches_by_domain[plan.compute_domain] = int(active_batches_by_domain.get(plan.compute_domain, 0)) + 1
         self._dispatcher_note_resident(pending, service_plans, attempted=attempted, made_ready=made_ready)
         return submitted
+
+    def _resident_submit_claims(
+        self,
+        *,
+        executor: ThreadPoolExecutor,
+        worker: BatchWorker,
+        pending: dict[Any, Any],
+        claims: list[QueueClaim],
+        plan: ResidentServicePlan,
+        entry_node_id: str,
+        node_profile_ids: tuple[str, ...],
+        batch_limits_by_service: dict[str, int],
+        kv_shard_layouts_by_profile: dict[str, Any],
+    ) -> int:
+        if not claims:
+            return 0
+        claimed = len(claims)
+        self._dispatcher_submit_cohort(
+            executor=executor,
+            worker=worker,
+            pending=pending,
+            claims=claims,
+            rolling_refill=_plan_uses_rolling_admission(plan),
+            entry_node_id=entry_node_id,
+            node_profile_ids=node_profile_ids,
+            batch_limits_by_service=batch_limits_by_service,
+            kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
+            low_watermark=plan.low_watermark,
+        )
+        plan.charge(claimed)
+        return claimed
 
     def _resident_refill_limit(self, plan: ResidentServicePlan, active_by_service: dict[str, int], submitted: int, global_available: int) -> int:
         active = int(active_by_service.get(plan.service_id, 0))
