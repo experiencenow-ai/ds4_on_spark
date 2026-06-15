@@ -131,7 +131,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(coordinator["completion_pp_safe_cohort_max"], 128)
         self.assertEqual(coordinator["completion_chunk_concurrency"], 4)
         self.assertEqual(coordinator["completion_token_budget"], 65536)
-        self.assertEqual(coordinator["auto_kv_batch_policy"], "strict_cache")
+        self.assertEqual(coordinator["auto_kv_batch_policy"], "prefer_batch")
         self.assertTrue(coordinator["prefer_cohort_batch"])
         self.assertTrue(coordinator["prestage_auto_kv_prefix"])
 
