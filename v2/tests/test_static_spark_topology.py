@@ -132,7 +132,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(coordinator["completion_chunk_concurrency"], 4)
         self.assertEqual(coordinator["completion_token_budget"], 65536)
         self.assertEqual(coordinator["auto_kv_batch_policy"], "strict_cache")
-        self.assertFalse(coordinator["prefer_cohort_batch"])
+        self.assertTrue(coordinator["prefer_cohort_batch"])
         self.assertTrue(coordinator["prestage_auto_kv_prefix"])
 
     def test_pipeline_client_urls_resolve_loopback_to_entry_node(self) -> None:
