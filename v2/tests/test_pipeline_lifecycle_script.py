@@ -400,6 +400,13 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertIn("vllm_running", script)
         self.assertIn("refusing Spark repo update while active DSAPI/vLLM work is visible", script)
 
+    def test_spark_updater_fails_closed_on_unreachable_nodes_by_default(self) -> None:
+        script = (ROOT.parent / "scripts" / "ds4_update_spark_nodes.sh").read_text(encoding="utf-8")
+
+        self.assertIn('DS4_SKIP_UNREACHABLE=0', script)
+        self.assertIn('skip_unreachable="${DS4_SKIP_UNREACHABLE:-0}"', script)
+        self.assertIn('set 1 only for intentional partial maintenance', script)
+
     def test_spark_updater_active_guard_exits_before_ssh(self) -> None:
         script = ROOT.parent / "scripts" / "ds4_update_spark_nodes.sh"
         env = dict(os.environ)
