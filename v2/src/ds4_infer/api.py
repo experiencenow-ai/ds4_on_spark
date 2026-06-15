@@ -490,7 +490,7 @@ class CoordinatorApi:
         state.setdefault("resident_service_targets", {sid: plan.target_active for sid, plan in service_plans.items()})
         state.setdefault("resident_service_queue_depth_targets", {sid: plan.queue_depth_target for sid, plan in service_plans.items()})
         state.setdefault("resident_service_low_watermarks", {sid: plan.low_watermark for sid, plan in service_plans.items()})
-        state.setdefault("resident_compute_domain_active_batches", {})
+        state["resident_compute_domain_active_batches"] = _resident_active_domain_batches_from_status(state)
         state["resident_compute_domain_batch_limits"] = _resident_compute_domain_batch_limits(service_plans)
         state.setdefault("resident_service_admission_modes", {sid: plan.admission_mode for sid, plan in service_plans.items()})
 
@@ -1916,6 +1916,20 @@ def _resident_compute_domain_batch_limits(service_plans: dict[str, ResidentServi
         existing = limits.get(domain)
         limits[domain] = limit if existing is None else min(existing, limit)
     return limits
+
+
+def _resident_active_domain_batches_from_status(state: dict[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    details = state.get("pending_cohort_details")
+    if not isinstance(details, list):
+        return counts
+    for item in details:
+        if not isinstance(item, dict) or int(item.get("active_count") or 0) <= 0:
+            continue
+        domain = str(item.get("compute_domain") or "")
+        if domain:
+            counts[domain] = counts.get(domain, 0) + 1
+    return counts
 
 
 def _dispatcher_batch_ineligible_reason(worker: BatchWorker, claims: list[QueueClaim]) -> str:

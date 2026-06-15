@@ -1190,6 +1190,21 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual(status["resident_compute_domain_batch_limits"], {"spark-fleet-0": 1})
             self.assertIn("dsv4_flash_pp8", status["resident_service_admission_modes"])
 
+    def test_dispatcher_status_clears_stale_active_compute_domain(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            with api.dispatcher_lock:
+                api.dispatcher_state.update(
+                    pending=0,
+                    pending_cohort_details=[],
+                    resident_compute_domain_active_batches={"spark-fleet-0": 1},
+                )
+
+            status = api.dispatcher_status()
+
+            self.assertEqual(status["resident_compute_domain_active_batches"], {})
+            self.assertEqual(status["resident_compute_domain_batch_limits"], {"spark-fleet-0": 1})
+
     def test_dispatcher_status_reports_live_queue_counts_by_service(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
