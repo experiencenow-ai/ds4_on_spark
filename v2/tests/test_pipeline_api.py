@@ -868,6 +868,71 @@ class PipelineApiTests(unittest.TestCase):
         self.assertEqual(calls[1]["payload"]["prompt"], [f"{prefix}request {idx}" for idx in range(3)])
         self.assertEqual(results["kv-0"]["transport"]["kv_prestage"]["strategy"], "single-prefix-load-before-cohort")
 
+    def test_pipeline_runner_prestages_generated_auto_kv_prefix_fail_open(self) -> None:
+        old_prestage_auto = os.environ.get("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX")
+        old_prefetch_api = os.environ.get("DS4_API_JIT_KV_PREFETCH_API")
+        os.environ["DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX"] = "1"
+        os.environ["DS4_API_JIT_KV_PREFETCH_API"] = "0"
+        try:
+            prefix = "stable generated auto prefix " * 50
+            plan = {
+                "format": "ds4-kv-cache-plan-v1",
+                "backend": "lmcache_hma",
+                "cache_id": "ds4-auto:qwen27:abc123",
+                "prefix_hash": "sha256:auto",
+                "load": {"mode": "prefer", "transport": "local_store", "cache_key": "ds4-auto:qwen27:abc123"},
+                "store": {"mode": "write_back", "transport": "local_store", "cache_key": "ds4-auto:qwen27:abc123"},
+                "miss_policy": "compute_and_store",
+                "route_affinity": "preferred",
+                "model_fingerprint": {},
+                "operation": "load_store",
+                "batch_key_hash": "sha256:batch",
+            }
+            requests = [
+                InferenceRequest.from_json(
+                    {
+                        "format": "ds4-inference-request-v1",
+                        "request_id": f"auto-kv-{idx}",
+                        "capability": "efficient",
+                        "chat": False,
+                        "immediate": False,
+                        "job_class": "analysis",
+                        "max_output_tokens": 8,
+                        "thinking_budget_tokens": 0,
+                        "temperature": 0,
+                        "input": {"prompt": f"{prefix}request {idx}", "shared_prefix": prefix},
+                        "output_contract": {"format": "text"},
+                    }
+                )
+                for idx in range(2)
+            ]
+            payload = {"model": "qwen27-bf16-pp13", "prompt": [request.input["prompt"] for request in requests], "extra_body": {"ds4_kv_cache": dict(plan)}, "kv_transfer_params": {"ds4_kv_cache": dict(plan)}}
+            calls: list[dict] = []
+            runner = OpenAICompatibleRunner(base_url="http://127.0.0.1:9")
+
+            def fake_post(endpoint, body, **kwargs):
+                calls.append({"endpoint": endpoint, "payload": body})
+                return {"choices": [{"index": 0, "text": "warm"}], "usage": {"completion_tokens": 1}}
+
+            runner._post_json = fake_post  # type: ignore[method-assign]
+            info = _maybe_prestage_common_kv_prefix(runner, payload, requests)
+
+            self.assertIsNotNone(info)
+            assert info is not None
+            self.assertEqual(info["strategy"], "single-prefix-load-before-cohort")
+            self.assertEqual(calls[0]["payload"]["prompt"], prefix)
+            self.assertIn("kv_transfer_params", payload)
+            self.assertIn("extra_body", payload)
+        finally:
+            if old_prestage_auto is None:
+                os.environ.pop("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX", None)
+            else:
+                os.environ["DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX"] = old_prestage_auto
+            if old_prefetch_api is None:
+                os.environ.pop("DS4_API_JIT_KV_PREFETCH_API", None)
+            else:
+                os.environ["DS4_API_JIT_KV_PREFETCH_API"] = old_prefetch_api
+
     def test_jit_kv_circuit_breaker_dispatches_cold_after_prefetch_failures(self) -> None:
         plan = {
             "format": "ds4-kv-cache-plan-v1",
@@ -917,6 +982,70 @@ class PipelineApiTests(unittest.TestCase):
         self.assertNotIn("kv_transfer_params", payload)
         self.assertNotIn("extra_body", payload)
         self.assertTrue(circuit.status()["jit_kv_circuit_open"])
+
+    def test_generated_auto_kv_prefetch_failure_keeps_kv_plan_for_cold_compute(self) -> None:
+        old_prestage_auto = os.environ.get("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX")
+        old_prefetch_api = os.environ.get("DS4_API_JIT_KV_PREFETCH_API")
+        os.environ["DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX"] = "1"
+        os.environ["DS4_API_JIT_KV_PREFETCH_API"] = "0"
+        try:
+            plan = {
+                "format": "ds4-kv-cache-plan-v1",
+                "backend": "lmcache_hma",
+                "cache_id": "ds4-auto:qwen27:def456",
+                "load": {"mode": "prefer", "transport": "local_store", "cache_key": "ds4-auto:qwen27:def456"},
+                "store": {"mode": "write_back", "transport": "local_store", "cache_key": "ds4-auto:qwen27:def456"},
+                "miss_policy": "compute_and_store",
+                "route_affinity": "preferred",
+                "model_fingerprint": {},
+                "operation": "load_store",
+                "batch_key_hash": "sha256:batch",
+            }
+            prefix = "auto fail-open prefix " * 80
+            requests = [
+                InferenceRequest.from_json(
+                    {
+                        "format": "ds4-inference-request-v1",
+                        "request_id": f"auto-cold-{idx}",
+                        "capability": "efficient",
+                        "chat": False,
+                        "immediate": False,
+                        "job_class": "analysis",
+                        "max_output_tokens": 8,
+                        "thinking_budget_tokens": 0,
+                        "temperature": 0,
+                        "input": {"prompt": f"{prefix}item {idx}", "shared_prefix": prefix},
+                        "output_contract": {"format": "text"},
+                    }
+                )
+                for idx in range(2)
+            ]
+            payload = {"model": "qwen27-bf16-pp13", "prompt": [request.input["prompt"] for request in requests], "extra_body": {"ds4_kv_cache": dict(plan)}, "kv_transfer_params": {"ds4_kv_cache": dict(plan)}}
+            circuit = JitKvCircuitBreaker(enabled=True, min_samples=1, failure_ratio=1.0, cooldown_s=60)
+            runner = OpenAICompatibleRunner(base_url="http://127.0.0.1:9", jit_kv_circuit=circuit)
+
+            def fail_post(endpoint, body, **kwargs):
+                raise RuntimeError("auto prefetch endpoint down")
+
+            runner._post_json = fail_post  # type: ignore[method-assign]
+            info = _maybe_prestage_common_kv_prefix(runner, payload, requests)
+
+            self.assertIsNotNone(info)
+            assert info is not None
+            self.assertTrue(info["cold_dispatch"])
+            self.assertEqual(info["strategy"], "jit-kv-prefetch-failed-auto-cold-dispatch")
+            self.assertIn("kv_transfer_params", payload)
+            self.assertIn("extra_body", payload)
+            self.assertTrue(circuit.status()["jit_kv_circuit_open"])
+        finally:
+            if old_prestage_auto is None:
+                os.environ.pop("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX", None)
+            else:
+                os.environ["DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX"] = old_prestage_auto
+            if old_prefetch_api is None:
+                os.environ.pop("DS4_API_JIT_KV_PREFETCH_API", None)
+            else:
+                os.environ["DS4_API_JIT_KV_PREFETCH_API"] = old_prefetch_api
 
 
 if __name__ == "__main__":

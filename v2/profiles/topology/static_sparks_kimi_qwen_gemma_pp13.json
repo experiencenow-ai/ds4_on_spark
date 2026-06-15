@@ -460,7 +460,9 @@
       "completion_pp_safe_cohort_max": 256,
       "completion_chunk_concurrency": 4,
       "dispatch_kv_capacity_bytes": 23622320128,
-      "auto_kv_batch_policy": "strict_cache"
+      "auto_kv_batch_policy": "strict_cache",
+      "prefer_cohort_batch": true,
+      "prestage_auto_kv_prefix": true
     }
   },
   "topology_id": "static_sparks_kimi27_qwen_gemma_pp13"

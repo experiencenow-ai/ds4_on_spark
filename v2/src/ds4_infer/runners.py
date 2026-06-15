@@ -1217,13 +1217,16 @@ def _coalesced_chat_completion_payload(requests: list[InferenceRequest], profile
 def _maybe_prestage_common_kv_prefix(runner: OpenAICompatibleRunner, payload: dict[str, Any], requests: list[InferenceRequest]) -> dict[str, Any] | None:
     if not _env_bool("DS4_PIPELINE_PRESTAGE_COMMON_KV_PREFIX", True):
         return None
-    if not _payload_has_strict_kv_load(payload):
+    strict_kv = _payload_has_strict_kv_load(payload)
+    auto_kv = _payload_has_prestageable_auto_kv(payload)
+    if not strict_kv and not auto_kv:
         return None
     circuit = getattr(runner, "jit_kv_circuit", None)
     if circuit is not None and not circuit.allow_prefetch():
-        disable_strict_kv(payload)
+        if strict_kv:
+            disable_strict_kv(payload)
         return {
-            "strategy": "jit-kv-circuit-open-cold-dispatch",
+            "strategy": "jit-kv-circuit-open-cold-dispatch" if strict_kv else "jit-kv-circuit-open-prefetch-skipped",
             "cold_dispatch": True,
         }
     prefix = _common_prompt_prefix(requests)
@@ -1232,15 +1235,30 @@ def _maybe_prestage_common_kv_prefix(runner: OpenAICompatibleRunner, payload: di
         return None
     max_tokens = max(1, _env_int("DS4_PIPELINE_PRESTAGE_MAX_TOKENS", 1))
     prefetch_payload = build_prefetch_payload(payload, prefix=prefix, max_tokens=max_tokens)
-    return run_prefetch(runner=runner, payload=payload, prefetch_payload=prefetch_payload, prefix_len=len(prefix), max_tokens=max_tokens, started=time.time(), circuit=circuit)
+    return run_prefetch(
+        runner=runner,
+        payload=payload,
+        prefetch_payload=prefetch_payload,
+        prefix_len=len(prefix),
+        max_tokens=max_tokens,
+        started=time.time(),
+        circuit=circuit,
+        fail_open=auto_kv and not strict_kv,
+        disable_kv_on_cold=strict_kv,
+    )
+
+
+def _payload_ds4_kv_cache_plan(payload: dict[str, Any]) -> dict[str, Any] | None:
+    extra = payload.get("extra_body")
+    if not isinstance(extra, dict):
+        return None
+    plan = extra.get("ds4_kv_cache")
+    return plan if isinstance(plan, dict) else None
 
 
 def _payload_has_strict_kv_load(payload: dict[str, Any]) -> bool:
-    extra = payload.get("extra_body")
-    if not isinstance(extra, dict):
-        return False
-    plan = extra.get("ds4_kv_cache")
-    if not isinstance(plan, dict):
+    plan = _payload_ds4_kv_cache_plan(payload)
+    if plan is None:
         return False
     load = plan.get("load")
     if not isinstance(load, dict):
@@ -1249,6 +1267,24 @@ def _payload_has_strict_kv_load(payload: dict[str, Any]) -> bool:
         return False
     miss_policy = str(plan.get("miss_policy") or "")
     return str(load.get("mode") or "") == "require" or miss_policy == "fail"
+
+
+def _payload_has_prestageable_auto_kv(payload: dict[str, Any]) -> bool:
+    if not _env_bool("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX", False):
+        return False
+    plan = _payload_ds4_kv_cache_plan(payload)
+    if plan is None:
+        return False
+    cache_id = plan.get("cache_id")
+    load = plan.get("load")
+    store = plan.get("store")
+    if not isinstance(cache_id, str) or not cache_id.startswith("ds4-auto:"):
+        return False
+    if not isinstance(load, dict) or str(load.get("mode") or "") != "prefer":
+        return False
+    if not isinstance(store, dict) or str(store.get("mode") or "") != "write_back":
+        return False
+    return str(plan.get("miss_policy") or "") == "compute_and_store"
 
 
 def _common_prompt_prefix(requests: list[InferenceRequest]) -> str | None:

@@ -125,6 +125,8 @@ def run_prefetch(
     max_tokens: int,
     started: float,
     circuit: Any | None,
+    fail_open: bool = False,
+    disable_kv_on_cold: bool = True,
 ) -> dict[str, Any]:
     try:
         if circuit is not None:
@@ -136,9 +138,11 @@ def run_prefetch(
     except Exception as exc:
         if circuit is not None:
             circuit.record_failure(str(exc))
-        if circuit is not None and not circuit.allow_prefetch():
-            disable_strict_kv(payload)
-            return _cold_dispatch_result(exc, prefix_len=prefix_len, started=started)
+        if fail_open or (circuit is not None and not circuit.allow_prefetch()):
+            if disable_kv_on_cold:
+                disable_strict_kv(payload)
+            strategy = "jit-kv-prefetch-failed-auto-cold-dispatch" if fail_open else "jit-kv-prefetch-failed-cold-dispatch"
+            return _cold_dispatch_result(exc, prefix_len=prefix_len, started=started, strategy=strategy)
         raise
 
 
@@ -174,5 +178,5 @@ def _prefetch_result(response: dict[str, Any] | None, *, prefix_len: int, max_to
     return out
 
 
-def _cold_dispatch_result(exc: Exception, *, prefix_len: int, started: float) -> dict[str, Any]:
-    return {"common_prefix_chars": prefix_len, "duration_s": round(time.time() - started, 6), "strategy": "jit-kv-prefetch-failed-cold-dispatch", "cold_dispatch": True, "error": str(exc)[-1000:]}
+def _cold_dispatch_result(exc: Exception, *, prefix_len: int, started: float, strategy: str = "jit-kv-prefetch-failed-cold-dispatch") -> dict[str, Any]:
+    return {"common_prefix_chars": prefix_len, "duration_s": round(time.time() - started, 6), "strategy": strategy, "cold_dispatch": True, "error": str(exc)[-1000:]}

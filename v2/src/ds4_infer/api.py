@@ -470,6 +470,8 @@ class CoordinatorApi:
         except Exception as exc:
             state["queue_status_error"] = str(exc)
         self._dispatcher_status_add_resident_defaults(state)
+        state["resident_prefer_cohort_batch"] = _env_bool("DS4_API_RESIDENT_PREFER_COHORT_BATCH", False)
+        state["prestage_auto_kv_prefix_enabled"] = _env_bool("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX", False)
         state.update(self.jit_kv_circuit.status())
         state["jit_kv_startup_recovery"] = dict(self.jit_kv_startup_recovery)
         return state
