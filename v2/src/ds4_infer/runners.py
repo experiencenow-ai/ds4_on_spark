@@ -737,6 +737,7 @@ class OpenAICompatibleRunner:
             return out
         except Exception as exc:
             if len(chunk) > 1 and _env_bool("DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE", True) and coalesced_failure_should_bisect(str(exc)):
+                split_reason = str(exc)
                 midpoint = max(1, len(chunk) // 2)
                 out: dict[str, dict] = {}
                 for subchunk in (chunk[:midpoint], chunk[midpoint:]):
@@ -745,6 +746,7 @@ class OpenAICompatibleRunner:
                         break
                     out.update(self._run_completion_chunk(subchunk, profile, subpayload, original_batch_size=original_batch_size))
                 if len(out) == len(chunk):
+                    mark_coalesced_split(out, original_batch_size=original_batch_size, reason=split_reason)
                     return out
             return {
                 item.request_id: self._transport_failure(item, profile, started, str(exc), endpoint=self.completion_endpoint, coalesced_batch_size=len(chunk))
@@ -852,6 +854,7 @@ class OpenAICompatibleRunner:
                     break
         except Exception as exc:
             if len(chunk) > 1 and _env_bool("DS4_PIPELINE_COMPLETION_BISECT_ON_FAILURE", True) and coalesced_failure_should_bisect(str(exc)):
+                split_reason = str(exc)
                 midpoint = max(1, len(chunk) // 2)
                 out = {}
                 for subchunk in (chunk[:midpoint], chunk[midpoint:]):
@@ -861,6 +864,7 @@ class OpenAICompatibleRunner:
                     subpayload["stream"] = True
                     out.update(self._run_completion_stream_chunk(subchunk, profile, subpayload, on_result=on_result, on_delta=on_delta, cancel_event=cancel_event, original_batch_size=original_size))
                 if len(out) == len(chunk):
+                    mark_coalesced_split(out, original_batch_size=original_size, reason=split_reason)
                     return out
             for index, item in enumerate(chunk):
                 if index in completed_indexes:

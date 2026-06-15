@@ -918,6 +918,7 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertTrue(all(status == "completed" for _, status in seen))
         self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_split_retry"] for index in range(4)))
         self.assertTrue(all(results[f"r{index}"]["transport"]["original_coalesced_batch_size"] == 4 for index in range(4)))
+        self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_split_retry_reason"] == "SSE stream first event timeout after 60.000s" for index in range(4)))
 
     def test_pipeline_runner_stops_coalesced_completion_on_answer_marker(self) -> None:
         profile = ModelProfile.from_json(

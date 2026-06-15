@@ -9,7 +9,7 @@
     "dtype": "fp8",
     "external_backend": "lmcache_hma",
     "expected_node_fraction": "1/13",
-    "fixed_kv_cache_memory_bytes": 6248464384,
+    "fixed_kv_cache_memory_bytes": 6060769280,
     "sharding": "pipeline_layers"
   },
   "admission": {
