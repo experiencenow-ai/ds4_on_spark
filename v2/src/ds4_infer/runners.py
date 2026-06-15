@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -23,7 +22,7 @@ from .coalesced_groups import plan_compatible_payload_groups
 from .jit_kv import build_prefetch_payload, disable_strict_kv, run_prefetch
 from .kv_cache import kv_cache_extra_body, kv_cache_vllm_request_fields
 from .profiles import ModelProfile
-from .runner_payloads import AUTO_KV_BATCH_SUPPRESSED_KEY, maybe_suppress_generated_auto_kv_for_cohort, merge_payload_extra_body, merge_request_extra_body, requests_need_client_stream
+from .runner_payloads import AUTO_KV_BATCH_SUPPRESSED_KEY, AUTO_KV_PRESTAGE_PLAN_KEY, auto_kv_cache_plan_from_material, coalesced_auto_kv_prestage_material, kv_plan_has_strict_load, kv_plan_is_prestageable_auto, maybe_suppress_generated_auto_kv_for_cohort, merge_payload_extra_body, merge_request_extra_body, requests_need_client_stream
 from .schemas import InferenceRequest, make_result
 
 
@@ -1243,6 +1242,13 @@ def _coalesced_completion_payload(requests: list[InferenceRequest], profile: Mod
     payload["prompt"] = prompts
     if auto_kv_suppressed:
         payload[AUTO_KV_BATCH_SUPPRESSED_KEY] = True
+        if _env_bool("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX", False) and _env_bool("DS4_PIPELINE_PRESTAGE_SUPPRESSED_AUTO_KV_PREFIX", True):
+            prefix = _common_prompt_prefix(requests)
+            min_chars = _env_int("DS4_PIPELINE_PRESTAGE_COMMON_PREFIX_MIN_CHARS", 1024)
+            if prefix is not None and len(prefix) >= max(1, min_chars):
+                service_id = _profile_service_id(profile)
+                material = coalesced_auto_kv_prestage_material(requests, payload, profile, prefix=prefix, service_id=service_id)
+                payload[AUTO_KV_PRESTAGE_PLAN_KEY] = auto_kv_cache_plan_from_material(material, payload, profile, service_id=service_id, backend=_auto_kv_backend(service_id), cache_kind="prefix")
     return payload
 
 
@@ -1299,10 +1305,14 @@ def _coalesced_chat_completion_payload(requests: list[InferenceRequest], profile
     return payload
 
 def _maybe_prestage_common_kv_prefix(runner: OpenAICompatibleRunner, payload: dict[str, Any], requests: list[InferenceRequest]) -> dict[str, Any] | None:
+    plan = _payload_ds4_kv_cache_plan(payload)
+    prestage_only_plan = payload.pop(AUTO_KV_PRESTAGE_PLAN_KEY, None)
     if not _env_bool("DS4_PIPELINE_PRESTAGE_COMMON_KV_PREFIX", True):
         return None
-    strict_kv = _payload_has_strict_kv_load(payload)
-    auto_kv = _payload_has_prestageable_auto_kv(payload)
+    if plan is None and isinstance(prestage_only_plan, dict):
+        plan = prestage_only_plan
+    strict_kv = kv_plan_has_strict_load(plan)
+    auto_kv = kv_plan_is_prestageable_auto(plan)
     if not strict_kv and not auto_kv:
         return None
     circuit = getattr(runner, "jit_kv_circuit", None)
@@ -1319,6 +1329,8 @@ def _maybe_prestage_common_kv_prefix(runner: OpenAICompatibleRunner, payload: di
         return None
     max_tokens = max(1, _env_int("DS4_PIPELINE_PRESTAGE_MAX_TOKENS", 1))
     prefetch_payload = build_prefetch_payload(payload, prefix=prefix, max_tokens=max_tokens)
+    if isinstance(prestage_only_plan, dict):
+        prefetch_payload["extra_body"] = {**dict(prefetch_payload.get("extra_body") or {}), "ds4_kv_cache": prestage_only_plan}
     return run_prefetch(
         runner=runner,
         payload=payload,
@@ -1341,34 +1353,13 @@ def _payload_ds4_kv_cache_plan(payload: dict[str, Any]) -> dict[str, Any] | None
 
 
 def _payload_has_strict_kv_load(payload: dict[str, Any]) -> bool:
-    plan = _payload_ds4_kv_cache_plan(payload)
-    if plan is None:
-        return False
-    load = plan.get("load")
-    if not isinstance(load, dict):
-        return False
-    if str(load.get("mode") or "skip") not in {"prefer", "require"}:
-        return False
-    miss_policy = str(plan.get("miss_policy") or "")
-    return str(load.get("mode") or "") == "require" or miss_policy == "fail"
+    return kv_plan_has_strict_load(_payload_ds4_kv_cache_plan(payload))
 
 
 def _payload_has_prestageable_auto_kv(payload: dict[str, Any]) -> bool:
     if not _env_bool("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX", False):
         return False
-    plan = _payload_ds4_kv_cache_plan(payload)
-    if plan is None:
-        return False
-    cache_id = plan.get("cache_id")
-    load = plan.get("load")
-    store = plan.get("store")
-    if not isinstance(cache_id, str) or not cache_id.startswith("ds4-auto:"):
-        return False
-    if not isinstance(load, dict) or str(load.get("mode") or "") != "prefer":
-        return False
-    if not isinstance(store, dict) or str(store.get("mode") or "") != "write_back":
-        return False
-    return str(plan.get("miss_policy") or "") == "compute_and_store"
+    return kv_plan_is_prestageable_auto(_payload_ds4_kv_cache_plan(payload))
 
 
 def _common_prompt_prefix(requests: list[InferenceRequest]) -> str | None:
@@ -1918,28 +1909,7 @@ def _auto_kv_cache_plan(payload: dict[str, Any], request: InferenceRequest, prof
     if allowed_services and (service_id or profile.profile_id) not in allowed_services:
         return None
     material = _auto_kv_cache_material(payload, request, profile, service_id=service_id)
-    digest = hashlib.sha256(_json_dumps_canonical(material).encode("utf-8")).hexdigest()
-    cache_scope = service_id or profile.profile_id
-    cache_id = f"ds4-auto:{cache_scope}:{digest[:32]}"
-    plan = {
-        "format": "ds4-kv-cache-plan-v1",
-        "backend": _auto_kv_backend(service_id),
-        "cache_id": cache_id,
-        "prefix_hash": "sha256:" + digest,
-        "load": {"mode": "prefer", "transport": "local_store", "cache_key": cache_id},
-        "store": {"mode": "write_back", "transport": "local_store", "cache_key": cache_id, "on_error": "warn"},
-        "miss_policy": "compute_and_store",
-        "route_affinity": "preferred",
-        "model_fingerprint": {
-            "model_id": str(payload.get("model") or profile.model_id),
-            "profile_id": profile.profile_id,
-            "runtime_contract_id": profile.runtime_contract_id,
-            "service_id": service_id,
-        },
-        "operation": "load_store",
-    }
-    plan["batch_key_hash"] = "sha256:" + hashlib.sha256(_json_dumps_canonical(_auto_kv_batch_key_material(plan)).encode("utf-8")).hexdigest()
-    return plan
+    return auto_kv_cache_plan_from_material(material, payload, profile, service_id=service_id, backend=_auto_kv_backend(service_id))
 
 
 def _auto_kv_cache_material(payload: dict[str, Any], request: InferenceRequest, profile: ModelProfile, *, service_id: str | None) -> dict[str, Any]:
@@ -1957,19 +1927,6 @@ def _auto_kv_cache_material(payload: dict[str, Any], request: InferenceRequest, 
     }
 
 
-def _auto_kv_batch_key_material(plan: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "backend": plan["backend"],
-        "cache_id": plan["cache_id"],
-        "prefix_hash": plan["prefix_hash"],
-        "load": plan["load"],
-        "store": plan["store"],
-        "miss_policy": plan["miss_policy"],
-        "route_affinity": plan["route_affinity"],
-        "model_fingerprint": plan["model_fingerprint"],
-    }
-
-
 def _profile_service_id(profile: ModelProfile) -> str | None:
     pipeline = profile.routing.get("pipeline")
     if isinstance(pipeline, dict) and pipeline.get("service_id"):
@@ -1984,10 +1941,6 @@ def _auto_kv_backend(service_id: str | None) -> str:
     if service_id and service_id.startswith(("qwen", "gemma", "kimi")):
         return "lmcache"
     return "auto"
-
-
-def _json_dumps_canonical(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
 def _env_csv_set(name: str) -> set[str]:
