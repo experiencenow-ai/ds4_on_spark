@@ -32,13 +32,13 @@ def main() -> int:
     repo_dir = v2_dir.parent
     if not args.skip_pull:
         _run(["git", "pull", "--ff-only", "origin", args.branch], cwd=repo_dir)
+    env = _coordinator_env(args, v2_dir)
+    coordinator_python = _coordinator_python(args)
     if not args.skip_build:
         _build(repo_dir, v2_dir, skip_tests=args.skip_tests)
     _run([sys.executable, str(script_path.with_name("ds4_stop_coordinator_api.py")), "--timeout-s", str(args.stop_timeout_s)], cwd=v2_dir)
     log_path = _log_path(args.log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    env = _coordinator_env(args, v2_dir)
-    coordinator_python = _coordinator_python(args)
     argv = [
         coordinator_python,
         "-m",
@@ -161,6 +161,8 @@ _SAFETY_PROFILE_DEFAULTS = {
     "DS4_API_RESOURCE_POWER_HARD_W",
     "DS4_API_RESOURCE_TOTAL_POWER_SOFT_W",
     "DS4_API_RESOURCE_TOTAL_POWER_HARD_W",
+    "DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT",
+    "DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT",
     "DS4_API_RESOURCE_THROTTLE_STEP_S",
     "DS4_API_RESOURCE_THROTTLE_MAX_S",
     "DS4_API_JIT_KV_PREFETCH_API",
@@ -247,6 +249,8 @@ _COMMON_RESOURCE_DEFAULTS = {
     "DS4_API_RESOURCE_POWER_HARD_W": "140",
     "DS4_API_RESOURCE_TOTAL_POWER_SOFT_W": "1350",
     "DS4_API_RESOURCE_TOTAL_POWER_HARD_W": "1550",
+    "DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT": "90",
+    "DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT": "94",
     "DS4_API_RESOURCE_THROTTLE_STEP_S": "0.5",
     "DS4_API_RESOURCE_THROTTLE_MAX_S": "4.0",
 }

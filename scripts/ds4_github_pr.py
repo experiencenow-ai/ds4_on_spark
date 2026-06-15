@@ -14,6 +14,18 @@ def _run(argv: list[str]) -> None:
     subprocess.run(argv, check=True)
 
 
+def _run_retry(argv: list[str], *, attempts: int = 4, interval_s: float = 5.0) -> None:
+    for attempt in range(1, attempts + 1):
+        try:
+            _run(argv)
+            return
+        except subprocess.CalledProcessError:
+            if attempt == attempts:
+                raise
+            print(f"command failed; retrying in {interval_s:g}s ({attempt}/{attempts})", file=sys.stderr)
+            time.sleep(interval_s)
+
+
 def _out(argv: list[str], *, check: bool = True) -> tuple[str, int, str]:
     proc = subprocess.run(argv, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if check and proc.returncode != 0:
@@ -153,7 +165,7 @@ def _merge_via_api(ref: str, method: str, delete_branch: bool) -> None:
     repo = _repo_name()
     meta = _pr_meta(ref)
     if meta.get("state") != "MERGED":
-        _run([
+        _run_retry([
             "gh",
             "api",
             "-X",
