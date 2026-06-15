@@ -811,7 +811,8 @@ class OpenAICompatibleRunner:
         timeout_error = ""
         try:
             prefetch_info = _maybe_prestage_common_kv_prefix(self, payload, chunk)
-            for event in self._post_sse_json(self.completion_endpoint, payload, cancel_event=cancel_event):
+            stream_first_event_timeout_s = max(_sse_first_event_timeout_s(), stream_timeout_s) if stream_timeout_s > 0 else None
+            for event in self._post_sse_json(self.completion_endpoint, payload, cancel_event=cancel_event, first_event_timeout_s=stream_first_event_timeout_s):
                 choices = event.get("choices")
                 if not isinstance(choices, list):
                     continue
@@ -913,7 +914,15 @@ class OpenAICompatibleRunner:
             raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
         return json.loads(text)
 
-    def _post_sse_json(self, endpoint: str, payload: dict[str, Any], *, cancel_event: Event | None = None) -> Iterator[dict[str, Any]]:
+    def _post_sse_json(
+        self,
+        endpoint: str,
+        payload: dict[str, Any],
+        *,
+        cancel_event: Event | None = None,
+        first_event_timeout_s: float | None = None,
+        idle_timeout_s: float | None = None,
+    ) -> Iterator[dict[str, Any]]:
         body = json.dumps(payload).encode("utf-8")
         headers = {"content-type": "application/json", "accept": "text/event-stream"}
         if self.api_key:
@@ -926,8 +935,8 @@ class OpenAICompatibleRunner:
             raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
         with response:
             poll_timeout = 0.0
-            idle_timeout_s = _sse_idle_timeout_s()
-            first_event_timeout_s = _sse_first_event_timeout_s()
+            idle_timeout_s = _sse_idle_timeout_s() if idle_timeout_s is None else max(0.0, float(idle_timeout_s))
+            first_event_timeout_s = _sse_first_event_timeout_s() if first_event_timeout_s is None else max(0.0, float(first_event_timeout_s))
             if cancel_event is not None or idle_timeout_s > 0 or first_event_timeout_s > 0:
                 poll_timeout = _env_float("DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S", 1.0)
             event_data: list[str] = []

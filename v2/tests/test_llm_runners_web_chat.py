@@ -99,9 +99,11 @@ class StreamingCompletionBackend(OpenAICompatibleRunner):
     def __init__(self) -> None:
         super().__init__(base_url="http://unused")
         self.calls: list[tuple[str, dict]] = []
+        self.stream_kwargs: list[dict] = []
 
     def _post_sse_json(self, endpoint: str, payload: dict, **kwargs):
         self.calls.append((endpoint, payload))
+        self.stream_kwargs.append(dict(kwargs))
         assert endpoint == self.completion_endpoint
         assert payload["stream"] is True
         assert len(payload["prompt"]) == 2
@@ -188,7 +190,7 @@ class CancellableStreamingBackend(OpenAICompatibleRunner):
         self.cancel_event_seen = False
         self.tail_requested = False
 
-    def _post_sse_json(self, endpoint: str, payload: dict, *, cancel_event: threading.Event | None = None):
+    def _post_sse_json(self, endpoint: str, payload: dict, *, cancel_event: threading.Event | None = None, **_kwargs):
         assert endpoint == self.completion_endpoint
         assert payload["stream"] is True
         self.cancel_event_seen = cancel_event is not None
@@ -224,7 +226,7 @@ class CancellableStreamingChatBackend(OpenAICompatibleRunner):
         self.cancel_event_seen = False
         self.tail_requested = False
 
-    def _post_sse_json(self, endpoint: str, payload: dict, *, cancel_event: threading.Event | None = None):
+    def _post_sse_json(self, endpoint: str, payload: dict, *, cancel_event: threading.Event | None = None, **_kwargs):
         assert endpoint == self.chat_endpoint
         assert payload["stream"] is True
         self.cancel_event_seen = cancel_event is not None
@@ -883,7 +885,7 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         self.assertEqual(results["r"]["transport"]["coalesced_completion_streaming"], True)
         self.assertEqual(results["r2"]["transport"]["coalesced_batch_size"], 2)
 
-    def test_pipeline_runner_bisects_streaming_first_event_timeout(self) -> None:
+    def test_pipeline_runner_does_not_bisect_streaming_first_event_timeout(self) -> None:
         profile = ModelProfile.from_json(
             {
                 "profile_id": "svc",
@@ -913,12 +915,53 @@ class LlmRunnersWebChatTests(unittest.TestCase):
             on_result=lambda request_id, result: seen.append((request_id, result["status"])),
         )
 
-        self.assertEqual(runner.backend.calls, [4, 2, 2])
+        self.assertEqual(runner.backend.calls, [4])
         self.assertEqual(len(seen), 4)
-        self.assertTrue(all(status == "completed" for _, status in seen))
-        self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_split_retry"] for index in range(4)))
-        self.assertTrue(all(results[f"r{index}"]["transport"]["original_coalesced_batch_size"] == 4 for index in range(4)))
-        self.assertTrue(all(results[f"r{index}"]["transport"]["coalesced_completion_split_retry_reason"] == "SSE stream first event timeout after 60.000s" for index in range(4)))
+        self.assertTrue(all(status == "transport_failed" for _, status in seen))
+        self.assertTrue(all("coalesced_completion_split_retry" not in results[f"r{index}"]["transport"] for index in range(4)))
+        self.assertTrue(all(results[f"r{index}"]["transport"]["error"] == "SSE stream first event timeout after 60.000s" for index in range(4)))
+
+    def test_pipeline_runner_uses_stream_wall_timeout_for_first_completion_event(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": False,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {"served_model_name": "served-model"},
+            }
+        )
+        first = InferenceRequest.from_json(make_request(chat=False).raw)
+        second_raw = make_request(chat=False).raw
+        second_raw["request_id"] = "r2"
+        runner = StreamingPipelineRunner()
+        old_wall = os.environ.get("DS4_PIPELINE_COMPLETION_STREAM_WALL_TIMEOUT_S")
+        old_first = os.environ.get("DS4_PIPELINE_SSE_FIRST_EVENT_TIMEOUT_S")
+        try:
+            os.environ["DS4_PIPELINE_COMPLETION_STREAM_WALL_TIMEOUT_S"] = "600"
+            os.environ["DS4_PIPELINE_SSE_FIRST_EVENT_TIMEOUT_S"] = "60"
+            results = runner.run_many_on_node_incremental(
+                [first, InferenceRequest.from_json(second_raw)],
+                profile,
+                None,
+                concurrency=2,
+                on_result=lambda _request_id, _result: None,
+            )
+        finally:
+            if old_wall is None:
+                os.environ.pop("DS4_PIPELINE_COMPLETION_STREAM_WALL_TIMEOUT_S", None)
+            else:
+                os.environ["DS4_PIPELINE_COMPLETION_STREAM_WALL_TIMEOUT_S"] = old_wall
+            if old_first is None:
+                os.environ.pop("DS4_PIPELINE_SSE_FIRST_EVENT_TIMEOUT_S", None)
+            else:
+                os.environ["DS4_PIPELINE_SSE_FIRST_EVENT_TIMEOUT_S"] = old_first
+        self.assertIsNotNone(results)
+        self.assertEqual(runner.backend.stream_kwargs[0]["first_event_timeout_s"], 600.0)
 
     def test_pipeline_runner_stops_coalesced_completion_on_answer_marker(self) -> None:
         profile = ModelProfile.from_json(

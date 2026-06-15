@@ -34,7 +34,6 @@ def coalesced_failure_should_bisect(error_text: str) -> bool:
         "kv cache",
         "context length",
         "maximum context",
-        "first event timeout",
         "too many tokens",
         "exceeds",
     )
