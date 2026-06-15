@@ -1055,7 +1055,7 @@ class PipelineApiTests(unittest.TestCase):
             else:
                 os.environ["DS4_API_JIT_KV_PREFETCH_API"] = old_prefetch_api
 
-    def test_generated_auto_kv_prefetch_timeout_fails_open(self) -> None:
+    def test_generated_auto_kv_prefetch_timeout_fails_open_without_poisoning_circuit(self) -> None:
         old_prestage_auto = os.environ.get("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX")
         old_prefetch_api = os.environ.get("DS4_API_JIT_KV_PREFETCH_API")
         old_timeout = os.environ.get("DS4_API_JIT_KV_PREFETCH_TIMEOUT_S")
@@ -1112,10 +1112,13 @@ class PipelineApiTests(unittest.TestCase):
             self.assertIsNotNone(info)
             assert info is not None
             self.assertTrue(info["cold_dispatch"])
-            self.assertEqual(info["strategy"], "jit-kv-prefetch-failed-auto-cold-dispatch")
+            self.assertEqual(info["strategy"], "jit-kv-prefetch-unavailable-auto-cold-dispatch")
             self.assertIn("kv_transfer_params", payload)
             self.assertIn("extra_body", payload)
-            self.assertTrue(circuit.status()["jit_kv_circuit_open"])
+            status = circuit.status()
+            self.assertFalse(status["jit_kv_circuit_open"])
+            self.assertEqual(status["jit_kv_prefetch_failed_count"], 0)
+            self.assertEqual(status["jit_kv_prefetch_submitted_count"], 1)
         finally:
             if old_prestage_auto is None:
                 os.environ.pop("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX", None)

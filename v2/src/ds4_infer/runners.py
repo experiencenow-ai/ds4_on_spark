@@ -910,11 +910,13 @@ class OpenAICompatibleRunner:
         with response:
             poll_timeout = 0.0
             idle_timeout_s = _sse_idle_timeout_s()
-            if cancel_event is not None or idle_timeout_s > 0:
+            first_event_timeout_s = _sse_first_event_timeout_s()
+            if cancel_event is not None or idle_timeout_s > 0 or first_event_timeout_s > 0:
                 poll_timeout = _env_float("DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S", 1.0)
             event_data: list[str] = []
             saw_event = False
-            last_progress_at = time.time()
+            stream_started_at = time.time()
+            last_progress_at = stream_started_at
             while True:
                 if cancel_event is not None and cancel_event.is_set(): break
                 try:
@@ -924,7 +926,10 @@ class OpenAICompatibleRunner:
                         except (AttributeError, OSError, ValueError):
                             readable = [response]
                         if not readable:
-                            if saw_event and idle_timeout_s > 0 and (time.time() - last_progress_at) >= idle_timeout_s:
+                            now = time.time()
+                            if not saw_event and first_event_timeout_s > 0 and (now - stream_started_at) >= first_event_timeout_s:
+                                raise RuntimeError(f"SSE stream first event timeout after {first_event_timeout_s:.3f}s")
+                            if saw_event and idle_timeout_s > 0 and (now - last_progress_at) >= idle_timeout_s:
                                 raise RuntimeError(f"SSE stream idle timeout after {idle_timeout_s:.3f}s")
                             continue
                     raw_line = response.readline()
@@ -1425,6 +1430,10 @@ def _completion_stream_wall_timeout_s() -> float:
 
 def _sse_idle_timeout_s() -> float:
     return max(0.0, _env_float("DS4_PIPELINE_SSE_IDLE_TIMEOUT_S", 0.0))
+
+
+def _sse_first_event_timeout_s() -> float:
+    return max(0.0, _env_float("DS4_PIPELINE_SSE_FIRST_EVENT_TIMEOUT_S", 0.0))
 
 
 def _profile_uses_pipeline(profile: ModelProfile) -> bool:

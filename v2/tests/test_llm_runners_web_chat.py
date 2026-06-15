@@ -1248,6 +1248,47 @@ class LlmRunnersWebChatTests(unittest.TestCase):
             else:
                 os.environ["DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S"] = old_poll
 
+    def test_sse_reader_first_event_timeout_before_progress(self) -> None:
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def fileno(self):
+                return 42
+
+            def readline(self):
+                return b""
+
+        old_first = os.environ.get("DS4_PIPELINE_SSE_FIRST_EVENT_TIMEOUT_S")
+        old_poll = os.environ.get("DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S")
+        response = FakeResponse()
+
+        def fake_select(*_args):
+            time.sleep(0.002)
+            return ([], [], [])
+
+        runner = OpenAICompatibleRunner(base_url="http://unused")
+        try:
+            os.environ["DS4_PIPELINE_SSE_FIRST_EVENT_TIMEOUT_S"] = "0.001"
+            os.environ["DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S"] = "0.001"
+            with patch("ds4_infer.runners.urlrequest.urlopen", return_value=response):
+                with patch("ds4_infer.runners.select.select", side_effect=fake_select):
+                    events = runner._post_sse_json("/v1/completions", {"model": "served"})
+                    with self.assertRaisesRegex(RuntimeError, "SSE stream first event timeout"):
+                        next(events)
+        finally:
+            if old_first is None:
+                os.environ.pop("DS4_PIPELINE_SSE_FIRST_EVENT_TIMEOUT_S", None)
+            else:
+                os.environ["DS4_PIPELINE_SSE_FIRST_EVENT_TIMEOUT_S"] = old_first
+            if old_poll is None:
+                os.environ.pop("DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S", None)
+            else:
+                os.environ["DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S"] = old_poll
+
     def test_sse_reader_can_leave_cancel_socket_timeout_disabled(self) -> None:
         class FakeSock:
             def __init__(self) -> None:
