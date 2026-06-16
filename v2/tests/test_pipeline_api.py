@@ -107,6 +107,16 @@ class PipelineApiTests(unittest.TestCase):
         profile = registry.resolve(capability=None, chat=True, job_class="analysis", model_pin={"profile_id": "kimi27_pp13"})
         self.assertEqual(profile.profile_id, "kimi27_code_pp13_smart_v1")
 
+    def test_openai_model_alias_catalog_prefers_active_resident_profile(self) -> None:
+        registry = ProfileRegistry.load(PROFILES)
+        topology = SparkTopology.load(KIMI_QWEN_TOPOLOGY)
+        models = api_module._openai_models(registry, topology)["data"]
+        by_id = {str(item["id"]): item for item in models}
+        self.assertEqual(by_id["qwen"]["ds4_profile_id"], "qwen3_6_27b_bf16_pp13_efficient_v1")
+        self.assertEqual(by_id["qwen"]["ds4_alias_profile_id"], "qwen3_6_27b_bf16_pp8_efficient_v1")
+        self.assertEqual(by_id["qwen"]["ds4_service_id"], "qwen27_bf16_pp13")
+        self.assertEqual(by_id["qwen27"]["ds4_profile_id"], "qwen3_6_27b_bf16_pp13_efficient_v1")
+
     def test_pipeline_openai_payload_uses_shared_thinking_fields(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
