@@ -463,6 +463,7 @@ class CoordinatorApi:
     def dispatcher_status(self) -> dict[str, Any]:
         with self.dispatcher_lock:
             state = dict(self.dispatcher_state)
+        state["resource_governor"] = self.dispatcher_resource_governor.status(refresh=True)
         try:
             queue_status = self.queue.status(refresh=False)
             service_counts = self.queue.service_state_counts()
