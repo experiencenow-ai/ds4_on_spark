@@ -21,6 +21,7 @@ DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_res
 FIRST3_MEMORY_BUDGET = ROOT / "profiles" / "production" / "first3_resident_memory_budget.json"
 STATIC_SPARKS_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 KIMI27_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi27_code_pp13.json"
+KIMI_QWEN_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_pp13.json"
 KIMI_QWEN_GEMMA_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_gemma_pp13.json"
 DEFAULT_COORDINATOR_PYTHON = Path("/home/spark0/ds4-vllm-local/bin/python")
 
@@ -97,7 +98,9 @@ def _parse_args() -> argparse.Namespace:
 def _default_topology_for_profile(profile: str) -> str:
     if profile == "kimi27":
         return str(KIMI27_TOPOLOGY.relative_to(ROOT))
-    if profile in {"centaur", "triad"}:
+    if profile == "centaur":
+        return str(KIMI_QWEN_TOPOLOGY.relative_to(ROOT))
+    if profile == "triad":
         return str(KIMI_QWEN_GEMMA_TOPOLOGY.relative_to(ROOT))
     return "profiles/topology/static_sparks.json"
 

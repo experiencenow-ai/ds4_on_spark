@@ -1,0 +1,382 @@
+{
+  "description": "Thirteen-Spark resident topology for Centaur with Kimi K2.7 Code smart lane and Qwen27 BF16 fast lane. Gemma is intentionally omitted to recover host-RAM headroom for large attached prompts while preserving LMCache-backed PP13 service residency.",
+  "format": "ds4-spark-topology-v1",
+  "nodes": [
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark0",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1",
+        "qwen3_6_27b_bf16_pp13_efficient_v1"
+      ],
+      "roles": [
+        "queue_ingress",
+        "api_ingress",
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark1",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1",
+        "qwen3_6_27b_bf16_pp13_efficient_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark2",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1",
+        "qwen3_6_27b_bf16_pp13_efficient_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark3",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1",
+        "qwen3_6_27b_bf16_pp13_efficient_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark4",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1",
+        "qwen3_6_27b_bf16_pp13_efficient_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark5",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1",
+        "qwen3_6_27b_bf16_pp13_efficient_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark6",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1",
+        "qwen3_6_27b_bf16_pp13_efficient_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark7",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1",
+        "qwen3_6_27b_bf16_pp13_efficient_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark8",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1",
+        "qwen3_6_27b_bf16_pp13_efficient_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "spark9",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1",
+        "qwen3_6_27b_bf16_pp13_efficient_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "sparka",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1",
+        "qwen3_6_27b_bf16_pp13_efficient_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "sparkb",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1",
+        "qwen3_6_27b_bf16_pp13_efficient_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    },
+    {
+      "default_capacity": 1,
+      "dynamic_load": false,
+      "immediate_reserved": false,
+      "node_id": "sparkc",
+      "resident_profiles": [
+        "kimi27_code_pp13_smart_v1",
+        "qwen3_6_27b_bf16_pp13_efficient_v1"
+      ],
+      "roles": [
+        "pipeline_stage",
+        "production"
+      ]
+    }
+  ],
+  "routing_policy": {
+    "active_resident_service_ids": [
+      "kimi27_pp13",
+      "qwen27_bf16_pp13"
+    ],
+    "allow_dynamic_load_for_unmatched_profiles": false,
+    "bind_on_submit": true,
+    "immediate_requests_prefer_roles": [
+      "production"
+    ],
+    "normal_requests_prefer_roles": [
+      "production"
+    ],
+    "queue_entry_node_id": "spark0",
+    "resident_service_expectations": {
+      "cache_backends": {
+        "kimi27_pp13": "lmcache_hma",
+        "qwen27_bf16_pp13": "lmcache_hma"
+      },
+      "cache_connectors": {
+        "kimi27_pp13": "lmcache",
+        "qwen27_bf16_pp13": "lmcache"
+      },
+      "dsv4_service_id": "",
+      "gpu_utilization_hard_cap": 0.85,
+      "gpu_utilization_floors": {},
+      "service_ids": [
+        "kimi27_pp13",
+        "qwen27_bf16_pp13"
+      ]
+    },
+    "pipeline_services": {
+      "kimi27_pp13": {
+        "api_base_url": "http://127.0.0.1:8138",
+        "compute_domain": "spark-fleet-0",
+        "dtype": "int4-bfloat16-fp8kv",
+        "entry_node_id": "spark0",
+        "kv_cache": {
+          "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/kimi27_code_pp13_fp8kv/p4_4_4_5_5_5_5_5_5_5_5_5_4",
+          "connector_id": "lmcache",
+          "expected_entry_fraction_per_node": 0.07692307692307693,
+          "external_backend": "lmcache_hma",
+          "gpu_memory_utilization": 0.254,
+          "kv_cache_memory_bytes": 6060769280,
+          "sharding": "pipeline_layers"
+        },
+        "layer_partition": [
+          4,
+          4,
+          4,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          4
+        ],
+        "max_batch_size": 128,
+        "model_id": "moonshotai/Kimi-K2.7-Code",
+        "node_ids": [
+          "spark0",
+          "spark1",
+          "spark2",
+          "spark3",
+          "spark4",
+          "spark5",
+          "spark6",
+          "spark7",
+          "spark8",
+          "spark9",
+          "sparka",
+          "sparkb",
+          "sparkc"
+        ],
+        "pipeline_parallel_size": 13,
+        "profile_id": "kimi27_code_pp13_smart_v1",
+        "scheduler": {
+          "admission_mode": "resident_multimodel_rolling_refill",
+          "batch_linger_s": 0.05,
+          "dispatch_batch_limit": 128,
+          "max_running_batches_per_compute_domain": 3,
+          "queue_depth_target": 256,
+          "queue_limit": 256,
+          "ready_shape_bucketing": true,
+          "ready_shape_lookahead": 4,
+          "refill_low_watermark": 64,
+          "vllm_max_num_batched_tokens": 65536,
+          "vllm_max_num_seqs": 128
+        },
+        "served_model_name": "kimi27-code-pp13",
+        "service_id": "kimi27_pp13",
+        "telemetry": {
+          "expected_stage_count": 13,
+          "stage_report_command": "ds4-infer pipeline-telemetry-report",
+          "stage_state": "candidate"
+        },
+        "tensor_parallel_size": 1,
+        "total_layers": 61
+      },
+      "qwen27_bf16_pp13": {
+        "api_base_url": "http://127.0.0.1:8101",
+        "compute_domain": "spark-fleet-0",
+        "dtype": "bfloat16",
+        "entry_node_id": "spark0",
+        "kv_cache": {
+          "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/qwen27_bf16_pp13_fp8kv/p5_5_5_5_5_5_5_4_5_5_5_5_5",
+          "connector_id": "lmcache",
+          "expected_entry_fraction_per_node": 0.07692307692307693,
+          "external_backend": "lmcache_hma",
+          "gpu_memory_utilization": 0.226,
+          "kv_cache_memory_bytes": 7070547968,
+          "sharding": "pipeline_layers"
+        },
+        "layer_partition": [
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          4,
+          5,
+          5,
+          5,
+          5,
+          5
+        ],
+        "max_batch_size": 32,
+        "model_id": "Qwen/Qwen3.6-27B",
+        "node_ids": [
+          "spark0",
+          "spark1",
+          "spark2",
+          "spark3",
+          "spark4",
+          "spark5",
+          "spark6",
+          "spark7",
+          "spark8",
+          "spark9",
+          "sparka",
+          "sparkb",
+          "sparkc"
+        ],
+        "pipeline_parallel_size": 13,
+        "profile_id": "qwen3_6_27b_bf16_pp13_efficient_v1",
+        "scheduler": {
+          "admission_mode": "resident_multimodel_rolling_refill",
+          "batch_linger_s": 0.05,
+          "dispatch_batch_limit": 32,
+          "max_running_batches_per_compute_domain": 3,
+          "max_running_batches_per_service": 1,
+          "queue_depth_target": 64,
+          "queue_limit": 64,
+          "ready_shape_bucketing": true,
+          "ready_shape_lookahead": 4,
+          "refill_low_watermark": 48,
+          "vllm_max_num_batched_tokens": 32768,
+          "vllm_max_num_seqs": 32
+        },
+        "served_model_name": "qwen27-bf16-pp13",
+        "service_id": "qwen27_bf16_pp13",
+        "telemetry": {
+          "expected_stage_count": 13,
+          "stage_report_command": "ds4-infer pipeline-telemetry-report",
+          "stage_state": "candidate"
+        },
+        "tensor_parallel_size": 1,
+        "total_layers": 64
+      }
+    },
+    "resident_coordinator_defaults": {
+      "dispatch_window": 384,
+      "dispatch_refill_batch": 384,
+      "dispatch_cohort_workers": 384,
+      "completion_cohort_max": 128,
+      "completion_token_budget": 65536,
+      "completion_budget_include_output": false,
+      "completion_pp_safe_cohort_max": 128,
+      "completion_chunk_concurrency": 4,
+      "dispatch_kv_capacity_bytes": 13131317248,
+      "auto_kv_batch_policy": "prefer_batch",
+      "prefer_cohort_batch": true,
+      "prestage_auto_kv_prefix": true
+    }
+  },
+  "topology_id": "static_sparks_kimi27_qwen_pp13"
+}

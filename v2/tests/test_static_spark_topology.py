@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 KIMI_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_gemma_pp13.json"
+KIMI_QWEN_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_pp13.json"
 KIMI27_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi27_code_pp13.json"
 QWEN_GEMMA_PP12_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_qwen_gemma_pp12.json"
 QWEN_GEMMA_PP12_PLAIN_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_qwen_gemma_pp12_plain.json"
@@ -281,6 +282,50 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertTrue(checks["first3_gpu_budget_under_hard_cap"]["ok"])
         self.assertEqual(checks["first3_gpu_budget_under_hard_cap"]["details"]["sum"], 0)
         self.assertEqual(checks["first3_gpu_budget_under_hard_cap"]["details"]["percentage_budget_services"], [])
+
+    def test_kimi_qwen_pp13_topology_drops_gemma_for_ram_headroom(self) -> None:
+        topology = SparkTopology.load(KIMI_QWEN_TOPOLOGY)
+        capacity = topology.estimate_capacity_by_profile()
+
+        self.assertEqual(len(topology.nodes), 13)
+        self.assertEqual(capacity[KIMI27_PP13], 128)
+        self.assertEqual(capacity[QWEN_PP13], 32)
+        self.assertNotIn(GEMMA26_PP13, capacity)
+        self.assertEqual(
+            topology.routing_policy["active_resident_service_ids"],
+            ["kimi27_pp13", "qwen27_bf16_pp13"],
+        )
+        self.assertEqual(set(topology.routing_policy["pipeline_services"]), {"kimi27_pp13", "qwen27_bf16_pp13"})
+        for node in topology.nodes:
+            self.assertEqual(set(node.resident_profiles), {KIMI27_PP13, QWEN_PP13})
+
+        coordinator = topology.routing_policy["resident_coordinator_defaults"]
+        self.assertEqual(coordinator["dispatch_window"], 384)
+        self.assertEqual(coordinator["dispatch_refill_batch"], 384)
+        self.assertEqual(coordinator["dispatch_cohort_workers"], 384)
+        self.assertEqual(coordinator["dispatch_kv_capacity_bytes"], 13131317248)
+
+        old_auto = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE")
+        old_services = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS")
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE"] = "1"
+        os.environ["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"] = "kimi27_pp13,qwen27_bf16_pp13"
+        try:
+            payload = deployment_readiness(
+                topology=topology,
+                dispatcher_window=384,
+                dispatcher_refill_batch=384,
+                dispatcher_cohort_workers=384,
+                resident_multimodel=True,
+            )
+        finally:
+            _restore_env("DS4_PIPELINE_AUTO_KV_CACHE", old_auto)
+            _restore_env("DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS", old_services)
+        self.assertTrue(payload["ready"])
+        self.assertEqual(payload["active_resident_service_ids"], ["kimi27_pp13", "qwen27_bf16_pp13"])
+        self.assertEqual(payload["resident_service_targets"], {"kimi27_pp13": 128, "qwen27_bf16_pp13": 32})
+        self.assertEqual(payload["resident_service_queue_depth_targets"], {"kimi27_pp13": 256, "qwen27_bf16_pp13": 64})
+        self.assertEqual(payload["resident_fixed_kv_cache_memory_bytes"], {"kimi27_pp13": 6060769280, "qwen27_bf16_pp13": 7070547968})
+        self.assertEqual(payload["resident_fixed_kv_cache_memory_bytes_sum"], 13131317248)
 
     def test_kimi_qwen_readiness_honors_resident_target_overrides(self) -> None:
         topology = SparkTopology.load(KIMI_TOPOLOGY)
