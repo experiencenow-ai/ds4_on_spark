@@ -1488,13 +1488,22 @@ def _openai_models(registry: ProfileRegistry, topology: SparkTopology) -> dict[s
     data: list[dict[str, Any]] = []
     for alias, profile_id in sorted(MODEL_ALIASES.items()):
         try:
-            profile = registry.get(profile_id)
+            alias_profile = registry.get(profile_id)
         except ValueError:
             continue
         if alias in seen:
             continue
         seen.add(alias)
-        data.append({"id": alias, "object": "model", "owned_by": "ds4", "ds4_profile_id": profile.profile_id, "ds4_model_alias": True})
+        profile = _active_profile_for_model(registry, topology, alias_profile.model_id)
+        if profile is None:
+            profile = alias_profile
+        item = {"id": alias, "object": "model", "owned_by": "ds4", "ds4_profile_id": profile.profile_id, "ds4_model_alias": True}
+        if profile.profile_id != alias_profile.profile_id:
+            item["ds4_alias_profile_id"] = alias_profile.profile_id
+        service = topology.pipeline_service_for_profile(profile.profile_id)
+        if service is not None:
+            item["ds4_service_id"] = service.service_id
+        data.append(item)
     for service in topology.pipeline_services.values():
         for model_id in (service.service_id, service.model_id, service.profile_id):
             if model_id in seen:
