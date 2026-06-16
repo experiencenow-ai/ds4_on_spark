@@ -1335,6 +1335,35 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             else:
                 os.environ["DS4_API_RESOURCE_LOCAL_NODE_ID"] = old_value
 
+    def test_resource_governor_status_refreshes_stale_sample(self) -> None:
+        old_values = {
+            "DS4_API_RESOURCE_GOVERNOR": os.environ.get("DS4_API_RESOURCE_GOVERNOR"),
+            "DS4_API_RESOURCE_SAMPLE_JSON": os.environ.get("DS4_API_RESOURCE_SAMPLE_JSON"),
+            "DS4_API_RESOURCE_POLL_S": os.environ.get("DS4_API_RESOURCE_POLL_S"),
+        }
+        os.environ["DS4_API_RESOURCE_GOVERNOR"] = "1"
+        os.environ["DS4_API_RESOURCE_SAMPLE_JSON"] = json.dumps({"nodes": {"spark0": {"temperature_c": 50, "power_w": 40, "utilization_pct": 3}}})
+        os.environ["DS4_API_RESOURCE_POLL_S"] = "1000"
+        try:
+            governor = GpuResourceGovernor.from_env(nodes=("spark0",), local_node_id="spark0")
+            first = governor.before_refill().status
+            self.assertEqual(first["max_utilization_pct"], 3.0)
+            governor.sample_json = json.dumps({"nodes": {"spark0": {"temperature_c": 51, "power_w": 41, "utilization_pct": 89}}})
+            reused = governor.status(refresh=True)
+            self.assertEqual(reused["max_utilization_pct"], 3.0)
+            governor.poll_s = 0.1
+            governor._last_sample_at = time.time() - 10.0
+            refreshed = governor.status(refresh=True)
+            self.assertEqual(refreshed["max_utilization_pct"], 89.0)
+            self.assertEqual(refreshed["last_decision"], "status_refresh")
+            self.assertIsNotNone(refreshed["sample_age_s"])
+        finally:
+            for key, value in old_values.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
     def test_resource_governor_hot_sample_delays_dispatcher_refill(self) -> None:
         old_values = {
             "DS4_API_RESOURCE_GOVERNOR": os.environ.get("DS4_API_RESOURCE_GOVERNOR"),

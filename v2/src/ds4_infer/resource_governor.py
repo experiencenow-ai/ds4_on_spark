@@ -124,14 +124,34 @@ class GpuResourceGovernor:
             sample_json=os.environ.get("DS4_API_RESOURCE_SAMPLE_JSON", ""),
         )
 
-    def status(self) -> dict[str, Any]:
+    def status(self, *, refresh: bool = False) -> dict[str, Any]:
+        if refresh:
+            self._refresh_status_sample_if_stale()
         status = dict(self._last_status)
+        sampled_at = status.get("sampled_at")
+        status["sample_age_s"] = round(max(0.0, time.time() - float(sampled_at)), 3) if sampled_at is not None else None
         remaining = self.cooldown_remaining_s()
         status["throttle_active"] = remaining > 0.0
         status["throttle_sleep_remaining_s"] = round(remaining, 3)
         status["cooldown_until"] = self._cooldown_until if remaining > 0.0 else None
         status["cooldown_count"] = self._cooldown_count
         return status
+
+    def _refresh_status_sample_if_stale(self) -> None:
+        if not self.enabled or self._last_sample_at <= 0.0:
+            return
+        now = time.time()
+        if (now - self._last_sample_at) < self.poll_s:
+            return
+        readings = self._sample()
+        self._last_sample_at = now
+        status = self._status_from_readings(readings, sampled_at=now)
+        status["last_decision"] = "status_refresh"
+        status["throttle_active"] = False
+        status["throttle_sleep_s"] = 0.0
+        status["cooldown_until"] = None
+        status["cooldown_count"] = self._cooldown_count
+        self._last_status = status
 
     def cooldown_remaining_s(self, now: float | None = None) -> float:
         now = time.time() if now is None else float(now)
@@ -315,6 +335,7 @@ class GpuResourceGovernor:
             "enabled": self.enabled,
             "node_count": len(self.nodes),
             "sampled_at": None,
+            "sample_age_s": None,
             "sampled_nodes": 0,
             "failed_nodes": [],
             "max_temp_c": None,
