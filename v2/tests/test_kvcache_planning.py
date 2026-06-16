@@ -251,6 +251,8 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(rank0["argv"][rank0["argv"].index("--max-num-batched-tokens") + 1], "65536")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--gpu-memory-utilization") + 1], "0.254")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--kv-cache-memory-bytes") + 1], "6060769280")
+        self.assertEqual(rank0["env"]["VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS"], "1200")
+        self.assertEqual(rank12["env"]["VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS"], "1200")
         self.assertIn("--served-model-name", rank0["argv"])
         self.assertEqual(rank0["argv"][rank0["argv"].index("--served-model-name") + 1], "kimi27-code-pp13")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--default-chat-template-kwargs") + 1], "{\"thinking\": true}")
