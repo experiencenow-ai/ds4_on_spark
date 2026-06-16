@@ -583,11 +583,27 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
     def test_dashboard_includes_dsapi_chat_console(self):
         self.assertIn('id="chat-console"', dashboard.DASHBOARD_HTML)
         self.assertIn('id="chat-model"', dashboard.DASHBOARD_HTML)
+        self.assertIn('id="chat-priority"', dashboard.DASHBOARD_HTML)
+        self.assertIn('id="chat-files"', dashboard.DASHBOARD_HTML)
+        self.assertIn('Reset Context', dashboard.DASHBOARD_HTML)
         self.assertIn('fetch("/api/chat/completions"', dashboard.DASHBOARD_HTML)
         self.assertIn("kimi27_pp13", dashboard.DASHBOARD_HTML)
         self.assertIn("qwen27_bf16_pp13", dashboard.DASHBOARD_HTML)
         self.assertIn("gemma4_26b_a4b_pp13", dashboard.DASHBOARD_HTML)
         self.assertIn('String(m.content||"").trim()!==""', dashboard.DASHBOARD_HTML)
+        self.assertIn("function formatAttachments(files)", dashboard.DASHBOARD_HTML)
+        self.assertIn("Attached files. Treat these as user-provided files attached to this chat turn", dashboard.DASHBOARD_HTML)
+        self.assertIn("priority:chatPriority()", dashboard.DASHBOARD_HTML)
+        self.assertIn("CHAT_ATTACHMENT_MAX_TOTAL_BYTES=768*1024", dashboard.DASHBOARD_HTML)
+        self.assertIn("CHAT_MAX_BODY_BYTES=1024*1024", dashboard.DASHBOARD_HTML)
+        self.assertIn("next request starts from an empty chat history", dashboard.DASHBOARD_HTML)
+
+    def test_dashboard_chat_attachment_limits_fit_proxy_body_cap(self):
+        self.assertEqual(dashboard.CHAT_ATTACHMENT_MAX_FILES,5)
+        self.assertEqual(dashboard.CHAT_ATTACHMENT_MAX_FILE_BYTES,256 * 1024)
+        self.assertEqual(dashboard.CHAT_ATTACHMENT_MAX_TOTAL_BYTES,768 * 1024)
+        self.assertEqual(dashboard.CHAT_DEFAULT_PRIORITY,5)
+        self.assertLess(dashboard.CHAT_ATTACHMENT_MAX_TOTAL_BYTES,dashboard.MAX_CHAT_BODY_BYTES)
 
     def test_dashboard_chat_proxy_forwards_to_dsapi(self):
         seen = []
@@ -616,7 +632,7 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
             server_thread = threading.Thread(target=server.serve_forever,daemon=True)
             server_thread.start()
             try:
-                request = urllib.request.Request("http://127.0.0.1:%d/api/chat/completions" % server.server_port,data=json.dumps({"model":"qwen27_bf16_pp13","messages":[{"role":"user","content":"hi"}],"stream":False}).encode("utf-8"),headers={"Content-Type":"application/json"},method="POST")
+                request = urllib.request.Request("http://127.0.0.1:%d/api/chat/completions" % server.server_port,data=json.dumps({"model":"qwen27_bf16_pp13","messages":[{"role":"user","content":"hi"}],"priority":5,"stream":False}).encode("utf-8"),headers={"Content-Type":"application/json"},method="POST")
                 with urllib.request.urlopen(request,timeout=2) as response:
                     payload = json.loads(response.read().decode("utf-8"))
             finally:
@@ -627,6 +643,7 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(payload["choices"][0]["message"]["content"],"ok")
         self.assertEqual(seen[0]["path"],"/v1/chat/completions")
         self.assertEqual(seen[0]["body"]["model"],"qwen27_bf16_pp13")
+        self.assertEqual(seen[0]["body"]["priority"],5)
 
     def test_stream_payload_includes_summary_and_selected_history(self):
         payload = {
