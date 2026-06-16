@@ -23,6 +23,8 @@ class GpuResourceReading:
     host_memory_used_mib: float | None = None
     host_memory_total_mib: float | None = None
     host_memory_used_pct: float | None = None
+    host_memory_available_mib: float | None = None
+    host_memory_available_pct: float | None = None
     error: str | None = None
 
     def to_public_dict(self) -> dict[str, Any]:
@@ -37,6 +39,8 @@ class GpuResourceReading:
             "host_memory_used_mib": self.host_memory_used_mib,
             "host_memory_total_mib": self.host_memory_total_mib,
             "host_memory_used_pct": self.host_memory_used_pct,
+            "host_memory_available_mib": self.host_memory_available_mib,
+            "host_memory_available_pct": self.host_memory_available_pct,
             "error": self.error,
         }
 
@@ -213,6 +217,8 @@ class GpuResourceGovernor:
             host_memory_used_mib=host_memory.get("host_memory_used_mib"),
             host_memory_total_mib=host_memory.get("host_memory_total_mib"),
             host_memory_used_pct=host_memory.get("host_memory_used_pct"),
+            host_memory_available_mib=host_memory.get("host_memory_available_mib"),
+            host_memory_available_pct=host_memory.get("host_memory_available_pct"),
         )
 
     def _sample_host_memory(self, node_id: str) -> dict[str, float | None]:
@@ -233,31 +239,14 @@ class GpuResourceGovernor:
         temps = [reading.temperature_c for reading in ok if reading.temperature_c is not None]
         powers = [reading.power_w for reading in ok if reading.power_w is not None]
         utils = [reading.utilization_pct for reading in ok if reading.utilization_pct is not None]
-        host_mem_pcts = [reading.host_memory_used_pct for reading in ok if reading.host_memory_used_pct is not None]
         max_temp = max(temps, default=None)
         max_power = max(powers, default=None)
-        max_host_mem_pct = max(host_mem_pcts, default=None)
+        host_memory = _host_memory_summary(ok)
+        max_host_mem_pct = host_memory["max_used_pct"]
         total_power = sum(powers)
-        reasons: list[str] = []
-        if max_temp is not None and self.temp_hard_c > 0 and max_temp >= self.temp_hard_c:
-            reasons.append("temp_hard")
-        elif max_temp is not None and self.temp_soft_c > 0 and max_temp >= self.temp_soft_c:
-            reasons.append("temp_soft")
-        if max_power is not None and self.power_hard_w > 0 and max_power >= self.power_hard_w:
-            reasons.append("power_hard")
-        elif max_power is not None and self.power_soft_w > 0 and max_power >= self.power_soft_w:
-            reasons.append("power_soft")
-        if powers and self.total_power_hard_w > 0 and total_power >= self.total_power_hard_w:
-            reasons.append("total_power_hard")
-        elif powers and self.total_power_soft_w > 0 and total_power >= self.total_power_soft_w:
-            reasons.append("total_power_soft")
-        if max_host_mem_pct is not None and self.host_memory_hard_pct > 0 and max_host_mem_pct >= self.host_memory_hard_pct:
-            reasons.append("host_memory_hard")
-        elif max_host_mem_pct is not None and self.host_memory_soft_pct > 0 and max_host_mem_pct >= self.host_memory_soft_pct:
-            reasons.append("host_memory_soft")
+        reasons = self._throttle_reasons(max_temp=max_temp, max_power=max_power, total_power=total_power if powers else None, max_host_mem_pct=max_host_mem_pct)
         hottest = max((reading for reading in ok if reading.temperature_c is not None), key=lambda item: float(item.temperature_c), default=None)
         power_peak = max((reading for reading in ok if reading.power_w is not None), key=lambda item: float(item.power_w), default=None)
-        host_mem_peak = max((reading for reading in ok if reading.host_memory_used_pct is not None), key=lambda item: float(item.host_memory_used_pct), default=None)
         return {
             "enabled": self.enabled,
             "node_count": len(self.nodes),
@@ -271,19 +260,44 @@ class GpuResourceGovernor:
             "total_power_w": round(total_power, 3) if powers else None,
             "max_utilization_pct": max(utils, default=None),
             "max_host_memory_used_pct": round(max_host_mem_pct, 3) if max_host_mem_pct is not None else None,
-            "max_host_memory_node": host_mem_peak.node_id if host_mem_peak is not None else None,
-            "thresholds": {
-                "temp_soft_c": self.temp_soft_c,
-                "temp_hard_c": self.temp_hard_c,
-                "power_soft_w": self.power_soft_w,
-                "power_hard_w": self.power_hard_w,
-                "total_power_soft_w": self.total_power_soft_w,
-                "total_power_hard_w": self.total_power_hard_w,
-                "host_memory_soft_pct": self.host_memory_soft_pct,
-                "host_memory_hard_pct": self.host_memory_hard_pct,
-            },
+            "max_host_memory_node": host_memory["max_used_node"],
+            "min_host_memory_available_pct": host_memory["min_available_pct"],
+            "min_host_memory_available_node": host_memory["min_available_node"],
+            "thresholds": self._thresholds(),
             "throttle_reasons": reasons,
             "readings": [reading.to_public_dict() for reading in readings],
+        }
+
+    def _throttle_reasons(self, *, max_temp: float | None, max_power: float | None, total_power: float | None, max_host_mem_pct: float | None) -> list[str]:
+        reasons: list[str] = []
+        if max_temp is not None and self.temp_hard_c > 0 and max_temp >= self.temp_hard_c:
+            reasons.append("temp_hard")
+        elif max_temp is not None and self.temp_soft_c > 0 and max_temp >= self.temp_soft_c:
+            reasons.append("temp_soft")
+        if max_power is not None and self.power_hard_w > 0 and max_power >= self.power_hard_w:
+            reasons.append("power_hard")
+        elif max_power is not None and self.power_soft_w > 0 and max_power >= self.power_soft_w:
+            reasons.append("power_soft")
+        if total_power is not None and self.total_power_hard_w > 0 and total_power >= self.total_power_hard_w:
+            reasons.append("total_power_hard")
+        elif total_power is not None and self.total_power_soft_w > 0 and total_power >= self.total_power_soft_w:
+            reasons.append("total_power_soft")
+        if max_host_mem_pct is not None and self.host_memory_hard_pct > 0 and max_host_mem_pct >= self.host_memory_hard_pct:
+            reasons.append("host_memory_hard")
+        elif max_host_mem_pct is not None and self.host_memory_soft_pct > 0 and max_host_mem_pct >= self.host_memory_soft_pct:
+            reasons.append("host_memory_soft")
+        return reasons
+
+    def _thresholds(self) -> dict[str, float]:
+        return {
+            "temp_soft_c": self.temp_soft_c,
+            "temp_hard_c": self.temp_hard_c,
+            "power_soft_w": self.power_soft_w,
+            "power_hard_w": self.power_hard_w,
+            "total_power_soft_w": self.total_power_soft_w,
+            "total_power_hard_w": self.total_power_hard_w,
+            "host_memory_soft_pct": self.host_memory_soft_pct,
+            "host_memory_hard_pct": self.host_memory_hard_pct,
         }
 
     def _sleep_for_status(self, status: dict[str, Any]) -> float:
@@ -311,6 +325,8 @@ class GpuResourceGovernor:
             "max_utilization_pct": None,
             "max_host_memory_used_pct": None,
             "max_host_memory_node": None,
+            "min_host_memory_available_pct": None,
+            "min_host_memory_available_node": None,
             "throttle_active": False,
             "throttle_sleep_s": 0.0,
             "throttle_sleep_remaining_s": 0.0,
@@ -355,11 +371,7 @@ def _readings_from_json(raw: str, nodes: tuple[str, ...]) -> list[GpuResourceRea
             continue
         if not isinstance(item, dict):
             continue
-        host_used = _optional_float(item.get("host_memory_used_mib", item.get("host_mem_used_mib")))
-        host_total = _optional_float(item.get("host_memory_total_mib", item.get("host_mem_total_mib")))
-        host_pct = _optional_float(item.get("host_memory_used_pct", item.get("host_mem_pct", item.get("mem_pct"))))
-        if host_pct is None:
-            host_pct = _host_memory_pct(host_used, host_total)
+        host_memory = _host_memory_fields_from_item(item)
         readings.append(
             GpuResourceReading(
                 node_id=node,
@@ -369,13 +381,50 @@ def _readings_from_json(raw: str, nodes: tuple[str, ...]) -> list[GpuResourceRea
                 utilization_pct=_optional_float(item.get("utilization_pct", item.get("gpu_util"))),
                 memory_used_mib=_optional_float(item.get("memory_used_mib")),
                 memory_total_mib=_optional_float(item.get("memory_total_mib")),
-                host_memory_used_mib=host_used,
-                host_memory_total_mib=host_total,
-                host_memory_used_pct=host_pct,
+                host_memory_used_mib=host_memory["used_mib"],
+                host_memory_total_mib=host_memory["total_mib"],
+                host_memory_used_pct=host_memory["used_pct"],
+                host_memory_available_mib=host_memory["available_mib"],
+                host_memory_available_pct=host_memory["available_pct"],
                 error=str(item.get("error")) if item.get("error") is not None else None,
             )
         )
     return readings
+
+
+def _host_memory_summary(readings: list[GpuResourceReading]) -> dict[str, Any]:
+    used = [reading.host_memory_used_pct for reading in readings if reading.host_memory_used_pct is not None]
+    available = [reading.host_memory_available_pct for reading in readings if reading.host_memory_available_pct is not None]
+    used_peak = max((reading for reading in readings if reading.host_memory_used_pct is not None), key=lambda item: float(item.host_memory_used_pct), default=None)
+    available_floor = min((reading for reading in readings if reading.host_memory_available_pct is not None), key=lambda item: float(item.host_memory_available_pct), default=None)
+    min_available_pct = min(available, default=None)
+    return {
+        "max_used_pct": max(used, default=None),
+        "max_used_node": used_peak.node_id if used_peak is not None else None,
+        "min_available_pct": round(min_available_pct, 3) if min_available_pct is not None else None,
+        "min_available_node": available_floor.node_id if available_floor is not None else None,
+    }
+
+
+def _host_memory_fields_from_item(item: dict[str, Any]) -> dict[str, float | None]:
+    used = _optional_float(item.get("host_memory_used_mib", item.get("host_mem_used_mib")))
+    total = _optional_float(item.get("host_memory_total_mib", item.get("host_mem_total_mib")))
+    available = _optional_float(item.get("host_memory_available_mib", item.get("host_mem_available_mib")))
+    available_pct = _optional_float(item.get("host_memory_available_pct", item.get("host_mem_available_pct")))
+    if available_pct is None:
+        available_pct = _host_memory_pct(available, total)
+    if used is None and total is not None and available is not None:
+        used = max(0.0, float(total) - float(available))
+    used_pct = _optional_float(item.get("host_memory_used_pct", item.get("host_mem_pct", item.get("mem_pct"))))
+    if used_pct is None and available_pct is not None:
+        used_pct = max(0.0, 100.0 - float(available_pct))
+    if used_pct is None:
+        used_pct = _host_memory_pct(used, total)
+    if available is None and total is not None and used is not None:
+        available = max(0.0, float(total) - float(used))
+    if available_pct is None:
+        available_pct = _host_memory_pct(available, total)
+    return {"used_mib": used, "total_mib": total, "used_pct": used_pct, "available_mib": available, "available_pct": available_pct}
 
 
 def _parse_free_m(text: str) -> dict[str, float | None]:
@@ -384,10 +433,16 @@ def _parse_free_m(text: str) -> dict[str, float | None]:
         if len(parts) >= 3 and parts[0] == "Mem:":
             total = _optional_float(parts[1])
             used = _optional_float(parts[2])
+            available = _optional_float(parts[6]) if len(parts) >= 7 else None
+            available_pct = _host_memory_pct(available, total)
+            if total is not None and available is not None:
+                used = max(0.0, float(total) - float(available))
             return {
                 "host_memory_used_mib": used,
                 "host_memory_total_mib": total,
                 "host_memory_used_pct": _host_memory_pct(used, total),
+                "host_memory_available_mib": available,
+                "host_memory_available_pct": available_pct,
             }
     return {}
 
