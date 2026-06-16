@@ -62,9 +62,9 @@
     ]
   },
   "fixed_kv_cache_memory_bytes": {
-    "qwen27_bf16_pp13": 7070547968,
+    "qwen27_bf16_pp13": 2147483648,
     "gemma4_26b_a4b_pp13": 5050990592,
-    "kimi27_pp13": 6060769280
+    "kimi27_pp13": 2147483648
   },
   "resident_batch_token_budget": {
     "qwen27_bf16_pp13": 32768,
@@ -108,7 +108,7 @@
         "lane": "smart",
         "lane_weight": 1.35,
         "pipeline_parallel_size": 13,
-        "gpu_memory_utilization": 0.254,
+        "gpu_memory_utilization": 0.09,
         "batch_size": 128,
         "input_budget_tokens": 8192,
         "output_budget_tokens": 4096,
@@ -122,7 +122,7 @@
         "lane": "fast_reasoning",
         "lane_weight": 1.0,
         "pipeline_parallel_size": 13,
-        "gpu_memory_utilization": 0.226,
+        "gpu_memory_utilization": 0.09,
         "batch_size": 32,
         "input_budget_tokens": 8192,
         "output_budget_tokens": 4096,

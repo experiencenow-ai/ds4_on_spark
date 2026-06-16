@@ -213,7 +213,7 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX"], "1")
         self.assertEqual(limits, {"kimi27_pp13": 128, "qwen27_bf16_pp13": 32})
         self.assertEqual(env["DS4_API_RESIDENT_SERVICE_IDS"], "kimi27_pp13,qwen27_bf16_pp13")
-        self.assertEqual(env["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "13131317248")
+        self.assertEqual(env["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], "4294967296")
         self.assertEqual(env["DS4_API_JIT_KV_PREFETCH_API"], "0")
         self.assertEqual(env["DS4_PIPELINE_AUTO_KV_CACHE"], "1")
         self.assertEqual(env["DS4_PIPELINE_AUTO_KV_BATCH_POLICY"], "prefer_batch")
