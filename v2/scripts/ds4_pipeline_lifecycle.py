@@ -364,18 +364,81 @@ def _valid_env_name(name: str) -> bool:
 
 def _remote_status(entry: dict[str, object]) -> str:
     code = _remote_vllm_process_code(include_ppid=False)
-    return f"N={shlex.quote(json.dumps(_needles(entry), separators=(',', ':')))} python3 -c {shlex.quote(code)}"
+    needles = shlex.quote(json.dumps(_needles(entry), separators=(",", ":")))
+    ports = shlex.quote(json.dumps(_ports(entry), separators=(",", ":")))
+    return f"N={needles} P={ports} python3 -c {shlex.quote(code)}"
 
 
 def _remote_kill(entry: dict[str, object]) -> str:
     code = _remote_vllm_process_code(include_ppid=True)
-    return f"N={shlex.quote(json.dumps(_needles(entry), separators=(',', ':')))} python3 -c {shlex.quote(code)}"
+    needles = shlex.quote(json.dumps(_needles(entry), separators=(",", ":")))
+    ports = shlex.quote(json.dumps(_ports(entry), separators=(",", ":")))
+    return f"N={needles} P={ports} python3 -c {shlex.quote(code)}"
+
+
+_REMOTE_VLLM_MATCHER_LINES = [
+    "def is_vllm_serve(cmd):",
+    " try: argv=shlex.split(cmd)",
+    " except ValueError: argv=cmd.split()",
+    " if len(argv)>=4 and argv[1]=='-m' and argv[2]=='vllm.entrypoints.cli.main' and argv[3]=='serve': return True",
+    " if len(argv)>=2 and (argv[0]=='vllm' or argv[0].endswith('/vllm')) and argv[1]=='serve': return True",
+    " if any(x.endswith('/ds4_run_vllm_from_source.py') or x=='ds4_run_vllm_from_source.py' for x in argv) and '--' in argv:",
+    "  tail=argv[argv.index('--')+1:]",
+    "  return len(tail)>=2 and tail[0]=='serve' or (len(tail)>=4 and tail[0]=='-m' and tail[1]=='vllm.entrypoints.cli.main' and tail[2]=='serve')",
+    " return False",
+]
+
+
+_REMOTE_STATUS_LINES = [
+    "import json,os,re,shlex,subprocess",
+    "n=json.loads(os.environ['N']);ports=set(json.loads(os.environ.get('P','[]')));rows=[];seen=set()",
+    *_REMOTE_VLLM_MATCHER_LINES,
+    "cmds={}",
+    "for l in subprocess.run(['ps','-eo','pid=,args='],text=True,stdout=subprocess.PIPE).stdout.splitlines():",
+    " p=l.strip().split(None,1)",
+    " if len(p)!=2: continue",
+    " pid=int(p[0]);cmd=p[1];cmds[pid]=cmd",
+    " if is_vllm_serve(cmd) and any(x and x in cmd for x in n): rows.append({'pid':pid,'cmd':cmd,'match':'serve'});seen.add(pid)",
+    "for l in subprocess.run(['ss','-ltnp'],text=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL).stdout.splitlines():",
+    " if not any((':'+str(port)) in l for port in ports): continue",
+    " for pid in re.findall(r'pid=(\\d+)',l):",
+    "  ipid=int(pid)",
+    "  if ipid not in seen: rows.append({'pid':ipid,'cmd':cmds.get(ipid,''),'match':'port-listener'});seen.add(ipid)",
+    "print(json.dumps(rows,sort_keys=True))",
+]
+
+
+_REMOTE_KILL_LINES = [
+    "import json,os,re,shlex,signal,subprocess,time",
+    "n=json.loads(os.environ['N']);ports=set(json.loads(os.environ.get('P','[]')));parents=[];children={}",
+    *_REMOTE_VLLM_MATCHER_LINES,
+    "for l in subprocess.run(['ps','-eo','pid=,ppid=,args='],text=True,stdout=subprocess.PIPE).stdout.splitlines():",
+    " p=l.strip().split(None,2)",
+    " if len(p)<3: continue",
+    " pid=int(p[0]);ppid=int(p[1]);cmd=p[2]",
+    " children.setdefault(ppid,[]).append(pid)",
+    " if is_vllm_serve(cmd) and any(x and x in cmd for x in n): parents.append(pid)",
+    "for l in subprocess.run(['ss','-ltnp'],text=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL).stdout.splitlines():",
+    " if not any((':'+str(port)) in l for port in ports): continue",
+    " for pid in re.findall(r'pid=(\\d+)',l): parents.append(int(pid))",
+    "t=[];stack=list(parents)",
+    "while stack:",
+    " pid=stack.pop()",
+    " if pid in t: continue",
+    " t.append(pid);stack.extend(children.get(pid,[]))",
+    "for p in t:",
+    " try: os.kill(p,signal.SIGTERM)",
+    " except ProcessLookupError: pass",
+    "time.sleep(2)",
+    "for p in t:",
+    " try: os.kill(p,0); os.kill(p,signal.SIGKILL)",
+    " except ProcessLookupError: pass",
+    "print(json.dumps({'killed':t},sort_keys=True))",
+]
 
 
 def _remote_vllm_process_code(*, include_ppid: bool) -> str:
-    if not include_ppid:
-        return "import json,os,shlex,subprocess\nn=json.loads(os.environ['N']);rows=[]\ndef is_vllm_serve(cmd):\n try: argv=shlex.split(cmd)\n except ValueError: argv=cmd.split()\n if len(argv)>=4 and argv[1]=='-m' and argv[2]=='vllm.entrypoints.cli.main' and argv[3]=='serve': return True\n if len(argv)>=2 and (argv[0]=='vllm' or argv[0].endswith('/vllm')) and argv[1]=='serve': return True\n if any(x.endswith('/ds4_run_vllm_from_source.py') or x=='ds4_run_vllm_from_source.py' for x in argv) and '--' in argv:\n  tail=argv[argv.index('--')+1:]\n  return len(tail)>=2 and tail[0]=='serve' or (len(tail)>=4 and tail[0]=='-m' and tail[1]=='vllm.entrypoints.cli.main' and tail[2]=='serve')\n return False\nfor l in subprocess.run(['ps','-eo','pid=,args='],text=True,stdout=subprocess.PIPE).stdout.splitlines():\n p=l.strip().split(None,1)\n if len(p)==2 and is_vllm_serve(p[1]) and any(x and x in p[1] for x in n): rows.append({'pid':int(p[0]),'cmd':p[1]})\nprint(json.dumps(rows,sort_keys=True))"
-    return "import json,os,shlex,signal,subprocess,time\nn=json.loads(os.environ['N']);parents=[];children={}\ndef is_vllm_serve(cmd):\n try: argv=shlex.split(cmd)\n except ValueError: argv=cmd.split()\n if len(argv)>=4 and argv[1]=='-m' and argv[2]=='vllm.entrypoints.cli.main' and argv[3]=='serve': return True\n if len(argv)>=2 and (argv[0]=='vllm' or argv[0].endswith('/vllm')) and argv[1]=='serve': return True\n if any(x.endswith('/ds4_run_vllm_from_source.py') or x=='ds4_run_vllm_from_source.py' for x in argv) and '--' in argv:\n  tail=argv[argv.index('--')+1:]\n  return len(tail)>=2 and tail[0]=='serve' or (len(tail)>=4 and tail[0]=='-m' and tail[1]=='vllm.entrypoints.cli.main' and tail[2]=='serve')\n return False\nfor l in subprocess.run(['ps','-eo','pid=,ppid=,args='],text=True,stdout=subprocess.PIPE).stdout.splitlines():\n p=l.strip().split(None,2)\n if len(p)<3: continue\n pid=int(p[0]);ppid=int(p[1]);cmd=p[2]\n children.setdefault(ppid,[]).append(pid)\n if is_vllm_serve(cmd) and any(x and x in cmd for x in n): parents.append(pid)\nt=[];stack=list(parents)\nwhile stack:\n pid=stack.pop()\n if pid in t: continue\n t.append(pid);stack.extend(children.get(pid,[]))\nfor p in t:\n try: os.kill(p,signal.SIGTERM)\n except ProcessLookupError: pass\ntime.sleep(2)\nfor p in t:\n try: os.kill(p,0); os.kill(p,signal.SIGKILL)\n except ProcessLookupError: pass\nprint(json.dumps({'killed':t},sort_keys=True))"
+    return "\n".join(_REMOTE_KILL_LINES if include_ppid else _REMOTE_STATUS_LINES)
 
 
 def _needles(entry: dict[str, object]) -> list[str]:
@@ -390,6 +453,20 @@ def _needles(entry: dict[str, object]) -> list[str]:
         if len(leaf) >= 6:
             needles.add(leaf)
     return sorted(needles)
+
+
+def _ports(entry: dict[str, object]) -> list[int]:
+    dep = entry["deployment"]
+    raw = {entry.get("http_port"), dep.get("http_port"), dep.get("master_port")}
+    ports = set()
+    for item in raw:
+        try:
+            port = int(item)
+        except (TypeError, ValueError):
+            continue
+        if 0 < port < 65536:
+            ports.add(port)
+    return sorted(ports)
 
 
 def _repo(args: argparse.Namespace) -> str:
