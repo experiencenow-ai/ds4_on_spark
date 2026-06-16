@@ -130,7 +130,8 @@ class CoordinatorApi:
             )
             return (200 if payload["ready"] else 503), payload
         if path == "/ds4/queue/status":
-            return 200, self.queue.status(request_id=_one(query, "request_id"), batch_id=_one(query, "batch_id"), job_id=_one(query, "job_id"), refresh=_query_bool(query, "refresh", False))
+            status = self.queue.status(request_id=_one(query, "request_id"), batch_id=_one(query, "batch_id"), job_id=_one(query, "job_id"), refresh=_query_bool(query, "refresh", False))
+            return 200, _queue_status_for_topology(status, self._topology())
         if path == "/ds4/queue/usage":
             return 200, self.queue.usage(window_s=_query_float(query, "window_s", 300.0))
         if path == "/ds4/queue/poll":
@@ -1778,6 +1779,46 @@ def _pipeline_telemetry_with_topology(report: dict[str, Any], topology: SparkTop
         normalized.setdefault("layer_start", stage.layer_start)
         normalized.setdefault("layer_end", stage.layer_end)
     return normalized
+
+
+def _queue_status_for_topology(status: dict[str, Any], topology: SparkTopology) -> dict[str, Any]:
+    pipeline = status.get("pipeline_status")
+    if not isinstance(pipeline, dict):
+        return status
+    active = _active_resident_service_ids(topology)
+    current_service_ids = set(active) if active is not None else set(topology.pipeline_services)
+    current_service_ids = {str(service_id) for service_id in current_service_ids if str(service_id)}
+    if not current_service_ids:
+        return status
+    filtered = dict(status)
+    filtered["active_compute_leases"] = _filter_service_records(status.get("active_compute_leases", []), current_service_ids, keep_without_service=True)
+    filtered["pipeline_status"] = _filter_pipeline_status_for_services(pipeline, current_service_ids)
+    return filtered
+
+
+def _filter_pipeline_status_for_services(pipeline: dict[str, Any], service_ids: set[str]) -> dict[str, Any]:
+    filtered = dict(pipeline)
+    service_id = str(filtered.get("service_id") or "")
+    if service_id not in service_ids:
+        filtered["service_id"] = None
+    filtered["stages"] = _filter_service_records(filtered.get("stages", []), service_ids)
+    filtered["kv_shards"] = _filter_service_records(filtered.get("kv_shards", []), service_ids)
+    filtered["active_compute_leases"] = _filter_service_records(filtered.get("active_compute_leases", []), service_ids, keep_without_service=True)
+    return filtered
+
+
+def _filter_service_records(records: Any, service_ids: set[str], *, keep_without_service: bool = False) -> list[Any]:
+    if not isinstance(records, list):
+        return []
+    filtered = []
+    for item in records:
+        if isinstance(item, dict):
+            service_id = str(item.get("service_id") or "")
+            if service_id in service_ids or (keep_without_service and service_id == ""):
+                filtered.append(dict(item))
+        elif str(item) in service_ids:
+            filtered.append(item)
+    return filtered
 
 
 def _telemetry_service(topology: SparkTopology, report: dict[str, Any]):
