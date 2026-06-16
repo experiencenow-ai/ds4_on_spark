@@ -735,6 +735,12 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertEqual(dashboard.DEFAULT_REPO_ROOT,"/Users/mac/Documents/New project 4")
         self.assertEqual(str(dashboard.repo_root()),"/Users/mac/Documents/New project 4")
 
+    def test_dashboard_dsapi_default_matches_spark0_telemetry_source(self):
+        self.assertEqual(dashboard.DEFAULT_DSAPI_URL,"http://10.20.0.10:8700")
+        plist = Path("deploy/launchd/com.ds4.spark-telemetry-dashboard.plist").read_text(encoding="utf-8")
+        self.assertIn("<string>--dsapi-url</string>", plist)
+        self.assertIn("<string>http://10.20.0.10:8700</string>", plist)
+
     def test_dashboard_card_omits_power_and_marks_missing_vllm_na(self):
         self.assertNotIn('Pwr <b>', dashboard.DASHBOARD_HTML)
         self.assertNotIn('let pwr=', dashboard.DASHBOARD_HTML)

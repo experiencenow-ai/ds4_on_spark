@@ -16,6 +16,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
+try:
+    from . import spark_telemetry_common as telemetry_common
+except ImportError:
+    import spark_telemetry_common as telemetry_common
+
 
 DEFAULT_SUMMARY_JSON = "/tmp/ds4_telemetry/mac/cluster_summary.json"
 DEFAULT_NODES_DIR = "/tmp/ds4_telemetry/mac/nodes"
@@ -23,7 +28,7 @@ DEFAULT_HISTORY_LIMIT = 720
 DEFAULT_SUMMARY_STALE_S = 60.0
 DEFAULT_REPO_ROOT = "/Users/mac/Documents/New project 4"
 DEFAULT_MODEL_LAYER_PARTITIONS_JSON = "/Users/mac/.local/share/ds4_telemetry/model_layer_partitions.json"
-DEFAULT_DSAPI_URL = os.environ.get("DS4_DASHBOARD_DSAPI_URL","http://127.0.0.1:8700")
+DEFAULT_DSAPI_URL = os.environ.get("DS4_DASHBOARD_DSAPI_URL",telemetry_common.DEFAULT_DS4_API_URL)
 MAX_CHAT_BODY_BYTES = 1024 * 1024
 CHAT_ATTACHMENT_MAX_FILES = 5
 CHAT_ATTACHMENT_MAX_FILE_BYTES = 256 * 1024

@@ -17,6 +17,8 @@
     <string>8765</string>
     <string>--summary-stale-s</string>
     <string>60</string>
+    <string>--dsapi-url</string>
+    <string>http://10.20.0.10:8700</string>
     <string>--repo-root</string>
     <string>/Users/mac/Documents/New project 4</string>
   </array>
