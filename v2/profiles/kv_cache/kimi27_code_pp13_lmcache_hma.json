@@ -80,6 +80,7 @@
     "VLLM_DS4_TRITON_MLA_BLOCK_H": "8",
     "VLLM_DS4_TRITON_MLA_NUM_STAGES": "1",
     "VLLM_DS4_VALIDATE_INPUT_IDS": "1",
+    "VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS": "1200",
     "VLLM_HOST_IP": "{fabric_ip}"
   },
   "fabric_topology": "../transfer/spark_200g.json",
