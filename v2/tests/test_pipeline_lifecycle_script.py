@@ -402,9 +402,32 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertIn("shlex.split(cmd)", status_script)
         self.assertIn("argv[1]==", status_script)
         self.assertIn("vllm.entrypoints.cli.main", status_script)
+        self.assertIn("P=", status_script)
+        self.assertIn("ss", status_script)
+        self.assertIn("-ltnp", status_script)
+        self.assertIn("port-listener", status_script)
+        self.assertIn("ss", kill_script)
+        self.assertIn("-ltnp", kill_script)
         self.assertIn("endswith", kill_script)
         self.assertNotIn("('vllm' in cmd or '--pipeline-parallel-size' in cmd)", kill_script)
         self.assertNotIn("('vllm' in p[1] or '--pipeline-parallel-size' in p[1])", status_script)
+
+    def test_remote_status_and_kill_include_service_ports(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        entry = {
+            "service_id": "kimi27_pp13",
+            "profile_id": "kimi27_code_pp13_smart_v1",
+            "model_id": "moonshotai/Kimi-K2.7-Code",
+            "http_port": 8138,
+            "deployment": {"model_id": "/home/{node}/models/hf/moonshotai/Kimi-K2.7-Code", "served_model_name": "kimi27-code-pp13", "master_port": 29664},
+        }
+
+        status_script = lifecycle._remote_status(entry)
+        kill_script = lifecycle._remote_kill(entry)
+
+        self.assertIn("P='[8138,29664]'", status_script)
+        self.assertIn("P='[8138,29664]'", kill_script)
+        self.assertEqual(lifecycle._ports(entry), [8138, 29664])
 
     def test_probe_code_polls_until_timeout_deadline(self) -> None:
         lifecycle = load_script(SCRIPT)
