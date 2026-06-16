@@ -14,7 +14,7 @@ from ds4_infer.api import CoordinatorApi, DispatcherRuntime
 from ds4_infer.dispatcher_resident import PendingDispatcherCohort, ResidentServicePlan, resident_service_plans
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.queue import QueueClaim
-from ds4_infer.resource_governor import GpuResourceGovernor
+from ds4_infer.resource_governor import GpuResourceGovernor, _parse_free_m
 from ds4_infer.runners import OpenAICompatibleRunner
 from ds4_infer.schemas import InferenceRequest, make_result
 from ds4_infer.topology import SparkTopology
@@ -1426,6 +1426,18 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                     os.environ.pop(key, None)
                 else:
                     os.environ[key] = value
+
+    def test_resource_governor_free_parser_uses_memavailable(self) -> None:
+        parsed = _parse_free_m(
+            "               total        used        free      shared  buff/cache   available\n"
+            "Mem:            1000         990          10           0         390         400\n"
+            "Swap:              0           0           0\n"
+        )
+        self.assertEqual(parsed["host_memory_total_mib"], 1000.0)
+        self.assertEqual(parsed["host_memory_available_mib"], 400.0)
+        self.assertEqual(parsed["host_memory_available_pct"], 40.0)
+        self.assertEqual(parsed["host_memory_used_mib"], 600.0)
+        self.assertEqual(parsed["host_memory_used_pct"], 60.0)
 
     def test_resource_governor_does_not_sample_when_queue_is_idle(self) -> None:
         old_values = {
