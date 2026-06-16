@@ -15,7 +15,8 @@ SCRIPT = ROOT / "scripts" / "ds4_pipeline_lifecycle.py"
 TOKEN_SCRIPT = ROOT / "scripts" / "ds4_prefetch_token.py"
 WARM_SCRIPT = ROOT / "scripts" / "ds4_warm_dsv4_flashinfer_cache.py"
 TOPOLOGY = json.loads((ROOT / "profiles" / "topology" / "static_sparks.json").read_text(encoding="utf-8"))
-CENTAUR_TOPOLOGY = json.loads((ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_gemma_pp13.json").read_text(encoding="utf-8"))
+CENTAUR_TOPOLOGY = json.loads((ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_pp13.json").read_text(encoding="utf-8"))
+TRIAD_TOPOLOGY = json.loads((ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_gemma_pp13.json").read_text(encoding="utf-8"))
 
 
 def load_script(path: Path):
@@ -33,6 +34,17 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         entries = lifecycle._load_entries(str(lifecycle.TOPOLOGY), str(ROOT / "profiles" / "models"))
 
         self.assertEqual({entry["service_id"] for entry in entries}, set(CENTAUR_TOPOLOGY["routing_policy"]["pipeline_services"]))
+        self.assertEqual(
+            {entry["service_id"] for entry in entries},
+            {"kimi27_pp13", "qwen27_bf16_pp13"},
+        )
+
+    def test_triad_topology_remains_available_for_explicit_rollbacks(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        topology = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_gemma_pp13.json"
+        entries = lifecycle._load_entries(str(topology), str(ROOT / "profiles" / "models"))
+
+        self.assertEqual({entry["service_id"] for entry in entries}, set(TRIAD_TOPOLOGY["routing_policy"]["pipeline_services"]))
         self.assertEqual(
             {entry["service_id"] for entry in entries},
             {"gemma4_26b_a4b_pp13", "kimi27_pp13", "qwen27_bf16_pp13"},

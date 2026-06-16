@@ -19,7 +19,7 @@ from ds4_prefetch_token import DEFAULT_PREFETCH_TOKEN_FILE, load_prefetch_token
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
-TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_gemma_pp13.json"
+TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_pp13.json"
 PROFILES = ROOT / "profiles" / "models"
 DEFAULT_PROBE_TIMEOUT_S = 900.0
 SECRET_ASSIGN_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY)[A-Za-z0-9_]*=)(?:'[^']*'|\"[^\"]*\"|[^ \n]+)")
