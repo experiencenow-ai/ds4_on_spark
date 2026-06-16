@@ -10,7 +10,7 @@ import threading
 import time
 import unittest
 
-from ds4_infer.api import CoordinatorApi, DispatcherRuntime
+from ds4_infer.api import CoordinatorApi, DispatcherRuntime, _parse_vllm_metrics_snapshot
 from ds4_infer.dispatcher_resident import PendingDispatcherCohort, ResidentServicePlan, resident_service_plans
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.queue import QueueClaim
@@ -1348,13 +1348,16 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             governor = GpuResourceGovernor.from_env(nodes=("spark0",), local_node_id="spark0")
             first = governor.before_refill().status
             self.assertEqual(first["max_utilization_pct"], 3.0)
+            self.assertEqual(first["max_utilization_node"], "spark0")
             governor.sample_json = json.dumps({"nodes": {"spark0": {"temperature_c": 51, "power_w": 41, "utilization_pct": 89}}})
             reused = governor.status(refresh=True)
             self.assertEqual(reused["max_utilization_pct"], 3.0)
+            self.assertEqual(reused["max_utilization_node"], "spark0")
             governor.poll_s = 0.1
             governor._last_sample_at = time.time() - 10.0
             refreshed = governor.status(refresh=True)
             self.assertEqual(refreshed["max_utilization_pct"], 89.0)
+            self.assertEqual(refreshed["max_utilization_node"], "spark0")
             self.assertEqual(refreshed["last_decision"], "status_refresh")
             self.assertIsNotNone(refreshed["sample_age_s"])
         finally:
@@ -1363,6 +1366,34 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                     os.environ.pop(key, None)
                 else:
                     os.environ[key] = value
+
+    def test_vllm_metrics_snapshot_reports_running_progress(self) -> None:
+        text = "\n".join(
+            [
+                'vllm:num_requests_running{engine="0",model_name="kimi27-code-pp13"} 1.0',
+                'vllm:num_requests_waiting{engine="0",model_name="kimi27-code-pp13"} 0.0',
+                'vllm:prompt_tokens_total{engine="0",model_name="kimi27-code-pp13"} 126901.0',
+                'vllm:prompt_tokens_by_source_total{engine="0",model_name="kimi27-code-pp13",source="local_compute"} 126901.0',
+                'vllm:prompt_tokens_by_source_total{engine="0",model_name="kimi27-code-pp13",source="local_cache_hit"} 0.0',
+                'vllm:generation_tokens_total{engine="0",model_name="kimi27-code-pp13"} 2199.0',
+                'vllm:prompt_tokens_cached_total{engine="0",model_name="kimi27-code-pp13"} 0.0',
+                'vllm:time_to_first_token_seconds_count{engine="0",model_name="kimi27-code-pp13"} 1.0',
+                'vllm:time_to_first_token_seconds_sum{engine="0",model_name="kimi27-code-pp13"} 321.5558202266693',
+                'vllm:request_success_total{engine="0",finished_reason="stop",model_name="kimi27-code-pp13"} 0.0',
+                'vllm:request_success_total{engine="0",finished_reason="length",model_name="kimi27-code-pp13"} 0.0',
+            ]
+        )
+        status = _parse_vllm_metrics_snapshot(text)
+        self.assertEqual(status["num_requests_running"], 1.0)
+        self.assertEqual(status["num_requests_waiting"], 0.0)
+        self.assertEqual(status["prompt_tokens_total"], 126901.0)
+        self.assertEqual(status["generation_tokens_total"], 2199.0)
+        self.assertEqual(status["prompt_tokens_cached_total"], 0.0)
+        self.assertEqual(status["prompt_tokens_by_source_total"]["local_compute"], 126901.0)
+        self.assertEqual(status["prompt_tokens_by_source_total"]["local_cache_hit"], 0.0)
+        self.assertEqual(status["request_success_total"]["stop"], 0.0)
+        self.assertEqual(status["request_success_total"]["length"], 0.0)
+        self.assertEqual(status["time_to_first_token_avg_s"], 321.556)
 
     def test_resource_governor_hot_sample_delays_dispatcher_refill(self) -> None:
         old_values = {

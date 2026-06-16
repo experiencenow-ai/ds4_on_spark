@@ -12,6 +12,7 @@ import threading
 import time
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
+import urllib.request
 import uuid
 
 from .api_chat_render import anthropic_messages_input_payload, openai_chat_input_payload
@@ -108,6 +109,7 @@ class CoordinatorApi:
         self.dispatcher_thread: threading.Thread | None = None
         self.dispatcher_lock = threading.Lock()
         self.dispatcher_state: dict[str, Any] = self._initial_dispatcher_state()
+        self._service_metric_last: dict[str, dict[str, float]] = {}
         if _env_bool("DS4_API_JIT_KV_RECOVER_ON_STARTUP", True):
             self.jit_kv_startup_recovery = self.queue.recover_jit_kv_startup(stale_s=_env_float("DS4_API_JIT_KV_RECOVERY_STALE_S", 0.0))
 
@@ -475,11 +477,59 @@ class CoordinatorApi:
         except Exception as exc:
             state["queue_status_error"] = str(exc)
         self._dispatcher_status_add_resident_defaults(state)
+        state["resident_service_metrics"] = self._resident_service_metrics_snapshot()
         state["resident_prefer_cohort_batch"] = _env_bool("DS4_API_RESIDENT_PREFER_COHORT_BATCH", False)
         state["prestage_auto_kv_prefix_enabled"] = _env_bool("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX", False)
         state.update(self.jit_kv_circuit.status())
         state["jit_kv_startup_recovery"] = dict(self.jit_kv_startup_recovery)
         return state
+
+    def _resident_service_metrics_snapshot(self) -> dict[str, dict[str, Any]]:
+        if not _env_bool("DS4_API_SERVICE_METRICS_STATUS", True):
+            return {}
+        try:
+            topology = self._topology()
+        except Exception as exc:
+            return {"_error": {"ok": False, "error": str(exc)}}
+        active = _active_resident_service_ids(topology)
+        timeout_s = max(0.05, _env_float("DS4_API_SERVICE_METRICS_TIMEOUT_S", 0.75))
+        out: dict[str, dict[str, Any]] = {}
+        for service in topology.pipeline_services.values():
+            if active is not None and service.service_id not in active:
+                continue
+            base_url = pipeline_service_client_base_url(service)
+            out[service.service_id] = self._resident_service_metric_snapshot(
+                service_id=service.service_id,
+                base_url=base_url,
+                timeout_s=timeout_s,
+            )
+        return out
+
+    def _resident_service_metric_snapshot(self, *, service_id: str, base_url: str, timeout_s: float) -> dict[str, Any]:
+        now = time.time()
+        url = f"{base_url.rstrip('/')}/metrics"
+        try:
+            with urllib.request.urlopen(url, timeout=timeout_s) as response:
+                text = response.read().decode("utf-8", errors="replace")
+        except Exception as exc:
+            return {"ok": False, "api_base_url": base_url, "error": str(exc), "sampled_at": now}
+        status = _parse_vllm_metrics_snapshot(text)
+        status.update({"ok": True, "api_base_url": base_url, "sampled_at": now})
+        previous = self._service_metric_last.get(service_id)
+        if previous:
+            elapsed_s = max(0.0, now - float(previous.get("sampled_at", now)))
+            if elapsed_s > 0.0:
+                for key, rate_key in (("prompt_tokens_total", "prompt_tokens_per_s"), ("generation_tokens_total", "generation_tokens_per_s")):
+                    current = _optional_float(status.get(key))
+                    before = _optional_float(previous.get(key))
+                    if current is not None and before is not None and current >= before:
+                        status[rate_key] = round((current - before) / elapsed_s, 3)
+        self._service_metric_last[service_id] = {
+            "sampled_at": now,
+            "prompt_tokens_total": float(status.get("prompt_tokens_total") or 0.0),
+            "generation_tokens_total": float(status.get("generation_tokens_total") or 0.0),
+        }
+        return status
 
     def _dispatcher_status_add_resident_defaults(self, state: dict[str, Any]) -> None:
         if not bool(state.get("resident_multimodel", False)):
@@ -1053,6 +1103,115 @@ def serve(*, host: str, port: int, queue_dir: str | Path, profiles_dir: str | Pa
     finally:
         api.stop_background_dispatcher()
         server.server_close()
+
+
+def _parse_vllm_metrics_snapshot(text: str) -> dict[str, Any]:
+    scalars: dict[str, float] = {}
+    prompt_by_source: dict[str, float] = {}
+    request_success: dict[str, float] = {}
+    wanted = {
+        "vllm:num_requests_running": "num_requests_running",
+        "vllm:num_requests_waiting": "num_requests_waiting",
+        "vllm:prompt_tokens_total": "prompt_tokens_total",
+        "vllm:generation_tokens_total": "generation_tokens_total",
+        "vllm:prompt_tokens_cached_total": "prompt_tokens_cached_total",
+        "vllm:time_to_first_token_seconds_count": "time_to_first_token_count",
+        "vllm:time_to_first_token_seconds_sum": "time_to_first_token_sum_s",
+        "vllm:e2e_request_latency_seconds_count": "e2e_request_latency_count",
+        "vllm:e2e_request_latency_seconds_sum": "e2e_request_latency_sum_s",
+    }
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        name_labels, value = _split_metric_line(line)
+        if name_labels is None:
+            continue
+        name, labels = _split_metric_labels(name_labels)
+        numeric = _optional_float(value)
+        if numeric is None:
+            continue
+        if name in wanted:
+            scalars[wanted[name]] = numeric
+        elif name == "vllm:prompt_tokens_by_source_total":
+            source = labels.get("source")
+            if source:
+                prompt_by_source[source] = numeric
+        elif name == "vllm:request_success_total":
+            reason = labels.get("finished_reason")
+            if reason:
+                request_success[reason] = numeric
+    if prompt_by_source:
+        scalars["prompt_tokens_by_source_total"] = dict(sorted(prompt_by_source.items()))
+    if request_success:
+        scalars["request_success_total"] = dict(sorted(request_success.items()))
+    ttft_sum = _optional_float(scalars.get("time_to_first_token_sum_s"))
+    ttft_count = _optional_float(scalars.get("time_to_first_token_count"))
+    if ttft_sum is not None and ttft_count is not None and ttft_count > 0:
+        scalars["time_to_first_token_avg_s"] = round(ttft_sum / ttft_count, 3)
+    latency_sum = _optional_float(scalars.get("e2e_request_latency_sum_s"))
+    latency_count = _optional_float(scalars.get("e2e_request_latency_count"))
+    if latency_sum is not None and latency_count is not None and latency_count > 0:
+        scalars["e2e_request_latency_avg_s"] = round(latency_sum / latency_count, 3)
+    return scalars
+
+
+def _split_metric_line(line: str) -> tuple[str | None, str]:
+    parts = line.rsplit(None, 1)
+    if len(parts) != 2:
+        return (None, "")
+    return (parts[0], parts[1])
+
+
+def _split_metric_labels(name_labels: str) -> tuple[str, dict[str, str]]:
+    if "{" not in name_labels or not name_labels.endswith("}"):
+        return (name_labels, {})
+    name, raw_labels = name_labels.split("{", 1)
+    raw_labels = raw_labels[:-1]
+    labels: dict[str, str] = {}
+    for part in _split_prometheus_label_parts(raw_labels):
+        if "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        labels[key.strip()] = value.strip().strip('"')
+    return (name, labels)
+
+
+def _split_prometheus_label_parts(raw_labels: str) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    in_quotes = False
+    escaped = False
+    for char in raw_labels:
+        if escaped:
+            current.append(char)
+            escaped = False
+            continue
+        if char == "\\":
+            current.append(char)
+            escaped = True
+            continue
+        if char == '"':
+            current.append(char)
+            in_quotes = not in_quotes
+            continue
+        if char == "," and not in_quotes:
+            parts.append("".join(current))
+            current = []
+            continue
+        current.append(char)
+    if current:
+        parts.append("".join(current))
+    return parts
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def main(argv: list[str] | None = None) -> int:
