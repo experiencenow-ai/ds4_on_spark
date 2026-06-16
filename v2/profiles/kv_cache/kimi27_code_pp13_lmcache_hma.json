@@ -26,7 +26,7 @@
     "--distributed-executor-backend",
     "mp",
     "--max-model-len",
-    "131072",
+    "262144",
     "--max-num-batched-tokens",
     "65536",
     "--gpu-memory-utilization",

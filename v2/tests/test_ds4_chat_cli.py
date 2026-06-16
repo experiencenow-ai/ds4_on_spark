@@ -25,6 +25,7 @@ class Ds4ChatCliTests(unittest.TestCase):
             thinking_budget_tokens=64,
             extra_body={"chat_template_kwargs": {"enable_thinking": True}},
             metadata={"caller": "chat"},
+            attachments=[{"name": "note.txt", "content": "attached text"}],
         )
         self.assertEqual(payload["model"], "kimi27_pp13")
         self.assertEqual(payload["messages"], [{"role": "system", "content": "s"}, {"role": "user", "content": "hello"}])
@@ -34,6 +35,7 @@ class Ds4ChatCliTests(unittest.TestCase):
         self.assertEqual(payload["thinking_budget_tokens"], 64)
         self.assertEqual(payload["extra_body"]["chat_template_kwargs"]["enable_thinking"], True)
         self.assertEqual(payload["metadata"], {"caller": "chat"})
+        self.assertEqual(payload["attachments"], [{"name": "note.txt", "content": "attached text"}])
 
     def test_public_messages_filters_private_metadata(self) -> None:
         self.assertEqual(

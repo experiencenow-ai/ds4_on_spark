@@ -11,10 +11,10 @@
   "performance": {
     "aggregate_completion_tok_s": 143.52,
     "latency_rank": 1.8,
-    "max_model_len": 131072,
+    "max_model_len": 262144,
     "max_num_batched_tokens": 65536,
     "max_num_seqs": 128,
-    "measurement_notes": "Pulled-main DSAPI coalesced completion probes on 2026-06-14: 64x512x32 reached 101.6 tok/s, 128x512x32 reached 115.8 tok/s, 256x512x32 reached 117.9 tok/s while vLLM admitted 128 running and 128 waiting, and 128x512x128 reached 143.5 tok/s with 128 running, <3% KV usage, max sampled utilization 96%, no resource-governor throttle. The resident default is capped at 128 sequences and 65536 batched tokens after 2026-06-15 pulled-main startup telemetry showed the 256/131072 launch envelope can push multiple 13-node stages into the high-90% system-RAM band during model init/profiling. Kimi's max model length is 131072 so DSAPI can admit real attached-document contexts while chunked prefill keeps each scheduler step bounded.",
+    "measurement_notes": "Pulled-main DSAPI coalesced completion probes on 2026-06-14: 64x512x32 reached 101.6 tok/s, 128x512x32 reached 115.8 tok/s, 256x512x32 reached 117.9 tok/s while vLLM admitted 128 running and 128 waiting, and 128x512x128 reached 143.5 tok/s with 128 running, <3% KV usage, max sampled utilization 96%, no resource-governor throttle. The resident default is capped at 128 sequences and 65536 batched tokens after 2026-06-15 pulled-main startup telemetry showed the 256/131072 launch envelope can push multiple 13-node stages into the high-90% system-RAM band during model init/profiling. Kimi's max model length is 262144 so DSAPI can admit large attached-document contexts while chunked prefill keeps each scheduler step bounded; DSAPI may coalesce up to a 524288-token prompt cohort for short/medium pipeline batches before splitting.",
     "target": "13-stage Kimi K2.7 Code smart-model qualification pipeline using the proven Kimi K2.6 PP13 layer partition."
   },
   "production_eligible": false,

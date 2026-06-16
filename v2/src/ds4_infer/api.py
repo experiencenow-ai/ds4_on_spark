@@ -236,14 +236,15 @@ class CoordinatorApi:
         batch_id = str(body.get("batch_id") or request_id)
         metadata = dict(body.get("metadata") or {})
         thinking_budget = _thinking_budget_tokens(body, metadata)
-        input_payload = openai_chat_input_payload(body, profile=profile, metadata=metadata, thinking_budget_tokens=thinking_budget)
+        max_tokens = int(body.get("max_completion_tokens") or body.get("max_tokens") or 1024)
+        input_payload = openai_chat_input_payload(body, profile=profile, metadata=metadata, thinking_budget_tokens=thinking_budget, max_output_tokens=max_tokens)
         raw_request = _make_inference_request_json(
             request_id=request_id,
             profile=profile,
             chat=True,
             input_payload=_input_with_api_kv(input_payload, body, profile, topology),
             output_contract=_openai_output_contract(body),
-            max_tokens=int(body.get("max_completion_tokens") or body.get("max_tokens") or 1024),
+            max_tokens=max_tokens,
             temperature=float(body.get("temperature") or 0.0),
             job_class=str(body.get("ds4_job_class") or metadata.get("job_class") or "analysis"),
             capability=_optional_str(body.get("ds4_capability") or metadata.get("capability")),
@@ -292,14 +293,15 @@ class CoordinatorApi:
         batch_id = str(body.get("batch_id") or request_id)
         metadata = dict(body.get("metadata") or {})
         thinking_budget = _thinking_budget_tokens(body, metadata)
-        input_payload = anthropic_messages_input_payload(body, profile=profile, metadata=metadata, thinking_budget_tokens=thinking_budget)
+        max_tokens = int(body.get("max_tokens") or 1024)
+        input_payload = anthropic_messages_input_payload(body, profile=profile, metadata=metadata, thinking_budget_tokens=thinking_budget, max_output_tokens=max_tokens)
         raw_request = _make_inference_request_json(
             request_id=request_id,
             profile=profile,
             chat=True,
             input_payload=_input_with_api_kv(input_payload, body, profile, topology),
             output_contract={"format": "text"},
-            max_tokens=int(body.get("max_tokens") or 1024),
+            max_tokens=max_tokens,
             temperature=float(body.get("temperature") or 0.0),
             job_class=str(body.get("ds4_job_class") or metadata.get("job_class") or "analysis"),
             capability=_optional_str(body.get("ds4_capability") or metadata.get("capability")),
