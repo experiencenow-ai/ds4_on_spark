@@ -368,7 +368,7 @@
       "dispatch_refill_batch": 384,
       "dispatch_cohort_workers": 384,
       "completion_cohort_max": 128,
-      "completion_token_budget": 65536,
+      "completion_token_budget": 131072,
       "completion_budget_include_output": false,
       "completion_pp_safe_cohort_max": 128,
       "completion_chunk_concurrency": 4,

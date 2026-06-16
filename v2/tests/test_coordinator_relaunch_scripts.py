@@ -159,7 +159,7 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "128")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "128")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "4")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "65536")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "131072")
         self.assertEqual(defaults["DS4_API_JIT_KV_PREFETCH_API"], "0")
         self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE"], "1")
         self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE_SERVICE_IDS"], "kimi27_pp13")
@@ -200,7 +200,7 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "384")
         self.assertEqual(defaults["DS4_API_DISPATCH_COHORT_WORKERS"], "384")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "128")
-        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "65536")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "131072")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_PP_SAFE_COHORT_MAX"], "128")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_CHUNK_CONCURRENCY"], "4")
         coordinator = KIMI_QWEN_TOPOLOGY_DATA["routing_policy"]["resident_coordinator_defaults"]

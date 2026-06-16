@@ -13,9 +13,10 @@
     "sharding": "pipeline_layers"
   },
   "admission": {
+    "max_model_len": 131072,
     "max_num_batched_tokens": 65536,
     "max_num_seqs": 128,
-    "power_policy": "one active Kimi batch per compute domain; resident launch is capped at 128 sequences, 65536 batched tokens, and a 6 GiB fixed GPU KV cache after 2026-06-15 pulled-main startup telemetry showed the 256/131072 launch envelope can push multiple 13-node stages into the high-90% system-RAM band and overload management SSH during init/profiling; DSAPI may submit up to queue_depth_target to keep vLLM's own wait queue warm during long tails",
+    "power_policy": "one active Kimi batch per compute domain; resident launch is capped at 128 sequences, 65536 batched tokens per prefill scheduler step, 131072 max model length, and a 6 GiB fixed GPU KV cache after 2026-06-15 pulled-main startup telemetry showed the 256/131072 launch envelope can push multiple 13-node stages into the high-90% system-RAM band and overload management SSH during init/profiling; DSAPI may submit up to queue_depth_target to keep vLLM's own wait queue warm during long tails",
     "queue_depth_target": 256
   },
   "launch": {
