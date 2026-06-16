@@ -190,6 +190,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_cohort_max"], 128)
         self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_pp_safe_cohort_max"], 128)
         self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_chunk_concurrency"], 4)
+        self.assertEqual(topology.routing_policy["resident_coordinator_defaults"]["completion_token_budget"], 131072)
         self.assertEqual(_batch_limits_by_service(topology)["kimi27_pp13"], 128)
         self.assertEqual(_topology_dispatch_window(KIMI27_TOPOLOGY), 256)
         self.assertEqual(_topology_dispatch_cohort_workers(KIMI27_TOPOLOGY), 256)
@@ -303,6 +304,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(coordinator["dispatch_window"], 384)
         self.assertEqual(coordinator["dispatch_refill_batch"], 384)
         self.assertEqual(coordinator["dispatch_cohort_workers"], 384)
+        self.assertEqual(coordinator["completion_token_budget"], 131072)
         self.assertEqual(coordinator["dispatch_kv_capacity_bytes"], 13131317248)
 
         old_auto = os.environ.get("DS4_PIPELINE_AUTO_KV_CACHE")
