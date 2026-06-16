@@ -4,6 +4,7 @@ import time
 from threading import Event
 from typing import Any, Callable, Iterator
 
+from .cohort_safety import prompt_token_estimate
 from .profiles import ModelProfile
 from .schemas import InferenceRequest, make_result
 
@@ -73,7 +74,7 @@ def _choice_text(choice: dict[str, Any]) -> str:
 
 def _stream_result(request: InferenceRequest, profile: ModelProfile, text: str, base_url: str, endpoint: str, started: float, batch_size: int, usage: dict[str, Any]) -> dict:
     result = make_result(request=request, profile_id=profile.profile_id, model_id=profile.model_id, backend=profile.backend, text=_strip_visible_thinking(text))
-    result["usage"].update(dict(usage) if usage else {"completion_tokens": _estimate_text_tokens(text), "completion_tokens_estimated": True})
+    result["usage"].update(_stream_usage(request, text, usage))
     result["transport"] = {"base_url": base_url, "endpoint": endpoint, "duration_s": round(time.time() - started, 6), "coalesced_chat_parallel": True, "coalesced_chat_parallel_streaming": True, "coalesced_batch_size": batch_size, "batch_size": batch_size}
     return result
 
@@ -89,5 +90,63 @@ def _strip_visible_thinking(text: str) -> str:
     return text.split(marker, 1)[1].lstrip() if marker in text else text
 
 
+def _stream_usage(request: InferenceRequest, text: str, usage: dict[str, Any]) -> dict[str, Any]:
+    out = dict(usage) if usage else {}
+    prompt_text = _request_prompt_text(request)
+    if "completion_tokens" not in out:
+        out["completion_tokens"] = _estimate_text_tokens(text)
+        out["completion_tokens_estimated"] = True
+    if "prompt_tokens" not in out and prompt_text:
+        out["prompt_tokens"] = prompt_token_estimate(prompt_text)
+        out["prompt_tokens_estimated"] = True
+    if "total_tokens" not in out:
+        total = 0
+        for key in ("prompt_tokens", "completion_tokens"):
+            value = out.get(key)
+            if isinstance(value, int):
+                total += value
+        if total > 0:
+            out["total_tokens"] = total
+    return out
+
+
+def _request_prompt_text(request: InferenceRequest) -> str:
+    raw_input = request.raw.get("input") if isinstance(request.raw, dict) else None
+    if not isinstance(raw_input, dict):
+        return ""
+    for key in ("rendered_prompt", "prompt"):
+        value = raw_input.get(key)
+        if isinstance(value, str):
+            return value
+    messages = raw_input.get("messages")
+    if isinstance(messages, list):
+        return "\n".join(_message_content_text(message) for message in messages if isinstance(message, dict))
+    shared_prefix = raw_input.get("shared_prefix")
+    suffix = raw_input.get("suffix")
+    parts = [part for part in (shared_prefix, suffix) if isinstance(part, str)]
+    return "\n".join(parts)
+
+
+def _message_content_text(message: dict[str, Any]) -> str:
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for item in content:
+        if isinstance(item, str):
+            parts.append(item)
+        elif isinstance(item, dict):
+            for key in ("text", "content"):
+                value = item.get(key)
+                if isinstance(value, str):
+                    parts.append(value)
+                    break
+    return "\n".join(parts)
+
+
 def _estimate_text_tokens(text: str) -> int:
-    return max(0, len(text.encode("utf-8")) // 4)
+    if text == "":
+        return 0
+    return max(1, (len(text.encode("utf-8")) + 3) // 4)

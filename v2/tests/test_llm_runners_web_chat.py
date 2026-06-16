@@ -220,6 +220,19 @@ class StreamingChatBackend(OpenAICompatibleRunner):
         raise AssertionError("parallel chat streaming test should not use non-streaming post")
 
 
+class ShortStreamingChatBackend(OpenAICompatibleRunner):
+    def __init__(self) -> None:
+        super().__init__(base_url="http://unused")
+
+    def _post_sse_json(self, endpoint: str, payload: dict, **kwargs):
+        assert endpoint == self.chat_endpoint
+        assert payload["stream"] is True
+        yield {"choices": [{"delta": {"content": "ok"}, "finish_reason": "stop"}]}
+
+    def _post_json(self, endpoint: str, payload: dict) -> dict:
+        raise AssertionError("short parallel chat streaming test should not use non-streaming post")
+
+
 class CancellableStreamingChatBackend(OpenAICompatibleRunner):
     def __init__(self) -> None:
         super().__init__(base_url="http://unused")
@@ -317,6 +330,15 @@ class StreamingChatPipelineRunner(PipelineOpenAIRunner):
         self.backend = StreamingChatBackend()
 
     def _runner_for(self, profile: ModelProfile, node_id: str | None) -> StreamingChatBackend:
+        return self.backend
+
+
+class ShortStreamingChatPipelineRunner(PipelineOpenAIRunner):
+    def __init__(self) -> None:
+        super().__init__(base_urls={"svc": "http://unused"})
+        self.backend = ShortStreamingChatBackend()
+
+    def _runner_for(self, profile: ModelProfile, node_id: str | None) -> ShortStreamingChatBackend:
         return self.backend
 
 
@@ -1107,6 +1129,43 @@ class LlmRunnersWebChatTests(unittest.TestCase):
         )
         self.assertEqual(sorted(seen), [("r", "chat done"), ("r2", "chat done")])
         self.assertTrue(results["r"]["transport"]["coalesced_chat_parallel_streaming"])
+        self.assertGreater(results["r"]["usage"]["prompt_tokens"], 0)
+        self.assertGreater(results["r"]["usage"]["completion_tokens"], 0)
+        self.assertGreater(results["r"]["usage"]["total_tokens"], 0)
+
+    def test_pipeline_runner_streaming_chat_short_answer_has_nonzero_usage(self) -> None:
+        profile = ModelProfile.from_json(
+            {
+                "profile_id": "svc",
+                "model_id": "served-model",
+                "backend": "vllm_pipeline",
+                "capability_classes": ["smart"],
+                "supported_job_classes": ["analysis"],
+                "supports_chat": True,
+                "supports_completion": True,
+                "production_eligible": True,
+                "routing": {
+                    "chat_cohort_transport": "parallel_chat_completions",
+                    "parallel_chat_concurrency": 1,
+                    "served_model_name": "served-model",
+                },
+            }
+        )
+        result = ShortStreamingChatPipelineRunner().run_many_on_node_incremental(
+            [InferenceRequest.from_json(make_request(chat=True).raw)],
+            profile,
+            None,
+            concurrency=1,
+            on_result=lambda _request_id, _result: None,
+            cancel_event=threading.Event(),
+        )["r"]
+
+        self.assertEqual(result["output"]["text"], "ok")
+        self.assertEqual(result["usage"]["completion_tokens"], 1)
+        self.assertTrue(result["usage"]["completion_tokens_estimated"])
+        self.assertGreater(result["usage"]["prompt_tokens"], 0)
+        self.assertTrue(result["usage"]["prompt_tokens_estimated"])
+        self.assertEqual(result["usage"]["total_tokens"], result["usage"]["prompt_tokens"] + result["usage"]["completion_tokens"])
 
     def test_pipeline_runner_parallel_chat_cancel_closes_internal_stream(self) -> None:
         profile = ModelProfile.from_json(
