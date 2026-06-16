@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
 KIMI27_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi27_code_pp13.json"
+KIMI_QWEN_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_pp13.json"
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 
@@ -500,6 +501,22 @@ class PipelineApiTests(unittest.TestCase):
             expected_start = sum(DSV4_PRODUCTION["layer_partition"][:4])
             expected_count = DSV4_PRODUCTION["layer_partition"][4]
             self.assertEqual((stage["layer_start"], stage["layer_end"], stage["layer_count"]), (expected_start, expected_start + expected_count, expected_count))
+
+    def test_queue_status_filters_stale_pipeline_status_to_current_topology(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=KIMI_QWEN_TOPOLOGY, runner_kind="fake")
+            api.queue.report_pipeline_telemetry(service_id="dsv4_flash_pp8", node_id="spark2", stage_index=2, stage_count=8, payload={"last_gpu_util_pct": 96.0}, reported_at=100.0)
+            api.queue.report_pipeline_telemetry(service_id="kimi27_pp13", node_id="spark0", stage_index=0, stage_count=13, payload={"last_gpu_util_pct": 0.0}, reported_at=200.0)
+
+            code, status = api.handle_get("/ds4/queue/status", {})
+            self.assertEqual(code, 200)
+            stages = status["pipeline_status"]["stages"]
+            self.assertEqual([stage["service_id"] for stage in stages], ["kimi27_pp13"])
+            self.assertEqual(stages[0]["payload"]["last_gpu_util_pct"], 0.0)
+
+            code, full = api.handle_get("/ds4/pipelines", {})
+            self.assertEqual(code, 200)
+            self.assertEqual([stage["service_id"] for stage in full["queue"]["stages"]], ["dsv4_flash_pp8", "kimi27_pp13"])
 
     def test_pipeline_worker_refills_under_existing_compute_lease(self) -> None:
         class Runner:
