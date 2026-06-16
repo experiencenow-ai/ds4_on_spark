@@ -749,6 +749,16 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertIn('function modelHint(n)', dashboard.DASHBOARD_HTML)
         self.assertIn('m.output_tok_s', dashboard.DASHBOARD_HTML)
 
+    def test_dashboard_chat_preserves_dsapi_request_trace(self):
+        self.assertIn("function chatRequestId()", dashboard.DASHBOARD_HTML)
+        self.assertIn("request_id:requestId", dashboard.DASHBOARD_HTML)
+        self.assertIn("batch_id:requestId", dashboard.DASHBOARD_HTML)
+        self.assertIn("context_message_count:kept.length", dashboard.DASHBOARD_HTML)
+        self.assertIn("attachment_bytes:attachmentBytes", dashboard.DASHBOARD_HTML)
+        self.assertIn("function chatDs4Line(ds4)", dashboard.DASHBOARD_HTML)
+        self.assertIn("if(event.ds4)ds4=event.ds4", dashboard.DASHBOARD_HTML)
+        self.assertIn("selected_service_id", dashboard.DASHBOARD_HTML)
+
     def test_dashboard_summary_combines_tokens_and_omits_power(self):
         self.assertIn('grid-template-columns:repeat(6,minmax(110px,1fr))', dashboard.DASHBOARD_HTML)
         self.assertIn('metric("GPU Avg",d.gpu_known?pct(d.avg_gpu_pct):"n/a")', dashboard.DASHBOARD_HTML)
