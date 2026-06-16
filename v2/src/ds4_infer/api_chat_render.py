@@ -3,13 +3,17 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+from .attachments import attach_request_files_to_messages
 from .builders import chat_template_thinking_enabled
 from .env_utils import env_bool as _env_bool
 from .profiles import ModelProfile
 
 
-def openai_chat_input_payload(body: dict[str, Any], *, profile: ModelProfile, metadata: dict[str, Any], thinking_budget_tokens: int) -> dict[str, Any]:
+def openai_chat_input_payload(body: dict[str, Any], *, profile: ModelProfile, metadata: dict[str, Any], thinking_budget_tokens: int, max_output_tokens: int = 1024) -> dict[str, Any]:
     messages = _normalize_openai_messages(body.get("messages"))
+    messages, attachment_context = attach_request_files_to_messages(body, profile, messages, max_output_tokens=max_output_tokens, thinking_budget_tokens=thinking_budget_tokens)
+    if attachment_context is not None:
+        metadata["attachment_context"] = attachment_context
     payload: dict[str, Any] = {"messages": messages, "metadata": metadata}
     if body.get("tools") is not None:
         payload["tools"] = body.get("tools")
@@ -19,11 +23,14 @@ def openai_chat_input_payload(body: dict[str, Any], *, profile: ModelProfile, me
     return payload
 
 
-def anthropic_messages_input_payload(body: dict[str, Any], *, profile: ModelProfile, metadata: dict[str, Any], thinking_budget_tokens: int) -> dict[str, Any]:
+def anthropic_messages_input_payload(body: dict[str, Any], *, profile: ModelProfile, metadata: dict[str, Any], thinking_budget_tokens: int, max_output_tokens: int = 1024) -> dict[str, Any]:
     messages = _normalize_openai_messages(body.get("messages"))
     system = body.get("system")
     if isinstance(system, str) and system:
         messages = [{"role": "system", "content": system}, *messages]
+    messages, attachment_context = attach_request_files_to_messages(body, profile, messages, max_output_tokens=max_output_tokens, thinking_budget_tokens=thinking_budget_tokens)
+    if attachment_context is not None:
+        metadata["attachment_context"] = attachment_context
     payload: dict[str, Any] = {"system": system, "messages": messages, "tools": body.get("tools"), "metadata": metadata}
     _attach_rendered_prompt(payload, body, profile, messages, metadata, thinking_budget_tokens)
     return payload

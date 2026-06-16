@@ -230,6 +230,49 @@ class PipelineApiTests(unittest.TestCase):
                 os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = old
         self.assertTrue(request_json["input"]["rendered_prompt"].endswith("<|im_assistant|>assistant<|im_middle|><think>"))
 
+    def test_kimi27_chat_request_chunks_attached_files_into_prompt_context(self) -> None:
+        old = os.environ.get("DS4_API_RENDER_CHAT_WITH_TOKENIZER")
+        os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = "0"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=KIMI27_TOPOLOGY, runner_kind="fake")
+                status, _payload = api.handle_post(
+                    "/v1/chat/completions",
+                    {
+                        "model": "kimi27",
+                        "messages": [{"role": "user", "content": "Which attachment mentions needle?"}],
+                        "attachments": [
+                            {"name": "alpha.txt", "content": "alpha line\n" * 120},
+                            {"filename": "needle.txt", "text": "needle line\n" * 120},
+                        ],
+                        "ds4_attachment_chunk_tokens": 16,
+                        "ds4_attachment_context_budget_tokens": 80,
+                        "thinking_budget_tokens": 0,
+                        "ds4_async": True,
+                        "batch_id": "kimi-attachment-chat",
+                    },
+                )
+                self.assertEqual(status, 202)
+                with api.queue._connect() as conn:
+                    row = conn.execute("select request_json from requests where batch_id=?", ("kimi-attachment-chat",)).fetchone()
+                request_json = json.loads(str(row["request_json"]))
+        finally:
+            if old is None:
+                os.environ.pop("DS4_API_RENDER_CHAT_WITH_TOKENIZER", None)
+            else:
+                os.environ["DS4_API_RENDER_CHAT_WITH_TOKENIZER"] = old
+        manifest = request_json["input"]["metadata"]["attachment_context"]
+        self.assertEqual(manifest["format"], "ds4-attachment-context-v1")
+        self.assertEqual(manifest["attachment_count"], 2)
+        self.assertGreater(manifest["chunk_count"], manifest["included_chunk_count"])
+        self.assertGreater(manifest["omitted_chunk_count"], 0)
+        self.assertEqual(manifest["selection"], "query_relevant")
+        prompt = request_json["input"]["rendered_prompt"]
+        self.assertIn("Attachment manifest:", prompt)
+        self.assertIn("needle.txt", prompt)
+        self.assertIn("needle line", prompt)
+        self.assertIn("Which attachment mentions needle?", prompt)
+
     def test_dsv4_openai_payload_defaults_chat_template_thinking_off(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")

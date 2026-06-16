@@ -82,6 +82,7 @@ class DsapiChatModel:
         thinking_budget_tokens: int | None,
         extra_body: dict[str, Any],
         metadata: dict[str, Any],
+        attachments: list[dict[str, Any]] | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -95,6 +96,7 @@ class DsapiChatModel:
         self.thinking_budget_tokens = thinking_budget_tokens
         self.extra_body = extra_body
         self.metadata = metadata
+        self.attachments = list(attachments or [])
 
     def next_message(self, messages: list[dict]) -> dict[str, Any]:
         payload = _dsapi_chat_payload(
@@ -109,14 +111,17 @@ class DsapiChatModel:
             thinking_budget_tokens=self.thinking_budget_tokens,
             extra_body=self.extra_body,
             metadata=self.metadata,
+            attachments=self.attachments,
         )
         started = time.time()
         if self.stream:
             text, usage, status = _post_chat_stream(self.base_url, payload, timeout_s=self.timeout_s, stream_to_stdout=self.stream_to_stdout)
+            self.attachments.clear()
             message = {"role": "assistant", "content": text}
             message["_ds4"] = {"usage": usage, "status": status, "elapsed_s": round(time.time() - started, 3), "streamed": True}
             return message
         response = _post_json(_url(self.base_url, "/v1/chat/completions"), payload, timeout_s=self.timeout_s)
+        self.attachments.clear()
         text = _chat_text_from_response(response)
         message = {"role": "assistant", "content": text}
         message["_ds4"] = {"usage": response.get("usage") or {}, "status": (response.get("ds4") or {}).get("status"), "elapsed_s": round(time.time() - started, 3), "streamed": False}
@@ -130,6 +135,29 @@ class DsapiChatModel:
 
 
 def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    history_path = Path(args.history)
+    messages = _load_history(history_path)
+    if not messages:
+        messages.append({"role": "system", "content": args.system})
+    model = _make_chat_model(args)
+    registry = ToolRegistry.load(args.registry) if args.mode == "queue" and not args.no_tools else None
+    allowed_prefixes = ["tool:ds4.", "tool:web.", "tool:spark.status", "tool:spark.transfer."]
+    if args.allow_spark7_tools:
+        allowed_prefixes.append("tool:spark7.")
+    if args.ask is not None:
+        answer = _ask_once(model=model, registry=registry, messages=messages, user_text=args.ask, allowed_prefixes=allowed_prefixes, max_tool_rounds=args.max_tool_rounds)
+        _save_history(history_path, answer["messages"])
+        _print_final(answer["final_message"], streamed=args.mode == "dsapi" and args.stream)
+        if args.mode == "dsapi" and args.show_usage:
+            _print_usage(answer["final_message"])
+        return 0
+    _run_repl(args=args, model=model, registry=registry, messages=messages, history_path=history_path, allowed_prefixes=allowed_prefixes)
+    return 0
+
+
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ds4-spark-chat")
     parser.add_argument("-m", "--model-alias", default="ds4v", help="profile id or alias: ds4v, qwen, fast")
     parser.add_argument("--mode", choices=["queue", "dsapi"], default="queue")
@@ -150,6 +178,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--thinking-budget-tokens", type=int)
     parser.add_argument("--extra-body-json", default="{}", help="JSON object merged into OpenAI extra_body.")
     parser.add_argument("--metadata-json", default="{}", help="JSON object sent as DSAPI metadata.")
+    parser.add_argument("--attach", action="append", default=[], help="Attach a UTF-8 text file to the next DSAPI chat request. Repeatable.")
     parser.add_argument("--stream", dest="stream", action="store_true", default=True)
     parser.add_argument("--no-stream", dest="stream", action="store_false")
     parser.add_argument("--show-usage", action="store_true", help="Print elapsed time and token usage after each DSAPI turn.")
@@ -157,26 +186,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-spark7-tools", action="store_true")
     parser.add_argument("--no-tools", action="store_true")
     parser.add_argument("--ask", help="single question mode; if omitted, enter a simple REPL")
-    args = parser.parse_args(argv)
+    return parser
 
-    history_path = Path(args.history)
-    messages = _load_history(history_path)
-    if not messages:
-        messages.append({"role": "system", "content": args.system})
-    model = _make_chat_model(args)
-    registry = ToolRegistry.load(args.registry) if args.mode == "queue" and not args.no_tools else None
-    allowed_prefixes = ["tool:ds4.", "tool:web.", "tool:spark.status", "tool:spark.transfer."]
-    if args.allow_spark7_tools:
-        allowed_prefixes.append("tool:spark7.")
 
-    if args.ask is not None:
-        answer = _ask_once(model=model, registry=registry, messages=messages, user_text=args.ask, allowed_prefixes=allowed_prefixes, max_tool_rounds=args.max_tool_rounds)
-        _save_history(history_path, answer["messages"])
-        _print_final(answer["final_message"], streamed=args.mode == "dsapi" and args.stream)
-        if args.mode == "dsapi" and args.show_usage:
-            _print_usage(answer["final_message"])
-        return 0
-
+def _run_repl(*, args: argparse.Namespace, model: QueueChatModel | DsapiChatModel, registry: ToolRegistry | None, messages: list[dict], history_path: Path, allowed_prefixes: list[str]) -> None:
     print(_banner(args, registry))
     if args.allow_spark7_tools:
         print("spark7 command tool is enabled for this session.")
@@ -202,7 +215,6 @@ def main(argv: list[str] | None = None) -> int:
         _print_final(answer["final_message"], streamed=args.mode == "dsapi" and args.stream, prefix="assistant> ")
         if args.mode == "dsapi" and args.show_usage:
             _print_usage(answer["final_message"])
-    return 0
 
 
 def _make_chat_model(args: argparse.Namespace) -> QueueChatModel | DsapiChatModel:
@@ -221,6 +233,7 @@ def _make_chat_model(args: argparse.Namespace) -> QueueChatModel | DsapiChatMode
         thinking_budget_tokens=args.thinking_budget_tokens,
         extra_body=_json_object_arg(args.extra_body_json, "--extra-body-json"),
         metadata=_json_object_arg(args.metadata_json, "--metadata-json"),
+        attachments=_attachments_from_paths(args.attach),
     )
 
 
@@ -254,6 +267,7 @@ def _dsapi_chat_payload(
     thinking_budget_tokens: int | None,
     extra_body: dict[str, Any],
     metadata: dict[str, Any],
+    attachments: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": model,
@@ -272,6 +286,8 @@ def _dsapi_chat_payload(
         payload["extra_body"] = extra_body
     if metadata:
         payload["metadata"] = metadata
+    if attachments:
+        payload["attachments"] = list(attachments)
     return payload
 
 
@@ -382,7 +398,7 @@ def _handle_dsapi_command(model: QueueChatModel | DsapiChatModel, user_text: str
     if command in {"/exit", "/quit"}:
         raise EOFError
     if command == "/help":
-        print("commands: /model [alias-or-id], /models, /status, /reset, /history, /exit")
+        print("commands: /model [alias-or-id], /models, /status, /attach PATH, /attachments, /clear-attachments, /reset, /history, /exit")
         return True
     if command == "/reset":
         system = messages[0] if messages and messages[0].get("role") == "system" else None
@@ -396,6 +412,25 @@ def _handle_dsapi_command(model: QueueChatModel | DsapiChatModel, user_text: str
         return True
     if not isinstance(model, DsapiChatModel):
         print(f"{command} is only available in --mode dsapi")
+        return True
+    if command == "/attach":
+        if not rest:
+            print("usage: /attach PATH")
+            return True
+        attachment = _attachment_from_path(Path(rest))
+        model.attachments.append(attachment)
+        print(f"attached {attachment['name']} ({attachment['size_bytes']} bytes) to next request")
+        return True
+    if command == "/attachments":
+        if not model.attachments:
+            print("no pending attachments")
+            return True
+        for index, attachment in enumerate(model.attachments, start=1):
+            print(f"{index}. {attachment['name']} ({attachment['size_bytes']} bytes)")
+        return True
+    if command == "/clear-attachments":
+        model.attachments.clear()
+        print("pending attachments cleared")
         return True
     if command == "/model":
         if rest:
@@ -442,6 +477,20 @@ def _json_object_arg(value: str, flag: str) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise SystemExit(f"{flag} must be a JSON object")
     return parsed
+
+
+def _attachments_from_paths(paths: list[str]) -> list[dict[str, Any]]:
+    return [_attachment_from_path(Path(path)) for path in paths]
+
+
+def _attachment_from_path(path: Path) -> dict[str, Any]:
+    data = path.read_bytes()
+    return {
+        "name": path.name,
+        "mime_type": "text/plain",
+        "content": data.decode("utf-8", "replace"),
+        "size_bytes": len(data),
+    }
 
 
 def _json_bytes(payload: dict[str, Any]) -> bytes:
