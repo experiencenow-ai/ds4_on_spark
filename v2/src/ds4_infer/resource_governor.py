@@ -267,6 +267,7 @@ class GpuResourceGovernor:
         reasons = self._throttle_reasons(max_temp=max_temp, max_power=max_power, total_power=total_power if powers else None, max_host_mem_pct=max_host_mem_pct)
         hottest = max((reading for reading in ok if reading.temperature_c is not None), key=lambda item: float(item.temperature_c), default=None)
         power_peak = max((reading for reading in ok if reading.power_w is not None), key=lambda item: float(item.power_w), default=None)
+        util_peak = max((reading for reading in ok if reading.utilization_pct is not None), key=lambda item: float(item.utilization_pct), default=None)
         return {
             "enabled": self.enabled,
             "node_count": len(self.nodes),
@@ -279,6 +280,7 @@ class GpuResourceGovernor:
             "max_power_node": power_peak.node_id if power_peak is not None else None,
             "total_power_w": round(total_power, 3) if powers else None,
             "max_utilization_pct": max(utils, default=None),
+            "max_utilization_node": util_peak.node_id if util_peak is not None else None,
             "max_host_memory_used_pct": round(max_host_mem_pct, 3) if max_host_mem_pct is not None else None,
             "max_host_memory_node": host_memory["max_used_node"],
             "min_host_memory_available_pct": host_memory["min_available_pct"],
@@ -344,6 +346,7 @@ class GpuResourceGovernor:
             "max_power_node": None,
             "total_power_w": None,
             "max_utilization_pct": None,
+            "max_utilization_node": None,
             "max_host_memory_used_pct": None,
             "max_host_memory_node": None,
             "min_host_memory_available_pct": None,
