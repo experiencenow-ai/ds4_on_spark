@@ -12,13 +12,16 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
         module_dir = vllm_root / "vllm/v1/attention/backends/mla"
         engine_dir = vllm_root / "vllm/v1/engine"
         layers_dir = vllm_root / "vllm/model_executor/layers"
+        models_dir = vllm_root / "vllm/model_executor/models"
         module_dir.mkdir(parents=True)
         engine_dir.mkdir(parents=True)
         layers_dir.mkdir(parents=True)
+        models_dir.mkdir(parents=True)
         for init_dir in [
             "vllm",
             "vllm/model_executor",
             "vllm/model_executor/layers",
+            "vllm/model_executor/models",
             "vllm/v1",
             "vllm/v1/attention",
             "vllm/v1/attention/backends",
@@ -50,6 +53,24 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                 class SparseAttnIndexer:
                     def forward_cuda(self, hidden_states, q_quant, k, weights):
                         return "original"
+                """
+            )
+        )
+        (models_dir / "deepseek_v2.py").write_text(
+            textwrap.dedent(
+                """
+                class DeepseekV2Model:
+                    def __init__(self, *, vllm_config, prefix=""):
+                        self.index_topk = vllm_config.model_config.hf_config.index_topk
+                """
+            )
+        )
+        (models_dir / "glm4_moe_lite.py").write_text(
+            textwrap.dedent(
+                """
+                class Glm4MoeLiteModel:
+                    def __init__(self, *, vllm_config, prefix=""):
+                        self.index_topk = vllm_config.model_config.hf_config.index_topk
                 """
             )
         )
@@ -200,6 +221,38 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             )
         self.assertIn("flashmla_sparse_torch_fallback", result.stdout)
         self.assertEqual(result.stdout.strip().splitlines()[-1], "True")
+
+    def test_runtime_patch_overrides_index_topk(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        with tempfile.TemporaryDirectory() as tmp:
+            vllm_root = Path(tmp)
+            self._write_fake_vllm(vllm_root)
+            code = textwrap.dedent(
+                """
+                from types import SimpleNamespace
+                from ds4_vllm_runtime.patches import apply_runtime_patches
+                from vllm.model_executor.models.deepseek_v2 import DeepseekV2Model
+                config = SimpleNamespace(index_topk=2048)
+                vllm_config = SimpleNamespace(model_config=SimpleNamespace(hf_config=config))
+                print(apply_runtime_patches())
+                model = DeepseekV2Model(vllm_config=vllm_config)
+                print(model.index_topk)
+                print(config._ds4_original_index_topk)
+                """
+            )
+            env = os.environ.copy()
+            env["DS4_VLLM_INDEX_TOPK_OVERRIDE"] = "512"
+            env["PYTHONPATH"] = os.pathsep.join([str(vllm_root), str(src_root)])
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        self.assertIn("index_topk_override_512", result.stdout)
+        self.assertEqual(result.stdout.strip().splitlines()[-2:], ["512", "2048"])
 
     def test_sitecustomize_applies_sm12_flashinfer_sparse_patch(self):
         v2_root = Path(__file__).resolve().parents[1]

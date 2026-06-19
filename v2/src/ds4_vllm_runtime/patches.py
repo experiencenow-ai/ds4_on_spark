@@ -114,6 +114,62 @@ def allow_flashmla_sparse_torch_fallback() -> str:
     return "flashmla_sparse_torch_fallback"
 
 
+def override_index_topk() -> str:
+    raw = os.getenv("DS4_VLLM_INDEX_TOPK_OVERRIDE", "").strip()
+    if raw == "":
+        return "index_topk_override_unset"
+    try:
+        override = int(raw)
+    except ValueError as exc:
+        raise ValueError("DS4_VLLM_INDEX_TOPK_OVERRIDE must be an integer") from exc
+    if override <= 0:
+        raise ValueError("DS4_VLLM_INDEX_TOPK_OVERRIDE must be positive")
+
+    patched = 0
+    for module_name, class_name in (
+        ("vllm.model_executor.models.deepseek_v2", "DeepseekV2Model"),
+        ("vllm.model_executor.models.glm4_moe_lite", "Glm4MoeLiteModel"),
+    ):
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError:
+            continue
+        model_cls = getattr(module, class_name, None)
+        if model_cls is None:
+            continue
+        original = getattr(model_cls, "__init__")
+        if getattr(original, "_ds4_index_topk_override", False):
+            patched += 1
+            continue
+
+        def __init__(self, *args, _original=original, _module=module, **kwargs):  # type: ignore[no-untyped-def]
+            vllm_config = kwargs.get("vllm_config")
+            if vllm_config is None and len(args) > 0:
+                vllm_config = args[0]
+            model_config = getattr(vllm_config, "model_config", None)
+            hf_config = getattr(model_config, "hf_config", None)
+            if hf_config is not None and hasattr(hf_config, "index_topk"):
+                current = int(getattr(hf_config, "index_topk"))
+                if not hasattr(hf_config, "_ds4_original_index_topk"):
+                    setattr(hf_config, "_ds4_original_index_topk", current)
+                if current != override:
+                    setattr(hf_config, "index_topk", override)
+                    logger = getattr(_module, "logger", None)
+                    if logger is not None:
+                        warn = getattr(logger, "warning_once", logger.warning)
+                        warn(
+                            "DS4 overriding sparse index_topk from %s to %s.",
+                            current,
+                            override,
+                        )
+            return _original(self, *args, **kwargs)
+
+        __init__._ds4_index_topk_override = True  # type: ignore[attr-defined]
+        model_cls.__init__ = __init__
+        patched += 1
+    return f"index_topk_override_{override}_classes_{patched}"
+
+
 def allow_sm12_flashinfer_mla_sparse() -> str:
     flashinfer_sparse = importlib.import_module(
         "vllm.v1.attention.backends.mla.flashinfer_mla_sparse"
@@ -390,6 +446,8 @@ def apply_runtime_patches() -> list[str]:
         patches.append(allow_sm12_flashmla_sparse())
     if env_flag("DS4_VLLM_FLASHMLA_SPARSE_TORCH_FALLBACK"):
         patches.append(allow_flashmla_sparse_torch_fallback())
+    if os.getenv("DS4_VLLM_INDEX_TOPK_OVERRIDE", "").strip() != "":
+        patches.append(override_index_topk())
     if env_flag("DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK"):
         patches.append(allow_sm12_sparse_indexer_dense_fallback())
     if env_flag("DS4_VLLM_FLASHINFER_MLA_SHARED_BLOCK_TABLES_2D"):
