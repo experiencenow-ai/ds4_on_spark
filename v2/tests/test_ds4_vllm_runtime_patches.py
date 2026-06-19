@@ -44,15 +44,25 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                 class EngineCoreReadyResponse:
                     pass
 
+                VLLM_VERSION = "fake-vllm-new"
+
                 class Msgpack:
                     @staticmethod
                     def decode(payload, type=None):
                         data = json.loads(payload.decode("utf-8"))
                         if type is EngineCoreReadyResponse:
-                            if "block_size" not in data:
-                                raise ValidationError(
-                                    "Object missing required field `block_size`"
-                                )
+                            for field in [
+                                "max_model_len",
+                                "num_gpu_blocks",
+                                "block_size",
+                                "dp_stats_address",
+                                "dtype",
+                                "vllm_version",
+                            ]:
+                                if field not in data:
+                                    raise ValidationError(
+                                        f"Object missing required field `{field}`"
+                                    )
                             return SimpleNamespace(**data)
                         return data
 
@@ -72,9 +82,13 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                             cache_config=SimpleNamespace(
                                 block_size=64, num_gpu_blocks=0
                             ),
-                            model_config=SimpleNamespace(max_model_len=8192),
+                            model_config=SimpleNamespace(
+                                dtype="torch.bfloat16", max_model_len=8192
+                            ),
                         )
                         self.stats_update_address = None
+                        self.ready_dtype = None
+                        self.ready_vllm_version = None
 
                     def _apply_ready_response(self, payload):
                         response = msgspec.msgpack.decode(
@@ -88,6 +102,8 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                             response.num_gpu_blocks
                         )
                         self.vllm_config.cache_config.block_size = response.block_size
+                        self.ready_dtype = response.dtype
+                        self.ready_vllm_version = response.vllm_version
                 """
             )
         )
@@ -160,14 +176,14 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                 apply_runtime_patches()
                 client = MPClient()
                 payload = (
-                    b'{"max_model_len":4096,"num_gpu_blocks":7,'
-                    b'"dp_stats_address":null,"dtype":"bfloat16",'
-                    b'"vllm_version":"old"}'
+                    b'{"max_model_len":4096,"num_gpu_blocks":7}'
                 )
                 client._apply_ready_response(payload)
                 print(client.vllm_config.model_config.max_model_len)
                 print(client.vllm_config.cache_config.num_gpu_blocks)
                 print(client.vllm_config.cache_config.block_size)
+                print(client.ready_dtype)
+                print(client.ready_vllm_version)
                 """
             )
             env = os.environ.copy()
@@ -180,7 +196,10 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
             )
-        self.assertEqual(result.stdout.strip().splitlines(), ["4096", "7", "64"])
+        self.assertEqual(
+            result.stdout.strip().splitlines(),
+            ["4096", "7", "64", "bfloat16", "fake-vllm-new"],
+        )
 
 
 if __name__ == "__main__":
