@@ -34,6 +34,10 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                     @classmethod
                     def supports_compute_capability(cls, capability):
                         return capability.major in (9, 10)
+
+                class FlashMLASparseImpl:
+                    def _bf16_flash_mla_kernel(self, q, kv_c_and_k_pe_cache, topk_indices):
+                        return "original"
                 """
             )
         )
@@ -170,6 +174,33 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             )
         self.assertEqual(result.stdout.strip(), "True")
 
+    def test_runtime_patch_applies_flashmla_torch_fallback(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        with tempfile.TemporaryDirectory() as tmp:
+            vllm_root = Path(tmp)
+            self._write_fake_vllm(vllm_root)
+            code = textwrap.dedent(
+                """
+                from ds4_vllm_runtime.patches import apply_runtime_patches
+                from vllm.v1.attention.backends.mla.flashmla_sparse import FlashMLASparseImpl
+                print(apply_runtime_patches())
+                print(getattr(FlashMLASparseImpl._bf16_flash_mla_kernel, "_ds4_sm12_torch_sparse_fallback", False))
+                """
+            )
+            env = os.environ.copy()
+            env["DS4_VLLM_FLASHMLA_SPARSE_TORCH_FALLBACK"] = "1"
+            env["PYTHONPATH"] = os.pathsep.join([str(vllm_root), str(src_root)])
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        self.assertIn("flashmla_sparse_torch_fallback", result.stdout)
+        self.assertEqual(result.stdout.strip().splitlines()[-1], "True")
+
     def test_sitecustomize_applies_sm12_flashinfer_sparse_patch(self):
         v2_root = Path(__file__).resolve().parents[1]
         src_root = v2_root / "src"
@@ -209,6 +240,7 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             env = os.environ.copy()
             env["DS4_VLLM_SM12_FLASHMLA_SPARSE"] = "1"
             env["DS4_VLLM_SM12_FLASHINFER_MLA_SPARSE"] = "1"
+            env["DS4_VLLM_FLASHMLA_SPARSE_TORCH_FALLBACK"] = "1"
             env["DS4_VLLM_READY_RESPONSE_COMPAT"] = "1"
             env["PYTHONPATH"] = str(src_root)
             result = subprocess.run(
@@ -226,6 +258,7 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             )
         self.assertIn("flashmla_sparse_sm12_compute_capability", result.stdout)
         self.assertIn("flashinfer_mla_sparse_sm12_compute_capability", result.stdout)
+        self.assertIn("flashmla_sparse_torch_fallback", result.stdout)
         self.assertIn("ready_response_block_size_compat", result.stdout)
 
     def test_runtime_patch_applies_sparse_indexer_dense_fallback(self):

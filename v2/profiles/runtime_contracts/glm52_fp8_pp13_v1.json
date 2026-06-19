@@ -98,9 +98,10 @@
     "required_runtime_patches": [
       "DS4_VLLM_READY_RESPONSE_COMPAT=1",
       "DS4_VLLM_SM12_FLASHMLA_SPARSE=1",
+      "DS4_VLLM_FLASHMLA_SPARSE_TORCH_FALLBACK=1",
       "DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK=1"
     ],
-    "required_source": "guarded vLLM 0.23.0 wheel overlay with GlmMoeDsaForCausalLM support, DS4 ready-response compatibility shim, SM12 FlashMLA sparse MLA validation shim, and DS4 dense-last-window sparse indexer fallback because the upstream DeepGEMM fp8_fp4_mqa_logits indexer kernel rejects Spark GB10",
+    "required_source": "guarded vLLM 0.23.0 wheel overlay with GlmMoeDsaForCausalLM support, DS4 ready-response compatibility shim, SM12 FlashMLA sparse MLA validation shim, DS4 chunked torch sparse-MLA BF16 fallback because upstream flash_mla_sparse_fwd rejects SM12, and DS4 dense-last-window sparse indexer fallback because the upstream DeepGEMM fp8_fp4_mqa_logits indexer kernel rejects Spark GB10",
     "required_source_root": "/home/{node}/standard-runtimes/vllm-0.23.0-overlay"
   }
 }
