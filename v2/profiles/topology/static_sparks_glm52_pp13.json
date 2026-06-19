@@ -50,7 +50,7 @@
         "dtype": "fp8-bfloat16",
         "entry_node_id": "spark0",
         "kv_cache": {
-          "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/glm52_fp8_pp13_fp8kv/p6_4_4_4_4_8_8_8_8_8_4_4_8",
+          "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/glm52_fp8_pp13_bf16kv/p6_4_4_4_4_8_8_8_8_8_4_4_8",
           "connector_id": "lmcache",
           "expected_entry_fraction_per_node": 0.07692307692307693,
           "external_backend": "lmcache_hma",
