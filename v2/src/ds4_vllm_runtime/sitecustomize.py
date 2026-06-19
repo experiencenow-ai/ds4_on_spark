@@ -17,6 +17,10 @@ def _enabled() -> bool:
         "DS4_VLLM_FLASHINFER_MLA_FORCE_TRTLLM_GEN",
         "DS4_VLLM_FLASHINFER_MLA_FORCE_CUTE_DSL",
         "DS4_VLLM_READY_RESPONSE_COMPAT",
+        "DS4_VLLM_FLASHMLA_SPARSE_TRITON_BF16_FALLBACK",
+        "DS4_VLLM_INDEX_TOPK_OVERRIDE",
+        "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR",
+        "VLLM_DS4_PP_TCP_TENSOR_DICT",
     ):
         value = os.getenv(name, "")
         if value.strip().lower() not in {"", "0", "false", "no", "off"}:
@@ -34,13 +38,14 @@ def _resolve_path(raw: str) -> Path:
 
 
 def _looks_like_vllm_source_root(path_text: str) -> bool:
-    if path_text == "":
+    candidate = path_text.strip()
+    if candidate == "":
         return False
     try:
-        path = _resolve_path(path_text)
+        init_file = _resolve_path(candidate).joinpath("vllm", "__init__.py")
     except OSError:
         return False
-    return (path / "vllm" / "__init__.py").is_file()
+    return init_file.exists() and init_file.is_file()
 
 
 def _enforce_source_root() -> None:

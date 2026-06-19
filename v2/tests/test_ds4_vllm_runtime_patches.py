@@ -10,15 +10,18 @@ import unittest
 class Ds4VllmRuntimePatchTests(unittest.TestCase):
     def _write_fake_vllm(self, vllm_root: Path) -> None:
         module_dir = vllm_root / "vllm/v1/attention/backends/mla"
+        dist_dir = vllm_root / "vllm/distributed"
         engine_dir = vllm_root / "vllm/v1/engine"
         layers_dir = vllm_root / "vllm/model_executor/layers"
         models_dir = vllm_root / "vllm/model_executor/models"
         module_dir.mkdir(parents=True)
+        dist_dir.mkdir(parents=True)
         engine_dir.mkdir(parents=True)
         layers_dir.mkdir(parents=True)
         models_dir.mkdir(parents=True)
         for init_dir in [
             "vllm",
+            "vllm/distributed",
             "vllm/model_executor",
             "vllm/model_executor/layers",
             "vllm/model_executor/models",
@@ -30,6 +33,133 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
         ]:
             (vllm_root / init_dir / "__init__.py").write_text("")
         (vllm_root / "vllm/__init__.py").write_text('__version__ = "fake-vllm-new"\n')
+        (vllm_root / "torch.py").write_text(
+            textwrap.dedent(
+                """
+                class Tensor:
+                    pass
+
+                class _Work:
+                    def wait(self):
+                        pass
+                    def is_completed(self):
+                        return True
+
+                class _Distributed:
+                    def __init__(self):
+                        self.initialized = True
+                    def is_initialized(self):
+                        return self.initialized
+                    def isend(self, *args, **kwargs):
+                        return _Work()
+                    def irecv(self, *args, **kwargs):
+                        return _Work()
+
+                class _Cuda:
+                    def current_stream(self, device=None):
+                        return None
+
+                distributed = _Distributed()
+                cuda = _Cuda()
+                """
+            )
+        )
+        (vllm_root / "vllm/envs.py").write_text(
+            textwrap.dedent(
+                """
+                import os
+
+                environment_variables = {
+                    "VLLM_HOST_IP": lambda: os.getenv("VLLM_HOST_IP", ""),
+                }
+
+                def __getattr__(name):
+                    if name in environment_variables:
+                        return environment_variables[name]()
+                    raise AttributeError(name)
+
+                def validate_environ(hard_fail):
+                    for key in os.environ:
+                        if key.startswith("VLLM_") and key not in environment_variables:
+                            if hard_fail:
+                                raise ValueError(key)
+                """
+            )
+        )
+        (dist_dir / "parallel_state.py").write_text(
+            textwrap.dedent(
+                """
+                from collections import namedtuple
+                import torch
+
+                TensorMetadata = namedtuple("TensorMetadata", ["device", "dtype", "size"])
+
+                def _split_tensor_dict(tensor_dict):
+                    metadata = []
+                    tensors = []
+                    for key, value in tensor_dict.items():
+                        if isinstance(value, torch.Tensor):
+                            metadata.append((key, TensorMetadata("cuda", "fake", (1,))))
+                            tensors.append(value)
+                        else:
+                            metadata.append((key, value))
+                    return metadata, tensors
+
+                class GroupCoordinator:
+                    def __init__(
+                        self,
+                        group_ranks,
+                        local_rank,
+                        torch_distributed_backend,
+                        use_device_communicator=True,
+                        use_message_queue_broadcaster=False,
+                        group_name=None,
+                    ):
+                        self.group_name = group_name
+                        self.unique_name = f"{group_name}:0"
+                        self.world_size = 2
+                        self.rank = 0
+                        self.rank_in_group = 0
+                        self.ranks = [0, 1]
+                        self.cpu_group = "cpu"
+                        self.device_group = "device"
+                        self.use_cpu_custom_send_recv = False
+                        self.use_device_communicator = use_device_communicator
+                        self.device_communicator = (
+                            object() if use_device_communicator else None
+                        )
+                        self.sent_objects = []
+
+                    def send_object(self, obj, dst):
+                        self.sent_objects.append((dst, obj))
+
+                    def recv_object(self, src):
+                        return []
+
+                    def _should_use_all_gather(
+                        self, key, numel, all_gather_group, all_gather_tensors
+                    ):
+                        return False
+
+                    def isend_tensor_dict(
+                        self,
+                        tensor_dict,
+                        dst=None,
+                        all_gather_group=None,
+                        all_gather_tensors=None,
+                    ):
+                        return ["original-send"]
+
+                    def irecv_tensor_dict(
+                        self,
+                        src=None,
+                        all_gather_group=None,
+                        all_gather_tensors=None,
+                    ):
+                        return {"original": True}, [], []
+                """
+            )
+        )
         (module_dir / "flashmla_sparse.py").write_text(
             textwrap.dedent(
                 """
@@ -248,6 +378,54 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             )
         self.assertIn("flashmla_sparse_triton_bf16_fallback", result.stdout)
         self.assertEqual(result.stdout.strip().splitlines()[-1], "True")
+
+    def test_sitecustomize_applies_pp_tcp_transport_patch(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        hook_root = src_root / "ds4_vllm_runtime"
+        with tempfile.TemporaryDirectory() as tmp:
+            vllm_root = Path(tmp)
+            self._write_fake_vllm(vllm_root)
+            code = textwrap.dedent(
+                """
+                import vllm.envs as envs
+                from vllm.distributed.parallel_state import GroupCoordinator
+                envs.validate_environ(True)
+                group = GroupCoordinator(
+                    group_ranks=[[0, 1]],
+                    local_rank=0,
+                    torch_distributed_backend="gloo",
+                    use_device_communicator=True,
+                    group_name="pp",
+                )
+                print(envs.VLLM_DS4_PP_TCP_TENSOR_DICT)
+                print(group.use_device_communicator)
+                print(group.device_communicator is None)
+                print(type(group.ds4_pp_tcp_tensor_channel).__name__)
+                print(group.isend_tensor_dict({"marker": "ok"}))
+                print(group.sent_objects)
+                """
+            )
+            env = os.environ.copy()
+            env["VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR"] = "1"
+            env["VLLM_DS4_PP_TCP_TENSOR_DICT"] = "1"
+            env["VLLM_DS4_PP_TCP_BIND_HOST"] = "127.0.0.1"
+            env["VLLM_DS4_PP_TCP_ADVERTISE_HOST"] = "127.0.0.1"
+            env["VLLM_DS4_PP_TCP_STRIPES"] = "2"
+            env["DS4_VLLM_RUNTIME_PATCHES_STRICT"] = "1"
+            env["PYTHONPATH"] = os.pathsep.join(
+                [str(vllm_root), str(hook_root), str(src_root)]
+            )
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        lines = result.stdout.strip().splitlines()
+        self.assertEqual(lines[:5], ["True", "False", "True", "Ds4TcpTensorChannel", "[]"])
+        self.assertIn("'marker', 'ok'", lines[5])
 
     def test_runtime_patch_overrides_index_topk(self):
         v2_root = Path(__file__).resolve().parents[1]

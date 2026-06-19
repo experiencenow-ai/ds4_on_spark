@@ -9,6 +9,9 @@ from pathlib import Path
 import sys
 from typing import Any
 
+from ds4_vllm_runtime.pp_tcp_transport_patch import patch_ds4_pp_tcp_tensor_transport
+from ds4_vllm_runtime.vllm_env_registry import register_ds4_vllm_envs
+
 _TRITON_SPARSE_BF16_KERNELS: tuple[Any, Any, Any] | None = None
 
 
@@ -17,6 +20,17 @@ def env_flag(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() not in {"", "0", "false", "no", "off"}
+
+
+def _is_sm12_cuda_tensor(tensor: Any) -> bool:
+    try:
+        import torch
+    except ImportError:
+        return False
+    if not getattr(tensor, "is_cuda", False):
+        return False
+    capability = torch.cuda.get_device_capability(tensor.device)
+    return int(capability[0]) == 12
 
 
 def allow_sm12_flashmla_sparse() -> str:
@@ -49,16 +63,6 @@ def allow_flashmla_sparse_torch_fallback() -> str:
             return max(1, int(raw))
         except ValueError:
             return 8
-
-    def _is_sm12(tensor: Any) -> bool:
-        try:
-            import torch
-        except ImportError:
-            return False
-        if not getattr(tensor, "is_cuda", False):
-            return False
-        capability = torch.cuda.get_device_capability(tensor.device)
-        return int(capability[0]) == 12
 
     def _torch_sparse_mla(self, q, kv_c_and_k_pe_cache, topk_indices):  # type: ignore[no-untyped-def]
         import torch
@@ -101,7 +105,7 @@ def allow_flashmla_sparse_torch_fallback() -> str:
     def bf16_kernel_with_torch_fallback(  # type: ignore[no-untyped-def]
         self, q, kv_c_and_k_pe_cache, topk_indices
     ):
-        if _is_sm12(q):
+        if _is_sm12_cuda_tensor(q):
             logger = getattr(flashmla_sparse, "logger", None)
             if logger is not None:
                 logger.warning_once(
@@ -400,20 +404,10 @@ def allow_flashmla_sparse_triton_bf16_fallback() -> str:
     if getattr(original, "_ds4_sm12_triton_sparse_bf16_fallback", False):
         return "flashmla_sparse_triton_bf16_fallback"
 
-    def _is_sm12(tensor: Any) -> bool:
-        try:
-            import torch
-        except ImportError:
-            return False
-        if not getattr(tensor, "is_cuda", False):
-            return False
-        capability = torch.cuda.get_device_capability(tensor.device)
-        return int(capability[0]) == 12
-
     def bf16_kernel_with_triton_fallback(  # type: ignore[no-untyped-def]
         self, q, kv_c_and_k_pe_cache, topk_indices
     ):
-        if _is_sm12(q):
+        if _is_sm12_cuda_tensor(q):
             logger = getattr(flashmla_sparse, "logger", None)
             if logger is not None:
                 logger.warning_once(
@@ -757,6 +751,12 @@ def allow_missing_ready_response_block_size() -> str:
 
 def apply_runtime_patches() -> list[str]:
     patches = []
+    if any(name.startswith("VLLM_DS4_") for name in os.environ):
+        patches.append(register_ds4_vllm_envs())
+    if env_flag("VLLM_DS4_PP_TCP_TENSOR_DICT") or env_flag(
+        "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR"
+    ):
+        patches.append(patch_ds4_pp_tcp_tensor_transport())
     if env_flag("DS4_VLLM_READY_RESPONSE_COMPAT"):
         patches.append(allow_missing_ready_response_block_size())
     if env_flag("DS4_VLLM_SM12_FLASHINFER_MLA_SPARSE"):
