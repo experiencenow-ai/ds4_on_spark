@@ -9,6 +9,8 @@ from pathlib import Path
 import sys
 from typing import Any
 
+_TRITON_SPARSE_BF16_KERNELS: tuple[Any, Any, Any] | None = None
+
 
 def env_flag(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
@@ -112,6 +114,323 @@ def allow_flashmla_sparse_torch_fallback() -> str:
     bf16_kernel_with_torch_fallback._ds4_sm12_torch_sparse_fallback = True  # type: ignore[attr-defined]
     impl_cls._bf16_flash_mla_kernel = bf16_kernel_with_torch_fallback
     return "flashmla_sparse_torch_fallback"
+
+
+def _load_triton_sparse_bf16_kernels() -> tuple[Any, Any, Any]:
+    global _TRITON_SPARSE_BF16_KERNELS
+    if _TRITON_SPARSE_BF16_KERNELS is not None:
+        return _TRITON_SPARSE_BF16_KERNELS
+    import triton
+    import triton.language as tl
+
+    @triton.jit
+    def _score_kernel(
+        q_ptr,
+        kv_ptr,
+        indices_ptr,
+        scores_ptr,
+        stride_q_t: tl.constexpr,
+        stride_q_h: tl.constexpr,
+        stride_q_d: tl.constexpr,
+        stride_kv_t,
+        stride_kv_d: tl.constexpr,
+        num_kv_rows,
+        stride_indices_t: tl.constexpr,
+        stride_indices_c: tl.constexpr,
+        stride_scores_t: tl.constexpr,
+        stride_scores_h: tl.constexpr,
+        stride_scores_c: tl.constexpr,
+        num_heads: tl.constexpr,
+        head_dim: tl.constexpr,
+        num_candidates: tl.constexpr,
+        scale: tl.constexpr,
+        HEAD_BLOCK: tl.constexpr,
+        BLOCK_C: tl.constexpr,
+        BLOCK_D: tl.constexpr,
+    ):
+        token_idx = tl.program_id(0)
+        head_block_idx = tl.program_id(1)
+        candidate_block_idx = tl.program_id(2)
+        head_offsets = (head_block_idx * HEAD_BLOCK) + tl.arange(0, HEAD_BLOCK)
+        candidate_offsets = (candidate_block_idx * BLOCK_C) + tl.arange(0, BLOCK_C)
+        dim_offsets = tl.arange(0, BLOCK_D)
+        head_mask = head_offsets < num_heads
+        candidate_mask = candidate_offsets < num_candidates
+        dim_mask = dim_offsets < head_dim
+        q = tl.load(
+            q_ptr
+            + (token_idx * stride_q_t)
+            + (head_offsets[:, None] * stride_q_h)
+            + (dim_offsets[None, :] * stride_q_d),
+            mask=head_mask[:, None] & dim_mask[None, :],
+            other=0.0,
+        ).to(tl.float32)
+        kv_indices = tl.load(
+            indices_ptr
+            + (token_idx * stride_indices_t)
+            + (candidate_offsets * stride_indices_c),
+            mask=candidate_mask,
+            other=-1,
+        )
+        is_valid = (
+            candidate_mask
+            & (kv_indices >= 0)
+            & (kv_indices < num_kv_rows)
+        )
+        safe_indices = tl.where(is_valid, kv_indices, 0)
+        kv = tl.load(
+            kv_ptr
+            + (safe_indices.to(tl.int64)[:, None] * stride_kv_t)
+            + (dim_offsets[None, :] * stride_kv_d),
+            mask=is_valid[:, None] & dim_mask[None, :],
+            other=0.0,
+        ).to(tl.float32)
+        scores = tl.dot(
+            q,
+            tl.trans(kv),
+            input_precision="tf32",
+            out_dtype=tl.float32,
+        ) * scale
+        scores = tl.where(head_mask[:, None] & is_valid[None, :], scores, -float("inf"))
+        tl.store(
+            scores_ptr
+            + (token_idx * stride_scores_t)
+            + (head_offsets[:, None] * stride_scores_h)
+            + (candidate_offsets[None, :] * stride_scores_c),
+            scores,
+            mask=head_mask[:, None] & candidate_mask[None, :],
+        )
+
+    @triton.jit
+    def _finish_kernel(
+        scores_ptr,
+        kv_ptr,
+        indices_ptr,
+        output_ptr,
+        stride_scores_t: tl.constexpr,
+        stride_scores_h: tl.constexpr,
+        stride_scores_c: tl.constexpr,
+        stride_kv_t,
+        stride_kv_d: tl.constexpr,
+        num_kv_rows,
+        stride_indices_t: tl.constexpr,
+        stride_indices_c: tl.constexpr,
+        stride_output_t: tl.constexpr,
+        stride_output_h: tl.constexpr,
+        stride_output_d: tl.constexpr,
+        value_dim: tl.constexpr,
+        num_candidates: tl.constexpr,
+        BLOCK_K: tl.constexpr,
+        BLOCK_D: tl.constexpr,
+    ):
+        token_idx = tl.program_id(0)
+        head_idx = tl.program_id(1)
+        dim_block_idx = tl.program_id(2)
+        candidate_offsets = tl.arange(0, BLOCK_K)
+        dim_offsets = (dim_block_idx * BLOCK_D) + tl.arange(0, BLOCK_D)
+        dim_mask = dim_offsets < value_dim
+        max_score = -float("inf")
+        for candidate_start in range(0, num_candidates, BLOCK_K):
+            candidates = candidate_start + candidate_offsets
+            candidate_mask = candidates < num_candidates
+            kv_indices = tl.load(
+                indices_ptr
+                + (token_idx * stride_indices_t)
+                + (candidates * stride_indices_c),
+                mask=candidate_mask,
+                other=-1,
+            )
+            is_valid = (
+                candidate_mask
+                & (kv_indices >= 0)
+                & (kv_indices < num_kv_rows)
+            )
+            scores = tl.load(
+                scores_ptr
+                + (token_idx * stride_scores_t)
+                + (head_idx * stride_scores_h)
+                + (candidates * stride_scores_c),
+                mask=is_valid,
+                other=-float("inf"),
+            ).to(tl.float32)
+            max_score = tl.maximum(max_score, tl.max(scores, axis=0))
+        has_tokens = max_score > -float("inf")
+        safe_max = tl.where(has_tokens, max_score, 0.0)
+        denom = 0.0
+        acc = tl.zeros((BLOCK_D,), tl.float32)
+        for candidate_start in range(0, num_candidates, BLOCK_K):
+            candidates = candidate_start + candidate_offsets
+            candidate_mask = candidates < num_candidates
+            kv_indices = tl.load(
+                indices_ptr
+                + (token_idx * stride_indices_t)
+                + (candidates * stride_indices_c),
+                mask=candidate_mask,
+                other=-1,
+            )
+            is_valid = (
+                candidate_mask
+                & (kv_indices >= 0)
+                & (kv_indices < num_kv_rows)
+            )
+            safe_indices = tl.where(is_valid, kv_indices, 0)
+            scores = tl.load(
+                scores_ptr
+                + (token_idx * stride_scores_t)
+                + (head_idx * stride_scores_h)
+                + (candidates * stride_scores_c),
+                mask=is_valid,
+                other=-float("inf"),
+            ).to(tl.float32)
+            weights = tl.where(is_valid, tl.exp(scores - safe_max), 0.0)
+            denom += tl.sum(weights, axis=0)
+            kv = tl.load(
+                kv_ptr
+                + (safe_indices.to(tl.int64)[:, None] * stride_kv_t)
+                + (dim_offsets[None, :] * stride_kv_d),
+                mask=is_valid[:, None] & dim_mask[None, :],
+                other=0.0,
+            ).to(tl.float32)
+            acc += tl.sum(kv * weights[:, None], axis=0)
+        output_value = tl.where(denom > 0.0, acc / denom, 0.0)
+        tl.store(
+            output_ptr
+            + (token_idx * stride_output_t)
+            + (head_idx * stride_output_h)
+            + (dim_offsets * stride_output_d),
+            output_value,
+            mask=dim_mask,
+        )
+
+    _TRITON_SPARSE_BF16_KERNELS = (triton, _score_kernel, _finish_kernel)
+    return _TRITON_SPARSE_BF16_KERNELS
+
+
+def _triton_sparse_mla_bf16(self: Any, q: Any, kv_cache: Any, topk_indices: Any) -> Any:
+    import torch
+
+    triton, score_kernel, finish_kernel = _load_triton_sparse_bf16_kernels()
+    if topk_indices.dim() == 3:
+        if int(topk_indices.shape[1]) != 1:
+            raise ValueError("expected sparse topk indices second dim to be 1")
+        topk_indices = topk_indices[:, 0, :]
+    if topk_indices.dtype != torch.int32:
+        topk_indices = topk_indices.to(torch.int32)
+    indices = topk_indices.contiguous()
+    kv_flat = kv_cache.reshape(-1, kv_cache.shape[-1]).contiguous()
+    num_tokens = int(q.shape[0])
+    active_heads = int(self.num_heads)
+    head_dim = int(q.shape[-1])
+    value_dim = int(self.kv_lora_rank)
+    num_candidates = int(indices.shape[1])
+    output = q.new_empty((num_tokens, active_heads, value_dim))
+    score_buffer = torch.empty(
+        (num_tokens, active_heads, num_candidates),
+        dtype=torch.float32,
+        device=q.device,
+    )
+    score_head_block = int(os.getenv("DS4_VLLM_TRITON_SPARSE_BF16_HEAD_BLOCK", "8"))
+    score_candidate_block = int(
+        os.getenv("DS4_VLLM_TRITON_SPARSE_BF16_CANDIDATE_BLOCK", "32")
+    )
+    score_block_d = min(1024, triton.next_power_of_2(head_dim))
+    score_grid = (
+        num_tokens,
+        triton.cdiv(active_heads, score_head_block),
+        triton.cdiv(num_candidates, score_candidate_block),
+    )
+    score_kernel[score_grid](
+        q,
+        kv_flat,
+        indices,
+        score_buffer,
+        q.stride(0),
+        q.stride(1),
+        q.stride(2),
+        kv_flat.stride(0),
+        kv_flat.stride(1),
+        kv_flat.shape[0],
+        indices.stride(0),
+        indices.stride(1),
+        score_buffer.stride(0),
+        score_buffer.stride(1),
+        score_buffer.stride(2),
+        active_heads,
+        head_dim,
+        num_candidates,
+        float(self.softmax_scale),
+        HEAD_BLOCK=score_head_block,
+        BLOCK_C=score_candidate_block,
+        BLOCK_D=score_block_d,
+        num_warps=4,
+    )
+    finish_block_d = min(256, triton.next_power_of_2(value_dim))
+    finish_grid = (num_tokens, active_heads, triton.cdiv(value_dim, finish_block_d))
+    finish_kernel[finish_grid](
+        score_buffer,
+        kv_flat,
+        indices,
+        output,
+        score_buffer.stride(0),
+        score_buffer.stride(1),
+        score_buffer.stride(2),
+        kv_flat.stride(0),
+        kv_flat.stride(1),
+        kv_flat.shape[0],
+        indices.stride(0),
+        indices.stride(1),
+        output.stride(0),
+        output.stride(1),
+        output.stride(2),
+        value_dim,
+        num_candidates,
+        BLOCK_K=128,
+        BLOCK_D=finish_block_d,
+        num_warps=4,
+    )
+    return output
+
+
+def allow_flashmla_sparse_triton_bf16_fallback() -> str:
+    flashmla_sparse = importlib.import_module(
+        "vllm.v1.attention.backends.mla.flashmla_sparse"
+    )
+    impl_cls = getattr(flashmla_sparse, "FlashMLASparseImpl")
+    original = getattr(impl_cls, "_bf16_flash_mla_kernel")
+    if getattr(original, "_ds4_sm12_triton_sparse_bf16_fallback", False):
+        return "flashmla_sparse_triton_bf16_fallback"
+
+    def _is_sm12(tensor: Any) -> bool:
+        try:
+            import torch
+        except ImportError:
+            return False
+        if not getattr(tensor, "is_cuda", False):
+            return False
+        capability = torch.cuda.get_device_capability(tensor.device)
+        return int(capability[0]) == 12
+
+    def bf16_kernel_with_triton_fallback(  # type: ignore[no-untyped-def]
+        self, q, kv_c_and_k_pe_cache, topk_indices
+    ):
+        if _is_sm12(q):
+            logger = getattr(flashmla_sparse, "logger", None)
+            if logger is not None:
+                logger.warning_once(
+                    "DS4 SM12 FlashMLA sparse fallback: using Triton indexed "
+                    "BF16 top-k attention because flash_mla_sparse_fwd rejects SM12."
+                )
+            return _triton_sparse_mla_bf16(
+                self,
+                q,
+                kv_c_and_k_pe_cache,
+                topk_indices,
+            )
+        return original(self, q, kv_c_and_k_pe_cache, topk_indices)
+
+    bf16_kernel_with_triton_fallback._ds4_sm12_triton_sparse_bf16_fallback = True  # type: ignore[attr-defined]
+    impl_cls._bf16_flash_mla_kernel = bf16_kernel_with_triton_fallback
+    return "flashmla_sparse_triton_bf16_fallback"
 
 
 def override_index_topk() -> str:
@@ -446,6 +765,8 @@ def apply_runtime_patches() -> list[str]:
         patches.append(allow_sm12_flashmla_sparse())
     if env_flag("DS4_VLLM_FLASHMLA_SPARSE_TORCH_FALLBACK"):
         patches.append(allow_flashmla_sparse_torch_fallback())
+    if env_flag("DS4_VLLM_FLASHMLA_SPARSE_TRITON_BF16_FALLBACK"):
+        patches.append(allow_flashmla_sparse_triton_bf16_fallback())
     if os.getenv("DS4_VLLM_INDEX_TOPK_OVERRIDE", "").strip() != "":
         patches.append(override_index_topk())
     if env_flag("DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK"):

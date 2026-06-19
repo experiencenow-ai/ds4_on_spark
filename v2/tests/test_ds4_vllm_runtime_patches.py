@@ -222,6 +222,33 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
         self.assertIn("flashmla_sparse_torch_fallback", result.stdout)
         self.assertEqual(result.stdout.strip().splitlines()[-1], "True")
 
+    def test_runtime_patch_applies_flashmla_triton_bf16_fallback(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        with tempfile.TemporaryDirectory() as tmp:
+            vllm_root = Path(tmp)
+            self._write_fake_vllm(vllm_root)
+            code = textwrap.dedent(
+                """
+                from ds4_vllm_runtime.patches import apply_runtime_patches
+                from vllm.v1.attention.backends.mla.flashmla_sparse import FlashMLASparseImpl
+                print(apply_runtime_patches())
+                print(getattr(FlashMLASparseImpl._bf16_flash_mla_kernel, "_ds4_sm12_triton_sparse_bf16_fallback", False))
+                """
+            )
+            env = os.environ.copy()
+            env["DS4_VLLM_FLASHMLA_SPARSE_TRITON_BF16_FALLBACK"] = "1"
+            env["PYTHONPATH"] = os.pathsep.join([str(vllm_root), str(src_root)])
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        self.assertIn("flashmla_sparse_triton_bf16_fallback", result.stdout)
+        self.assertEqual(result.stdout.strip().splitlines()[-1], "True")
+
     def test_runtime_patch_overrides_index_topk(self):
         v2_root = Path(__file__).resolve().parents[1]
         src_root = v2_root / "src"
