@@ -71,7 +71,7 @@
           4,
           8
         ],
-        "max_batch_size": 32,
+        "max_batch_size": 64,
         "model_id": "zai-org/GLM-5.2-FP8",
         "node_ids": [
           "spark0",
@@ -93,13 +93,13 @@
         "scheduler": {
           "admission_mode": "single_active_batch_per_compute_domain",
           "batch_linger_s": 0.05,
-          "dispatch_batch_limit": 32,
+          "dispatch_batch_limit": 64,
           "max_running_batches_per_compute_domain": 1,
-          "queue_depth_target": 64,
-          "queue_limit": 64,
-          "refill_low_watermark": 16,
+          "queue_depth_target": 128,
+          "queue_limit": 128,
+          "refill_low_watermark": 32,
           "vllm_max_num_batched_tokens": 16384,
-          "vllm_max_num_seqs": 32
+          "vllm_max_num_seqs": 64
         },
         "served_model_name": "glm-5.2-fp8-pp13",
         "service_id": "glm52_fp8_pp13",

@@ -12,8 +12,8 @@
   "performance": {
     "latency_rank": 1.6,
     "max_num_batched_tokens": 16384,
-    "max_num_seqs": 32,
-    "measurement_notes": "PP13 DSAPI throughput profile. GLM-5.2-FP8 has 78 main transformer layers and needs enough queued requests to fill the 13-stage layer pipeline. The merged sparse FlashMLA BF16 fallback launch loaded but timed out on a direct one-token smoke request on Spark GB10, so the service baseline now returns to the completed dense TRITON_MLA path with FP8 E4M3 KV, Marlin FP8 MoE, 32 sequences, 16384 batched tokens, 4 GiB fixed KV per rank, eager execution, and overlapped PP TCP tensor-dict sends. A prior 128-sequence/65536-token envelope hit NVIDIA driver NV_ERR_NO_MEMORY during CUDA initialization on 8-layer stages; raise beyond the 32-sequence envelope only after direct smoke and batch sweep establish headroom. Native SM12 sparse FlashMLA remains the preferred future path once upstream accepts the architecture without the DS4 Triton BF16 fallback.",
+    "max_num_seqs": 64,
+    "measurement_notes": "PP13 DSAPI throughput profile. GLM-5.2-FP8 has 78 main transformer layers and needs enough queued requests to fill the 13-stage layer pipeline. The merged sparse FlashMLA BF16 fallback launch loaded but timed out on a direct one-token smoke request on Spark GB10, so the service baseline now returns to the completed dense TRITON_MLA path with FP8 E4M3 KV, Marlin FP8 MoE, 64 sequences, 16384 batched tokens, 4 GiB fixed KV per rank, eager execution, and overlapped PP TCP tensor-dict sends. A 32-sequence batch sweep topped out at 44.5 tok/sec for 64-token outputs, while a prior 128-sequence/65536-token envelope hit NVIDIA driver NV_ERR_NO_MEMORY during CUDA initialization on 8-layer stages. Native SM12 sparse FlashMLA remains the preferred future path once upstream accepts the architecture without the DS4 Triton BF16 fallback.",
     "target": "13-stage GLM-5.2-FP8 frontier throughput pipeline with dense TRITON_MLA, FP8 KV, and no external KV connector."
   },
   "production_eligible": false,
