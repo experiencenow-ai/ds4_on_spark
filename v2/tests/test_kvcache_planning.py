@@ -269,7 +269,7 @@ class KvCachePlanningTests(unittest.TestCase):
 
         self.assertEqual(plan["profile_id"], "glm52_fp8_pp13_frontier_v1")
         self.assertEqual(plan["pipeline_parallel_size"], 13)
-        self.assertEqual(plan["layer_partition"], [6, 4, 4, 4, 4, 8, 8, 8, 8, 8, 4, 4, 8])
+        self.assertEqual(plan["layer_partition"], [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6])
         self.assertEqual(len(plan["vllm_nodes"]), 13)
         rank0 = plan["vllm_nodes"][0]
         rank12 = plan["vllm_nodes"][-1]
