@@ -9,7 +9,7 @@ kv_cache_deployment: profiles/kv_cache/glm52_fp8_pp13_lmcache_hma.json
 runtime_contract: profiles/runtime_contracts/glm52_fp8_pp13_v1.json
 notes:
   - GLM-5.2-FP8 has 78 main transformer layers. Its IndexShare sparse-attention indexers are full on layers 0,1,2,6,10,... and shared otherwise, so PP partitions must start each stage on a full-indexer layer. The PP13 smoke partition is 6,4,4,4,4,8,8,8,8,8,4,4,8.
-  - The launch flags follow the vLLM GLM-5.2 recipe: fp8_e4m3 KV, glm45 reasoning parser, and glm47 tool parser. MTP is disabled for the PP13 path because vLLM currently rejects the GLM MTP draft model under pipeline parallelism.
+  - The launch flags follow the vLLM GLM-5.2 recipe: fp8_e4m3 KV, FLASHINFER_MLA_SPARSE attention, glm45 reasoning parser, and glm47 tool parser. MTP is disabled for the PP13 path because vLLM currently rejects the GLM MTP draft model under pipeline parallelism.
   - The default chat template enables thinking unless enable_thinking=false is passed; the DSAPI profile disables thinking by default for first-pass ds4-eval.
   - The repository waterfall fanout is spark3-seeded; spark0/mac to spark3 is only the archive-ingest leg, and cluster replication must run with fanout-all from spark3.
   - For prep while the archive is still running, generate completed-file manifests and transfer only completed files; never copy *.part files.

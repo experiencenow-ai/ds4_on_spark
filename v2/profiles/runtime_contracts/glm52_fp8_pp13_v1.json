@@ -87,8 +87,8 @@
     "required_quantization": "fp8",
     "required_runtime_version": "0.23.0",
     "required_runtime_flags": [
-      "--kv-cache-dtype fp8",
-      "--attention-backend FLASHMLA_SPARSE",
+      "--kv-cache-dtype fp8_e4m3",
+      "--attention-backend FLASHINFER_MLA_SPARSE",
       "--reasoning-parser glm45",
       "--tool-call-parser glm47",
       "--enable-auto-tool-choice"
@@ -97,9 +97,9 @@
       "humming-kernels[cu13]==0.1.4"
     ],
     "required_runtime_patches": [
-      "DS4_VLLM_SM12_FLASHMLA_SPARSE=1"
+      "DS4_VLLM_READY_RESPONSE_COMPAT=1"
     ],
-    "required_source": "guarded vLLM 0.23.0 wheel overlay with GlmMoeDsaForCausalLM support and DS4 SM12 FlashMLA sparse runtime shim",
+    "required_source": "guarded vLLM 0.23.0 wheel overlay with GlmMoeDsaForCausalLM support and DS4 ready-response compatibility shim",
     "required_source_root": "/home/{node}/standard-runtimes/vllm-0.23.0-overlay"
   }
 }
