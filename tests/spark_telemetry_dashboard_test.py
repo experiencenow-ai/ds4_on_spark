@@ -587,6 +587,7 @@ class SparkTelemetryDashboardTest(unittest.TestCase):
         self.assertIn('id="chat-files"', dashboard.DASHBOARD_HTML)
         self.assertIn('Reset Context', dashboard.DASHBOARD_HTML)
         self.assertIn('fetch("/api/chat/completions"', dashboard.DASHBOARD_HTML)
+        self.assertIn("glm52_fp8_pp13_frontier_v1", dashboard.DASHBOARD_HTML)
         self.assertIn("kimi27_pp13", dashboard.DASHBOARD_HTML)
         self.assertIn("qwen27_bf16_pp13", dashboard.DASHBOARD_HTML)
         self.assertIn("gemma4_26b_a4b_pp13", dashboard.DASHBOARD_HTML)
