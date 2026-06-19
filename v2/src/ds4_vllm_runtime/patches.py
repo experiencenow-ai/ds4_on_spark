@@ -663,6 +663,113 @@ def allow_triton_mla_sparse_validation() -> str:
     return "triton_mla_sparse_validation"
 
 
+def tune_triton_mla_decode() -> str:
+    raw_block_h = os.getenv("VLLM_DS4_TRITON_MLA_BLOCK_H", "").strip()
+    raw_num_stages = os.getenv("VLLM_DS4_TRITON_MLA_NUM_STAGES", "").strip()
+    block_h = int(raw_block_h) if raw_block_h else 0
+    num_stages_override = int(raw_num_stages) if raw_num_stages else 0
+    if block_h <= 0 and num_stages_override <= 0:
+        return "triton_mla_decode_tuning_unset"
+    decode = importlib.import_module("vllm.v1.attention.ops.triton_decode_attention")
+    original = getattr(decode, "_decode_grouped_att_m_fwd")
+    if getattr(original, "_ds4_triton_mla_decode_tuning", False):
+        return "triton_mla_decode_tuning"
+
+    def _decode_grouped_att_m_fwd(  # type: ignore[no-untyped-def]
+        q,
+        k_buffer,
+        v_buffer,
+        att_out,
+        Req_to_tokens,
+        B_Seqlen,
+        num_kv_splits,
+        sm_scale,
+        page_size,
+        logit_cap,
+        k_scale,
+        v_scale,
+        is_mla=False,
+    ):
+        triton = decode.triton
+        is_hip = bool(getattr(decode, "is_hip_", False))
+        Lk = k_buffer.shape[-1]
+        Lv = v_buffer.shape[-1]
+        if is_mla:
+            if not is_hip and Lk == 576:
+                BLOCK_DMODEL = 512
+                BLOCK_DPE = 64
+            elif not is_hip and Lk == 288:
+                BLOCK_DMODEL = 256
+                BLOCK_DPE = 32
+            else:
+                BLOCK_DMODEL = triton.next_power_of_2(Lv)
+                BLOCK_DPE = triton.next_power_of_2(Lk - Lv) if Lk > Lv else 0
+        else:
+            BLOCK_DMODEL = triton.next_power_of_2(Lk)
+            BLOCK_DPE = 0
+        BLOCK_DV = triton.next_power_of_2(Lv)
+        BLOCK = 16 if is_hip else 32
+        batch, head_num = q.shape[0], q.shape[1]
+        kv_group_num = q.shape[1] // k_buffer.shape[-2]
+        BLOCK_H = block_h if block_h > 0 else 16
+        NUM_KV_SPLITS = num_kv_splits
+        grid = (
+            batch,
+            triton.cdiv(head_num, min(BLOCK_H, kv_group_num)),
+            NUM_KV_SPLITS,
+        )
+        extra_kargs = {}
+        num_stages = 2
+        if is_hip:
+            extra_kargs = {"waves_per_eu": 1, "matrix_instr_nonkdim": 16, "kpack": 2}
+            num_stages = 1
+        elif not is_hip and BLOCK_DMODEL >= 1024:
+            num_stages = 1
+        if num_stages_override > 0:
+            num_stages = num_stages_override
+        decode._fwd_grouped_kernel_stage1[grid](
+            q,
+            k_buffer,
+            v_buffer,
+            sm_scale,
+            Req_to_tokens,
+            B_Seqlen,
+            att_out,
+            Req_to_tokens.stride(0),
+            q.stride(0),
+            q.stride(1),
+            k_buffer.stride(-3),
+            k_buffer.stride(-2),
+            v_buffer.stride(-3),
+            v_buffer.stride(-2),
+            att_out.stride(0),
+            att_out.stride(1),
+            att_out.stride(2),
+            k_scale,
+            v_scale,
+            kv_group_num=kv_group_num,
+            q_head_num=head_num,
+            BLOCK_DMODEL=BLOCK_DMODEL,
+            BLOCK_DPE=BLOCK_DPE,
+            BLOCK_DV=BLOCK_DV,
+            BLOCK_N=BLOCK,
+            BLOCK_H=BLOCK_H,
+            NUM_KV_SPLITS=NUM_KV_SPLITS,
+            PAGE_SIZE=page_size,
+            logit_cap=logit_cap,
+            num_warps=4,
+            num_stages=num_stages,
+            Lk=Lk,
+            Lv=Lv,
+            IS_MLA=is_mla,
+            **extra_kargs,
+        )
+
+    _decode_grouped_att_m_fwd._ds4_triton_mla_decode_tuning = True  # type: ignore[attr-defined]
+    decode._decode_grouped_att_m_fwd = _decode_grouped_att_m_fwd
+    return "triton_mla_decode_tuning"
+
+
 def _configured_block_size(client: Any) -> int | None:
     vllm_config = getattr(client, "vllm_config", None)
     cache_config = getattr(vllm_config, "cache_config", None)
@@ -807,6 +914,11 @@ def apply_runtime_patches() -> list[str]:
         patches.append(force_flashinfer_mla_cute_dsl_decode())
     if env_flag("VLLM_TRITON_MLA_SPARSE"):
         patches.append(allow_triton_mla_sparse_validation())
+    if (
+        os.getenv("VLLM_DS4_TRITON_MLA_BLOCK_H", "").strip() != ""
+        or os.getenv("VLLM_DS4_TRITON_MLA_NUM_STAGES", "").strip() != ""
+    ):
+        patches.append(tune_triton_mla_decode())
     return patches
 
 
