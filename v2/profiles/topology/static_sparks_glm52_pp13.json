@@ -31,10 +31,10 @@
     "queue_entry_node_id": "spark0",
     "resident_service_expectations": {
       "cache_backends": {
-        "glm52_fp8_pp13": "none"
+        "glm52_fp8_pp13": "lmcache_hma"
       },
       "cache_connectors": {
-        "glm52_fp8_pp13": "none"
+        "glm52_fp8_pp13": "lmcache"
       },
       "dsv4_service_id": "",
       "gpu_utilization_hard_cap": 0.95,
@@ -50,10 +50,10 @@
         "dtype": "fp8-bfloat16",
         "entry_node_id": "spark0",
         "kv_cache": {
-          "cache_root": "",
-          "connector_id": "none",
-          "expected_entry_fraction_per_node": 0.0,
-          "external_backend": "none",
+          "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/glm52_fp8_pp13_fp8kv/p6_4_4_4_4_8_8_8_8_8_4_4_8",
+          "connector_id": "lmcache",
+          "expected_entry_fraction_per_node": 0.07692307692307693,
+          "external_backend": "lmcache_hma",
           "kv_cache_memory_bytes": 4294967296,
           "sharding": "pipeline_layers"
         },
