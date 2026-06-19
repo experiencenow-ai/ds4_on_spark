@@ -71,7 +71,7 @@
           4,
           8
         ],
-        "max_batch_size": 4,
+        "max_batch_size": 16,
         "model_id": "zai-org/GLM-5.2-FP8",
         "node_ids": [
           "spark0",
@@ -97,7 +97,7 @@
           "queue_limit": 32,
           "refill_low_watermark": 1,
           "vllm_max_num_batched_tokens": 8192,
-          "vllm_max_num_seqs": 4
+          "vllm_max_num_seqs": 16
         },
         "served_model_name": "glm-5.2-fp8-pp13",
         "service_id": "glm52_fp8_pp13",

@@ -49,8 +49,9 @@
     "DS4_VLLM_READY_RESPONSE_COMPAT": "1",
     "DS4_VLLM_SM12_FLASHMLA_SPARSE": "1",
     "DS4_VLLM_FLASHMLA_SPARSE_TORCH_FALLBACK": "1",
+    "DS4_VLLM_FLASHMLA_SPARSE_TRITON_BF16_FALLBACK": "1",
     "DS4_VLLM_FLASHMLA_SPARSE_TORCH_FALLBACK_TOKENS": "8",
-    "DS4_VLLM_INDEX_TOPK_OVERRIDE": "512",
+    "DS4_VLLM_INDEX_TOPK_OVERRIDE": "128",
     "DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK": "1",
     "DS4_VLLM_IMPORT_PROOF_JSON": "/tmp/ds4_vllm_import_proof_glm52_rank{node_rank}.json",
     "DS4_VLLM_SOURCE_ROOT": "/home/{node}/standard-runtimes/vllm-0.23.0-overlay",
@@ -90,7 +91,7 @@
     "VLLM_DS4_PP_TORCH_PAIR_GROUPS": "0",
     "VLLM_DS4_PP_TORCH_PG_TENSOR_DICT": "0",
     "VLLM_DS4_PROFILE_SKIP_DUMMY_SAMPLER": "1",
-    "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "4",
+    "VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP": "16",
     "VLLM_DS4_VALIDATE_INPUT_IDS": "1",
     "VLLM_HOST_IP": "{fabric_ip}"
   },
@@ -116,7 +117,7 @@
   "lmcache_config": {},
   "master_addr": "10.10.100.10",
   "master_port": 29652,
-  "max_batch_size": 4,
+  "max_batch_size": 16,
   "model_id": "/home/{node}/models/hf/zai-org/GLM-5.2-FP8",
   "pipeline_nodes": [
     "spark0",
