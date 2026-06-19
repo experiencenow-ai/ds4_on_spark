@@ -12,9 +12,10 @@
     "sharding": "none"
   },
   "admission": {
-    "max_num_batched_tokens": 8192,
-    "max_num_seqs": 4,
-    "power_policy": "GLM-5.2-FP8 is expected to need the full Spark ring. Stop resident peer services before launch unless a live memory check proves enough headroom."
+    "max_num_batched_tokens": 65536,
+    "max_num_seqs": 128,
+    "power_policy": "GLM-5.2-FP8 is expected to need the full Spark ring. Stop resident peer services before launch unless a live memory check proves enough headroom. The throughput launch must keep enough work queued to fill all 13 layer-pipeline stages.",
+    "queue_depth_target": 256
   },
   "launch": {
     "api_base_url": "http://127.0.0.1:8152",

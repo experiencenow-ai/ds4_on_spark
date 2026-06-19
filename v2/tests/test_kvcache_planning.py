@@ -23,6 +23,7 @@ QWEN_BF16KV_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp8_bf
 GEMMA26_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_26b_a4b_it_pp8_lmcache_hma.json"
 KIMI_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "kimi26_pp13_lmcache_hma.json"
 KIMI27_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "kimi27_code_pp13_lmcache_hma.json"
+GLM52_PP13_DIRECT_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "glm52_fp8_pp13_direct_vllm.json"
 QWEN_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp13_lmcache_hma.json"
 GEMMA26_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_26b_a4b_it_pp13_lmcache_hma.json"
 QWEN_PP12_PLAIN_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp12_plain.json"
@@ -260,6 +261,33 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(rank0["lmcache_config"]["data"]["lookup_server_worker_ids"], [0])
         self.assertEqual(rank12["lmcache_config"]["data"]["local_disk"], "/home/sparkc/ds4_nvme/ds4_lmcache/kimi27_code_pp13_fp8kv/p4_4_4_5_5_5_5_5_5_5_5_5_4")
         self.assertEqual(rank12["lmcache_config"]["data"]["lookup_server_worker_ids"], [0])
+        self.assertIn("--headless", rank12["argv"])
+
+    def test_glm52_pp13_direct_plan_fills_pipeline(self) -> None:
+        deployment = KvCacheDeployment.load(GLM52_PP13_DIRECT_DEPLOYMENT)
+        plan = plan_deployment(deployment)
+
+        self.assertEqual(plan["profile_id"], "glm52_fp8_pp13_frontier_v1")
+        self.assertEqual(plan["pipeline_parallel_size"], 13)
+        self.assertEqual(plan["layer_partition"], [6, 4, 4, 4, 4, 8, 8, 8, 8, 8, 4, 4, 8])
+        self.assertEqual(len(plan["vllm_nodes"]), 13)
+        rank0 = plan["vllm_nodes"][0]
+        rank12 = plan["vllm_nodes"][-1]
+        self.assertEqual(rank0["argv"][1], "/home/spark0/src/ds4_on_spark/v2/scripts/ds4_run_vllm_from_source.py")
+        self.assertEqual(rank0["argv"][3], "/home/spark0/standard-runtimes/vllm-0.23.0-overlay")
+        self.assertEqual(rank0["argv"][8], "/home/spark0/models/hf/zai-org/GLM-5.2-FP8")
+        self.assertEqual(rank12["argv"][8], "/home/sparkc/models/hf/zai-org/GLM-5.2-FP8")
+        self.assertEqual(rank0["argv"][rank0["argv"].index("--max-model-len") + 1], "8192")
+        self.assertEqual(rank0["argv"][rank0["argv"].index("--max-num-seqs") + 1], "128")
+        self.assertEqual(rank0["argv"][rank0["argv"].index("--max-num-batched-tokens") + 1], "65536")
+        self.assertEqual(rank0["argv"][rank0["argv"].index("--gpu-memory-utilization") + 1], "0.80")
+        self.assertEqual(rank0["argv"][rank0["argv"].index("--kv-cache-memory-bytes") + 1], "4294967296")
+        self.assertNotIn("--enforce-eager", rank0["argv"])
+        self.assertEqual(rank0["env"]["VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP"], "128")
+        self.assertEqual(rank12["env"]["VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP"], "128")
+        self.assertEqual(rank0["env"]["VLLM_DS4_PP_TCP_STRIPES"], "16")
+        self.assertIn("--served-model-name", rank0["argv"])
+        self.assertEqual(rank0["argv"][rank0["argv"].index("--served-model-name") + 1], "glm-5.2-fp8-pp13")
         self.assertIn("--headless", rank12["argv"])
 
     def test_pp13_lmcache_services_enable_private_cache_admin(self) -> None:
