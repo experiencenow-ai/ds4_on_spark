@@ -1,0 +1,57 @@
+name: glm-5.2-fp8-pp13-dsapi
+description: GLM-5.2-FP8 full-ring PP13 DSAPI smoke and ds4-eval recipe.
+model_repo: zai-org/GLM-5.2-FP8
+profile_id: glm52_fp8_pp13_frontier_v1
+service_id: glm52_fp8_pp13
+served_model_name: glm-5.2-fp8-pp13
+topology: profiles/topology/static_sparks_glm52_pp13.json
+kv_cache_deployment: profiles/kv_cache/glm52_fp8_pp13_lmcache_hma.json
+runtime_contract: profiles/runtime_contracts/glm52_fp8_pp13_v1.json
+notes:
+  - GLM-5.2-FP8 has 78 main transformer layers. Its IndexShare sparse-attention indexers are full on layers 0,1,2,6,10,... and shared otherwise, so PP partitions must start each stage on a full-indexer layer. The PP13 smoke partition is 6,4,4,4,4,8,8,8,8,8,4,4,8.
+  - The launch flags follow the vLLM GLM-5.2 recipe: fp8_e4m3 KV, glm45 reasoning parser, and glm47 tool parser. MTP is disabled for the PP13 path because vLLM currently rejects the GLM MTP draft model under pipeline parallelism.
+  - The default chat template enables thinking unless enable_thinking=false is passed; the DSAPI profile disables thinking by default for first-pass ds4-eval.
+  - The repository waterfall fanout is spark3-seeded; spark0/mac to spark3 is only the archive-ingest leg, and cluster replication must run with fanout-all from spark3.
+  - For prep while the archive is still running, generate completed-file manifests and transfer only completed files; never copy *.part files.
+  - This profile is not production eligible and should be submitted with model_pin.profile_id.
+paths:
+  mac_archive: /mnt/mac/22tb0/models/hf/zai-org/GLM-5.2-FP8
+  node_local_template: /home/{node}/models/hf/zai-org/GLM-5.2-FP8
+commands:
+  check_archive: |
+    ssh spark0 'status_dir=$(cat /home/spark0/hf_archive_glm52_fp8_status_dir.txt); cat "$status_dir/zai-org__GLM-5.2-FP8.json"'
+  snapshot_completed_manifest: |
+    ssh spark0 'cd /mnt/mac/22tb0/models/hf/zai-org/GLM-5.2-FP8 && find . -type f ! -name "*.part" ! -name ".hf_archive_complete.json" ! -path "./.cache/*" -printf "%P\n" | sort' >/private/tmp/glm52_fp8_completed_include.txt
+  seed_spark3_completed_manifest: |
+    cd v2
+    PYTHONPATH=src python3 -m ds4_transfer.fast_copy --topology profiles/transfer/spark_200g.json --source-node spark0 --source-path /mnt/mac/22tb0/models/hf/zai-org/GLM-5.2-FP8 --destination-node spark3 --destination-path /home/spark3/models/hf/zai-org/GLM-5.2-FP8 --include-from /private/tmp/glm52_fp8_completed_include.txt --jobs-per-edge 2 --striped-file-stripes 2 --timeout-s 7200
+  snapshot_spark3_completed_manifest: |
+    ssh spark3 'cd /home/spark3/models/hf/zai-org/GLM-5.2-FP8 && find . -type f ! -name "*.part" ! -name ".hf_archive_complete.json" ! -name "*ds4tmp*" ! -path "./.cache/*" -printf "%P\n" | sort' >/private/tmp/glm52_fp8_spark3_include.txt
+  fanout_spark3_completed_manifest: |
+    cd v2
+    PYTHONPATH=src python3 -m ds4_transfer.fast_copy --topology profiles/transfer/spark_200g.json --source-node spark3 --source-path /home/spark3/models/hf/zai-org/GLM-5.2-FP8 --fanout-all --destination-path-template '/home/{node}/models/hf/zai-org/GLM-5.2-FP8' --include-from /private/tmp/glm52_fp8_spark3_include.txt --jobs-per-edge 4 --timeout-s 7200
+  seed_spark0: |
+    ssh spark0 'mkdir -p /home/spark0/models/hf/zai-org && rsync -aH --info=progress2 /mnt/mac/22tb0/models/hf/zai-org/GLM-5.2-FP8/ /home/spark0/models/hf/zai-org/GLM-5.2-FP8/'
+  seed_spark3: |
+    cd v2
+    PYTHONPATH=src python3 -m ds4_transfer.fast_copy --topology profiles/transfer/spark_200g.json --source-node spark0 --source-path /home/spark0/models/hf/zai-org/GLM-5.2-FP8 --destination-node spark3 --destination-path /home/spark3/models/hf/zai-org/GLM-5.2-FP8 --jobs-per-edge 16 --timeout-s 7200
+  fanout_from_spark3: |
+    cd v2
+    PYTHONPATH=src python3 -m ds4_transfer.fast_copy --topology profiles/transfer/spark_200g.json --source-node spark3 --source-path /home/spark3/models/hf/zai-org/GLM-5.2-FP8 --fanout-all --destination-path-template '/home/{node}/models/hf/zai-org/GLM-5.2-FP8' --jobs-per-edge 16 --timeout-s 7200
+  audit_dsapi_profile: |
+    cd v2
+    PYTHONPATH=src python3 scripts/ds4_pipeline_lifecycle.py audit --topology profiles/topology/static_sparks_glm52_pp13.json --service glm52_fp8_pp13
+  launch_pipeline: |
+    cd v2
+    PYTHONPATH=src python3 scripts/ds4_pipeline_lifecycle.py relaunch --topology profiles/topology/static_sparks_glm52_pp13.json --service glm52_fp8_pp13 --execute --stagger-s 3
+  launch_coordinator: |
+    ssh spark0 'cd ~/src/ds4_on_spark/v2 && /home/spark0/ds4-vllm-local/bin/python scripts/ds4_relaunch_coordinator_api.py --skip-pull --skip-build --topology profiles/topology/static_sparks_glm52_pp13.json --profile resident128'
+  smoke_openai: |
+    ssh spark0 'curl -s http://127.0.0.1:8152/v1/chat/completions -H "content-type: application/json" -d "{\"model\":\"glm-5.2-fp8-pp13\",\"messages\":[{\"role\":\"user\",\"content\":\"Answer in one sentence: what is 19*23?\"}],\"max_tokens\":64,\"temperature\":0}"'
+  dsapi_smoke_request: |
+    cd v2
+    printf '%s\n' '{"format":"ds4-inference-request-v1","request_id":"glm52-smoke-001","capability":null,"chat":true,"immediate":true,"job_class":"analysis","max_output_tokens":128,"thinking_budget_tokens":0,"temperature":0.0,"input":{"messages":[{"role":"user","content":"Answer in one sentence: what is 19*23?"}],"prompt":"Answer in one sentence: what is 19*23?"},"output_contract":{"format":"text"},"model_pin":{"profile_id":"glm52_fp8_pp13_frontier_v1"}}' >/tmp/glm52_dsapi_smoke.jsonl
+    PYTHONPATH=src python3 -m ds4_infer.cli queue-submit --queue-dir /tmp/ds4_glm52_queue --profiles-dir profiles/models --topology profiles/topology/static_sparks_glm52_pp13.json --requests /tmp/glm52_dsapi_smoke.jsonl --batch-id glm52-smoke
+  ds4_eval_subset: |
+    cd v2
+    python3 scripts/ds4_eval_api_runner.py run --base-url http://127.0.0.1:8700 --model glm52_fp8_pp13_frontier_v1 --max-output-tokens 1024 --limit 12 --out-dir /private/tmp/ds4_bench/glm52_fp8_pp13_dsapi_subset

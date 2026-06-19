@@ -1,0 +1,116 @@
+{
+  "description": "Thirteen-Spark GLM-5.2-FP8 frontier test topology. This topology gives the whole Spark ring to one PP13 GLM lane and is intended for explicit DSAPI profile-pin testing, not steady-state co-residency.",
+  "format": "ds4-spark-topology-v1",
+  "nodes": [
+    {"default_capacity": 1, "dynamic_load": false, "immediate_reserved": false, "node_id": "spark0", "resident_profiles": ["glm52_fp8_pp13_frontier_v1"], "roles": ["queue_ingress", "api_ingress", "pipeline_stage", "frontier_test"]},
+    {"default_capacity": 1, "dynamic_load": false, "immediate_reserved": false, "node_id": "spark1", "resident_profiles": ["glm52_fp8_pp13_frontier_v1"], "roles": ["pipeline_stage", "frontier_test"]},
+    {"default_capacity": 1, "dynamic_load": false, "immediate_reserved": false, "node_id": "spark2", "resident_profiles": ["glm52_fp8_pp13_frontier_v1"], "roles": ["pipeline_stage", "frontier_test"]},
+    {"default_capacity": 1, "dynamic_load": false, "immediate_reserved": false, "node_id": "spark3", "resident_profiles": ["glm52_fp8_pp13_frontier_v1"], "roles": ["pipeline_stage", "frontier_test"]},
+    {"default_capacity": 1, "dynamic_load": false, "immediate_reserved": false, "node_id": "spark4", "resident_profiles": ["glm52_fp8_pp13_frontier_v1"], "roles": ["pipeline_stage", "frontier_test"]},
+    {"default_capacity": 1, "dynamic_load": false, "immediate_reserved": false, "node_id": "spark5", "resident_profiles": ["glm52_fp8_pp13_frontier_v1"], "roles": ["pipeline_stage", "frontier_test"]},
+    {"default_capacity": 1, "dynamic_load": false, "immediate_reserved": false, "node_id": "spark6", "resident_profiles": ["glm52_fp8_pp13_frontier_v1"], "roles": ["pipeline_stage", "frontier_test"]},
+    {"default_capacity": 1, "dynamic_load": false, "immediate_reserved": false, "node_id": "spark7", "resident_profiles": ["glm52_fp8_pp13_frontier_v1"], "roles": ["pipeline_stage", "frontier_test"]},
+    {"default_capacity": 1, "dynamic_load": false, "immediate_reserved": false, "node_id": "spark8", "resident_profiles": ["glm52_fp8_pp13_frontier_v1"], "roles": ["pipeline_stage", "frontier_test"]},
+    {"default_capacity": 1, "dynamic_load": false, "immediate_reserved": false, "node_id": "spark9", "resident_profiles": ["glm52_fp8_pp13_frontier_v1"], "roles": ["pipeline_stage", "frontier_test"]},
+    {"default_capacity": 1, "dynamic_load": false, "immediate_reserved": false, "node_id": "sparka", "resident_profiles": ["glm52_fp8_pp13_frontier_v1"], "roles": ["pipeline_stage", "frontier_test"]},
+    {"default_capacity": 1, "dynamic_load": false, "immediate_reserved": false, "node_id": "sparkb", "resident_profiles": ["glm52_fp8_pp13_frontier_v1"], "roles": ["pipeline_stage", "frontier_test"]},
+    {"default_capacity": 1, "dynamic_load": false, "immediate_reserved": false, "node_id": "sparkc", "resident_profiles": ["glm52_fp8_pp13_frontier_v1"], "roles": ["pipeline_stage", "frontier_test"]}
+  ],
+  "routing_policy": {
+    "active_resident_service_ids": [
+      "glm52_fp8_pp13"
+    ],
+    "allow_dynamic_load_for_unmatched_profiles": false,
+    "bind_on_submit": true,
+    "immediate_requests_prefer_roles": [
+      "frontier_test"
+    ],
+    "normal_requests_prefer_roles": [
+      "frontier_test"
+    ],
+    "queue_entry_node_id": "spark0",
+    "resident_service_expectations": {
+      "cache_backends": {
+        "glm52_fp8_pp13": "lmcache_hma"
+      },
+      "cache_connectors": {
+        "glm52_fp8_pp13": "lmcache"
+      },
+      "dsv4_service_id": "",
+      "gpu_utilization_hard_cap": 0.95,
+      "gpu_utilization_floors": {},
+      "service_ids": [
+        "glm52_fp8_pp13"
+      ]
+    },
+    "pipeline_services": {
+      "glm52_fp8_pp13": {
+        "api_base_url": "http://127.0.0.1:8152",
+        "compute_domain": "spark-fleet-0",
+        "dtype": "fp8-bfloat16",
+        "entry_node_id": "spark0",
+        "kv_cache": {
+          "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/glm52_fp8_pp13_fp8kv/p6_4_4_4_4_8_8_8_8_8_4_4_8",
+          "connector_id": "lmcache",
+          "expected_entry_fraction_per_node": 0.07692307692307693,
+          "external_backend": "lmcache_hma",
+          "kv_cache_memory_bytes": 4294967296,
+          "sharding": "pipeline_layers"
+        },
+        "layer_partition": [
+          6,
+          4,
+          4,
+          4,
+          4,
+          8,
+          8,
+          8,
+          8,
+          8,
+          4,
+          4,
+          8
+        ],
+        "max_batch_size": 4,
+        "model_id": "zai-org/GLM-5.2-FP8",
+        "node_ids": [
+          "spark0",
+          "spark1",
+          "spark2",
+          "spark3",
+          "spark4",
+          "spark5",
+          "spark6",
+          "spark7",
+          "spark8",
+          "spark9",
+          "sparka",
+          "sparkb",
+          "sparkc"
+        ],
+        "pipeline_parallel_size": 13,
+        "profile_id": "glm52_fp8_pp13_frontier_v1",
+        "scheduler": {
+          "admission_mode": "single_active_batch_per_compute_domain",
+          "batch_linger_s": 0.05,
+          "max_running_batches_per_compute_domain": 1,
+          "queue_limit": 32,
+          "refill_low_watermark": 1,
+          "vllm_max_num_batched_tokens": 8192,
+          "vllm_max_num_seqs": 4
+        },
+        "served_model_name": "glm-5.2-fp8-pp13",
+        "service_id": "glm52_fp8_pp13",
+        "telemetry": {
+          "expected_stage_count": 13,
+          "stage_report_command": "ds4-infer pipeline-telemetry-report",
+          "stage_state": "frontier_test"
+        },
+        "tensor_parallel_size": 1,
+        "total_layers": 78
+      }
+    }
+  },
+  "topology_id": "static_sparks_glm52_pp13"
+}
