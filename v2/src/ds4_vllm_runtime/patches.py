@@ -507,6 +507,41 @@ def allow_sm12_sparse_indexer_dense_fallback() -> str:
     if getattr(original, "_ds4_sm12_dense_fallback", False):
         return "sparse_indexer_dense_topk_fallback"
     custom_ops = importlib.import_module("vllm._custom_ops")
+    try:
+        deep_gemm = importlib.import_module("vllm.utils.deep_gemm")
+        original_metadata = getattr(deep_gemm, "get_paged_mqa_logits_metadata")
+    except (ImportError, AttributeError):
+        deep_gemm = None
+        original_metadata = None
+    if original_metadata is not None and not getattr(
+        original_metadata, "_ds4_sm12_dense_metadata_fallback", False
+    ):
+
+        def get_paged_mqa_logits_metadata(context_lens, block_size, num_sms):  # type: ignore[no-untyped-def]
+            try:
+                return original_metadata(context_lens, block_size, num_sms)
+            except RuntimeError as exc:
+                if "Unsupported architecture" not in str(exc):
+                    raise
+                import torch
+
+                return torch.zeros(
+                    (int(num_sms) + 1, 2),
+                    dtype=torch.int32,
+                    device=context_lens.device,
+                )
+
+        get_paged_mqa_logits_metadata._ds4_sm12_dense_metadata_fallback = True  # type: ignore[attr-defined]
+        deep_gemm.get_paged_mqa_logits_metadata = get_paged_mqa_logits_metadata
+        indexer_module = sys.modules.get("vllm.v1.attention.backends.mla.indexer")
+        if (
+            indexer_module is not None
+            and getattr(indexer_module, "get_paged_mqa_logits_metadata", None)
+            is original_metadata
+        ):
+            indexer_module.get_paged_mqa_logits_metadata = (
+                get_paged_mqa_logits_metadata
+            )
 
     def _fill_last_window(out, starts, ends, topk):  # type: ignore[no-untyped-def]
         import torch
