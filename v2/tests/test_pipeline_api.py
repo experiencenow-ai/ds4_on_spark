@@ -35,6 +35,20 @@ class PipelineApiTests(unittest.TestCase):
             if original is not None:
                 os.environ["DS4_API_SYNC_TIMEOUT_S"] = original
 
+    def test_http_request_queue_size_defaults_for_bursts(self) -> None:
+        original = os.environ.pop("DS4_API_HTTP_REQUEST_QUEUE_SIZE", None)
+        try:
+            self.assertEqual(api_module._http_request_queue_size(), 512)
+            os.environ["DS4_API_HTTP_REQUEST_QUEUE_SIZE"] = "128"
+            self.assertEqual(api_module._http_request_queue_size(), 128)
+            os.environ["DS4_API_HTTP_REQUEST_QUEUE_SIZE"] = "1"
+            self.assertEqual(api_module._http_request_queue_size(), 5)
+        finally:
+            if original is not None:
+                os.environ["DS4_API_HTTP_REQUEST_QUEUE_SIZE"] = original
+            else:
+                os.environ.pop("DS4_API_HTTP_REQUEST_QUEUE_SIZE", None)
+
     def test_pipeline_openai_payload_uses_served_model_name(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")

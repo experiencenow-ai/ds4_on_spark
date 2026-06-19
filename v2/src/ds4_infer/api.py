@@ -1097,13 +1097,21 @@ def serve(*, host: str, port: int, queue_dir: str | Path, profiles_dir: str | Pa
         def log_message(self, format: str, *args: Any) -> None:
             return
 
-    server = ThreadingHTTPServer((host, port), Handler)
+    class Server(ThreadingHTTPServer):
+        daemon_threads = True
+        request_queue_size = _http_request_queue_size()
+
+    server = Server((host, port), Handler)
     api.start_background_dispatcher()
     try:
         server.serve_forever()
     finally:
         api.stop_background_dispatcher()
         server.server_close()
+
+
+def _http_request_queue_size() -> int:
+    return max(5, _env_int("DS4_API_HTTP_REQUEST_QUEUE_SIZE", 512))
 
 
 def _parse_vllm_metrics_snapshot(text: str) -> dict[str, Any]:
