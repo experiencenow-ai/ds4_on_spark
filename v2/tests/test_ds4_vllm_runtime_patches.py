@@ -56,6 +56,9 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                     @classmethod
                     def supports_compute_capability(cls, capability):
                         return capability.major == 10
+
+                def trtllm_batch_decode_with_kv_cache_mla(**kwargs):
+                    return kwargs["block_tables"].ndim
                 """
             )
         )
@@ -248,6 +251,34 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             )
         self.assertIn("sparse_indexer_dense_topk_fallback", result.stdout)
         self.assertEqual(result.stdout.strip().splitlines()[-1], "True")
+
+    def test_runtime_patch_squeezes_flashinfer_shared_block_tables(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        with tempfile.TemporaryDirectory() as tmp:
+            vllm_root = Path(tmp)
+            self._write_fake_vllm(vllm_root)
+            code = textwrap.dedent(
+                """
+                from types import SimpleNamespace
+                from ds4_vllm_runtime.patches import apply_runtime_patches
+                import vllm.v1.attention.backends.mla.flashinfer_mla_sparse as sparse
+                apply_runtime_patches()
+                block_tables = SimpleNamespace(ndim=3, shape=(2, 1, 4), squeeze=lambda dim: SimpleNamespace(ndim=2, shape=(2, 4)))
+                print(sparse.trtllm_batch_decode_with_kv_cache_mla(block_tables=block_tables))
+                """
+            )
+            env = os.environ.copy()
+            env["DS4_VLLM_FLASHINFER_MLA_SHARED_BLOCK_TABLES_2D"] = "1"
+            env["PYTHONPATH"] = os.pathsep.join([str(vllm_root), str(src_root)])
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        self.assertEqual(result.stdout.strip(), "2")
 
     def test_runner_child_pythonpath_enables_sitecustomize_for_flashinfer_patch(self):
         v2_root = Path(__file__).resolve().parents[1]

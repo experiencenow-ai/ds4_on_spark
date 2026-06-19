@@ -125,6 +125,31 @@ def allow_sm12_sparse_indexer_dense_fallback() -> str:
     return "sparse_indexer_dense_topk_fallback"
 
 
+def allow_flashinfer_mla_shared_block_tables_2d() -> str:
+    flashinfer_sparse = importlib.import_module(
+        "vllm.v1.attention.backends.mla.flashinfer_mla_sparse"
+    )
+    original = getattr(flashinfer_sparse, "trtllm_batch_decode_with_kv_cache_mla")
+    if getattr(original, "_ds4_shared_block_tables_2d", False):
+        return "flashinfer_mla_shared_block_tables_2d"
+
+    def decode_with_2d_block_tables(*args, **kwargs):  # type: ignore[no-untyped-def]
+        block_tables = kwargs.get("block_tables")
+        if (
+            block_tables is not None
+            and getattr(block_tables, "ndim", None) == 3
+            and int(block_tables.shape[1]) == 1
+        ):
+            kwargs["block_tables"] = block_tables.squeeze(1)
+        return original(*args, **kwargs)
+
+    decode_with_2d_block_tables._ds4_shared_block_tables_2d = True  # type: ignore[attr-defined]
+    flashinfer_sparse.trtllm_batch_decode_with_kv_cache_mla = (
+        decode_with_2d_block_tables
+    )
+    return "flashinfer_mla_shared_block_tables_2d"
+
+
 def _configured_block_size(client: Any) -> int | None:
     vllm_config = getattr(client, "vllm_config", None)
     cache_config = getattr(vllm_config, "cache_config", None)
@@ -245,6 +270,8 @@ def apply_runtime_patches() -> list[str]:
         patches.append(allow_sm12_flashmla_sparse())
     if env_flag("DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK"):
         patches.append(allow_sm12_sparse_indexer_dense_fallback())
+    if env_flag("DS4_VLLM_FLASHINFER_MLA_SHARED_BLOCK_TABLES_2D"):
+        patches.append(allow_flashinfer_mla_shared_block_tables_2d())
     return patches
 
 
