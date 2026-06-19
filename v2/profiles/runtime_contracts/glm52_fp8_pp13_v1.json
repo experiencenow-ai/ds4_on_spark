@@ -3,14 +3,13 @@
   "description": "GLM-5.2-FP8 13-stage vLLM layer-pipeline runtime for Spark-ring frontier testing through DSAPI. spark0 is the API ingress; stage boundaries are aligned to GLM IndexShare full-indexer layers.",
   "format": "ds4-runtime-contract-v1",
   "kv_cache": {
-    "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/glm52_fp8_pp13_bf16kv/p6_4_4_4_4_8_8_8_8_8_4_4_8",
-    "connector": "LMCacheConnectorV1",
-    "deployment": "profiles/kv_cache/glm52_fp8_pp13_lmcache_hma.json",
+    "connector": "none",
+    "deployment": "profiles/kv_cache/glm52_fp8_pp13_direct_vllm.json",
     "dtype": "bfloat16",
-    "external_backend": "lmcache_hma",
+    "external_backend": "none",
     "expected_node_fraction": "1/13",
     "fixed_kv_cache_memory_bytes": 4294967296,
-    "sharding": "pipeline_layers"
+    "sharding": "none"
   },
   "admission": {
     "max_num_batched_tokens": 8192,

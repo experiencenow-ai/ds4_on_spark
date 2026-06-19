@@ -13,8 +13,8 @@
     "latency_rank": 1.6,
     "max_num_batched_tokens": 8192,
     "max_num_seqs": 4,
-    "measurement_notes": "PP13 DSAPI test profile. GLM-5.2-FP8 has 78 main transformer layers. Keep non-production and profile-pinned until smoke and ds4-eval measurements are complete. The guarded vLLM 0.23.0 wheel overlay uses eager FLASHINFER_MLA_SPARSE attention with BF16 KV, a guarded SM12 validation shim, and Marlin FP8 MoE on Spark; FP8 E4M3 KV produced corrupt repeated-token smoke outputs on GB10.",
-    "target": "13-stage GLM-5.2-FP8 frontier test pipeline with BF16 KV and LMCache HMA."
+    "measurement_notes": "PP13 DSAPI test profile. GLM-5.2-FP8 has 78 main transformer layers. Keep non-production and profile-pinned until smoke and ds4-eval measurements are complete. The guarded vLLM 0.23.0 wheel overlay uses eager FLASHINFER_MLA_SPARSE attention with BF16 KV, a guarded SM12 validation shim, and Marlin FP8 MoE on Spark. FP8 E4M3 KV produced corrupt repeated-token smoke outputs on GB10; LMCache HMA with BF16 KV loaded but hung direct OpenAI smoke requests before normal vLLM scheduler accounting.",
+    "target": "13-stage GLM-5.2-FP8 frontier test pipeline with BF16 KV and no external KV connector for the first working baseline."
   },
   "production_eligible": false,
   "profile_id": "glm52_fp8_pp13_frontier_v1",
@@ -29,7 +29,7 @@
     },
     "default_for": [],
     "optional_kv_cache_deployments": [
-      "profiles/kv_cache/glm52_fp8_pp13_lmcache_hma.json"
+      "profiles/kv_cache/glm52_fp8_pp13_direct_vllm.json"
     ],
     "pipeline": {
       "api_base_url": "http://127.0.0.1:8152",
