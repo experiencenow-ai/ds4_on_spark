@@ -310,6 +310,41 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                 str(vllm_root / "vllm/__init__.py"), child_proofs[0].read_text()
             )
 
+    def test_sitecustomize_forces_source_root_ahead_of_old_editable_vllm(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        hook_root = src_root / "ds4_vllm_runtime"
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            old_root = tmp_path / "old_vllm"
+            new_root = tmp_path / "new_vllm"
+            proof_path = tmp_path / "proof.json"
+            self._write_fake_vllm(old_root)
+            self._write_fake_vllm(new_root)
+            (old_root / "vllm/__init__.py").write_text('__version__ = "old-vllm"\n')
+            code = "import vllm; print(vllm.__version__); print(vllm.__file__)"
+            env = os.environ.copy()
+            env["DS4_VLLM_READY_RESPONSE_COMPAT"] = "1"
+            env["DS4_VLLM_IMPORT_PROOF_JSON"] = str(proof_path)
+            env["DS4_VLLM_SOURCE_ROOT"] = str(new_root)
+            env["PYTHONPATH"] = os.pathsep.join(
+                [str(old_root), str(new_root), str(hook_root), str(src_root)]
+            )
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+            proof_files = list(tmp_path.glob("proof.sitecustomize.pid*.json"))
+            self.assertTrue(proof_files)
+            proof = proof_files[0].read_text()
+        self.assertEqual(result.stdout.strip().splitlines()[0], "fake-vllm-new")
+        self.assertIn(str(new_root / "vllm/__init__.py"), result.stdout)
+        self.assertIn(str(new_root / "vllm/__init__.py"), proof)
+        self.assertNotIn(str(old_root / "vllm/__init__.py"), proof)
+
     def test_runtime_patch_repairs_old_ready_response_payload_without_flashmla(self):
         v2_root = Path(__file__).resolve().parents[1]
         src_root = v2_root / "src"
