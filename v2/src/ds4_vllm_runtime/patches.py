@@ -32,6 +32,81 @@ def allow_sm12_flashmla_sparse() -> str:
     return "flashmla_sparse_sm12_compute_capability"
 
 
+def allow_flashmla_sparse_torch_fallback() -> str:
+    flashmla_sparse = importlib.import_module(
+        "vllm.v1.attention.backends.mla.flashmla_sparse"
+    )
+    impl_cls = getattr(flashmla_sparse, "FlashMLASparseImpl")
+    original = getattr(impl_cls, "_bf16_flash_mla_kernel")
+    if getattr(original, "_ds4_sm12_torch_sparse_fallback", False):
+        return "flashmla_sparse_torch_fallback"
+
+    def _chunk_size() -> int:
+        raw = os.getenv("DS4_VLLM_FLASHMLA_SPARSE_TORCH_FALLBACK_TOKENS", "8")
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            return 8
+
+    def _is_sm12(tensor: Any) -> bool:
+        try:
+            import torch
+        except ImportError:
+            return False
+        if not getattr(tensor, "is_cuda", False):
+            return False
+        capability = torch.cuda.get_device_capability(tensor.device)
+        return int(capability[0]) == 12
+
+    def _torch_sparse_mla(self, q, kv_c_and_k_pe_cache, topk_indices):  # type: ignore[no-untyped-def]
+        import torch
+
+        kv_flat = kv_c_and_k_pe_cache.reshape(-1, kv_c_and_k_pe_cache.shape[-1])
+        num_tokens = int(q.shape[0])
+        topk = int(topk_indices.shape[1])
+        value_dim = int(self.kv_lora_rank)
+        output = q.new_empty((num_tokens, int(self.num_heads), value_dim))
+        chunk = _chunk_size()
+        for start in range(0, num_tokens, chunk):
+            end = min(start + chunk, num_tokens)
+            q_chunk = q[start:end]
+            indices = topk_indices[start:end].to(device=q.device)
+            valid = indices >= 0
+            safe_indices = torch.where(valid, indices, torch.zeros_like(indices)).to(
+                torch.long
+            )
+            gathered = kv_flat.index_select(0, safe_indices.reshape(-1)).reshape(
+                end - start, topk, kv_flat.shape[-1]
+            )
+            scores = torch.einsum("thd,tkd->thk", q_chunk, gathered)
+            scores = (scores * float(self.softmax_scale)).float()
+            scores = scores.masked_fill(~valid[:, None, :], -1.0e30)
+            probs = torch.softmax(scores, dim=-1)
+            probs = torch.where(valid[:, None, :], probs, torch.zeros_like(probs))
+            values = gathered[:, :, :value_dim]
+            output[start:end] = torch.einsum(
+                "thk,tkv->thv", probs.to(values.dtype), values
+            )
+        return output
+
+    def bf16_kernel_with_torch_fallback(  # type: ignore[no-untyped-def]
+        self, q, kv_c_and_k_pe_cache, topk_indices
+    ):
+        if _is_sm12(q):
+            logger = getattr(flashmla_sparse, "logger", None)
+            if logger is not None:
+                logger.warning_once(
+                    "DS4 SM12 FlashMLA sparse fallback: using chunked torch "
+                    "top-k attention because flash_mla_sparse_fwd rejects SM12."
+                )
+            return _torch_sparse_mla(self, q, kv_c_and_k_pe_cache, topk_indices)
+        return original(self, q, kv_c_and_k_pe_cache, topk_indices)
+
+    bf16_kernel_with_torch_fallback._ds4_sm12_torch_sparse_fallback = True  # type: ignore[attr-defined]
+    impl_cls._bf16_flash_mla_kernel = bf16_kernel_with_torch_fallback
+    return "flashmla_sparse_torch_fallback"
+
+
 def allow_sm12_flashinfer_mla_sparse() -> str:
     flashinfer_sparse = importlib.import_module(
         "vllm.v1.attention.backends.mla.flashinfer_mla_sparse"
@@ -306,6 +381,8 @@ def apply_runtime_patches() -> list[str]:
         patches.append(allow_sm12_flashinfer_mla_sparse())
     if env_flag("DS4_VLLM_SM12_FLASHMLA_SPARSE"):
         patches.append(allow_sm12_flashmla_sparse())
+    if env_flag("DS4_VLLM_FLASHMLA_SPARSE_TORCH_FALLBACK"):
+        patches.append(allow_flashmla_sparse_torch_fallback())
     if env_flag("DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK"):
         patches.append(allow_sm12_sparse_indexer_dense_fallback())
     if env_flag("DS4_VLLM_FLASHINFER_MLA_SHARED_BLOCK_TABLES_2D"):
