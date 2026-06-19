@@ -47,6 +47,84 @@ def allow_sm12_flashinfer_mla_sparse() -> str:
     return "flashinfer_mla_sparse_sm12_compute_capability"
 
 
+def allow_sm12_sparse_indexer_dense_fallback() -> str:
+    sparse_indexer = importlib.import_module(
+        "vllm.model_executor.layers.sparse_attn_indexer"
+    )
+    indexer_cls = getattr(sparse_indexer, "SparseAttnIndexer")
+    original = getattr(indexer_cls, "forward_cuda")
+    if getattr(original, "_ds4_sm12_dense_fallback", False):
+        return "sparse_indexer_dense_topk_fallback"
+    custom_ops = importlib.import_module("vllm._custom_ops")
+
+    def _fill_last_window(out, starts, ends, topk):  # type: ignore[no-untyped-def]
+        import torch
+
+        row_count = int(starts.shape[0])
+        if row_count == 0:
+            return
+        offsets = torch.arange(topk, dtype=torch.int32, device=out.device).view(1, -1)
+        window_starts = torch.maximum(starts, (ends - topk))
+        lengths = torch.clamp(ends - window_starts, min=0, max=topk).view(-1, 1)
+        values = (window_starts.view(-1, 1) + offsets).to(torch.int32)
+        out[:row_count, :topk].copy_(torch.where(offsets < lengths, values, -1))
+
+    def forward_cuda(self, hidden_states, q_quant, k, weights):  # type: ignore[no-untyped-def]
+        attn_metadata = sparse_indexer.get_forward_context().attn_metadata
+        if not isinstance(attn_metadata, dict):
+            return original(self, hidden_states, q_quant, k, weights)
+        k_cache_prefix = sparse_indexer._resolve_layer_name(self.k_cache.prefix)
+        attn_metadata_narrowed = attn_metadata[k_cache_prefix]
+        slot_mapping = attn_metadata_narrowed.slot_mapping
+        num_tokens = int(slot_mapping.shape[0])
+        if k is not None:
+            k = k[:num_tokens]
+        if not self.skip_k_cache_insert:
+            custom_ops.indexer_k_quant_and_cache(
+                k,
+                self.k_cache.kv_cache,
+                slot_mapping,
+                self.quant_block_size,
+                self.scale_fmt,
+            )
+        topk_indices_buffer = self.topk_indices_buffer
+        topk_indices_buffer[: hidden_states.shape[0]].fill_(-1)
+        topk = int(self.topk_tokens)
+        if attn_metadata_narrowed.num_prefills > 0:
+            prefill = attn_metadata_narrowed.prefill
+            assert prefill is not None
+            for chunk in prefill.chunks:
+                chunk_out = topk_indices_buffer[chunk.token_start : chunk.token_end]
+                _fill_last_window(
+                    chunk_out,
+                    chunk.cu_seqlen_ks.to(
+                        device=chunk_out.device, dtype=chunk_out.dtype
+                    ),
+                    chunk.cu_seqlen_ke.to(
+                        device=chunk_out.device, dtype=chunk_out.dtype
+                    ),
+                    topk,
+                )
+        if attn_metadata_narrowed.num_decodes > 0:
+            decode = attn_metadata_narrowed.decode
+            assert decode is not None
+            decode_lens = decode.decode_lens.to(
+                device=topk_indices_buffer.device, dtype=topk_indices_buffer.dtype
+            )
+            starts = (decode_lens - topk).clamp(min=0)
+            _fill_last_window(
+                topk_indices_buffer[: attn_metadata_narrowed.num_decode_tokens],
+                starts,
+                decode_lens,
+                topk,
+            )
+        return topk_indices_buffer
+
+    forward_cuda._ds4_sm12_dense_fallback = True  # type: ignore[attr-defined]
+    indexer_cls.forward_cuda = forward_cuda
+    return "sparse_indexer_dense_topk_fallback"
+
+
 def _configured_block_size(client: Any) -> int | None:
     vllm_config = getattr(client, "vllm_config", None)
     cache_config = getattr(vllm_config, "cache_config", None)
@@ -165,6 +243,8 @@ def apply_runtime_patches() -> list[str]:
         patches.append(allow_sm12_flashinfer_mla_sparse())
     if env_flag("DS4_VLLM_SM12_FLASHMLA_SPARSE"):
         patches.append(allow_sm12_flashmla_sparse())
+    if env_flag("DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK"):
+        patches.append(allow_sm12_sparse_indexer_dense_fallback())
     return patches
 
 
