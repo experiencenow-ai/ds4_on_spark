@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import sys
 
 
@@ -23,8 +24,53 @@ def _strict() -> bool:
     return value.strip().lower() not in {"", "0", "false", "no", "off"}
 
 
+def _resolve_path(raw: str) -> Path:
+    return Path(os.path.expandvars(os.path.expanduser(raw))).resolve()
+
+
+def _looks_like_vllm_source_root(path_text: str) -> bool:
+    if path_text == "":
+        return False
+    try:
+        path = _resolve_path(path_text)
+    except OSError:
+        return False
+    return (path / "vllm" / "__init__.py").is_file()
+
+
+def _enforce_source_root() -> None:
+    source_root_text = os.getenv("DS4_VLLM_SOURCE_ROOT", "")
+    if source_root_text.strip() == "":
+        return
+    source_root = _resolve_path(source_root_text)
+    if not (source_root / "vllm" / "__init__.py").is_file():
+        raise RuntimeError(
+            f"DS4 source-root guard: not a vLLM source root: {source_root}"
+        )
+    sanitized = [str(source_root)]
+    seen = {str(source_root)}
+    for entry in sys.path:
+        if entry == "":
+            continue
+        try:
+            resolved = _resolve_path(entry)
+        except OSError:
+            continue
+        resolved_text = str(resolved)
+        if resolved == source_root:
+            continue
+        if _looks_like_vllm_source_root(resolved_text):
+            continue
+        if resolved_text in seen:
+            continue
+        sanitized.append(resolved_text)
+        seen.add(resolved_text)
+    sys.path[:] = sanitized
+
+
 if _enabled():
     try:
+        _enforce_source_root()
         from ds4_vllm_runtime.patches import apply_runtime_patches, write_import_proof
 
         write_import_proof("sitecustomize")
