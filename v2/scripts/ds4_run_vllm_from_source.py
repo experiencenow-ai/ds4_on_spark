@@ -102,6 +102,7 @@ def _configure_child_pythonpath(source_root: Path) -> None:
         "DS4_VLLM_SM12_FLASHMLA_SPARSE",
         "DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK",
         "DS4_VLLM_FLASHINFER_MLA_SHARED_BLOCK_TABLES_2D",
+        "DS4_VLLM_FLASHINFER_MLA_FORCE_TRTLLM_GEN",
     )
     if any(env_flag(name) for name in runtime_patch_envs):
         entries.extend([str(_sitecustomize_root()), str(_ds4_src_root())])
