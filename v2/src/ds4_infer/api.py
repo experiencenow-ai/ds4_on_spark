@@ -2167,7 +2167,7 @@ def _resident_active_service_batches_from_status(state: dict[str, Any]) -> dict[
     if not isinstance(details, list):
         return counts
     for item in details:
-        if not isinstance(item, dict) or int(item.get("active_count") or 0) <= 0:
+        if not isinstance(item, dict) or not _resident_status_cohort_batch_active(item):
             continue
         service_id = str(item.get("service_id") or "")
         if service_id:
@@ -2181,12 +2181,21 @@ def _resident_active_domain_batches_from_status(state: dict[str, Any]) -> dict[s
     if not isinstance(details, list):
         return counts
     for item in details:
-        if not isinstance(item, dict) or int(item.get("active_count") or 0) <= 0:
+        if not isinstance(item, dict) or not _resident_status_cohort_batch_active(item):
             continue
         domain = str(item.get("compute_domain") or "")
         if domain:
             counts[domain] = counts.get(domain, 0) + 1
     return counts
+
+
+def _resident_status_cohort_batch_active(item: dict[str, Any]) -> bool:
+    if "batch_active" in item:
+        return bool(item.get("batch_active"))
+    if int(item.get("active_count") or 0) > 0:
+        return True
+    mode = str(item.get("admission_mode") or "").lower()
+    return mode == "rolling_refill" and int(item.get("initial_count") or 0) > 0
 
 
 def _dispatcher_batch_ineligible_reason(worker: BatchWorker, claims: list[QueueClaim]) -> str:
