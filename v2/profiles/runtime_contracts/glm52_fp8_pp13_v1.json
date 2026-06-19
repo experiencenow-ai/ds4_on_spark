@@ -97,9 +97,10 @@
       "humming-kernels[cu13]==0.1.4"
     ],
     "required_runtime_patches": [
-      "DS4_VLLM_READY_RESPONSE_COMPAT=1"
+      "DS4_VLLM_READY_RESPONSE_COMPAT=1",
+      "DS4_VLLM_SM12_FLASHINFER_MLA_SPARSE=1"
     ],
-    "required_source": "guarded vLLM 0.23.0 wheel overlay with GlmMoeDsaForCausalLM support and DS4 ready-response compatibility shim",
+    "required_source": "guarded vLLM 0.23.0 wheel overlay with GlmMoeDsaForCausalLM support, DS4 ready-response compatibility shim, and guarded SM12 FlashInfer sparse MLA validation shim",
     "required_source_root": "/home/{node}/standard-runtimes/vllm-0.23.0-overlay"
   }
 }

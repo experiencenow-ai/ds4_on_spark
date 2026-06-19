@@ -13,7 +13,7 @@
     "latency_rank": 1.6,
     "max_num_batched_tokens": 8192,
     "max_num_seqs": 4,
-    "measurement_notes": "PP13 DSAPI test profile. GLM-5.2-FP8 has 78 main transformer layers. Keep non-production and profile-pinned until smoke and ds4-eval measurements are complete. The guarded vLLM 0.23.0 wheel overlay uses eager FLASHINFER_MLA_SPARSE attention with FP8 KV and Marlin FP8 MoE on Spark; FLASHMLA_SPARSE loads on GB10 but its sparse prefill kernel rejects the first forward pass.",
+    "measurement_notes": "PP13 DSAPI test profile. GLM-5.2-FP8 has 78 main transformer layers. Keep non-production and profile-pinned until smoke and ds4-eval measurements are complete. The guarded vLLM 0.23.0 wheel overlay uses eager FLASHINFER_MLA_SPARSE attention with FP8 KV, a guarded SM12 validation shim, and Marlin FP8 MoE on Spark; FLASHMLA_SPARSE loads on GB10 but its sparse prefill kernel rejects the first forward pass.",
     "target": "13-stage GLM-5.2-FP8 frontier test pipeline with FP8 KV and LMCache HMA."
   },
   "production_eligible": false,

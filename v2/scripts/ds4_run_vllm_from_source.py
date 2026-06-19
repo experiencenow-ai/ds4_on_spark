@@ -96,7 +96,12 @@ def _configure_child_pythonpath(source_root: Path) -> None:
     from ds4_vllm_runtime.patches import env_flag
 
     entries = [str(source_root)]
-    if env_flag("DS4_VLLM_SM12_FLASHMLA_SPARSE"):
+    runtime_patch_envs = (
+        "DS4_VLLM_READY_RESPONSE_COMPAT",
+        "DS4_VLLM_SM12_FLASHINFER_MLA_SPARSE",
+        "DS4_VLLM_SM12_FLASHMLA_SPARSE",
+    )
+    if any(env_flag(name) for name in runtime_patch_envs):
         entries.extend([str(_sitecustomize_root()), str(_ds4_src_root())])
         os.environ["DS4_VLLM_RUNTIME_PATCHES_STRICT"] = "1"
     os.environ["PYTHONPATH"] = os.pathsep.join(entries)

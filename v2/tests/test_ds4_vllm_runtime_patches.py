@@ -32,6 +32,16 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                 """
             )
         )
+        (module_dir / "flashinfer_mla_sparse.py").write_text(
+            textwrap.dedent(
+                """
+                class FlashInferMLASparseBackend:
+                    @classmethod
+                    def supports_compute_capability(cls, capability):
+                        return capability.major == 10
+                """
+            )
+        )
         (engine_dir / "core_client.py").write_text(
             textwrap.dedent(
                 """
@@ -137,7 +147,36 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             )
         self.assertEqual(result.stdout.strip(), "True")
 
-    def test_runner_check_only_applies_sm12_patch(self):
+    def test_sitecustomize_applies_sm12_flashinfer_sparse_patch(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        hook_root = src_root / "ds4_vllm_runtime"
+        with tempfile.TemporaryDirectory() as tmp:
+            vllm_root = Path(tmp)
+            self._write_fake_vllm(vllm_root)
+            code = textwrap.dedent(
+                """
+                from types import SimpleNamespace
+                from vllm.v1.attention.backends.mla.flashinfer_mla_sparse import FlashInferMLASparseBackend
+                print(FlashInferMLASparseBackend.supports_compute_capability(SimpleNamespace(major=12)))
+                """
+            )
+            env = os.environ.copy()
+            env["DS4_VLLM_SM12_FLASHINFER_MLA_SPARSE"] = "1"
+            env["DS4_VLLM_RUNTIME_PATCHES_STRICT"] = "1"
+            env["PYTHONPATH"] = os.pathsep.join(
+                [str(vllm_root), str(hook_root), str(src_root)]
+            )
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        self.assertEqual(result.stdout.strip(), "True")
+
+    def test_runner_check_only_applies_sm12_patches(self):
         v2_root = Path(__file__).resolve().parents[1]
         src_root = v2_root / "src"
         runner = v2_root / "scripts/ds4_run_vllm_from_source.py"
@@ -146,6 +185,7 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             self._write_fake_vllm(vllm_root)
             env = os.environ.copy()
             env["DS4_VLLM_SM12_FLASHMLA_SPARSE"] = "1"
+            env["DS4_VLLM_SM12_FLASHINFER_MLA_SPARSE"] = "1"
             env["DS4_VLLM_READY_RESPONSE_COMPAT"] = "1"
             env["PYTHONPATH"] = str(src_root)
             result = subprocess.run(
@@ -162,7 +202,60 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                 capture_output=True,
             )
         self.assertIn("flashmla_sparse_sm12_compute_capability", result.stdout)
+        self.assertIn("flashinfer_mla_sparse_sm12_compute_capability", result.stdout)
         self.assertIn("ready_response_block_size_compat", result.stdout)
+
+    def test_runner_child_pythonpath_enables_sitecustomize_for_flashinfer_patch(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        runner = v2_root / "scripts/ds4_run_vllm_from_source.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            vllm_root = Path(tmp)
+            self._write_fake_vllm(vllm_root)
+            child_code = (
+                "from types import SimpleNamespace; "
+                "from vllm.v1.attention.backends.mla.flashinfer_mla_sparse "
+                "import FlashInferMLASparseBackend; "
+                "print(FlashInferMLASparseBackend.supports_compute_capability("
+                "SimpleNamespace(major=12)))"
+            )
+            (vllm_root / "child_probe.py").write_text(
+                textwrap.dedent(
+                    f"""
+                    import os
+                    import subprocess
+                    import sys
+
+                    result = subprocess.run(
+                        [sys.executable, "-c", {child_code!r}],
+                        env=os.environ.copy(),
+                        check=True,
+                        text=True,
+                        capture_output=True,
+                    )
+                    print(result.stdout.strip())
+                    """
+                )
+            )
+            env = os.environ.copy()
+            env["DS4_VLLM_SM12_FLASHINFER_MLA_SPARSE"] = "1"
+            env["PYTHONPATH"] = str(src_root)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(runner),
+                    "--source-root",
+                    str(vllm_root),
+                    "--module",
+                    "child_probe",
+                ],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        self.assertIn("flashinfer_mla_sparse_sm12_compute_capability", result.stdout)
+        self.assertEqual(result.stdout.strip().splitlines()[-1], "True")
 
     def test_runtime_patch_repairs_old_ready_response_payload_without_flashmla(self):
         v2_root = Path(__file__).resolve().parents[1]
