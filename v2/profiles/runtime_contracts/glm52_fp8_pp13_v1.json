@@ -102,6 +102,7 @@
     ],
     "required_runtime_patches": [
       "DS4_VLLM_READY_RESPONSE_COMPAT=1",
+      "DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK=1",
       "VLLM_TRITON_MLA_SPARSE=1",
       "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR=1",
       "VLLM_DS4_PP_TCP_TENSOR_DICT=1",
@@ -110,7 +111,7 @@
       "VLLM_DS4_TRITON_MLA_BLOCK_H=8",
       "VLLM_DS4_TRITON_MLA_NUM_STAGES=1"
     ],
-    "required_source": "guarded vLLM 0.23.0 wheel overlay with GlmMoeDsaForCausalLM support, DS4 ready-response compatibility shim, dense TRITON_MLA attention selected on Spark GB10, FP8 E4M3 KV cache storage, DS4 Triton MLA tuning knobs, and DS4 runtime-patched PP TCP tensor-dict transport with upstream PP device communicator disabled",
+    "required_source": "guarded vLLM 0.23.0 wheel overlay with GlmMoeDsaForCausalLM support, DS4 ready-response compatibility shim, dense TRITON_MLA attention selected on Spark GB10, FP8 E4M3 KV cache storage, DS4 sparse-indexer dense fallback for unsupported SM12 DeepGEMM indexer kernels, DS4 Triton MLA tuning knobs, and DS4 runtime-patched PP TCP tensor-dict transport with upstream PP device communicator disabled",
     "required_source_root": "/home/{node}/standard-runtimes/vllm-0.23.0-overlay"
   }
 }
