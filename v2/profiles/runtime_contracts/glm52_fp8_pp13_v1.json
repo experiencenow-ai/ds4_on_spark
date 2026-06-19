@@ -8,14 +8,14 @@
     "dtype": "bfloat16",
     "external_backend": "none",
     "expected_node_fraction": "1/13",
-    "fixed_kv_cache_memory_bytes": 12884901888,
+    "fixed_kv_cache_memory_bytes": 4294967296,
     "sharding": "none"
   },
   "admission": {
-    "max_num_batched_tokens": 65536,
-    "max_num_seqs": 128,
+    "max_num_batched_tokens": 16384,
+    "max_num_seqs": 32,
     "power_policy": "GLM-5.2-FP8 is expected to need the full Spark ring. Stop resident peer services before launch unless a live memory check proves enough headroom. The throughput launch must keep enough work queued to fill all 13 layer-pipeline stages.",
-    "queue_depth_target": 256
+    "queue_depth_target": 64
   },
   "launch": {
     "api_base_url": "http://127.0.0.1:8152",
@@ -86,10 +86,14 @@
     "required_model_type": "glm_moe_dsa",
     "required_quantization": "fp8",
     "required_runtime_version": "0.23.0",
-    "required_runtime_flags": [
-      "--kv-cache-dtype bfloat16",
-      "--attention-backend FLASHMLA_SPARSE",
-      "--reasoning-parser glm45",
+        "required_runtime_flags": [
+            "--max-num-batched-tokens 16384",
+            "--max-num-seqs 32",
+            "--kv-cache-memory-bytes 4294967296",
+            "--enforce-eager",
+            "--kv-cache-dtype bfloat16",
+            "--attention-backend FLASHMLA_SPARSE",
+            "--reasoning-parser glm45",
       "--tool-call-parser glm47",
       "--enable-auto-tool-choice"
     ],
