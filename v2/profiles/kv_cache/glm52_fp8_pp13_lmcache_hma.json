@@ -1,6 +1,6 @@
 {
   "cache_directories": [
-    "/home/{node}/ds4_nvme/ds4_lmcache/glm52_fp8_pp13_bf16kv/p6_6_6_6_6_6_6_6_6_6_6_6_6"
+    "/home/{node}/ds4_nvme/ds4_lmcache/glm52_fp8_pp13_bf16kv/p6_4_4_4_4_8_8_8_8_8_4_4_8"
   ],
   "cache_sharding": "pipeline_layers",
   "connector": {
@@ -70,7 +70,7 @@
     "GLOO_SOCKET_IFNAME": "ds4ring0",
     "LMCACHE_CONFIG_FILE": "/tmp/lmcache_glm52_fp8_pp13_bf16kv.yaml",
     "LMCACHE_LOG_LEVEL": "INFO",
-    "LMCACHE_ROOT": "/home/{node}/ds4_nvme/ds4_lmcache/glm52_fp8_pp13_bf16kv/p6_6_6_6_6_6_6_6_6_6_6_6_6",
+    "LMCACHE_ROOT": "/home/{node}/ds4_nvme/ds4_lmcache/glm52_fp8_pp13_bf16kv/p6_4_4_4_4_8_8_8_8_8_4_4_8",
     "MALLOC_ARENA_MAX": "2",
     "NCCL_DEBUG": "WARN",
     "NCCL_IB_DISABLE": "1",
@@ -116,24 +116,24 @@
   "http_port": 8152,
   "layer_partition": [
     6,
-    6,
-    6,
-    6,
-    6,
-    6,
-    6,
-    6,
-    6,
-    6,
-    6,
-    6,
-    6
+    4,
+    4,
+    4,
+    4,
+    8,
+    8,
+    8,
+    8,
+    8,
+    4,
+    4,
+    8
   ],
   "lmcache_config": {
     "chunk_size": 256,
     "local_cpu": true,
     "max_local_cpu_size": 1,
-    "local_disk": "/home/{node}/ds4_nvme/ds4_lmcache/glm52_fp8_pp13_bf16kv/p6_6_6_6_6_6_6_6_6_6_6_6_6",
+    "local_disk": "/home/{node}/ds4_nvme/ds4_lmcache/glm52_fp8_pp13_bf16kv/p6_4_4_4_4_8_8_8_8_8_4_4_8",
     "max_local_disk_size": 128,
     "save_unfull_chunk": false,
     "extra_config": {
