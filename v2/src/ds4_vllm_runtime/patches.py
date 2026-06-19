@@ -135,8 +135,10 @@ def allow_flashinfer_mla_shared_block_tables_2d() -> str:
 
     def decode_with_2d_block_tables(*args, **kwargs):  # type: ignore[no-untyped-def]
         block_tables = kwargs.get("block_tables")
+        backend = kwargs.get("backend", "auto")
         if (
-            block_tables is not None
+            backend != "trtllm-gen"
+            and block_tables is not None
             and getattr(block_tables, "ndim", None) == 3
             and int(block_tables.shape[1]) == 1
         ):

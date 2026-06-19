@@ -311,6 +311,35 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             )
         self.assertEqual(result.stdout.strip(), "trtllm-gen:2")
 
+    def test_runtime_patch_keeps_trtllm_gen_sparse_block_tables_3d(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        with tempfile.TemporaryDirectory() as tmp:
+            vllm_root = Path(tmp)
+            self._write_fake_vllm(vllm_root)
+            code = textwrap.dedent(
+                """
+                from types import SimpleNamespace
+                from ds4_vllm_runtime.patches import apply_runtime_patches
+                import vllm.v1.attention.backends.mla.flashinfer_mla_sparse as sparse
+                apply_runtime_patches()
+                block_tables = SimpleNamespace(ndim=3, shape=(2, 1, 4), squeeze=lambda dim: SimpleNamespace(ndim=2, shape=(2, 4)))
+                print(sparse.trtllm_batch_decode_with_kv_cache_mla(block_tables=block_tables))
+                """
+            )
+            env = os.environ.copy()
+            env["DS4_VLLM_FLASHINFER_MLA_SHARED_BLOCK_TABLES_2D"] = "1"
+            env["DS4_VLLM_FLASHINFER_MLA_FORCE_TRTLLM_GEN"] = "1"
+            env["PYTHONPATH"] = os.pathsep.join([str(vllm_root), str(src_root)])
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        self.assertEqual(result.stdout.strip(), "trtllm-gen:3")
+
     def test_runner_child_pythonpath_enables_sitecustomize_for_flashinfer_patch(self):
         v2_root = Path(__file__).resolve().parents[1]
         src_root = v2_root / "src"
