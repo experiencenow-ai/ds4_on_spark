@@ -152,7 +152,9 @@ class Ds4TcpTensorChannel:
 
     def _stripe_count(self, byte_count: int) -> int:
         stripes = max(1, int(self._envs.VLLM_DS4_PP_TCP_STRIPES))
-        return min(stripes, max(1, byte_count))
+        min_bytes = max(1, int(self._envs.VLLM_DS4_PP_TCP_STRIPE_MIN_BYTES))
+        useful_stripes = max(1, (byte_count + min_bytes - 1) // min_bytes)
+        return min(stripes, useful_stripes, max(1, byte_count))
 
     def _stripe_ranges(self, byte_count: int, stripes: int) -> list[tuple[int, int]]:
         stripes = min(max(1, stripes), max(1, byte_count))
@@ -254,4 +256,3 @@ class Ds4TcpTensorChannel:
                     offset += nread
         except BaseException as exc:
             handle._record_error(exc)
-

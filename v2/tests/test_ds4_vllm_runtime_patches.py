@@ -544,6 +544,42 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             ["TensorMetadataCpuStaged", "cuda", "1"],
         )
 
+    def test_pp_tcp_channel_caps_stripes_by_minimum_bytes(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        with tempfile.TemporaryDirectory() as tmp:
+            vllm_root = Path(tmp)
+            self._write_fake_vllm(vllm_root)
+            code = textwrap.dedent(
+                """
+                from types import SimpleNamespace
+                from ds4_vllm_runtime.pp_tcp_tensor_channel import Ds4TcpTensorChannel
+                env = SimpleNamespace(
+                    VLLM_DS4_PP_TCP_STRIPES=16,
+                    VLLM_DS4_PP_TCP_STRIPE_MIN_BYTES=262144,
+                )
+                channel = Ds4TcpTensorChannel(
+                    rank=0,
+                    rank_in_group=0,
+                    envs=env,
+                    send_control=lambda obj, dst: None,
+                    recv_control=lambda src: None,
+                )
+                for byte_count in (32768, 262144, 262145, 1048576, 8388608):
+                    print(channel._stripe_count(byte_count))
+                """
+            )
+            env = os.environ.copy()
+            env["PYTHONPATH"] = os.pathsep.join([str(vllm_root), str(src_root)])
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        self.assertEqual(result.stdout.strip().splitlines(), ["1", "1", "2", "4", "16"])
+
     def test_runtime_patch_overrides_index_topk(self):
         v2_root = Path(__file__).resolve().parents[1]
         src_root = v2_root / "src"
