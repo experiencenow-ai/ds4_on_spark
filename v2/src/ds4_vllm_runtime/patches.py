@@ -29,6 +29,21 @@ def allow_sm12_flashmla_sparse() -> str:
     return "flashmla_sparse_sm12_compute_capability"
 
 
+def allow_sm12_flashinfer_mla_sparse() -> str:
+    flashinfer_sparse = importlib.import_module(
+        "vllm.v1.attention.backends.mla.flashinfer_mla_sparse"
+    )
+
+    @classmethod
+    def supports_compute_capability(cls, capability):  # type: ignore[no-untyped-def]
+        return capability.major in (10, 12)
+
+    flashinfer_sparse.FlashInferMLASparseBackend.supports_compute_capability = (
+        supports_compute_capability
+    )
+    return "flashinfer_mla_sparse_sm12_compute_capability"
+
+
 def _configured_block_size(client: Any) -> int | None:
     vllm_config = getattr(client, "vllm_config", None)
     cache_config = getattr(vllm_config, "cache_config", None)
@@ -143,6 +158,8 @@ def apply_runtime_patches() -> list[str]:
     patches = []
     if env_flag("DS4_VLLM_READY_RESPONSE_COMPAT"):
         patches.append(allow_missing_ready_response_block_size())
+    if env_flag("DS4_VLLM_SM12_FLASHINFER_MLA_SPARSE"):
+        patches.append(allow_sm12_flashinfer_mla_sparse())
     if env_flag("DS4_VLLM_SM12_FLASHMLA_SPARSE"):
         patches.append(allow_sm12_flashmla_sparse())
     return patches

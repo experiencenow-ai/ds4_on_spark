@@ -63,6 +63,7 @@
   "extra_env": {
     "CPATH": "/home/{node}/standard-runtimes/python3.12-dev-extract/usr/include:/home/{node}/standard-runtimes/python3.12-dev-extract/usr/include/python3.12:/home/{node}/standard-runtimes/python3.12-dev-extract/usr/include/aarch64-linux-gnu/python3.12",
     "DS4_VLLM_READY_RESPONSE_COMPAT": "1",
+    "DS4_VLLM_SM12_FLASHINFER_MLA_SPARSE": "1",
     "DS4_VLLM_IMPORT_PROOF_JSON": "/tmp/ds4_vllm_import_proof_glm52_rank{node_rank}.json",
     "DS4_VLLM_SOURCE_ROOT": "/home/{node}/standard-runtimes/vllm-0.23.0-overlay",
     "DS4_PP_TRANSPORT": "tcp-staged",
