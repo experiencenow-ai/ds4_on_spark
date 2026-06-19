@@ -49,8 +49,13 @@ class RingControlInstallerTests(unittest.TestCase):
         self.assertIn("tmp_route_apply=", text)
         self.assertIn("while [ \"\\$target_rank\" -lt 13 ]", text)
         self.assertIn("target_ip=\"10.10.100.\\$((10 + target_rank))\"", text)
+        self.assertIn("setup_rail \"enp1s0f0np0\"", text)
+        self.assertIn("setup_rail \"enp1s0f1np1\"", text)
         self.assertIn("dev=\"enP2p1s0f1np1\"", text)
         self.assertIn("dev=\"enP2p1s0f0np0\"", text)
+        self.assertIn("fallback_dev=\"enp1s0f1np1\"", text)
+        self.assertIn("fallback_dev=\"enp1s0f0np0\"", text)
+        self.assertIn("if rail_up \"\\$primary_dev\"", text)
         self.assertIn("install -m 0755 \"$tmp_route_apply\" /usr/local/sbin/ds4-ring-200g-apply", text)
         self.assertIn("install -m 0755 \"$tmp_route_extend\" /usr/local/sbin/ds4-ring-200g-extend13", text)
 

@@ -69,6 +69,34 @@ cat >"$tmp_route_apply" <<EOF
 set -eu
 rank=$rank
 src_ip="$ip"
+
+rail_up()
+{
+	dev="\$1"
+	[ -e "/sys/class/net/\$dev/operstate" ] && [ "\$(cat "/sys/class/net/\$dev/operstate")" = "up" ]
+}
+
+setup_rail()
+{
+	dev="\$1"
+	cidr="\$2"
+	if [ -e "/sys/class/net/\$dev" ]
+	then
+		ip link set "\$dev" mtu 9000 up 2>/dev/null || true
+		ip addr replace "\$cidr" dev "\$dev" 2>/dev/null || true
+		sysctl -w "net.ipv4.conf.\$dev.rp_filter=0" >/dev/null 2>&1 || true
+	fi
+}
+
+if [ "\$rank" -gt 0 ]
+then
+	setup_rail "enp1s0f0np0" "10.10.\$(((rank * 2) - 1)).2/30"
+fi
+if [ "\$rank" -lt 12 ]
+then
+	setup_rail "enp1s0f1np1" "10.10.\$(((rank * 2) + 1)).1/30"
+fi
+
 target_rank=0
 while [ "\$target_rank" -lt 13 ]
 do
@@ -77,11 +105,23 @@ do
 		target_ip="10.10.100.\$((10 + target_rank))"
 		if [ "\$target_rank" -gt "\$rank" ]
 		then
-			via="10.10.\$(((rank + 1) * 2)).2"
-			dev="enP2p1s0f1np1"
+			primary_via="10.10.\$(((rank + 1) * 2)).2"
+			primary_dev="enP2p1s0f1np1"
+			fallback_via="10.10.\$(((rank * 2) + 1)).2"
+			fallback_dev="enp1s0f1np1"
 		else
-			via="10.10.\$((rank * 2)).1"
-			dev="enP2p1s0f0np0"
+			primary_via="10.10.\$((rank * 2)).1"
+			primary_dev="enP2p1s0f0np0"
+			fallback_via="10.10.\$(((rank * 2) - 1)).1"
+			fallback_dev="enp1s0f0np0"
+		fi
+		if rail_up "\$primary_dev"
+		then
+			via="\$primary_via"
+			dev="\$primary_dev"
+		else
+			via="\$fallback_via"
+			dev="\$fallback_dev"
 		fi
 		ip route replace "\$target_ip" via "\$via" dev "\$dev" src "\$src_ip"
 	fi
