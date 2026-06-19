@@ -15,18 +15,21 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
         engine_dir = vllm_root / "vllm/v1/engine"
         layers_dir = vllm_root / "vllm/model_executor/layers"
         models_dir = vllm_root / "vllm/model_executor/models"
+        utils_dir = vllm_root / "vllm/utils"
         module_dir.mkdir(parents=True)
         ops_dir.mkdir(parents=True)
         dist_dir.mkdir(parents=True)
         engine_dir.mkdir(parents=True)
         layers_dir.mkdir(parents=True)
         models_dir.mkdir(parents=True)
+        utils_dir.mkdir(parents=True)
         for init_dir in [
             "vllm",
             "vllm/distributed",
             "vllm/model_executor",
             "vllm/model_executor/layers",
             "vllm/model_executor/models",
+            "vllm/utils",
             "vllm/v1",
             "vllm/v1/attention",
             "vllm/v1/attention/backends",
@@ -80,6 +83,11 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
 
                 def empty(size, dtype=None, device="cpu"):
                     return Tensor(str(device), tuple(size), dtype or "fake")
+
+                def zeros(size, dtype=None, device="cpu"):
+                    return Tensor(str(device), tuple(size), dtype or "fake")
+
+                int32 = "int32"
 
                 class _Work:
                     def wait(self):
@@ -262,6 +270,14 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
         )
         (vllm_root / "vllm/_custom_ops.py").write_text(
             "def indexer_k_quant_and_cache(*args, **kwargs):\n    return None\n"
+        )
+        (utils_dir / "deep_gemm.py").write_text(
+            textwrap.dedent(
+                """
+                def get_paged_mqa_logits_metadata(context_lens, block_size, num_sms):
+                    raise RuntimeError("Assertion error (/workspace/.deps/deepgemm-src/csrc/apis/attention.hpp:219): Unsupported architecture")
+                """
+            )
         )
         (layers_dir / "sparse_attn_indexer.py").write_text(
             textwrap.dedent(
@@ -827,9 +843,14 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             code = textwrap.dedent(
                 """
                 from ds4_vllm_runtime.patches import apply_runtime_patches
+                import torch
+                import vllm.utils.deep_gemm as deep_gemm
                 from vllm.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
                 print(apply_runtime_patches())
                 print(getattr(SparseAttnIndexer.forward_cuda, "_ds4_sm12_dense_fallback", False))
+                metadata = deep_gemm.get_paged_mqa_logits_metadata(torch.Tensor(), 64, 14)
+                print(getattr(deep_gemm.get_paged_mqa_logits_metadata, "_ds4_sm12_dense_metadata_fallback", False))
+                print(metadata.shape)
                 """
             )
             env = os.environ.copy()
@@ -843,7 +864,10 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                 capture_output=True,
             )
         self.assertIn("sparse_indexer_dense_topk_fallback", result.stdout)
-        self.assertEqual(result.stdout.strip().splitlines()[-1], "True")
+        lines = result.stdout.strip().splitlines()
+        self.assertEqual(lines[-3], "True")
+        self.assertEqual(lines[-2], "True")
+        self.assertEqual(lines[-1], "(15, 2)")
 
     def test_runtime_patch_squeezes_flashinfer_shared_block_tables(self):
         v2_root = Path(__file__).resolve().parents[1]
