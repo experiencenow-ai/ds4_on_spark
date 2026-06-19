@@ -25,8 +25,9 @@ def _strict() -> bool:
 
 if _enabled():
     try:
-        from ds4_vllm_runtime.patches import apply_runtime_patches
+        from ds4_vllm_runtime.patches import apply_runtime_patches, write_import_proof
 
+        write_import_proof("sitecustomize")
         apply_runtime_patches()
     except Exception as exc:
         print(f"DS4 vLLM runtime patch failed: {exc}", file=sys.stderr)

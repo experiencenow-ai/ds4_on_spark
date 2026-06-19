@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
+from pathlib import Path
+import sys
 from typing import Any
 
 
@@ -163,3 +166,37 @@ def apply_runtime_patches() -> list[str]:
     if env_flag("DS4_VLLM_SM12_FLASHMLA_SPARSE"):
         patches.append(allow_sm12_flashmla_sparse())
     return patches
+
+
+def write_import_proof(role: str) -> str | None:
+    proof_json = os.getenv("DS4_VLLM_IMPORT_PROOF_JSON", "")
+    if proof_json.strip() == "":
+        return None
+    proof_path = Path(proof_json).expanduser()
+    if not proof_path.is_absolute():
+        proof_path = Path.cwd() / proof_path
+    suffix = proof_path.suffix or ".json"
+    if proof_path.name.endswith(suffix):
+        stem = proof_path.name[: -len(suffix)]
+    else:
+        stem = proof_path.name
+    child_path = proof_path.with_name(f"{stem}.{role}.pid{os.getpid()}{suffix}")
+    proof: dict[str, Any] = {
+        "argv": sys.argv,
+        "pid": os.getpid(),
+        "ppid": os.getppid(),
+        "python": sys.executable,
+        "role": role,
+        "sys_path_first": sys.path[:12],
+        "pythonpath": os.getenv("PYTHONPATH", ""),
+    }
+    try:
+        vllm_module = importlib.import_module("vllm")
+        proof["vllm_file"] = str(Path(str(vllm_module.__file__)).resolve())
+        proof["vllm_root"] = str(Path(str(vllm_module.__file__)).resolve().parent.parent)
+        proof["vllm_version"] = str(getattr(vllm_module, "__version__", "unknown"))
+    except Exception as exc:  # pragma: no cover - defensive diagnostic path
+        proof["vllm_import_error"] = repr(exc)
+    child_path.parent.mkdir(parents=True, exist_ok=True)
+    child_path.write_text(json.dumps(proof, indent=2, sort_keys=True) + "\n")
+    return str(child_path)
