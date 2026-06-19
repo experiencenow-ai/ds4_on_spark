@@ -14,6 +14,7 @@ def _enabled() -> bool:
         "DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK",
         "DS4_VLLM_FLASHINFER_MLA_SHARED_BLOCK_TABLES_2D",
         "DS4_VLLM_FLASHINFER_MLA_FORCE_TRTLLM_GEN",
+        "DS4_VLLM_FLASHINFER_MLA_FORCE_CUTE_DSL",
         "DS4_VLLM_READY_RESPONSE_COMPAT",
     ):
         value = os.getenv(name, "")
