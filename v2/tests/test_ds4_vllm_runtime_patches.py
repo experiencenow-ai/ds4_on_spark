@@ -11,10 +11,14 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
     def _write_fake_vllm(self, vllm_root: Path) -> None:
         module_dir = vllm_root / "vllm/v1/attention/backends/mla"
         engine_dir = vllm_root / "vllm/v1/engine"
+        layers_dir = vllm_root / "vllm/model_executor/layers"
         module_dir.mkdir(parents=True)
         engine_dir.mkdir(parents=True)
+        layers_dir.mkdir(parents=True)
         for init_dir in [
             "vllm",
+            "vllm/model_executor",
+            "vllm/model_executor/layers",
             "vllm/v1",
             "vllm/v1/attention",
             "vllm/v1/attention/backends",
@@ -30,6 +34,18 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                     @classmethod
                     def supports_compute_capability(cls, capability):
                         return capability.major in (9, 10)
+                """
+            )
+        )
+        (vllm_root / "vllm/_custom_ops.py").write_text(
+            "def indexer_k_quant_and_cache(*args, **kwargs):\n    return None\n"
+        )
+        (layers_dir / "sparse_attn_indexer.py").write_text(
+            textwrap.dedent(
+                """
+                class SparseAttnIndexer:
+                    def forward_cuda(self, hidden_states, q_quant, k, weights):
+                        return "original"
                 """
             )
         )
@@ -205,6 +221,33 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
         self.assertIn("flashmla_sparse_sm12_compute_capability", result.stdout)
         self.assertIn("flashinfer_mla_sparse_sm12_compute_capability", result.stdout)
         self.assertIn("ready_response_block_size_compat", result.stdout)
+
+    def test_runtime_patch_applies_sparse_indexer_dense_fallback(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        with tempfile.TemporaryDirectory() as tmp:
+            vllm_root = Path(tmp)
+            self._write_fake_vllm(vllm_root)
+            code = textwrap.dedent(
+                """
+                from ds4_vllm_runtime.patches import apply_runtime_patches
+                from vllm.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
+                print(apply_runtime_patches())
+                print(getattr(SparseAttnIndexer.forward_cuda, "_ds4_sm12_dense_fallback", False))
+                """
+            )
+            env = os.environ.copy()
+            env["DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK"] = "1"
+            env["PYTHONPATH"] = os.pathsep.join([str(vllm_root), str(src_root)])
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        self.assertIn("sparse_indexer_dense_topk_fallback", result.stdout)
+        self.assertEqual(result.stdout.strip().splitlines()[-1], "True")
 
     def test_runner_child_pythonpath_enables_sitecustomize_for_flashinfer_patch(self):
         v2_root = Path(__file__).resolve().parents[1]

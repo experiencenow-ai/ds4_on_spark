@@ -11,6 +11,7 @@ def _enabled() -> bool:
     for name in (
         "DS4_VLLM_SM12_FLASHINFER_MLA_SPARSE",
         "DS4_VLLM_SM12_FLASHMLA_SPARSE",
+        "DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK",
         "DS4_VLLM_READY_RESPONSE_COMPAT",
     ):
         value = os.getenv(name, "")
