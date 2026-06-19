@@ -33,6 +33,16 @@ GEMMA31_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_31b_it_pp8_plai
 DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_resident128.json"
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 VLLM_COMMIT = "c6e55a80d213ba2652ab9a7d5d0aacf01cbccd34"
+GLM52_INDEXSHARE_FULL_INDEXER_STARTS = {0, 1, 2, *range(6, 78, 4)}
+
+
+def _partition_starts(layer_partition: list[int]) -> list[int]:
+    starts: list[int] = []
+    start = 0
+    for count in layer_partition:
+        starts.append(start)
+        start += count
+    return starts
 
 
 class KvCachePlanningTests(unittest.TestCase):
@@ -269,7 +279,8 @@ class KvCachePlanningTests(unittest.TestCase):
 
         self.assertEqual(plan["profile_id"], "glm52_fp8_pp13_frontier_v1")
         self.assertEqual(plan["pipeline_parallel_size"], 13)
-        self.assertEqual(plan["layer_partition"], [6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6])
+        self.assertEqual(plan["layer_partition"], [6, 4, 4, 4, 4, 8, 8, 8, 8, 8, 4, 4, 8])
+        self.assertLessEqual(set(_partition_starts(plan["layer_partition"])), GLM52_INDEXSHARE_FULL_INDEXER_STARTS)
         self.assertEqual(len(plan["vllm_nodes"]), 13)
         rank0 = plan["vllm_nodes"][0]
         rank12 = plan["vllm_nodes"][-1]
