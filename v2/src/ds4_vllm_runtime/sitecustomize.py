@@ -7,8 +7,11 @@ import sys
 
 
 def _enabled() -> bool:
-    value = os.getenv("DS4_VLLM_SM12_FLASHMLA_SPARSE", "")
-    return value.strip().lower() not in {"", "0", "false", "no", "off"}
+    for name in ("DS4_VLLM_SM12_FLASHMLA_SPARSE", "DS4_VLLM_READY_RESPONSE_COMPAT"):
+        value = os.getenv(name, "")
+        if value.strip().lower() not in {"", "0", "false", "no", "off"}:
+            return True
+    return False
 
 
 def _strict() -> bool:
@@ -25,4 +28,3 @@ if _enabled():
         print(f"DS4 vLLM runtime patch failed: {exc}", file=sys.stderr)
         if _strict():
             raise
-

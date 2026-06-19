@@ -146,6 +146,7 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             self._write_fake_vllm(vllm_root)
             env = os.environ.copy()
             env["DS4_VLLM_SM12_FLASHMLA_SPARSE"] = "1"
+            env["DS4_VLLM_READY_RESPONSE_COMPAT"] = "1"
             env["PYTHONPATH"] = str(src_root)
             result = subprocess.run(
                 [
@@ -163,7 +164,7 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
         self.assertIn("flashmla_sparse_sm12_compute_capability", result.stdout)
         self.assertIn("ready_response_block_size_compat", result.stdout)
 
-    def test_runtime_patch_repairs_old_ready_response_payload(self):
+    def test_runtime_patch_repairs_old_ready_response_payload_without_flashmla(self):
         v2_root = Path(__file__).resolve().parents[1]
         src_root = v2_root / "src"
         with tempfile.TemporaryDirectory() as tmp:
@@ -187,7 +188,7 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                 """
             )
             env = os.environ.copy()
-            env["DS4_VLLM_SM12_FLASHMLA_SPARSE"] = "1"
+            env["DS4_VLLM_READY_RESPONSE_COMPAT"] = "1"
             env["PYTHONPATH"] = os.pathsep.join([str(vllm_root), str(src_root)])
             result = subprocess.run(
                 [sys.executable, "-c", code],

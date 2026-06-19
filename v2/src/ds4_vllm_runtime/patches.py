@@ -141,7 +141,8 @@ def allow_missing_ready_response_block_size() -> str:
 
 def apply_runtime_patches() -> list[str]:
     patches = []
+    if env_flag("DS4_VLLM_READY_RESPONSE_COMPAT"):
+        patches.append(allow_missing_ready_response_block_size())
     if env_flag("DS4_VLLM_SM12_FLASHMLA_SPARSE"):
         patches.append(allow_sm12_flashmla_sparse())
-        patches.append(allow_missing_ready_response_block_size())
     return patches
