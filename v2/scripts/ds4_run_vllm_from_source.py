@@ -105,6 +105,10 @@ def _configure_child_pythonpath(source_root: Path) -> None:
         "DS4_VLLM_FLASHINFER_MLA_SHARED_BLOCK_TABLES_2D",
         "DS4_VLLM_FLASHINFER_MLA_FORCE_TRTLLM_GEN",
         "DS4_VLLM_FLASHINFER_MLA_FORCE_CUTE_DSL",
+        "DS4_VLLM_FLASHMLA_SPARSE_TRITON_BF16_FALLBACK",
+        "DS4_VLLM_INDEX_TOPK_OVERRIDE",
+        "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR",
+        "VLLM_DS4_PP_TCP_TENSOR_DICT",
     )
     if any(env_flag(name) for name in runtime_patch_envs):
         entries.extend([str(_sitecustomize_root()), str(_ds4_src_root())])

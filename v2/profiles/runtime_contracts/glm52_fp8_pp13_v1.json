@@ -101,9 +101,12 @@
       "DS4_VLLM_FLASHMLA_SPARSE_TORCH_FALLBACK=1",
       "DS4_VLLM_FLASHMLA_SPARSE_TRITON_BF16_FALLBACK=1",
       "DS4_VLLM_INDEX_TOPK_OVERRIDE=128",
-      "DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK=1"
+      "DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK=1",
+      "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR=1",
+      "VLLM_DS4_PP_TCP_TENSOR_DICT=1",
+      "VLLM_DS4_PP_OVERLAP_SEND=0"
     ],
-    "required_source": "guarded vLLM 0.23.0 wheel overlay with GlmMoeDsaForCausalLM support, DS4 ready-response compatibility shim, SM12 FlashMLA sparse MLA validation shim, DS4 Triton indexed BF16 sparse-MLA fallback because upstream flash_mla_sparse_fwd rejects SM12, DS4 sparse index_topk override for the Spark BF16 fallback, and DS4 dense-last-window sparse indexer fallback because the upstream DeepGEMM fp8_fp4_mqa_logits indexer kernel rejects Spark GB10",
+    "required_source": "guarded vLLM 0.23.0 wheel overlay with GlmMoeDsaForCausalLM support, DS4 ready-response compatibility shim, SM12 FlashMLA sparse MLA validation shim, DS4 Triton indexed BF16 sparse-MLA fallback because upstream flash_mla_sparse_fwd rejects SM12, DS4 sparse index_topk override for the Spark BF16 fallback, DS4 dense-last-window sparse indexer fallback because the upstream DeepGEMM fp8_fp4_mqa_logits indexer kernel rejects Spark GB10, and DS4 runtime-patched PP TCP tensor-dict transport with upstream PP device communicator disabled",
     "required_source_root": "/home/{node}/standard-runtimes/vllm-0.23.0-overlay"
   }
 }
