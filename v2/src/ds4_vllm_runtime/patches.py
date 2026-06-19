@@ -72,6 +72,13 @@ def allow_flashmla_sparse_torch_fallback() -> str:
             q_chunk = q[start:end]
             indices = topk_indices[start:end].to(device=q.device)
             valid = indices >= 0
+            max_valid = int(valid.sum(dim=1).max().item())
+            if max_valid <= 0:
+                output[start:end].zero_()
+                continue
+            indices = indices[:, :max_valid]
+            valid = valid[:, :max_valid]
+            topk = max_valid
             safe_indices = torch.where(valid, indices, torch.zeros_like(indices)).to(
                 torch.long
             )
