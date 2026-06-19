@@ -53,7 +53,7 @@
           "connector_id": "none",
           "expected_entry_fraction_per_node": 0.07692307692307693,
           "external_backend": "none",
-          "kv_cache_memory_bytes": 4294967296,
+          "kv_cache_memory_bytes": 12884901888,
           "sharding": "none"
         },
         "layer_partition": [

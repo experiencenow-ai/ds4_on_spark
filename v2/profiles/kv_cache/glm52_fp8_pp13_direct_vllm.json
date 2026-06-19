@@ -17,7 +17,7 @@
     "--gpu-memory-utilization",
     "0.80",
     "--kv-cache-memory-bytes",
-    "4294967296",
+    "12884901888",
     "--dtype",
     "bfloat16",
     "--kv-cache-dtype",

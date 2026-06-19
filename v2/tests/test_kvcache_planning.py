@@ -281,7 +281,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(rank0["argv"][rank0["argv"].index("--max-num-seqs") + 1], "128")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--max-num-batched-tokens") + 1], "65536")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--gpu-memory-utilization") + 1], "0.80")
-        self.assertEqual(rank0["argv"][rank0["argv"].index("--kv-cache-memory-bytes") + 1], "4294967296")
+        self.assertEqual(rank0["argv"][rank0["argv"].index("--kv-cache-memory-bytes") + 1], "12884901888")
         self.assertNotIn("--enforce-eager", rank0["argv"])
         self.assertEqual(rank0["env"]["VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP"], "128")
         self.assertEqual(rank12["env"]["VLLM_DS4_SCHED_MAX_NEW_REQS_PER_STEP"], "128")

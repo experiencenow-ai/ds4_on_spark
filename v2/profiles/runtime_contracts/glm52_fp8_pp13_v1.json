@@ -8,7 +8,7 @@
     "dtype": "bfloat16",
     "external_backend": "none",
     "expected_node_fraction": "1/13",
-    "fixed_kv_cache_memory_bytes": 4294967296,
+    "fixed_kv_cache_memory_bytes": 12884901888,
     "sharding": "none"
   },
   "admission": {
