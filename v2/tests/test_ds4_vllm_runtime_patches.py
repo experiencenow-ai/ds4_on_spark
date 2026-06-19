@@ -213,6 +213,18 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                 """
             )
         )
+        (module_dir / "triton_mla.py").write_text(
+            textwrap.dedent(
+                """
+                class TritonMLABackend:
+                    @classmethod
+                    def validate_configuration(cls, **kwargs):
+                        if kwargs.get("use_sparse"):
+                            return ["sparse not supported", "other reason"]
+                        return []
+                """
+            )
+        )
         (vllm_root / "vllm/_custom_ops.py").write_text(
             "def indexer_k_quant_and_cache(*args, **kwargs):\n    return None\n"
         )
@@ -417,6 +429,45 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             )
         self.assertIn("flashmla_sparse_triton_bf16_fallback", result.stdout)
         self.assertEqual(result.stdout.strip().splitlines()[-1], "True")
+
+    def test_runtime_patch_allows_triton_mla_sparse_validation(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        with tempfile.TemporaryDirectory() as tmp:
+            vllm_root = Path(tmp)
+            self._write_fake_vllm(vllm_root)
+            code = textwrap.dedent(
+                """
+                import vllm.envs as envs
+                from ds4_vllm_runtime.patches import apply_runtime_patches
+                from vllm.v1.attention.backends.mla.triton_mla import TritonMLABackend
+                print(TritonMLABackend.validate_configuration(use_sparse=True))
+                print(apply_runtime_patches())
+                envs.validate_environ(True)
+                print(envs.VLLM_TRITON_MLA_SPARSE)
+                print(TritonMLABackend.validate_configuration(use_sparse=True))
+                print(TritonMLABackend.validate_configuration(use_sparse=False))
+                print(apply_runtime_patches().count("triton_mla_sparse_validation"))
+                """
+            )
+            env = os.environ.copy()
+            env["VLLM_TRITON_MLA_SPARSE"] = "1"
+            env["PYTHONPATH"] = os.pathsep.join([str(vllm_root), str(src_root)])
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        lines = result.stdout.strip().splitlines()
+        self.assertEqual(lines[0], "['sparse not supported', 'other reason']")
+        self.assertIn("vllm_ds4_envs_registered_", lines[1])
+        self.assertIn("triton_mla_sparse_validation", lines[1])
+        self.assertEqual(lines[2], "True")
+        self.assertEqual(lines[3], "['other reason']")
+        self.assertEqual(lines[4], "[]")
+        self.assertEqual(lines[5], "1")
 
     def test_sitecustomize_applies_pp_tcp_transport_patch(self):
         v2_root = Path(__file__).resolve().parents[1]
