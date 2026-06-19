@@ -57,6 +57,17 @@ dev="\${DS4_RING_CONTROL_DEV:-ds4ring0}"
 modprobe dummy 2>/dev/null || true
 ip link add "\$dev" type dummy 2>/dev/null || true
 ip link set "\$dev" up
+ip -o -4 addr show dev lo | awk '{print \$4}' | while read addr
+do
+	case "\$addr" in
+	10.10.100.*)
+		if [ "\$addr" != "$ip/32" ]
+		then
+			ip -4 addr del "\$addr" dev lo 2>/dev/null || true
+		fi
+		;;
+	esac
+done
 ip -4 addr replace $ip/32 dev lo
 ip -4 addr flush dev "\$dev" scope global 2>/dev/null || true
 ip -4 addr replace $ip/32 dev "\$dev"
@@ -73,7 +84,14 @@ src_ip="$ip"
 rail_up()
 {
 	dev="\$1"
-	[ -e "/sys/class/net/\$dev/operstate" ] && [ "\$(cat "/sys/class/net/\$dev/operstate")" = "up" ]
+	[ -e "/sys/class/net/\$dev/carrier" ] && [ "\$(cat "/sys/class/net/\$dev/carrier" 2>/dev/null || echo 0)" = "1" ]
+}
+
+next_hop_ready()
+{
+	dev="\$1"
+	via="\$2"
+	rail_up "\$dev" && ping -I "\$dev" -c 1 -W 1 "\$via" >/dev/null 2>&1
 }
 
 setup_rail()
@@ -88,6 +106,15 @@ setup_rail()
 	fi
 }
 
+install_forward_accept()
+{
+	if command -v iptables >/dev/null 2>&1
+	then
+		iptables -C DOCKER-USER -s 10.10.100.0/24 -d 10.10.100.0/24 -j ACCEPT 2>/dev/null || iptables -I DOCKER-USER 1 -s 10.10.100.0/24 -d 10.10.100.0/24 -j ACCEPT 2>/dev/null || true
+		iptables -C FORWARD -s 10.10.100.0/24 -d 10.10.100.0/24 -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -s 10.10.100.0/24 -d 10.10.100.0/24 -j ACCEPT 2>/dev/null || true
+	fi
+}
+
 if [ "\$rank" -gt 0 ]
 then
 	setup_rail "enp1s0f0np0" "10.10.\$(((rank * 2) - 1)).2/30"
@@ -96,6 +123,7 @@ if [ "\$rank" -lt 12 ]
 then
 	setup_rail "enp1s0f1np1" "10.10.\$(((rank * 2) + 1)).1/30"
 fi
+install_forward_accept
 
 target_rank=0
 while [ "\$target_rank" -lt 13 ]
@@ -115,13 +143,17 @@ do
 			fallback_via="10.10.\$(((rank * 2) - 1)).1"
 			fallback_dev="enp1s0f0np0"
 		fi
-		if rail_up "\$primary_dev"
+		if next_hop_ready "\$primary_dev" "\$primary_via"
 		then
 			via="\$primary_via"
 			dev="\$primary_dev"
-		else
+		elif next_hop_ready "\$fallback_dev" "\$fallback_via"
+		then
 			via="\$fallback_via"
 			dev="\$fallback_dev"
+		else
+			via="\$primary_via"
+			dev="\$primary_dev"
 		fi
 		ip route replace "\$target_ip" via "\$via" dev "\$dev" src "\$src_ip"
 	fi
