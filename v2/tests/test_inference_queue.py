@@ -192,6 +192,22 @@ class InferenceQueueTests(unittest.TestCase):
             self.assertEqual(second["claimed_count"], 3)
             self.assertEqual(runner.calls, [("spark0", ["a", "b", "c"], 12)])
 
+    def test_partial_ready_batch_waits_for_recent_queued_peer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(requests=[req("a"), req("b")], registry=registry, batch_id="early")
+            prepared = queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=2, leased_by="worker", lease_ttl_s=30)
+            self.assertEqual(prepared, 2)
+            time.sleep(0.03)
+            queue.submit_requests(requests=[req("c")], registry=registry, batch_id="late")
+            first = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=3, leased_by="worker", lease_ttl_s=30, batch_linger_s=0.02)
+            self.assertEqual(first, [])
+            prepared = queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=3, leased_by="worker", lease_ttl_s=30)
+            self.assertEqual(prepared, 1)
+            second = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=3, leased_by="worker", lease_ttl_s=30, batch_linger_s=0.02)
+            self.assertEqual([claim.request_id for claim in second], ["a", "b", "c"])
+
     def test_heartbeat_allows_claims_that_finished_during_incremental_batch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             queue = InferenceQueue(tmp)
