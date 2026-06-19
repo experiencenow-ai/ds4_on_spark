@@ -61,6 +61,8 @@
   ],
   "extra_env": {
     "CPATH": "/home/{node}/standard-runtimes/python3.12-dev-extract/usr/include:/home/{node}/standard-runtimes/python3.12-dev-extract/usr/include/python3.12:/home/{node}/standard-runtimes/python3.12-dev-extract/usr/include/aarch64-linux-gnu/python3.12",
+    "DS4_VLLM_IMPORT_PROOF_JSON": "/tmp/ds4_vllm_import_proof_glm52_rank{node_rank}.json",
+    "DS4_VLLM_SOURCE_ROOT": "/home/{node}/standard-runtimes/vllm-0.23.0-overlay",
     "DS4_PP_TRANSPORT": "tcp-staged",
     "GLOO_SOCKET_IFNAME": "ds4ring0",
     "LMCACHE_CONFIG_FILE": "/tmp/lmcache_glm52_fp8_pp13_fp8kv.yaml",
@@ -166,8 +168,9 @@
   "text_only": true,
   "total_layers": 78,
   "vllm_bin": "/home/{node}/ds4-vllm-local/bin/python",
-  "vllm_fork": "https://github.com/experiencenow-ai/vllm",
-  "vllm_source_commit": "local-glm52-fp8-pp13-test",
-  "vllm_source_root": "/home/{node}/src/vllm",
+  "vllm_fork": "https://github.com/vllm-project/vllm",
+  "vllm_runner": "/home/{node}/src/vllm/tools/ds4_run_vllm_from_source.py",
+  "vllm_source_commit": "vllm==0.23.0 wheel overlay",
+  "vllm_source_root": "/home/{node}/standard-runtimes/vllm-0.23.0-overlay",
   "working_directory": "/home/{node}/src/ds4_on_spark/v2"
 }
