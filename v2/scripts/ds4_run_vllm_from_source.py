@@ -17,13 +17,6 @@ DEFAULT_MODULE = "vllm.entrypoints.cli.main"
 SOURCE_ROOT_ERROR = "DS4 source-root guard requires --source-root or DS4_VLLM_SOURCE_ROOT"
 
 
-def _env_flag(name: str, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().lower() not in {"", "0", "false", "no", "off"}
-
-
 def _resolve_path(raw: str) -> Path:
     return Path(os.path.expandvars(os.path.expanduser(raw))).resolve()
 
@@ -65,6 +58,50 @@ def _package_root(module_file: str) -> Path:
     return init_path.parent.parent
 
 
+def _v2_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _ds4_src_root() -> Path:
+    return _v2_root() / "src"
+
+
+def _sitecustomize_root() -> Path:
+    return _ds4_src_root() / "ds4_vllm_runtime"
+
+
+def _ensure_ds4_src_path(source_root: Path | None = None) -> None:
+    path = _ds4_src_root()
+    if source_root is not None:
+        _insert_after_source_root(source_root, path)
+        return
+    path_text = str(path.resolve())
+    if path_text not in sys.path:
+        sys.path.insert(0, path_text)
+
+
+def _insert_after_source_root(source_root: Path, path: Path) -> None:
+    path_text = str(path.resolve())
+    if path_text in sys.path:
+        return
+    try:
+        source_index = sys.path.index(str(source_root))
+    except ValueError:
+        source_index = 0
+    sys.path.insert(source_index + 1, path_text)
+
+
+def _configure_child_pythonpath(source_root: Path) -> None:
+    _ensure_ds4_src_path(source_root)
+    from ds4_vllm_runtime.patches import env_flag
+
+    entries = [str(source_root)]
+    if env_flag("DS4_VLLM_SM12_FLASHMLA_SPARSE"):
+        entries.extend([str(_sitecustomize_root()), str(_ds4_src_root())])
+        os.environ["DS4_VLLM_RUNTIME_PATCHES_STRICT"] = "1"
+    os.environ["PYTHONPATH"] = os.pathsep.join(entries)
+
+
 def _proof(source_root: Path, module: str) -> dict[str, object]:
     vllm_module = importlib.import_module("vllm")
     actual_root = _package_root(str(vllm_module.__file__))
@@ -80,18 +117,10 @@ def _proof(source_root: Path, module: str) -> dict[str, object]:
 
 
 def _allow_sm12_flashmla_sparse() -> str:
-    flashmla_sparse = importlib.import_module(
-        "vllm.v1.attention.backends.mla.flashmla_sparse"
-    )
+    _ensure_ds4_src_path(_resolve_path(os.getcwd()))
+    from ds4_vllm_runtime.patches import allow_sm12_flashmla_sparse
 
-    @classmethod
-    def supports_compute_capability(cls, capability):  # type: ignore[no-untyped-def]
-        return capability.major in (9, 10, 12)
-
-    flashmla_sparse.FlashMLASparseBackend.supports_compute_capability = (
-        supports_compute_capability
-    )
-    return "flashmla_sparse_sm12_compute_capability"
+    return allow_sm12_flashmla_sparse()
 
 
 def _apply_runtime_patches() -> list[str]:
@@ -129,7 +158,7 @@ def _prepare_source_root(args: argparse.Namespace) -> Path | int:
         return 64
     os.chdir(source_root)
     sys.path[:] = _sanitize_sys_path(source_root, sys.path)
-    os.environ["PYTHONPATH"] = str(source_root)
+    _configure_child_pythonpath(source_root)
     return source_root
 
 
