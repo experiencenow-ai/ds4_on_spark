@@ -12,6 +12,7 @@ import unittest
 
 from ds4_infer.api import CoordinatorApi, DispatcherRuntime, _parse_vllm_metrics_snapshot
 from ds4_infer.dispatcher_resident import PendingDispatcherCohort, ResidentServicePlan, resident_service_plans
+from ds4_infer.dispatcher_resident import pending_cohort_count_by_compute_domain, pending_cohort_count_by_service
 from ds4_infer.profiles import ProfileRegistry
 from ds4_infer.queue import QueueClaim
 from ds4_infer.resource_governor import GpuResourceGovernor, _parse_free_m
@@ -687,6 +688,39 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
         self.assertEqual(cohort.status()["initial_unfinished_count"], 0)
         self.assertEqual(cohort.status()["active_count"], 0)
 
+    def test_rolling_cohort_remains_active_batch_after_initial_claims_finish(self) -> None:
+        claims = [
+            QueueClaim(
+                request_id=f"r{index}",
+                batch_id="batch",
+                request_kind="model",
+                selected_profile_id="profile",
+                selected_node_id="spark0",
+                lease_id=f"lease-{index}",
+                attempt_count=1,
+                request=None,
+                selected_service_id="svc",
+                selected_compute_domain="fleet",
+            )
+            for index in range(2)
+        ]
+        cohort = PendingDispatcherCohort.from_claims(claims, admission_mode="rolling_refill")
+        for claim in claims:
+            cohort.mark_finished(claim.request_id)
+
+        self.assertEqual(cohort.active_count(), 0)
+        self.assertTrue(cohort.batch_active())
+        self.assertTrue(cohort.status()["batch_active"])
+        self.assertEqual(pending_cohort_count_by_compute_domain({object(): cohort}), {"fleet": 1})
+        self.assertEqual(pending_cohort_count_by_service({object(): cohort}), {"svc": 1})
+
+        normal = PendingDispatcherCohort.from_claims(claims, admission_mode="cohort")
+        for claim in claims:
+            normal.mark_finished(claim.request_id)
+        self.assertFalse(normal.batch_active())
+        self.assertEqual(pending_cohort_count_by_compute_domain({object(): normal}), {})
+        self.assertEqual(pending_cohort_count_by_service({object(): normal}), {})
+
     def test_worker_force_cancel_terminal_cancels_incremental_transport(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
@@ -1271,6 +1305,31 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             status = api.dispatcher_status()
 
             self.assertEqual(status["resident_compute_domain_active_batches"], {})
+            self.assertEqual(status["resident_compute_domain_batch_limits"], {"spark-fleet-0": 1})
+
+    def test_dispatcher_status_keeps_drained_rolling_batch_active(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            with api.dispatcher_lock:
+                api.dispatcher_state.update(
+                    pending=1,
+                    pending_cohorts=1,
+                    pending_cohort_details=[
+                        {
+                            "service_id": "dsv4_flash_pp8",
+                            "compute_domain": "spark-fleet-0",
+                            "admission_mode": "rolling_refill",
+                            "initial_count": 4,
+                            "active_count": 0,
+                            "batch_active": True,
+                        }
+                    ],
+                )
+
+            status = api.dispatcher_status()
+
+            self.assertEqual(status["resident_service_active_batches"], {"dsv4_flash_pp8": 1})
+            self.assertEqual(status["resident_compute_domain_active_batches"], {"spark-fleet-0": 1})
             self.assertEqual(status["resident_compute_domain_batch_limits"], {"spark-fleet-0": 1})
 
     def test_dispatcher_status_reports_live_queue_counts_by_service(self) -> None:

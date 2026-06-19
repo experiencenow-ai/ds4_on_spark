@@ -53,6 +53,14 @@ class PendingDispatcherCohort:
         with self.lock:
             return len(self.unfinished_request_ids)
 
+    def batch_active(self) -> bool:
+        with self.lock:
+            unfinished = len(self.unfinished_request_ids)
+        if unfinished > 0:
+            return True
+        mode = str(self.admission_mode or "").lower()
+        return mode == "rolling_refill" and int(self.initial_count) > 0
+
     def active_claims(self) -> list[QueueClaim]:
         with self.lock:
             active = set(self.unfinished_request_ids)
@@ -73,6 +81,7 @@ class PendingDispatcherCohort:
             "claimed_count": self.claimed_count,
             "initial_unfinished_count": unfinished,
             "active_count": unfinished,
+            "batch_active": self.batch_active(),
             "finished_count": finished,
             "age_s": round(max(0.0, now - float(self.submitted_at)), 3),
             "last_finished_age_s": None if last_finished is None else round(max(0.0, now - float(last_finished)), 3),
@@ -195,7 +204,7 @@ def pending_cohort_count_by_compute_domain(pending: dict[Any, Any]) -> dict[str,
     counts: dict[str, int] = {}
     for value in pending.values():
         cohort = pending_cohort(value)
-        if cohort.active_count() <= 0:
+        if not cohort.batch_active():
             continue
         domain = str(cohort.compute_domain or "")
         if not domain:
@@ -208,7 +217,7 @@ def pending_cohort_count_by_service(pending: dict[Any, Any]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for value in pending.values():
         cohort = pending_cohort(value)
-        if cohort.active_count() <= 0:
+        if not cohort.batch_active():
             continue
         service_id = str(cohort.service_id or "")
         if not service_id:
