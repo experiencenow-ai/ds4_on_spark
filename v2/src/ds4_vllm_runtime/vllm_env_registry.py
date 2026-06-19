@@ -148,6 +148,9 @@ _DS4_ENV_SPECS: dict[str, Callable[[], Any]] = {
     "VLLM_DS4_PP_TCP_READ_TIMEOUT_SECONDS": _env_float(
         "VLLM_DS4_PP_TCP_READ_TIMEOUT_SECONDS", "300"
     ),
+    "VLLM_DS4_PP_TCP_STRIPE_MIN_BYTES": _env_int(
+        "VLLM_DS4_PP_TCP_STRIPE_MIN_BYTES", "262144"
+    ),
     "VLLM_DS4_PP_TCP_STRIPES": _env_int("VLLM_DS4_PP_TCP_STRIPES", "8"),
     "VLLM_DS4_PP_TCP_TENSOR_DICT": _env_bool("VLLM_DS4_PP_TCP_TENSOR_DICT"),
     "VLLM_DS4_PP_TENSOR_DICT_TP_ALL_GATHER": _env_bool(
@@ -207,4 +210,3 @@ def register_ds4_vllm_envs() -> str:
             environment_variables[name] = getter
             added += 1
     return f"vllm_ds4_envs_registered_{added}"
-
