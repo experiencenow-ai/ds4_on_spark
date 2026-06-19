@@ -87,7 +87,7 @@
     "required_runtime_version": "0.23.0",
     "required_runtime_flags": [
       "--kv-cache-dtype bfloat16",
-      "--attention-backend FLASHINFER_MLA_SPARSE",
+      "--attention-backend FLASHMLA_SPARSE",
       "--reasoning-parser glm45",
       "--tool-call-parser glm47",
       "--enable-auto-tool-choice"
@@ -97,12 +97,10 @@
     ],
     "required_runtime_patches": [
       "DS4_VLLM_READY_RESPONSE_COMPAT=1",
-      "DS4_VLLM_SM12_FLASHINFER_MLA_SPARSE=1",
-      "DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK=1",
-      "DS4_VLLM_FLASHINFER_MLA_SHARED_BLOCK_TABLES_2D=1",
-      "DS4_VLLM_FLASHINFER_MLA_FORCE_CUTE_DSL=1"
+      "DS4_VLLM_SM12_FLASHMLA_SPARSE=1",
+      "DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK=1"
     ],
-    "required_source": "guarded vLLM 0.23.0 wheel overlay with GlmMoeDsaForCausalLM support, DS4 ready-response compatibility shim, SM12 FlashInfer sparse MLA validation shim, DS4 dense-last-window sparse indexer fallback because the upstream DeepGEMM fp8_fp4_mqa_logits indexer kernel rejects Spark GB10, DS4 FlashInfer shared block-table shape compatibility for the installed FlashInfer API, and DS4 CUTE-DSL decode forcing because FlashInfer auto selects SM120 XQA which rejects GLM's 64 query heads while TRTLLM-GEN rejects Spark GB10",
+    "required_source": "guarded vLLM 0.23.0 wheel overlay with GlmMoeDsaForCausalLM support, DS4 ready-response compatibility shim, SM12 FlashMLA sparse MLA validation shim, and DS4 dense-last-window sparse indexer fallback because the upstream DeepGEMM fp8_fp4_mqa_logits indexer kernel rejects Spark GB10",
     "required_source_root": "/home/{node}/standard-runtimes/vllm-0.23.0-overlay"
   }
 }
