@@ -124,8 +124,11 @@ def _allow_sm12_flashmla_sparse() -> str:
 
 
 def _apply_runtime_patches() -> list[str]:
+    _ensure_ds4_src_path(_resolve_path(os.getcwd()))
+    from ds4_vllm_runtime.patches import env_flag
+
     patches = []
-    if _env_flag("DS4_VLLM_SM12_FLASHMLA_SPARSE"):
+    if env_flag("DS4_VLLM_SM12_FLASHMLA_SPARSE"):
         patches.append(_allow_sm12_flashmla_sparse())
     return patches
 
