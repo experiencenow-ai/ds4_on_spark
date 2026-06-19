@@ -303,6 +303,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(rank0["env"]["VLLM_DS4_PP_TCP_STRIPES"], "32")
         self.assertEqual(rank0["env"]["VLLM_DS4_TRITON_MLA_BLOCK_H"], "8")
         self.assertEqual(rank0["env"]["VLLM_DS4_TRITON_MLA_NUM_STAGES"], "1")
+        self.assertEqual(rank0["env"]["DS4_VLLM_SM12_SPARSE_INDEXER_DENSE_FALLBACK"], "1")
         self.assertEqual(rank0["env"]["VLLM_TRITON_MLA_SPARSE"], "1")
         self.assertNotIn("DS4_VLLM_FLASHMLA_SPARSE_TRITON_BF16_FALLBACK", rank0["env"])
         self.assertIn("--served-model-name", rank0["argv"])
