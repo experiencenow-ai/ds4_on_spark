@@ -116,21 +116,11 @@ def _proof(source_root: Path, module: str) -> dict[str, object]:
     }
 
 
-def _allow_sm12_flashmla_sparse() -> str:
-    _ensure_ds4_src_path(_resolve_path(os.getcwd()))
-    from ds4_vllm_runtime.patches import allow_sm12_flashmla_sparse
-
-    return allow_sm12_flashmla_sparse()
-
-
 def _apply_runtime_patches() -> list[str]:
     _ensure_ds4_src_path(_resolve_path(os.getcwd()))
-    from ds4_vllm_runtime.patches import env_flag
+    from ds4_vllm_runtime.patches import apply_runtime_patches
 
-    patches = []
-    if env_flag("DS4_VLLM_SM12_FLASHMLA_SPARSE"):
-        patches.append(_allow_sm12_flashmla_sparse())
-    return patches
+    return apply_runtime_patches()
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:

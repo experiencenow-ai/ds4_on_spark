@@ -145,6 +145,7 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                 capture_output=True,
             )
         self.assertIn("flashmla_sparse_sm12_compute_capability", result.stdout)
+        self.assertIn("ready_response_block_size_compat", result.stdout)
 
     def test_runtime_patch_repairs_old_ready_response_payload(self):
         v2_root = Path(__file__).resolve().parents[1]
