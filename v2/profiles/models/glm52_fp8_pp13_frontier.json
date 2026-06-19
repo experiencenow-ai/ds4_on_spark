@@ -1,0 +1,64 @@
+{
+  "backend": "vllm_pipeline",
+  "capability_classes": [
+    "frontier",
+    "glm",
+    "peer",
+    "smart",
+    "smartest"
+  ],
+  "format": "ds4-model-profile-v1",
+  "model_id": "zai-org/GLM-5.2-FP8",
+  "performance": {
+    "latency_rank": 1.6,
+    "max_num_batched_tokens": 8192,
+    "max_num_seqs": 4,
+    "measurement_notes": "Initial PP13 DSAPI test profile. GLM-5.2-FP8 has 78 main transformer layers, split evenly as 6 layers per Spark. Keep non-production and profile-pinned until smoke and ds4-eval measurements are complete.",
+    "target": "13-stage GLM-5.2-FP8 frontier test pipeline with FP8 KV and LMCache HMA."
+  },
+  "production_eligible": false,
+  "profile_id": "glm52_fp8_pp13_frontier_v1",
+  "quality": {
+    "baseline": "Unmeasured. Added for first Spark-ring GLM-5.2-FP8 smoke and ds4-eval testing."
+  },
+  "routing": {
+    "chat_cohort_transport": "parallel_chat_completions",
+    "chat_template_thinking_key": "enable_thinking",
+    "default_chat_template_kwargs": {
+      "enable_thinking": false
+    },
+    "default_for": [],
+    "optional_kv_cache_deployments": [
+      "profiles/kv_cache/glm52_fp8_pp13_lmcache_hma.json"
+    ],
+    "pipeline": {
+      "api_base_url": "http://127.0.0.1:8152",
+      "compute_domain": "spark-fleet-0",
+      "entry_node_id": "spark0",
+      "served_model_name": "glm-5.2-fp8-pp13",
+      "service_id": "glm52_fp8_pp13"
+    },
+    "pipeline_service_id": "glm52_fp8_pp13",
+    "rank": 12,
+    "requires_profile_pin": true,
+    "served_model_name": "glm-5.2-fp8-pp13",
+    "startup_autoload": false,
+    "tokenizer_path": "/home/spark0/models/hf/zai-org/GLM-5.2-FP8"
+  },
+  "runtime_contract_id": "glm52_fp8_pp13_v1",
+  "supported_job_classes": [
+    "analysis",
+    "atom_edit",
+    "cluster_synthesis",
+    "debug",
+    "json_repair",
+    "longmem",
+    "summary",
+    "tool_chat",
+    "triage",
+    "world_model_extract"
+  ],
+  "supports_chat": true,
+  "supports_completion": true,
+  "supports_thinking": true
+}
