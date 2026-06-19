@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import importlib
+from collections import namedtuple
 from collections.abc import Callable
 from typing import Any
 
 from ds4_vllm_runtime.vllm_env_registry import register_ds4_vllm_envs
 
+_FallbackTensorMetadata = namedtuple("TensorMetadata", ["device", "dtype", "size"])
+_FallbackTensorMetadataCpuStaged = namedtuple(
+    "TensorMetadataCpuStaged", ["target_device", "dtype", "size"]
+)
 _ORIGINAL_INIT: Callable[..., None] | None = None
 _ORIGINAL_ISEND: Callable[..., list[Any]] | None = None
 _ORIGINAL_IRECV: Callable[..., tuple[dict[str, Any] | None, list[Any], list[Any]]] | None = None
@@ -61,6 +66,11 @@ def _can_use_tcp(group: Any) -> bool:
 
 
 def _reject_conflicting_transports(envs: Any) -> None:
+    if envs.VLLM_DS4_PP_CPU_STAGED_TENSOR_DICT:
+        raise RuntimeError(
+            "VLLM_DS4_PP_TCP_TENSOR_DICT and "
+            "VLLM_DS4_PP_CPU_STAGED_TENSOR_DICT cannot both be enabled."
+        )
     if envs.VLLM_DS4_PP_PYNCCL_TENSOR_DICT:
         raise RuntimeError(
             "VLLM_DS4_PP_TCP_TENSOR_DICT and "
@@ -73,16 +83,41 @@ def _reject_conflicting_transports(envs: Any) -> None:
         )
 
 
+def _can_use_bridge(group: Any) -> bool:
+    return _can_use_tcp(group) or _should_cpu_stage(group)
+
+
 def _init_with_ds4_tcp(self: Any, *args: Any, **kwargs: Any) -> None:
     _, envs, _ = _modules()
-    group_name = kwargs.get("group_name")
+    group_name = _group_name_from_init(args, kwargs)
     if group_name == "pp" and envs.VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR:
-        kwargs["use_device_communicator"] = False
+        args, kwargs = _disable_device_communicator(args, kwargs)
     assert _ORIGINAL_INIT is not None
     _ORIGINAL_INIT(self, *args, **kwargs)
     self.ds4_pp_tcp_tensor_channel = None
     if group_name == "pp" and envs.VLLM_DS4_PP_TCP_TENSOR_DICT:
         _attach_tcp_channel(self, envs)
+
+
+def _group_name_from_init(args: tuple[Any, ...], kwargs: dict[str, Any]) -> str | None:
+    group_name = kwargs.get("group_name")
+    if group_name is not None:
+        return str(group_name)
+    if len(args) >= 6 and args[5] is not None:
+        return str(args[5])
+    return None
+
+
+def _disable_device_communicator(
+    args: tuple[Any, ...], kwargs: dict[str, Any]
+) -> tuple[tuple[Any, ...], dict[str, Any]]:
+    if len(args) >= 4:
+        rewritten = list(args)
+        rewritten[3] = False
+        return tuple(rewritten), kwargs
+    rewritten_kwargs = dict(kwargs)
+    rewritten_kwargs["use_device_communicator"] = False
+    return args, rewritten_kwargs
 
 
 def _attach_tcp_channel(group: Any, envs: Any) -> None:
@@ -106,7 +141,7 @@ def _isend_tensor_dict(
     all_gather_group: Any | None = None,
     all_gather_tensors: dict[str, bool] | None = None,
 ) -> list[Any]:
-    if not _can_use_tcp(self):
+    if not _can_use_bridge(self):
         assert _ORIGINAL_ISEND is not None
         return _ORIGINAL_ISEND(
             self,
@@ -119,7 +154,9 @@ def _isend_tensor_dict(
     if self.use_cpu_custom_send_recv:
         return _send_via_cpu_custom(self, tensor_dict, dst)
     parallel_state, _, torch = _modules()
-    metadata_list, tensor_list = parallel_state._split_tensor_dict(tensor_dict)
+    metadata_list, tensor_list = _split_tensor_dict(
+        parallel_state, tensor_dict, torch, cpu_stage_cuda=_should_cpu_stage(self)
+    )
     self.send_object(metadata_list, dst=dst)
     return _send_tensor_payloads(
         self, tensor_dict, tensor_list, dst, all_gather_group, all_gather_tensors, torch
@@ -140,6 +177,69 @@ def _send_via_cpu_custom(group: Any, tensor_dict: dict[str, Any], dst: int) -> l
         raise ValueError("No device communicator found")
     group.device_communicator.send_tensor_dict(tensor_dict, dst)
     return []
+
+
+def _should_cpu_stage(group: Any) -> bool:
+    _, envs, _ = _modules()
+    if not envs.VLLM_DS4_PP_CPU_STAGED_TENSOR_DICT:
+        return False
+    if not _is_pp_group(group) or int(getattr(group, "world_size", 1)) <= 1:
+        return False
+    if envs.VLLM_DS4_PP_TCP_TENSOR_DICT:
+        raise RuntimeError(
+            "VLLM_DS4_PP_CPU_STAGED_TENSOR_DICT and "
+            "VLLM_DS4_PP_TCP_TENSOR_DICT cannot both be enabled."
+        )
+    if envs.VLLM_DS4_PP_PYNCCL_TENSOR_DICT:
+        raise RuntimeError(
+            "VLLM_DS4_PP_CPU_STAGED_TENSOR_DICT and "
+            "VLLM_DS4_PP_PYNCCL_TENSOR_DICT cannot both be enabled."
+        )
+    return True
+
+
+def _split_tensor_dict(
+    parallel_state: Any,
+    tensor_dict: dict[str, Any],
+    torch: Any,
+    *,
+    cpu_stage_cuda: bool,
+) -> tuple[list[tuple[str, Any]], list[Any]]:
+    splitter = getattr(parallel_state, "_split_tensor_dict", None)
+    if callable(splitter) and not cpu_stage_cuda:
+        return splitter(tensor_dict)
+    if callable(splitter) and cpu_stage_cuda:
+        try:
+            return splitter(tensor_dict, cpu_stage_cuda=True)
+        except TypeError:
+            pass
+    return _split_tensor_dict_compat(parallel_state, tensor_dict, torch, cpu_stage_cuda)
+
+
+def _split_tensor_dict_compat(
+    parallel_state: Any,
+    tensor_dict: dict[str, Any],
+    torch: Any,
+    cpu_stage_cuda: bool,
+) -> tuple[list[tuple[str, Any]], list[Any]]:
+    metadata_cls = getattr(parallel_state, "TensorMetadata", _FallbackTensorMetadata)
+    staged_cls = getattr(
+        parallel_state, "TensorMetadataCpuStaged", _FallbackTensorMetadataCpuStaged
+    )
+    metadata_list: list[tuple[str, Any]] = []
+    tensor_list: list[Any] = []
+    for key, value in tensor_dict.items():
+        if not isinstance(value, torch.Tensor):
+            metadata_list.append((key, value))
+            continue
+        device = value.device.type
+        if cpu_stage_cuda and value.is_cuda:
+            metadata_list.append((key, staged_cls(device, value.dtype, value.size())))
+            tensor_list.append(value.detach().to("cpu").contiguous())
+        else:
+            metadata_list.append((key, metadata_cls(device, value.dtype, value.size())))
+            tensor_list.append(value)
+    return metadata_list, tensor_list
 
 
 def _send_tensor_payloads(
@@ -206,7 +306,7 @@ def _irecv_tensor_dict(
     all_gather_tensors: dict[str, bool] | None = None,
 ) -> tuple[dict[str, Any] | None, list[Any], list[Callable[[], None]]]:
     parallel_state, _, torch = _modules()
-    if not _can_use_tcp(self):
+    if not _can_use_bridge(self):
         assert _ORIGINAL_IRECV is not None
         return _ORIGINAL_IRECV(
             self,
@@ -271,34 +371,68 @@ def _recv_metadata_entry(
     handles: list[Any],
     postprocess: list[Callable[[], None]],
 ) -> None:
-    if not isinstance(value, parallel_state.TensorMetadata):
+    metadata_kind = _tensor_metadata_kind(parallel_state, value)
+    if metadata_kind is None:
         tensor_dict[key] = value
         return
-    tcp_staged = value.device == "cuda" and _can_use_tcp(group)
-    full_tensor = _alloc_recv_tensor(value, tcp_staged, torch)
+    cpu_staged = metadata_kind == "cpu_staged"
+    tcp_staged = metadata_kind == "tensor" and value.device == "cuda" and _can_use_tcp(group)
+    stage_to_cpu = cpu_staged or tcp_staged
+    target_device = _target_device(value, cpu_staged, tcp_staged)
+    full_tensor = _alloc_recv_tensor(value, stage_to_cpu, torch)
     if full_tensor.numel() == 0:
-        tensor_dict[key] = full_tensor.to(value.device) if tcp_staged else full_tensor
+        tensor_dict[key] = _maybe_to_target(full_tensor, stage_to_cpu, target_device)
         return
     if _should_use_all_gather(group, key, full_tensor, all_gather_group, all_gather_tensors):
-        _recv_all_gather(group, key, value, full_tensor, src, all_gather_group,
+        _recv_all_gather(group, key, full_tensor, src, all_gather_group,
+                         tcp_staged, stage_to_cpu, target_device,
                          tensor_dict, handles, postprocess, torch)
     else:
-        _recv_full_tensor(group, key, value, full_tensor, src, tcp_staged,
+        _recv_full_tensor(group, key, full_tensor, src, tcp_staged,
+                          stage_to_cpu, target_device,
                           tensor_dict, handles, postprocess, torch)
 
 
-def _alloc_recv_tensor(value: Any, tcp_staged: bool, torch: Any) -> Any:
-    recv_device = "cpu" if tcp_staged else value.device
+def _tensor_metadata_kind(parallel_state: Any, value: Any) -> str | None:
+    tensor_cls = getattr(parallel_state, "TensorMetadata", _FallbackTensorMetadata)
+    staged_cls = getattr(
+        parallel_state, "TensorMetadataCpuStaged", _FallbackTensorMetadataCpuStaged
+    )
+    if isinstance(value, staged_cls):
+        return "cpu_staged"
+    if isinstance(value, tensor_cls):
+        return "tensor"
+    return None
+
+
+def _target_device(value: Any, cpu_staged: bool, tcp_staged: bool) -> Any:
+    if cpu_staged:
+        return value.target_device
+    if tcp_staged:
+        return value.device
+    return "cpu"
+
+
+def _alloc_recv_tensor(value: Any, stage_to_cpu: bool, torch: Any) -> Any:
+    recv_device = "cpu" if stage_to_cpu else value.device
     return torch.empty(value.size, dtype=value.dtype, device=recv_device)
+
+
+def _maybe_to_target(tensor: Any, stage_to_cpu: bool, target_device: Any) -> Any:
+    if stage_to_cpu and str(target_device) != "cpu":
+        return tensor.to(target_device)
+    return tensor
 
 
 def _recv_all_gather(
     group: Any,
     key: str,
-    value: Any,
     full_tensor: Any,
     src: int,
     all_gather_group: Any,
+    tcp_staged: bool,
+    stage_to_cpu: bool,
+    target_device: Any,
     tensor_dict: dict[str, Any],
     handles: list[Any],
     postprocess: list[Callable[[], None]],
@@ -308,11 +442,11 @@ def _recv_all_gather(
     slice_tensor = full_tensor.reshape(all_gather_group.world_size, -1)[
         all_gather_group.rank_in_group
     ]
-    handles.append(_recv_slice(group, slice_tensor, src, value.device == "cuda", torch))
+    handles.append(_recv_slice(group, slice_tensor, src, tcp_staged, torch))
     postprocess.append(
         _make_all_gather_postprocess(
-            key, slice_tensor, tuple(orig_shape), all_gather_group, value.device,
-            tensor_dict
+            key, slice_tensor, tuple(orig_shape), all_gather_group, stage_to_cpu,
+            target_device, tensor_dict
         )
     )
     tensor_dict[key] = slice_tensor
@@ -330,11 +464,12 @@ def _make_all_gather_postprocess(
     slice_tensor: Any,
     orig_shape: tuple[int, ...],
     all_gather_group: Any,
-    target_device: str,
+    stage_to_cpu: bool,
+    target_device: Any,
     tensor_dict: dict[str, Any],
 ) -> Callable[[], None]:
     def _postprocess() -> None:
-        tensor = slice_tensor.to(target_device) if target_device == "cuda" else slice_tensor
+        tensor = _maybe_to_target(slice_tensor, stage_to_cpu, target_device)
         tensor_dict[key] = all_gather_group.all_gather(tensor, dim=0).reshape(orig_shape)
 
     return _postprocess
@@ -343,29 +478,29 @@ def _make_all_gather_postprocess(
 def _recv_full_tensor(
     group: Any,
     key: str,
-    value: Any,
     full_tensor: Any,
     src: int,
     tcp_staged: bool,
+    stage_to_cpu: bool,
+    target_device: Any,
     tensor_dict: dict[str, Any],
     handles: list[Any],
     postprocess: list[Callable[[], None]],
     torch: Any,
 ) -> None:
     handles.append(_recv_slice(group, full_tensor, src, tcp_staged, torch))
-    if tcp_staged:
-        postprocess.append(_make_tcp_postprocess(key, full_tensor, value.device, tensor_dict))
+    if stage_to_cpu and str(target_device) != "cpu":
+        postprocess.append(_make_target_postprocess(key, full_tensor, target_device, tensor_dict))
     tensor_dict[key] = full_tensor
 
 
-def _make_tcp_postprocess(
+def _make_target_postprocess(
     key: str,
     full_tensor: Any,
-    target_device: str,
+    target_device: Any,
     tensor_dict: dict[str, Any],
 ) -> Callable[[], None]:
     def _postprocess() -> None:
         tensor_dict[key] = full_tensor.to(target_device)
 
     return _postprocess
-

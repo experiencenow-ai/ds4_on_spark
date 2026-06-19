@@ -36,8 +36,47 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
         (vllm_root / "torch.py").write_text(
             textwrap.dedent(
                 """
+                class _Device:
+                    def __init__(self, kind):
+                        self.type = kind
+                    def __str__(self):
+                        return self.type
+
                 class Tensor:
-                    pass
+                    def __init__(self, device="cuda", shape=(4,), dtype="fake"):
+                        self.device = _Device(device)
+                        self.shape = tuple(shape)
+                        self.dtype = dtype
+                    @property
+                    def is_cuda(self):
+                        return self.device.type == "cuda"
+                    @property
+                    def is_cpu(self):
+                        return self.device.type == "cpu"
+                    def numel(self):
+                        out = 1
+                        for dim in self.shape:
+                            out *= dim
+                        return out
+                    def element_size(self):
+                        return 2
+                    def size(self):
+                        return self.shape
+                    def detach(self):
+                        return self
+                    def to(self, device):
+                        return Tensor(str(device), self.shape, self.dtype)
+                    def contiguous(self):
+                        return self
+                    def reshape(self, *shape):
+                        if len(shape) == 1 and isinstance(shape[0], tuple):
+                            shape = shape[0]
+                        return Tensor(self.device.type, shape, self.dtype)
+                    def record_stream(self, stream):
+                        pass
+
+                def empty(size, dtype=None, device="cpu"):
+                    return Tensor(str(device), tuple(size), dtype or "fake")
 
                 class _Work:
                     def wait(self):
@@ -426,6 +465,84 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
         lines = result.stdout.strip().splitlines()
         self.assertEqual(lines[:5], ["True", "False", "True", "Ds4TcpTensorChannel", "[]"])
         self.assertIn("'marker', 'ok'", lines[5])
+
+    def test_pp_tcp_patch_handles_positional_group_name(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        hook_root = src_root / "ds4_vllm_runtime"
+        with tempfile.TemporaryDirectory() as tmp:
+            vllm_root = Path(tmp)
+            self._write_fake_vllm(vllm_root)
+            code = textwrap.dedent(
+                """
+                from vllm.distributed.parallel_state import GroupCoordinator
+                group = GroupCoordinator([[0, 1]], 0, "gloo", True, False, "pp")
+                print(group.use_device_communicator)
+                print(group.device_communicator is None)
+                print(type(group.ds4_pp_tcp_tensor_channel).__name__)
+                """
+            )
+            env = os.environ.copy()
+            env["VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR"] = "1"
+            env["VLLM_DS4_PP_TCP_TENSOR_DICT"] = "1"
+            env["VLLM_DS4_PP_TCP_BIND_HOST"] = "127.0.0.1"
+            env["VLLM_DS4_PP_TCP_ADVERTISE_HOST"] = "127.0.0.1"
+            env["DS4_VLLM_RUNTIME_PATCHES_STRICT"] = "1"
+            env["PYTHONPATH"] = os.pathsep.join(
+                [str(vllm_root), str(hook_root), str(src_root)]
+            )
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        self.assertEqual(
+            result.stdout.strip().splitlines(),
+            ["False", "True", "Ds4TcpTensorChannel"],
+        )
+
+    def test_pp_patch_cpu_stages_cuda_tensor_dict_without_upstream_helper(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        hook_root = src_root / "ds4_vllm_runtime"
+        with tempfile.TemporaryDirectory() as tmp:
+            vllm_root = Path(tmp)
+            self._write_fake_vllm(vllm_root)
+            code = textwrap.dedent(
+                """
+                import torch
+                from vllm.distributed.parallel_state import GroupCoordinator
+                group = GroupCoordinator(
+                    [[0, 1]], 0, "gloo", True, False, group_name="pp"
+                )
+                handles = group.isend_tensor_dict(
+                    {"hidden_states": torch.Tensor(device="cuda", shape=(8,))}
+                )
+                metadata = group.sent_objects[0][1][0][1]
+                print(type(metadata).__name__)
+                print(metadata.target_device)
+                print(len(handles))
+                """
+            )
+            env = os.environ.copy()
+            env["VLLM_DS4_PP_CPU_STAGED_TENSOR_DICT"] = "1"
+            env["DS4_VLLM_RUNTIME_PATCHES_STRICT"] = "1"
+            env["PYTHONPATH"] = os.pathsep.join(
+                [str(vllm_root), str(hook_root), str(src_root)]
+            )
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        self.assertEqual(
+            result.stdout.strip().splitlines(),
+            ["TensorMetadataCpuStaged", "cuda", "1"],
+        )
 
     def test_runtime_patch_overrides_index_topk(self):
         v2_root = Path(__file__).resolve().parents[1]
