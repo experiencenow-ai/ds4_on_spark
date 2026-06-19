@@ -85,13 +85,14 @@
     "required_architecture": "GlmMoeDsaForCausalLM",
     "required_model_type": "glm_moe_dsa",
     "required_quantization": "fp8",
+    "required_runtime_version": "0.23.0",
     "required_runtime_flags": [
       "--kv-cache-dtype fp8_e4m3",
       "--reasoning-parser glm45",
       "--tool-call-parser glm47",
       "--enable-auto-tool-choice"
     ],
-    "required_source": "local vLLM source tree with GlmMoeDsaForCausalLM support",
-    "required_source_root": "/home/{node}/src/vllm"
+    "required_source": "guarded vLLM 0.23.0 wheel overlay with GlmMoeDsaForCausalLM support",
+    "required_source_root": "/home/{node}/standard-runtimes/vllm-0.23.0-overlay"
   }
 }
