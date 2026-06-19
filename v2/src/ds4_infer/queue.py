@@ -337,6 +337,8 @@ class InferenceQueue:
                 newest_ready = max(float(row["ready_at"] or row["updated_at"] or now) for row in rows)
                 if (now - newest_ready) < batch_linger_s:
                     return []
+                if _has_recent_queued_peer(conn, rows[0], node_id=node_id, batch_id=batch_id, now=now, linger_s=batch_linger_s):
+                    return []
             if share_compute_domain:
                 acquired_compute_lease_id = None
             else:
@@ -1585,6 +1587,33 @@ def _ready_rows(conn: sqlite3.Connection, *, node_id: str | None, batch_id: str 
     if ready_shape_bucketing:
         return _ready_shape_bucket(rows, service_limit)
     return rows
+
+
+def _has_recent_queued_peer(conn: sqlite3.Connection, first: sqlite3.Row, *, node_id: str | None, batch_id: str | None, now: float, linger_s: float) -> bool:
+    clauses = ["state='queued'", "selected_profile_id=?"]
+    params: list[Any] = [first["selected_profile_id"]]
+    if node_id is not None:
+        clauses.append("(selected_node_id is null or selected_node_id=?)")
+        params.append(node_id)
+    if batch_id:
+        clauses.append("batch_id=?")
+        params.append(batch_id)
+    service_id = first["selected_service_id"]
+    if service_id is None:
+        clauses.append("selected_service_id is null")
+    else:
+        clauses.append("selected_service_id=?")
+        params.append(service_id)
+    compute_domain = first["selected_compute_domain"]
+    if compute_domain is None:
+        clauses.append("selected_compute_domain is null")
+    else:
+        clauses.append("selected_compute_domain=?")
+        params.append(compute_domain)
+    row = conn.execute(f"select max(coalesce(updated_at,created_at)) newest from requests where {' and '.join(clauses)}", tuple(params)).fetchone()
+    if row is None or row["newest"] is None:
+        return False
+    return (now - float(row["newest"])) < max(0.0, float(linger_s))
 
 
 def _ready_row_scope(clauses: list[str], params: list[Any], first: sqlite3.Row, *, shape_bucket: bool) -> Any:

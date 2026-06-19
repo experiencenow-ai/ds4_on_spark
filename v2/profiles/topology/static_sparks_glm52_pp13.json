@@ -92,7 +92,7 @@
         "profile_id": "glm52_fp8_pp13_frontier_v1",
         "scheduler": {
           "admission_mode": "single_active_batch_per_compute_domain",
-          "batch_linger_s": 0.05,
+          "batch_linger_s": 0.35,
           "dispatch_batch_limit": 128,
           "max_running_batches_per_compute_domain": 1,
           "queue_depth_target": 256,
