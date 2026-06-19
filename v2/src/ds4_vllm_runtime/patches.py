@@ -753,8 +753,10 @@ def apply_runtime_patches() -> list[str]:
     patches = []
     if any(name.startswith("VLLM_DS4_") for name in os.environ):
         patches.append(register_ds4_vllm_envs())
-    if env_flag("VLLM_DS4_PP_TCP_TENSOR_DICT") or env_flag(
-        "VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR"
+    if (
+        env_flag("VLLM_DS4_PP_CPU_STAGED_TENSOR_DICT")
+        or env_flag("VLLM_DS4_PP_TCP_TENSOR_DICT")
+        or env_flag("VLLM_DS4_PP_DISABLE_DEVICE_COMMUNICATOR")
     ):
         patches.append(patch_ds4_pp_tcp_tensor_transport())
     if env_flag("DS4_VLLM_READY_RESPONSE_COMPAT"):
