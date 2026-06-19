@@ -87,7 +87,7 @@
     "required_runtime_version": "0.23.0",
     "required_runtime_flags": [
       "--kv-cache-dtype bfloat16",
-      "--attention-backend FLASHINFER_MLA_SPARSE",
+      "--attention-backend TRITON_MLA",
       "--reasoning-parser glm45",
       "--tool-call-parser glm47",
       "--enable-auto-tool-choice"
@@ -96,10 +96,9 @@
       "humming-kernels[cu13]==0.1.4"
     ],
     "required_runtime_patches": [
-      "DS4_VLLM_READY_RESPONSE_COMPAT=1",
-      "DS4_VLLM_SM12_FLASHINFER_MLA_SPARSE=1"
+      "DS4_VLLM_READY_RESPONSE_COMPAT=1"
     ],
-    "required_source": "guarded vLLM 0.23.0 wheel overlay with GlmMoeDsaForCausalLM support, DS4 ready-response compatibility shim, and guarded SM12 FlashInfer sparse MLA validation shim",
+    "required_source": "guarded vLLM 0.23.0 wheel overlay with GlmMoeDsaForCausalLM support, DS4 ready-response compatibility shim, and TRITON_MLA attention on Spark GB10 because FLASHINFER_MLA_SPARSE first-token execution fails in fp8_fp4_mqa_logits with unsupported architecture",
     "required_source_root": "/home/{node}/standard-runtimes/vllm-0.23.0-overlay"
   }
 }
