@@ -13,8 +13,8 @@
     "latency_rank": 1.6,
     "max_num_batched_tokens": 8192,
     "max_num_seqs": 4,
-    "measurement_notes": "PP13 DSAPI test profile. GLM-5.2-FP8 has 78 main transformer layers. Keep non-production and profile-pinned until smoke and ds4-eval measurements are complete. The baseline runtime uses eager TRITON_MLA attention and Marlin FP8 MoE because the non-eager FLASHINFER_MLA_SPARSE/Triton-MoE variant returned malformed smoke outputs on the Spark GB10 ring.",
-    "target": "13-stage GLM-5.2-FP8 frontier test pipeline with FP8 KV and LMCache HMA."
+    "measurement_notes": "PP13 DSAPI test profile. GLM-5.2-FP8 has 78 main transformer layers. Keep non-production and profile-pinned until smoke and ds4-eval measurements are complete. The diagnostic runtime uses the patched SM12 FLASHINFER_MLA_SPARSE path without LMCache while the upstream-runtime LMCache import mismatch is isolated.",
+    "target": "13-stage GLM-5.2-FP8 frontier diagnostic pipeline with FP8 KV and no KV-transfer connector."
   },
   "production_eligible": false,
   "profile_id": "glm52_fp8_pp13_frontier_v1",
@@ -29,7 +29,7 @@
     },
     "default_for": [],
     "optional_kv_cache_deployments": [
-      "profiles/kv_cache/glm52_fp8_pp13_lmcache_hma.json"
+      "profiles/kv_cache/glm52_fp8_pp13_nokvtransfer_diag.json"
     ],
     "pipeline": {
       "api_base_url": "http://127.0.0.1:8152",
