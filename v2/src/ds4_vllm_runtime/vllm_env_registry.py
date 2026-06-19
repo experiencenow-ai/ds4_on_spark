@@ -21,6 +21,16 @@ def _env_bool(name: str, default: str = "0") -> Callable[[], bool]:
     return _get
 
 
+def _env_optional_bool(name: str) -> Callable[[], bool | None]:
+    def _get() -> bool | None:
+        value = os.getenv(name)
+        if value is None:
+            return None
+        return value.strip().lower() not in {"", "0", "false", "no", "off"}
+
+    return _get
+
+
 def _env_int(name: str, default: str) -> Callable[[], int]:
     def _get() -> int:
         return int(os.getenv(name, default))
@@ -43,6 +53,7 @@ def _env_str(name: str, default: str = "") -> Callable[[], str]:
 
 
 _DS4_ENV_SPECS: dict[str, Callable[[], Any]] = {
+    "VLLM_TRITON_MLA_SPARSE": _env_optional_bool("VLLM_TRITON_MLA_SPARSE"),
     "VLLM_DS4_DISABLE_DSV3_FUSED_A_GEMM": _env_bool(
         "VLLM_DS4_DISABLE_DSV3_FUSED_A_GEMM"
     ),

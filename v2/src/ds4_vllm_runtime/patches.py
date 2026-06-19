@@ -639,6 +639,30 @@ def force_flashinfer_mla_cute_dsl_decode() -> str:
     return "flashinfer_mla_force_cute_dsl"
 
 
+def allow_triton_mla_sparse_validation() -> str:
+    triton_mla = importlib.import_module(
+        "vllm.v1.attention.backends.mla.triton_mla"
+    )
+    backend_cls = getattr(triton_mla, "TritonMLABackend")
+    original = getattr(backend_cls, "validate_configuration")
+    original_func = getattr(original, "__func__", original)
+    if getattr(original_func, "_ds4_triton_mla_sparse_validation", False):
+        return "triton_mla_sparse_validation"
+
+    def validate_configuration(cls, *args, **kwargs):  # type: ignore[no-untyped-def]
+        reasons = list(original(*args, **kwargs))
+        use_sparse = kwargs.get("use_sparse")
+        if use_sparse is None and len(args) >= 7:
+            use_sparse = args[6]
+        if use_sparse is True:
+            reasons = [reason for reason in reasons if reason != "sparse not supported"]
+        return reasons
+
+    validate_configuration._ds4_triton_mla_sparse_validation = True  # type: ignore[attr-defined]
+    backend_cls.validate_configuration = classmethod(validate_configuration)
+    return "triton_mla_sparse_validation"
+
+
 def _configured_block_size(client: Any) -> int | None:
     vllm_config = getattr(client, "vllm_config", None)
     cache_config = getattr(vllm_config, "cache_config", None)
@@ -751,7 +775,9 @@ def allow_missing_ready_response_block_size() -> str:
 
 def apply_runtime_patches() -> list[str]:
     patches = []
-    if any(name.startswith("VLLM_DS4_") for name in os.environ):
+    if any(name.startswith("VLLM_DS4_") for name in os.environ) or os.getenv(
+        "VLLM_TRITON_MLA_SPARSE"
+    ) is not None:
         patches.append(register_ds4_vllm_envs())
     if (
         env_flag("VLLM_DS4_PP_CPU_STAGED_TENSOR_DICT")
@@ -779,6 +805,8 @@ def apply_runtime_patches() -> list[str]:
         patches.append(force_flashinfer_mla_trtllm_gen_decode())
     if env_flag("DS4_VLLM_FLASHINFER_MLA_FORCE_CUTE_DSL"):
         patches.append(force_flashinfer_mla_cute_dsl_decode())
+    if env_flag("VLLM_TRITON_MLA_SPARSE"):
+        patches.append(allow_triton_mla_sparse_validation())
     return patches
 
 
