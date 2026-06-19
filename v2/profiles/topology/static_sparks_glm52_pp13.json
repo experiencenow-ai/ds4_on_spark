@@ -93,13 +93,13 @@
         "scheduler": {
           "admission_mode": "single_active_batch_per_compute_domain",
           "batch_linger_s": 0.05,
-          "dispatch_batch_limit": 64,
+          "dispatch_batch_limit": 128,
           "max_running_batches_per_compute_domain": 1,
-          "queue_depth_target": 128,
-          "queue_limit": 128,
-          "refill_low_watermark": 32,
-          "vllm_max_num_batched_tokens": 16384,
-          "vllm_max_num_seqs": 64
+          "queue_depth_target": 256,
+          "queue_limit": 256,
+          "refill_low_watermark": 64,
+          "vllm_max_num_batched_tokens": 32768,
+          "vllm_max_num_seqs": 128
         },
         "served_model_name": "glm-5.2-fp8-pp13",
         "service_id": "glm52_fp8_pp13",
