@@ -10,11 +10,13 @@ import unittest
 class Ds4VllmRuntimePatchTests(unittest.TestCase):
     def _write_fake_vllm(self, vllm_root: Path) -> None:
         module_dir = vllm_root / "vllm/v1/attention/backends/mla"
+        ops_dir = vllm_root / "vllm/v1/attention/ops"
         dist_dir = vllm_root / "vllm/distributed"
         engine_dir = vllm_root / "vllm/v1/engine"
         layers_dir = vllm_root / "vllm/model_executor/layers"
         models_dir = vllm_root / "vllm/model_executor/models"
         module_dir.mkdir(parents=True)
+        ops_dir.mkdir(parents=True)
         dist_dir.mkdir(parents=True)
         engine_dir.mkdir(parents=True)
         layers_dir.mkdir(parents=True)
@@ -29,6 +31,7 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             "vllm/v1/attention",
             "vllm/v1/attention/backends",
             "vllm/v1/attention/backends/mla",
+            "vllm/v1/attention/ops",
             "vllm/v1/engine",
         ]:
             (vllm_root / init_dir / "__init__.py").write_text("")
@@ -222,6 +225,38 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                         if kwargs.get("use_sparse"):
                             return ["sparse not supported", "other reason"]
                         return []
+                """
+            )
+        )
+        (ops_dir / "triton_decode_attention.py").write_text(
+            textwrap.dedent(
+                """
+                calls = []
+                is_hip_ = False
+
+                class _Triton:
+                    @staticmethod
+                    def next_power_of_2(value):
+                        out = 1
+                        while out < value:
+                            out *= 2
+                        return out
+                    @staticmethod
+                    def cdiv(left, right):
+                        return -(-left // right)
+
+                triton = _Triton()
+
+                class _Kernel:
+                    def __getitem__(self, grid):
+                        def _run(*args, **kwargs):
+                            calls.append({"grid": grid, "kwargs": kwargs})
+                        return _run
+
+                _fwd_grouped_kernel_stage1 = _Kernel()
+
+                def _decode_grouped_att_m_fwd(*args, **kwargs):
+                    return "original"
                 """
             )
         )
@@ -468,6 +503,66 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
         self.assertEqual(lines[3], "['other reason']")
         self.assertEqual(lines[4], "[]")
         self.assertEqual(lines[5], "1")
+
+    def test_runtime_patch_tunes_triton_mla_decode_block_h(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        with tempfile.TemporaryDirectory() as tmp:
+            vllm_root = Path(tmp)
+            self._write_fake_vllm(vllm_root)
+            code = textwrap.dedent(
+                """
+                from ds4_vllm_runtime.patches import apply_runtime_patches
+                import vllm.v1.attention.ops.triton_decode_attention as decode
+
+                class T:
+                    def __init__(self, shape):
+                        self.shape = tuple(shape)
+                    def stride(self, axis):
+                        return 100 + axis
+
+                print(apply_runtime_patches())
+                decode._decode_grouped_att_m_fwd(
+                    T((1, 32, 576)),
+                    T((1, 1, 1, 576)),
+                    T((1, 1, 1, 512)),
+                    T((1, 32, 512)),
+                    T((1, 1)),
+                    T((1,)),
+                    2,
+                    1.0,
+                    1,
+                    0.0,
+                    object(),
+                    object(),
+                    is_mla=True,
+                )
+                call = decode.calls[-1]
+                print(call["grid"])
+                print(call["kwargs"]["BLOCK_H"])
+                print(call["kwargs"]["num_stages"])
+                print(call["kwargs"]["BLOCK_DMODEL"])
+                print(call["kwargs"]["BLOCK_DPE"])
+                """
+            )
+            env = os.environ.copy()
+            env["VLLM_DS4_TRITON_MLA_BLOCK_H"] = "8"
+            env["VLLM_DS4_TRITON_MLA_NUM_STAGES"] = "1"
+            env["PYTHONPATH"] = os.pathsep.join([str(vllm_root), str(src_root)])
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        lines = result.stdout.strip().splitlines()
+        self.assertIn("triton_mla_decode_tuning", lines[0])
+        self.assertEqual(lines[1], "(1, 4, 2)")
+        self.assertEqual(lines[2], "8")
+        self.assertEqual(lines[3], "1")
+        self.assertEqual(lines[4], "512")
+        self.assertEqual(lines[5], "64")
 
     def test_sitecustomize_applies_pp_tcp_transport_patch(self):
         v2_root = Path(__file__).resolve().parents[1]
