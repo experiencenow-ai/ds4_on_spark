@@ -150,6 +150,24 @@ def allow_flashinfer_mla_shared_block_tables_2d() -> str:
     return "flashinfer_mla_shared_block_tables_2d"
 
 
+def force_flashinfer_mla_trtllm_gen_decode() -> str:
+    flashinfer_sparse = importlib.import_module(
+        "vllm.v1.attention.backends.mla.flashinfer_mla_sparse"
+    )
+    original = getattr(flashinfer_sparse, "trtllm_batch_decode_with_kv_cache_mla")
+    if getattr(original, "_ds4_force_trtllm_gen", False):
+        return "flashinfer_mla_force_trtllm_gen"
+
+    def decode_with_trtllm_gen(*args, **kwargs):  # type: ignore[no-untyped-def]
+        if kwargs.get("backend", "auto") == "auto":
+            kwargs["backend"] = "trtllm-gen"
+        return original(*args, **kwargs)
+
+    decode_with_trtllm_gen._ds4_force_trtllm_gen = True  # type: ignore[attr-defined]
+    flashinfer_sparse.trtllm_batch_decode_with_kv_cache_mla = decode_with_trtllm_gen
+    return "flashinfer_mla_force_trtllm_gen"
+
+
 def _configured_block_size(client: Any) -> int | None:
     vllm_config = getattr(client, "vllm_config", None)
     cache_config = getattr(vllm_config, "cache_config", None)
@@ -272,6 +290,8 @@ def apply_runtime_patches() -> list[str]:
         patches.append(allow_sm12_sparse_indexer_dense_fallback())
     if env_flag("DS4_VLLM_FLASHINFER_MLA_SHARED_BLOCK_TABLES_2D"):
         patches.append(allow_flashinfer_mla_shared_block_tables_2d())
+    if env_flag("DS4_VLLM_FLASHINFER_MLA_FORCE_TRTLLM_GEN"):
+        patches.append(force_flashinfer_mla_trtllm_gen_decode())
     return patches
 
 
