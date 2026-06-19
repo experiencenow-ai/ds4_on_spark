@@ -22,6 +22,7 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             "vllm/v1/engine",
         ]:
             (vllm_root / init_dir / "__init__.py").write_text("")
+        (vllm_root / "vllm/__init__.py").write_text('__version__ = "fake-vllm-new"\n')
         (module_dir / "flashmla_sparse.py").write_text(
             textwrap.dedent(
                 """
@@ -256,6 +257,58 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             )
         self.assertIn("flashinfer_mla_sparse_sm12_compute_capability", result.stdout)
         self.assertEqual(result.stdout.strip().splitlines()[-1], "True")
+
+    def test_sitecustomize_writes_child_import_proof(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        runner = v2_root / "scripts/ds4_run_vllm_from_source.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            vllm_root = tmp_path / "fake_vllm"
+            proof_path = tmp_path / "proof.json"
+            self._write_fake_vllm(vllm_root)
+            (vllm_root / "child_probe.py").write_text(
+                textwrap.dedent(
+                    """
+                    import os
+                    import subprocess
+                    import sys
+
+                    subprocess.run(
+                        [sys.executable, "-c", "import vllm; print(vllm.__file__)"],
+                        env=os.environ.copy(),
+                        check=True,
+                        text=True,
+                        capture_output=True,
+                    )
+                    """
+                )
+            )
+            env = os.environ.copy()
+            env["DS4_VLLM_READY_RESPONSE_COMPAT"] = "1"
+            env["DS4_VLLM_IMPORT_PROOF_JSON"] = str(proof_path)
+            env["PYTHONPATH"] = str(src_root)
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(runner),
+                    "--source-root",
+                    str(vllm_root),
+                    "--module",
+                    "child_probe",
+                ],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+            parent = proof_path.read_text()
+            child_proofs = list(tmp_path.glob("proof.sitecustomize.pid*.json"))
+            self.assertIn(str(vllm_root / "vllm/__init__.py"), parent)
+            self.assertTrue(child_proofs)
+            self.assertIn(
+                str(vllm_root / "vllm/__init__.py"), child_proofs[0].read_text()
+            )
 
     def test_runtime_patch_repairs_old_ready_response_payload_without_flashmla(self):
         v2_root = Path(__file__).resolve().parents[1]
