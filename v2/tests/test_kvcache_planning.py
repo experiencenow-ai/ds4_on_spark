@@ -26,6 +26,7 @@ KIMI27_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "kimi27_code_pp13_lmca
 GLM52_PP13_DIRECT_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "glm52_fp8_pp13_direct_vllm.json"
 GLM52_PP13_PROFILE_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "glm52_fp8_pp13_direct_vllm_torch_profile.json"
 GLM52_PP13_MOE_TRITON_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "glm52_fp8_pp13_direct_vllm_moe_triton.json"
+GLM52_PP13_MOE_DEEPGEMM_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "glm52_fp8_pp13_direct_vllm_moe_deepgemm.json"
 QWEN_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp13_lmcache_hma.json"
 GEMMA26_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_26b_a4b_it_pp13_lmcache_hma.json"
 QWEN_PP12_PLAIN_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp12_plain.json"
@@ -349,6 +350,24 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(triton_rank0["env"], base_rank0["env"])
         self.assertEqual(triton_rank0["argv"][:triton_rank0["argv"].index("--moe-backend")], base_rank0["argv"][:base_rank0["argv"].index("--moe-backend")])
         self.assertEqual(triton_rank0["argv"][triton_rank0["argv"].index("--moe-backend") + 2:], base_rank0["argv"][base_rank0["argv"].index("--moe-backend") + 2:])
+
+    def test_glm52_pp13_moe_deepgemm_canary_changes_only_moe_backend(self) -> None:
+        base = plan_deployment(KvCacheDeployment.load(GLM52_PP13_DIRECT_DEPLOYMENT))
+        deepgemm = plan_deployment(KvCacheDeployment.load(GLM52_PP13_MOE_DEEPGEMM_DEPLOYMENT))
+        base_rank0 = base["vllm_nodes"][0]
+        deepgemm_rank0 = deepgemm["vllm_nodes"][0]
+
+        self.assertEqual(deepgemm["profile_id"], "glm52_fp8_pp13_moe_deepgemm_v1")
+        self.assertEqual(deepgemm["layer_partition"], base["layer_partition"])
+        self.assertEqual(deepgemm["pipeline_parallel_size"], base["pipeline_parallel_size"])
+        self.assertEqual(deepgemm_rank0["argv"][deepgemm_rank0["argv"].index("--moe-backend") + 1], "deep_gemm")
+        self.assertEqual(base_rank0["argv"][base_rank0["argv"].index("--moe-backend") + 1], "marlin")
+        self.assertEqual(deepgemm_rank0["argv"][deepgemm_rank0["argv"].index("--attention-backend") + 1], "TRITON_MLA")
+        self.assertEqual(deepgemm_rank0["argv"][deepgemm_rank0["argv"].index("--max-model-len") + 1], "262144")
+        self.assertEqual(deepgemm_rank0["argv"][deepgemm_rank0["argv"].index("--max-num-batched-tokens") + 1], "32768")
+        self.assertEqual(deepgemm_rank0["env"], base_rank0["env"])
+        self.assertEqual(deepgemm_rank0["argv"][:deepgemm_rank0["argv"].index("--moe-backend")], base_rank0["argv"][:base_rank0["argv"].index("--moe-backend")])
+        self.assertEqual(deepgemm_rank0["argv"][deepgemm_rank0["argv"].index("--moe-backend") + 2:], base_rank0["argv"][base_rank0["argv"].index("--moe-backend") + 2:])
 
     def test_pp13_lmcache_services_enable_private_cache_admin(self) -> None:
         deployments = (KIMI27_PP13_DEPLOYMENT, QWEN_PP13_DEPLOYMENT, GEMMA26_PP13_DEPLOYMENT)
