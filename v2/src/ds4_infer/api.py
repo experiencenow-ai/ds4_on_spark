@@ -870,6 +870,7 @@ class CoordinatorApi:
                 entry_node_id=entry_node_id,
                 node_profile_ids=node_profile_ids,
                 batch_limits_by_service=batch_limits_by_service,
+                batch_token_limits_by_service=batch_token_limits_by_service,
                 kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
             )
             if claimed <= 0:
@@ -894,10 +895,15 @@ class CoordinatorApi:
         entry_node_id: str,
         node_profile_ids: tuple[str, ...],
         batch_limits_by_service: dict[str, int],
+        batch_token_limits_by_service: dict[str, int],
         kv_shard_layouts_by_profile: dict[str, Any],
     ) -> int:
         if not claims:
             return 0
+        token_limits = dict(batch_token_limits_by_service)
+        if int(plan.max_cohort_tokens or 0) > 0:
+            token_limits[plan.service_id] = int(plan.max_cohort_tokens)
+        decode_reserves = {plan.service_id: plan.decode_token_reserve} if int(plan.decode_token_reserve or 0) > 0 else {}
         claimed = len(claims)
         self._dispatcher_submit_cohort(
             executor=executor,
@@ -908,6 +914,8 @@ class CoordinatorApi:
             entry_node_id=entry_node_id,
             node_profile_ids=node_profile_ids,
             batch_limits_by_service=batch_limits_by_service,
+            batch_token_limits_by_service=token_limits,
+            batch_decode_token_reserves_by_service=decode_reserves,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
             low_watermark=plan.low_watermark,
         )
@@ -1006,6 +1014,8 @@ class CoordinatorApi:
         entry_node_id: str | None = None,
         node_profile_ids: tuple[str, ...] = (),
         batch_limits_by_service: dict[str, int] | None = None,
+        batch_token_limits_by_service: dict[str, int] | None = None,
+        batch_decode_token_reserves_by_service: dict[str, int] | None = None,
         kv_shard_layouts_by_profile: dict[str, Any] | None = None,
         low_watermark: int = 0,
     ) -> None:
@@ -1023,6 +1033,8 @@ class CoordinatorApi:
                 self.dispatcher_kv_capacity_bytes,
                 kv_shard_layouts_by_profile or {},
                 batch_limits_by_service or {},
+                batch_token_limits_by_service or {},
+                batch_decode_token_reserves_by_service or {},
                 low_watermark,
             )
         else:
@@ -2150,6 +2162,8 @@ def _dispatcher_run_resident_rolling_claims(
     kv_capacity_bytes: int,
     kv_shard_layouts_by_profile: dict[str, Any],
     batch_limits_by_service: dict[str, int],
+    batch_token_limits_by_service: dict[str, int],
+    batch_decode_token_reserves_by_service: dict[str, int],
     low_watermark: int,
 ) -> list[tuple[Any, dict[str, Any]]]:
     if not claims:
@@ -2170,6 +2184,8 @@ def _dispatcher_run_resident_rolling_claims(
         kv_capacity_bytes,
         kv_shard_layouts_by_profile,
         batch_limits_by_service,
+        batch_token_limits_by_service,
+        batch_decode_token_reserves_by_service,
         low_watermark,
         forced=force_refill_stream,
     )
@@ -2185,6 +2201,8 @@ def _dispatcher_run_rolling_refill_stream_claims(
     kv_capacity_bytes: int,
     kv_shard_layouts_by_profile: dict[str, Any],
     batch_limits_by_service: dict[str, int],
+    batch_token_limits_by_service: dict[str, int],
+    batch_decode_token_reserves_by_service: dict[str, int],
     low_watermark: int,
     forced: bool = False,
 ) -> list[tuple[Any, dict[str, Any]]]:
@@ -2202,6 +2220,8 @@ def _dispatcher_run_rolling_refill_stream_claims(
             kv_capacity_bytes=kv_capacity_bytes,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
             batch_limits_by_service=batch_limits_by_service,
+            batch_token_limits_by_service=batch_token_limits_by_service,
+            batch_decode_token_reserves_by_service=batch_decode_token_reserves_by_service,
             refill_low_watermark=max(1, int(low_watermark)),
             on_item_finished=mark_finished,
         )

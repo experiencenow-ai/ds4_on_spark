@@ -39,6 +39,8 @@ class BatchWorker:
         kv_capacity_bytes: int = 0,
         kv_shard_layouts_by_profile: Mapping[str, PipelineProfile] | None = None,
         batch_limits_by_service: Mapping[str, int] | None = None,
+        batch_token_limits_by_service: Mapping[str, int] | None = None,
+        batch_decode_token_reserves_by_service: Mapping[str, int] | None = None,
         refill_low_watermarks_by_service: Mapping[str, int] | None = None,
         on_result: FinishHook | None = None,
     ) -> dict[str, Any]:
@@ -65,6 +67,8 @@ class BatchWorker:
             batch_linger_s=batch_linger_s,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile or {},
             batch_limits_by_service=batch_limits_by_service or {},
+            batch_token_limits_by_service=batch_token_limits_by_service or {},
+            batch_decode_token_reserves_by_service=batch_decode_token_reserves_by_service or {},
         )
         if not claims:
             return _summary(0, 0, 0, reap, prefilled_count=prefilled, batch_dispatch_count=0)
@@ -89,6 +93,8 @@ class BatchWorker:
                 kv_capacity_bytes=kv_capacity_bytes,
                 kv_shard_layouts_by_profile=kv_shard_layouts_by_profile or {},
                 batch_limits_by_service=batch_limits_by_service or {},
+                batch_token_limits_by_service=batch_token_limits_by_service or {},
+                batch_decode_token_reserves_by_service=batch_decode_token_reserves_by_service or {},
                 refill_low_watermark=_service_refill_low_watermark(claims[0].selected_service_id, refill_low_watermarks_by_service or {}),
             )
             return _summary(claimed, completed, failed, reap, prefilled_count=prefilled + refill_prefilled, retried_count=retried, batch_dispatch_count=claimed, batch_dispatch_mode="rolling_refill")
@@ -217,6 +223,8 @@ class BatchWorker:
         kv_shard_layouts_by_profile: Mapping[str, PipelineProfile],
         batch_limits_by_service: Mapping[str, int],
         refill_low_watermark: int,
+        batch_token_limits_by_service: Mapping[str, int] | None = None,
+        batch_decode_token_reserves_by_service: Mapping[str, int] | None = None,
         on_item_finished: Callable[[str], None] | None = None,
     ) -> tuple[int, int, int, int, int]:
         return self._run_refill_stream(
@@ -230,6 +238,8 @@ class BatchWorker:
             kv_capacity_bytes=kv_capacity_bytes,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
             batch_limits_by_service=batch_limits_by_service,
+            batch_token_limits_by_service=batch_token_limits_by_service or {},
+            batch_decode_token_reserves_by_service=batch_decode_token_reserves_by_service or {},
             refill_low_watermark=refill_low_watermark,
             share_compute_domain=True,
             on_item_finished=on_item_finished,
@@ -270,6 +280,8 @@ class BatchWorker:
         kv_capacity_bytes: int,
         kv_shard_layouts_by_profile: Mapping[str, PipelineProfile],
         batch_limits_by_service: Mapping[str, int],
+        batch_token_limits_by_service: Mapping[str, int],
+        batch_decode_token_reserves_by_service: Mapping[str, int],
         refill_low_watermark: int,
         share_compute_domain: bool = False,
         on_item_finished: Callable[[str], None] | None = None,
@@ -320,6 +332,8 @@ class BatchWorker:
                             kv_capacity_bytes=kv_capacity_bytes,
                             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
                             batch_limits_by_service=batch_limits_by_service,
+                            batch_token_limits_by_service=batch_token_limits_by_service,
+                            batch_decode_token_reserves_by_service=batch_decode_token_reserves_by_service,
                             compute_lease_id=compute_lease_id,
                             selected_service_id=service_id,
                             allow_new_compute_lease=not pending,
@@ -350,6 +364,8 @@ class BatchWorker:
         kv_capacity_bytes: int,
         kv_shard_layouts_by_profile: Mapping[str, PipelineProfile],
         batch_limits_by_service: Mapping[str, int],
+        batch_token_limits_by_service: Mapping[str, int],
+        batch_decode_token_reserves_by_service: Mapping[str, int],
         compute_lease_id: str | None,
         selected_service_id: str | None,
         allow_new_compute_lease: bool,
@@ -377,6 +393,8 @@ class BatchWorker:
             batch_linger_s=0.0,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
             batch_limits_by_service=batch_limits_by_service,
+            batch_token_limits_by_service=batch_token_limits_by_service,
+            batch_decode_token_reserves_by_service=batch_decode_token_reserves_by_service,
             compute_lease_id=compute_lease_id,
             selected_service_id=selected_service_id,
             share_compute_domain=share_compute_domain,
@@ -391,6 +409,8 @@ class BatchWorker:
                 batch_linger_s=0.0,
                 kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
                 batch_limits_by_service=batch_limits_by_service,
+                batch_token_limits_by_service=batch_token_limits_by_service,
+                batch_decode_token_reserves_by_service=batch_decode_token_reserves_by_service,
                 selected_service_id=selected_service_id,
             )
         return prefilled, claims
