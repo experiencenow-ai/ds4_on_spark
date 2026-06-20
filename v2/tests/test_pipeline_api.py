@@ -50,6 +50,44 @@ class PipelineApiTests(unittest.TestCase):
             else:
                 os.environ.pop("DS4_API_HTTP_REQUEST_QUEUE_SIZE", None)
 
+    def test_glm52_inline_chat_context_gets_prompt_truncation_budget(self) -> None:
+        original = os.environ.pop("DS4_API_CONTEXT_SAFETY_TOKENS", None)
+        try:
+            registry = ProfileRegistry.load(PROFILES)
+            profile = registry.get("glm52_fp8_pp13_frontier_v1")
+            payload = {
+                "rendered_prompt": "inline attachment text",
+                "estimated_prompt_tokens": 77679,
+                "metadata": {},
+            }
+            out = api_module._apply_profile_context_budget(
+                payload,
+                profile,
+                max_output_tokens=5120,
+                requested_max_output_tokens=5120,
+            )
+            self.assertEqual(out["openai"]["truncate_prompt_tokens"], 3008)
+            self.assertEqual(out["metadata"]["context_budget"]["max_model_len"], 8192)
+            self.assertEqual(out["metadata"]["context_budget"]["estimated_prompt_tokens"], 77679)
+            self.assertEqual(out["metadata"]["context_budget"]["prompt_budget_tokens"], 3008)
+        finally:
+            if original is not None:
+                os.environ["DS4_API_CONTEXT_SAFETY_TOKENS"] = original
+            else:
+                os.environ.pop("DS4_API_CONTEXT_SAFETY_TOKENS", None)
+
+    def test_glm52_context_budget_clamps_impossible_output_budget(self) -> None:
+        original = os.environ.pop("DS4_API_CONTEXT_SAFETY_TOKENS", None)
+        try:
+            registry = ProfileRegistry.load(PROFILES)
+            profile = registry.get("glm52_fp8_pp13_frontier_v1")
+            self.assertEqual(api_module._context_bounded_output_tokens(profile, 9000), 8127)
+        finally:
+            if original is not None:
+                os.environ["DS4_API_CONTEXT_SAFETY_TOKENS"] = original
+            else:
+                os.environ.pop("DS4_API_CONTEXT_SAFETY_TOKENS", None)
+
     def test_pipeline_openai_payload_uses_served_model_name(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")

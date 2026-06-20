@@ -24,9 +24,13 @@ def openai_completion_requests(body: dict[str, Any], registry: ProfileRegistry, 
     prompts = api_module._completion_prompt_items(body.get("prompt"))
     raw_requests = []
     client_stream = bool(body.get("stream"))
+    thinking_budget = api_module._thinking_budget_tokens(body)
+    requested_max_tokens = int(body.get("max_tokens") or 1024)
+    max_tokens = api_module._context_bounded_output_tokens(profile, requested_max_tokens, thinking_budget_tokens=thinking_budget)
     for index, prompt in enumerate(prompts):
         request_id = base_request_id if len(prompts) == 1 else f"{base_request_id}-{index:06d}"
         input_payload = api_module._input_with_api_kv({"prompt": prompt}, body, profile, topology)
+        input_payload = api_module._apply_profile_context_budget(input_payload, profile, max_output_tokens=max_tokens, thinking_budget_tokens=thinking_budget, requested_max_output_tokens=requested_max_tokens)
         if client_stream:
             input_payload["ds4_client_stream"] = True
         raw_requests.append(
@@ -36,11 +40,11 @@ def openai_completion_requests(body: dict[str, Any], registry: ProfileRegistry, 
                 chat=False,
                 input_payload=input_payload,
                 output_contract={"format": "text"},
-                max_tokens=int(body.get("max_tokens") or 1024),
+                max_tokens=max_tokens,
                 temperature=float(body.get("temperature") or 0.0),
                 job_class=str(body.get("ds4_job_class") or "analysis"),
                 capability=api_module._optional_str(body.get("ds4_capability")),
-                thinking_budget_tokens=api_module._thinking_budget_tokens(body),
+                thinking_budget_tokens=thinking_budget,
             )
         )
     return profile, base_request_id, batch_id, [InferenceRequest.from_json(raw) for raw in raw_requests]
@@ -74,15 +78,18 @@ def openai_chat_stream_events(api: Any, body: dict[str, Any]):
     batch_id = str(body.get("batch_id") or request_id)
     metadata = dict(body.get("metadata") or {})
     thinking_budget = api_module._thinking_budget_tokens(body, metadata)
-    input_payload = openai_chat_input_payload(body, profile=profile, metadata=metadata, thinking_budget_tokens=thinking_budget)
+    requested_max_tokens = int(body.get("max_completion_tokens") or body.get("max_tokens") or 1024)
+    max_tokens = api_module._context_bounded_output_tokens(profile, requested_max_tokens, thinking_budget_tokens=thinking_budget)
+    input_payload = openai_chat_input_payload(body, profile=profile, metadata=metadata, thinking_budget_tokens=thinking_budget, max_output_tokens=max_tokens)
+    input_payload = api_module._apply_profile_context_budget(api_module._input_with_api_kv(input_payload, body, profile, topology), profile, max_output_tokens=max_tokens, thinking_budget_tokens=thinking_budget, requested_max_output_tokens=requested_max_tokens)
     input_payload["ds4_client_stream"] = True
     raw_request = api_module._make_inference_request_json(
         request_id=request_id,
         profile=profile,
         chat=True,
-        input_payload=api_module._input_with_api_kv(input_payload, body, profile, topology),
+        input_payload=input_payload,
         output_contract=api_module._openai_output_contract(body),
-        max_tokens=int(body.get("max_completion_tokens") or body.get("max_tokens") or 1024),
+        max_tokens=max_tokens,
         temperature=float(body.get("temperature") or 0.0),
         job_class=str(body.get("ds4_job_class") or metadata.get("job_class") or "analysis"),
         capability=api_module._optional_str(body.get("ds4_capability") or metadata.get("capability")),

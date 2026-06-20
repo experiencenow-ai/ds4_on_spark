@@ -239,13 +239,15 @@ class CoordinatorApi:
         batch_id = str(body.get("batch_id") or request_id)
         metadata = dict(body.get("metadata") or {})
         thinking_budget = _thinking_budget_tokens(body, metadata)
-        max_tokens = int(body.get("max_completion_tokens") or body.get("max_tokens") or 1024)
+        requested_max_tokens = int(body.get("max_completion_tokens") or body.get("max_tokens") or 1024)
+        max_tokens = _context_bounded_output_tokens(profile, requested_max_tokens, thinking_budget_tokens=thinking_budget)
         input_payload = openai_chat_input_payload(body, profile=profile, metadata=metadata, thinking_budget_tokens=thinking_budget, max_output_tokens=max_tokens)
+        input_payload = _apply_profile_context_budget(_input_with_api_kv(input_payload, body, profile, topology), profile, max_output_tokens=max_tokens, thinking_budget_tokens=thinking_budget, requested_max_output_tokens=requested_max_tokens)
         raw_request = _make_inference_request_json(
             request_id=request_id,
             profile=profile,
             chat=True,
-            input_payload=_input_with_api_kv(input_payload, body, profile, topology),
+            input_payload=input_payload,
             output_contract=_openai_output_contract(body),
             max_tokens=max_tokens,
             temperature=float(body.get("temperature") or 0.0),
@@ -296,13 +298,15 @@ class CoordinatorApi:
         batch_id = str(body.get("batch_id") or request_id)
         metadata = dict(body.get("metadata") or {})
         thinking_budget = _thinking_budget_tokens(body, metadata)
-        max_tokens = int(body.get("max_tokens") or 1024)
+        requested_max_tokens = int(body.get("max_tokens") or 1024)
+        max_tokens = _context_bounded_output_tokens(profile, requested_max_tokens, thinking_budget_tokens=thinking_budget)
         input_payload = anthropic_messages_input_payload(body, profile=profile, metadata=metadata, thinking_budget_tokens=thinking_budget, max_output_tokens=max_tokens)
+        input_payload = _apply_profile_context_budget(_input_with_api_kv(input_payload, body, profile, topology), profile, max_output_tokens=max_tokens, thinking_budget_tokens=thinking_budget, requested_max_output_tokens=requested_max_tokens)
         raw_request = _make_inference_request_json(
             request_id=request_id,
             profile=profile,
             chat=True,
-            input_payload=_input_with_api_kv(input_payload, body, profile, topology),
+            input_payload=input_payload,
             output_contract={"format": "text"},
             max_tokens=max_tokens,
             temperature=float(body.get("temperature") or 0.0),
@@ -1344,6 +1348,79 @@ def _input_with_api_kv(input_payload: dict[str, Any], body: dict[str, Any], prof
     if raw.get("total_bytes") is not None or raw.get("bytes") is not None:
         out["kv_bytes_estimate"] = int(raw.get("total_bytes") or raw.get("bytes") or 0)
     return out
+
+
+def _context_bounded_output_tokens(profile: ModelProfile, max_output_tokens: int, *, thinking_budget_tokens: int = 0) -> int:
+    requested = max(1, int(max_output_tokens))
+    limit = _profile_context_window_tokens(profile)
+    safety = _context_safety_tokens()
+    available = limit - max(0, int(thinking_budget_tokens)) - safety
+    if available <= 1:
+        return 1
+    return min(requested, available - 1)
+
+
+def _apply_profile_context_budget(
+    input_payload: dict[str, Any],
+    profile: ModelProfile,
+    *,
+    max_output_tokens: int,
+    thinking_budget_tokens: int = 0,
+    requested_max_output_tokens: int | None = None,
+) -> dict[str, Any]:
+    limit = _profile_context_window_tokens(profile)
+    safety = _context_safety_tokens()
+    max_output = max(1, int(max_output_tokens))
+    thinking = max(0, int(thinking_budget_tokens))
+    prompt_budget = max(1, limit - max_output - thinking - safety)
+    estimated_prompt_tokens = _estimated_prompt_tokens(input_payload)
+    out = dict(input_payload)
+    openai = dict(out.get("openai") or {})
+    existing_truncate = _optional_int(openai.get("truncate_prompt_tokens"))
+    should_truncate = estimated_prompt_tokens is not None and (estimated_prompt_tokens + max_output + thinking + safety) > limit
+    if should_truncate:
+        openai["truncate_prompt_tokens"] = max(1, min(existing_truncate, prompt_budget)) if existing_truncate is not None else prompt_budget
+        out["openai"] = openai
+    requested = max(1, int(requested_max_output_tokens)) if requested_max_output_tokens is not None else max_output
+    if should_truncate or requested != max_output:
+        metadata = dict(out.get("metadata") or {})
+        metadata["context_budget"] = {
+            "format": "ds4-context-budget-v1",
+            "max_model_len": limit,
+            "safety_tokens": safety,
+            "prompt_budget_tokens": prompt_budget,
+            "estimated_prompt_tokens": estimated_prompt_tokens,
+            "max_output_tokens": max_output,
+            "requested_max_output_tokens": requested,
+            "thinking_budget_tokens": thinking,
+            "truncate_prompt_tokens": openai.get("truncate_prompt_tokens"),
+        }
+        out["metadata"] = metadata
+    return out
+
+
+def _profile_context_window_tokens(profile: ModelProfile) -> int:
+    for container in (profile.performance, profile.routing):
+        value = container.get("max_model_len") if isinstance(container, dict) else None
+        if value is not None:
+            return max(1, int(value))
+    return 32768
+
+
+def _context_safety_tokens() -> int:
+    return max(0, _env_int("DS4_API_CONTEXT_SAFETY_TOKENS", 64))
+
+
+def _estimated_prompt_tokens(input_payload: dict[str, Any]) -> int | None:
+    value = input_payload.get("estimated_prompt_tokens")
+    if value is not None:
+        return max(0, int(value))
+    prompt = input_payload.get("rendered_prompt")
+    if not isinstance(prompt, str) or not prompt:
+        prompt = input_payload.get("prompt")
+    if not isinstance(prompt, str) or not prompt:
+        return None
+    return max(1, len(prompt.encode("utf-8")) // 4)
 
 
 def _thinking_budget_tokens(body: dict[str, Any], metadata: dict[str, Any] | None = None) -> int:
