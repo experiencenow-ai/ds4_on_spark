@@ -157,6 +157,10 @@ class GpuResourceGovernor:
         now = time.time() if now is None else float(now)
         return max(0.0, self._cooldown_until - now)
 
+    def force_resample_after_remediation(self) -> None:
+        self._cooldown_until = 0.0
+        self._last_sample_at = 0.0
+
     def before_refill(self) -> GpuResourceDecision:
         now = time.time()
         remaining = self.cooldown_remaining_s(now)

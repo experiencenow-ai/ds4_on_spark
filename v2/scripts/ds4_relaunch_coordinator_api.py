@@ -321,6 +321,7 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str, *, topology_pa
         "DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX": _env_bool_value(coordinator.get("prestage_auto_kv_prefix"), default=False),
     }
     defaults.update(_coordinator_resource_env(coordinator))
+    defaults.update(_coordinator_trim_env(coordinator))
     defaults.update(_coordinator_stream_env(coordinator))
     return defaults
 
@@ -353,6 +354,25 @@ def _coordinator_resource_env(coordinator: dict[str, object]) -> dict[str, str]:
         "resource_throttle_max_s": "DS4_API_RESOURCE_THROTTLE_MAX_S",
     }
     return {env_key: str(coordinator[key]) for key, env_key in env_keys.items() if key in coordinator}
+
+
+def _coordinator_trim_env(coordinator: dict[str, object]) -> dict[str, str]:
+    env_keys = {
+        "trim_on_host_memory_pressure": "DS4_API_TRIM_ON_HOST_MEMORY_THROTTLE",
+        "trim_memory_cooldown_s": "DS4_API_TRIM_MEMORY_COOLDOWN_S",
+        "trim_memory_timeout_s": "DS4_API_TRIM_MEMORY_TIMEOUT_S",
+        "trim_memory_mode": "DS4_API_TRIM_MEMORY_MODE",
+    }
+    out: dict[str, str] = {}
+    for key, env_key in env_keys.items():
+        if key not in coordinator:
+            continue
+        value = coordinator[key]
+        if isinstance(value, bool):
+            out[env_key] = _env_bool_value(value, default=False)
+        else:
+            out[env_key] = str(value)
+    return out
 
 
 def _env_bool_value(value: object, *, default: bool) -> str:

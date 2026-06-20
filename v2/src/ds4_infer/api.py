@@ -18,6 +18,8 @@ import uuid
 from .api_chat_render import anthropic_messages_input_payload, openai_chat_input_payload
 from .api_stream import openai_chat_stream_events, openai_completion_requests, openai_completion_stream_events, write_sse
 from .builders import MODEL_ALIASES, resolve_model_alias
+from .dispatcher_memory import dispatcher_runtime_options
+from .dispatcher_memory import try_trim_host_memory
 from .dispatcher_resident import PendingDispatcherCohort, ResidentServicePlan
 from .dispatcher_resident import active_resident_service_ids as _active_resident_service_ids
 from .dispatcher_resident import pending_claim_count as _pending_claim_count
@@ -94,6 +96,7 @@ class CoordinatorApi:
         self.dispatcher_transport_max_attempts = max(1, _env_int("DS4_API_TRANSPORT_MAX_ATTEMPTS", 1))
         self.dispatcher_kv_capacity_bytes = max(0, _env_int("DS4_API_DISPATCH_KV_CAPACITY_BYTES", 0))
         topology = self._topology()
+        self.__dict__.update(dispatcher_runtime_options(topology))
         active_service_ids = _active_resident_service_ids(topology)
         entry_node_id = str(topology.routing_policy.get("queue_entry_node_id") or "spark0")
         self.dispatcher_resource_governor = GpuResourceGovernor.from_env(nodes=topology_governor_nodes(topology, active_service_ids=active_service_ids), local_node_id=entry_node_id)
@@ -484,7 +487,7 @@ class CoordinatorApi:
             state["queue_status_error"] = str(exc)
         self._dispatcher_status_add_resident_defaults(state)
         state["resident_service_metrics"] = self._resident_service_metrics_snapshot()
-        state["resident_prefer_cohort_batch"] = _env_bool("DS4_API_RESIDENT_PREFER_COHORT_BATCH", False)
+        state["resident_prefer_cohort_batch"] = self.dispatcher_resident_prefer_cohort_batch
         state["prestage_auto_kv_prefix_enabled"] = _env_bool("DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX", False)
         state.update(self.jit_kv_circuit.status())
         state["jit_kv_startup_recovery"] = dict(self.jit_kv_startup_recovery)
@@ -589,6 +592,7 @@ class CoordinatorApi:
             "requeued_count": 0,
             "idle_count": 0,
             "resource_governor_throttle_count": 0,
+            "host_memory_trim_count": 0,
             "transport_timeout_s": self.dispatcher_transport_timeout_s,
             "transport_max_attempts": self.dispatcher_transport_max_attempts,
             "kv_capacity_bytes": self.dispatcher_kv_capacity_bytes,
@@ -739,7 +743,7 @@ class CoordinatorApi:
         if not self._dispatcher_has_refill_demand(pending):
             self._dispatcher_note(resource_governor=self.dispatcher_resource_governor.status())
             return 0
-        if not self._dispatcher_resource_allows_refill():
+        if not self._dispatcher_resource_allows_refill(pending):
             return 0
         service_plans = service_plans or {}
         batch_token_limits_by_service = batch_token_limits_by_service or {}
@@ -772,11 +776,30 @@ class CoordinatorApi:
         counts = self.queue.status(refresh=False).get("state_counts") or {}
         return any(int(counts.get(state) or 0) > 0 for state in ("queued", "ready"))
 
-    def _dispatcher_resource_allows_refill(self) -> bool:
+    def _dispatcher_resource_allows_refill(self, pending: dict[Any, Any] | None = None) -> bool:
         decision = self.dispatcher_resource_governor.before_refill()
         self._dispatcher_note(resource_governor=decision.status)
         if decision.allow_refill:
             return True
+        trim, self._last_host_memory_trim_at = try_trim_host_memory(
+            status=decision.status,
+            pending=pending or {},
+            enabled=self.dispatcher_trim_on_host_memory,
+            cooldown_s=self.dispatcher_trim_cooldown_s,
+            last_trim_at=self._last_host_memory_trim_at,
+            mode=self.dispatcher_trim_mode,
+            timeout_s=self.dispatcher_trim_timeout_s,
+            topology=self._topology(),
+        )
+        if trim.get("attempted"):
+            self._dispatcher_note(last_host_memory_trim=trim)
+            if trim.get("ok"):
+                self._dispatcher_count(host_memory_trim_count=1)
+                self.dispatcher_resource_governor.force_resample_after_remediation()
+                decision = self.dispatcher_resource_governor.before_refill()
+                self._dispatcher_note(resource_governor=decision.status, last_host_memory_trim=trim)
+                if decision.allow_refill:
+                    return True
         self._dispatcher_count(resource_governor_throttle_count=1)
         return False
 
@@ -918,6 +941,7 @@ class CoordinatorApi:
             batch_decode_token_reserves_by_service=decode_reserves,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
             low_watermark=plan.low_watermark,
+            prefer_cohort_batch=self.dispatcher_resident_prefer_cohort_batch,
         )
         plan.charge(claimed)
         return claimed
@@ -1018,6 +1042,7 @@ class CoordinatorApi:
         batch_decode_token_reserves_by_service: dict[str, int] | None = None,
         kv_shard_layouts_by_profile: dict[str, Any] | None = None,
         low_watermark: int = 0,
+        prefer_cohort_batch: bool = False,
     ) -> None:
         admission_mode = "rolling_refill" if rolling_refill else "cohort"
         cohort = PendingDispatcherCohort.from_claims(list(claims), admission_mode=admission_mode)
@@ -1036,6 +1061,7 @@ class CoordinatorApi:
                 batch_token_limits_by_service or {},
                 batch_decode_token_reserves_by_service or {},
                 low_watermark,
+                prefer_cohort_batch,
             )
         else:
             future = executor.submit(_dispatcher_run_claims, worker, claims, len(claims), cohort.mark_finished)
@@ -2165,13 +2191,13 @@ def _dispatcher_run_resident_rolling_claims(
     batch_token_limits_by_service: dict[str, int],
     batch_decode_token_reserves_by_service: dict[str, int],
     low_watermark: int,
+    prefer_cohort_batch: bool = False,
 ) -> list[tuple[Any, dict[str, Any]]]:
     if not claims:
         return []
     if claims[0].request_kind == "cpu":
         return _dispatcher_run_claims(worker, claims, concurrency, mark_finished)
     force_refill_stream = _dispatcher_force_refill_stream_for_claims(claims)
-    prefer_cohort_batch = _env_bool("DS4_API_RESIDENT_PREFER_COHORT_BATCH", False)
     if not force_refill_stream and prefer_cohort_batch and _dispatcher_can_batch_models(worker, claims) and hasattr(worker.runner, "run_many_on_node_incremental"):
         return _dispatcher_run_rolling_batch_claims(worker, claims, concurrency, mark_finished)
     return _dispatcher_run_rolling_refill_stream_claims(
