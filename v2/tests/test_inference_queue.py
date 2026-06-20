@@ -18,7 +18,7 @@ PROFILES = ROOT / "profiles" / "models"
 QWEN = "qwen3_6_27b_fp8_efficient_v1"
 
 
-def req(request_id: str, *, priority: int | None = None, kv_key: str | None = None, kv_bytes: int = 0, output_tokens: int = 64) -> InferenceRequest:
+def req(request_id: str, *, priority: int | None = None, kv_key: str | None = None, kv_bytes: int = 0, output_tokens: int = 64, input_tokens: int | None = None, thinking_tokens: int = 0) -> InferenceRequest:
     raw = {
         "format": "ds4-inference-request-v1",
         "request_id": request_id,
@@ -27,13 +27,15 @@ def req(request_id: str, *, priority: int | None = None, kv_key: str | None = No
         "immediate": False,
         "job_class": "summary",
         "max_output_tokens": output_tokens,
-        "thinking_budget_tokens": 0,
+        "thinking_budget_tokens": thinking_tokens,
         "temperature": 0,
         "input": {"messages": [{"role": "user", "content": f"reply {request_id}"}], "prompt": f"reply {request_id}"},
         "output_contract": {"format": "text"},
         "model_pin": {"profile_id": QWEN},
         "metadata": {"kv_cache_key": kv_key, "kv_bytes_estimate": kv_bytes},
     }
+    if input_tokens is not None:
+        raw["input"]["estimated_prompt_tokens"] = input_tokens
     if priority is not None:
         raw["priority"] = priority
     return InferenceRequest.from_json(raw)
@@ -126,6 +128,25 @@ class InferenceQueueTests(unittest.TestCase):
             self.assertEqual(worked["batch_dispatch_count"], 1)
             self.assertEqual(worked["batch_dispatch_mode"], "batch")
             self.assertEqual(runner.calls, [("spark0", [f"cohort-{idx:03d}" for idx in range(12)], 12)])
+
+    def test_ready_claim_respects_token_budget_not_just_row_count(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            requests = [req(f"wide-{idx:03d}", input_tokens=256, output_tokens=128, thinking_tokens=128) for idx in range(8)]
+            queue.submit_requests(requests=requests, registry=registry, batch_id="wide")
+            queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=8, leased_by="worker", lease_ttl_s=60)
+            claims = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=8, leased_by="worker", lease_ttl_s=60, batch_token_limits_by_service={"*": 1536})
+            self.assertEqual([claim.request_id for claim in claims], ["wide-000", "wide-001", "wide-002"])
+
+    def test_ready_claim_always_allows_one_large_request(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(requests=[req("large", input_tokens=7000, output_tokens=1024)], registry=registry, batch_id="large")
+            queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=1, leased_by="worker", lease_ttl_s=60)
+            claims = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=1, leased_by="worker", lease_ttl_s=60, batch_token_limits_by_service={"*": 1024})
+            self.assertEqual([claim.request_id for claim in claims], ["large"])
 
     def test_ready_shape_bucketing_claims_uniform_output_budget(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

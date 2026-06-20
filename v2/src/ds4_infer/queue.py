@@ -326,12 +326,13 @@ class InferenceQueue:
                 self._refresh_batch(conn, touched_batch_id)
         return made_ready
 
-    def claim_ready_batch(self, *, node_id: str | None, batch_id: str | None, limit: int, leased_by: str, lease_ttl_s: int, batch_linger_s: float = 0.0, kv_shard_layouts_by_profile: Mapping[str, Any] | None = None, batch_limits_by_service: Mapping[str, int] | None = None, compute_lease_id: str | None = None, selected_service_id: str | None = None, share_compute_domain: bool = False, ready_shape_bucketing: bool = False, ready_shape_lookahead: int = 1) -> list[QueueClaim]:
+    def claim_ready_batch(self, *, node_id: str | None, batch_id: str | None, limit: int, leased_by: str, lease_ttl_s: int, batch_linger_s: float = 0.0, kv_shard_layouts_by_profile: Mapping[str, Any] | None = None, batch_limits_by_service: Mapping[str, int] | None = None, batch_token_limits_by_service: Mapping[str, int] | None = None, compute_lease_id: str | None = None, selected_service_id: str | None = None, share_compute_domain: bool = False, ready_shape_bucketing: bool = False, ready_shape_lookahead: int = 1) -> list[QueueClaim]:
         now = time.time()
         with closing(self._connect()) as conn, conn:
             rows = _ready_rows(conn, node_id=node_id, batch_id=batch_id, limit=limit, batch_limits_by_service=batch_limits_by_service or {}, selected_service_id=selected_service_id, ignore_compute_lease=share_compute_domain, ready_shape_bucketing=ready_shape_bucketing, ready_shape_lookahead=ready_shape_lookahead)
             if not rows:
                 return []
+            rows = _limit_ready_rows_by_token_budget(rows, _service_batch_token_limit(rows[0]["selected_service_id"], batch_token_limits_by_service or {}))
             linger_limit = _service_batch_limit(rows[0]["selected_service_id"], batch_limits_by_service or {}, limit)
             if len(rows) < linger_limit and batch_linger_s > 0:
                 newest_ready = max(float(row["ready_at"] or row["updated_at"] or now) for row in rows)
@@ -1684,6 +1685,79 @@ def _service_batch_limit(service_id: Any, batch_limits_by_service: Mapping[str, 
     if configured is None:
         return limit
     return min(limit, max(1, int(configured)))
+
+
+def _service_batch_token_limit(service_id: Any, batch_token_limits_by_service: Mapping[str, int]) -> int:
+    configured = None
+    if service_id is not None:
+        configured = batch_token_limits_by_service.get(str(service_id))
+    if configured is None:
+        configured = batch_token_limits_by_service.get("*")
+    if configured is None:
+        return 0
+    return max(0, int(configured))
+
+
+def _limit_ready_rows_by_token_budget(rows: list[sqlite3.Row], token_limit: int) -> list[sqlite3.Row]:
+    if token_limit <= 0 or len(rows) <= 1:
+        return rows
+    selected: list[sqlite3.Row] = []
+    used = 0
+    for row in rows:
+        need = _row_reserved_tokens(row)
+        if not selected or (used + need) <= token_limit:
+            selected.append(row)
+            used += need
+    return selected
+
+
+def _row_reserved_tokens(row: sqlite3.Row) -> int:
+    try:
+        raw = json.loads(str(row["request_json"]))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return 1
+    if not isinstance(raw, dict):
+        return 1
+    input_data = raw.get("input") if isinstance(raw.get("input"), dict) else {}
+    prompt = _reserved_prompt_tokens(input_data)
+    output = _safe_int(raw.get("max_output_tokens"), 0)
+    thinking = _safe_int(raw.get("thinking_budget_tokens"), 0)
+    return max(1, prompt + max(0, output) + max(0, thinking))
+
+
+def _reserved_prompt_tokens(input_data: dict[str, Any]) -> int:
+    metadata = input_data.get("metadata") if isinstance(input_data.get("metadata"), dict) else {}
+    context_budget = metadata.get("context_budget") if isinstance(metadata.get("context_budget"), dict) else {}
+    openai = input_data.get("openai") if isinstance(input_data.get("openai"), dict) else {}
+    truncate = _safe_int(openai.get("truncate_prompt_tokens"), 0) or _safe_int(context_budget.get("truncate_prompt_tokens"), 0)
+    estimated = _safe_int(input_data.get("estimated_prompt_tokens"), 0) or _safe_int(context_budget.get("estimated_prompt_tokens"), 0)
+    prompt_budget = _safe_int(context_budget.get("prompt_budget_tokens"), 0)
+    if truncate > 0 and estimated > 0:
+        return min(truncate, estimated)
+    if truncate > 0:
+        return truncate
+    if estimated > 0:
+        return estimated
+    if prompt_budget > 0:
+        return prompt_budget
+    return max(1, _input_text_bytes(input_data) // 4)
+
+
+def _input_text_bytes(value: Any) -> int:
+    if isinstance(value, str):
+        return len(value.encode("utf-8"))
+    if isinstance(value, list):
+        return sum(_input_text_bytes(item) for item in value)
+    if isinstance(value, dict):
+        return sum(_input_text_bytes(item) for item in value.values())
+    return 0
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return int(default)
 
 
 def _claim(row: sqlite3.Row, lease_id: str, compute_lease_id: str | None) -> QueueClaim:

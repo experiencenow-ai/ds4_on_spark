@@ -97,6 +97,7 @@ class ResidentServicePlan:
     queue_depth_target: int
     low_watermark: int
     max_cohort_size: int
+    max_cohort_tokens: int
     batch_linger_s: float
     max_running_batches_per_compute_domain: int = 0
     max_running_batches_per_service: int = 0
@@ -128,6 +129,7 @@ def resident_service_plans(topology: SparkTopology, *, entry_node_id: str, defau
     queue_targets = _json_int_env("DS4_API_SERVICE_QUEUE_DEPTH_TARGETS_JSON")
     lows = _json_int_env("DS4_API_SERVICE_LOW_WATERMARKS_JSON")
     cohort_sizes = _json_int_env("DS4_API_SERVICE_MAX_COHORTS_JSON")
+    token_limits = _json_int_env("DS4_API_SERVICE_TOKEN_LIMITS_JSON")
     linger = _json_float_env("DS4_API_SERVICE_LINGER_JSON")
     admission_modes = _json_str_env("DS4_API_SERVICE_ADMISSION_MODES_JSON")
     default_admission_mode = os.environ.get("DS4_API_SERVICE_ADMISSION_MODE") or os.environ.get("DS4_API_RESIDENT_ADMISSION_MODE") or ""
@@ -146,6 +148,7 @@ def resident_service_plans(topology: SparkTopology, *, entry_node_id: str, defau
             queue_targets=queue_targets,
             lows=lows,
             cohort_sizes=cohort_sizes,
+            token_limits=token_limits,
             linger=linger,
             admission_modes=admission_modes,
             default_admission_mode=default_admission_mode,
@@ -241,7 +244,7 @@ def plan_uses_rolling_admission(plan: ResidentServicePlan) -> bool:
     return mode in {"resident_multimodel_rolling_refill", "rolling_refill", "rolling"}
 
 
-def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weights: dict[str, float], targets: dict[str, int], queue_targets: dict[str, int], lows: dict[str, int], cohort_sizes: dict[str, int], linger: dict[str, float], admission_modes: dict[str, str], default_admission_mode: str) -> ResidentServicePlan:
+def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weights: dict[str, float], targets: dict[str, int], queue_targets: dict[str, int], lows: dict[str, int], cohort_sizes: dict[str, int], token_limits: dict[str, int], linger: dict[str, float], admission_modes: dict[str, str], default_admission_mode: str) -> ResidentServicePlan:
     service_id = service.service_id
     target = max(1, int(targets.get(service_id, targets.get(service.profile_id, service_target_active(service)))))
     queue_target = max(target, int(queue_targets.get(service_id, queue_targets.get(service.profile_id, _scheduler_int(service, ("queue_depth_target", "vllm_queue_depth_target", "submit_queue_depth_target"), target)))))
@@ -250,6 +253,8 @@ def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weigh
         low = max(1, int(queue_target * 0.75))
     max_cohort_default = _scheduler_int(service, ("dispatch_batch_limit", "max_dispatch_cohort", "queue_depth_target", "vllm_queue_depth_target"), pipeline_service_batch_limit(service))
     max_cohort = max(1, int(cohort_sizes.get(service_id, cohort_sizes.get(service.profile_id, max_cohort_default))))
+    max_tokens_default = _scheduler_int(service, ("dispatch_token_limit", "max_dispatch_tokens", "vllm_max_num_batched_tokens", "max_num_batched_tokens"), 0)
+    max_tokens = max(0, int(token_limits.get(service_id, token_limits.get(service.profile_id, max_tokens_default))))
     max_domain_batches = max(0, _scheduler_int(service, ("max_running_batches_per_compute_domain",), 0))
     max_service_batches = max(0, _scheduler_int(service, ("max_running_batches_per_service", "max_running_same_service_batches"), 0))
     service_linger = float(linger.get(service_id, linger.get(service.profile_id, _scheduler_linger(service, default_batch_linger_s))))
@@ -264,6 +269,7 @@ def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weigh
         queue_depth_target=queue_target,
         low_watermark=min(queue_target, max(1, low)),
         max_cohort_size=max_cohort,
+        max_cohort_tokens=max_tokens,
         max_running_batches_per_compute_domain=max_domain_batches,
         max_running_batches_per_service=max_service_batches,
         batch_linger_s=max(0.0, service_linger),
