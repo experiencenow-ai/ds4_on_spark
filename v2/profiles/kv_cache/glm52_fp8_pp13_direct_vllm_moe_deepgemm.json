@@ -51,6 +51,7 @@
     "DS4_VLLM_READY_RESPONSE_COMPAT": "1",
     "DS4_VLLM_IMPORT_PROOF_JSON": "/tmp/ds4_vllm_import_proof_glm52_rank{node_rank}.json",
     "DS4_VLLM_ENABLE_TRIM_MEMORY": "1",
+    "DS4_VLLM_SM12_DEEPGEMM_MOE": "1",
     "DS4_VLLM_SOURCE_ROOT": "/home/{node}/standard-runtimes/vllm-0.23.0-overlay",
     "DS4_PP_TRANSPORT": "tcp-staged",
     "GLOO_SOCKET_IFNAME": "ds4ring0",

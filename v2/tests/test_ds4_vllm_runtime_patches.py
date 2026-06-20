@@ -428,6 +428,81 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             )
         self.assertEqual(result.stdout.strip(), "True")
 
+    def test_runtime_patch_allows_sm12_deepgemm_moe_support(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        with tempfile.TemporaryDirectory() as tmp:
+            vllm_root = Path(tmp)
+            platforms_dir = vllm_root / "vllm/platforms"
+            platforms_dir.mkdir(parents=True)
+            (vllm_root / "vllm/__init__.py").write_text("")
+            (platforms_dir / "__init__.py").write_text("")
+            (platforms_dir / "cuda.py").write_text(
+                textwrap.dedent(
+                    """
+                    from collections import namedtuple
+
+                    DeviceCapability = namedtuple("DeviceCapability", ["major", "minor"])
+
+                    class CudaPlatformBase:
+                        device_name = "cuda"
+
+                        @classmethod
+                        def get_device_capability(cls, device_id=0):
+                            return DeviceCapability(12, 1)
+
+                        @classmethod
+                        def is_device_capability(cls, capability, device_id=0):
+                            current = cls.get_device_capability(device_id)
+                            if isinstance(capability, tuple):
+                                return current == capability
+                            return ((current.major * 10) + current.minor) == capability
+
+                        @classmethod
+                        def is_device_capability_family(cls, capability, device_id=0):
+                            current = cls.get_device_capability(device_id)
+                            return (((current.major * 10) + current.minor) // 10) == (capability // 10)
+
+                        @classmethod
+                        def support_deep_gemm(cls):
+                            return cls.is_device_capability(90) or cls.is_device_capability_family(100)
+
+                    class NvmlCudaPlatform(CudaPlatformBase):
+                        pass
+
+                    class NonNvmlCudaPlatform(CudaPlatformBase):
+                        pass
+
+                    CudaPlatform = NvmlCudaPlatform
+                    """
+                )
+            )
+            code = textwrap.dedent(
+                """
+                from ds4_vllm_runtime.patches import apply_runtime_patches
+                from vllm.platforms.cuda import CudaPlatformBase
+
+                print(CudaPlatformBase.support_deep_gemm())
+                print(apply_runtime_patches())
+                print(CudaPlatformBase.support_deep_gemm())
+                print(CudaPlatformBase.is_device_capability_blackwell())
+                """
+            )
+            env = os.environ.copy()
+            env["DS4_VLLM_SM12_DEEPGEMM_MOE"] = "1"
+            env["PYTHONPATH"] = os.pathsep.join([str(vllm_root), str(src_root)])
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        lines = result.stdout.strip().splitlines()
+        self.assertEqual(lines[0], "False")
+        self.assertIn("deepgemm_moe_sm12_support:", lines[1])
+        self.assertEqual(lines[2:], ["True", "True"])
+
     def test_runtime_patch_applies_flashmla_torch_fallback(self):
         v2_root = Path(__file__).resolve().parents[1]
         src_root = v2_root / "src"

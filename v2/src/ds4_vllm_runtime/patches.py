@@ -51,6 +51,45 @@ def allow_sm12_flashmla_sparse() -> str:
     return "flashmla_sparse_sm12_compute_capability"
 
 
+def allow_sm12_deepgemm_moe_support() -> str:
+    cuda_platform = importlib.import_module("vllm.platforms.cuda")
+    patched = 0
+    seen: set[type] = set()
+    for name in (
+        "CudaPlatformBase",
+        "NvmlCudaPlatform",
+        "NonNvmlCudaPlatform",
+        "CudaPlatform",
+    ):
+        cls = getattr(cuda_platform, name, None)
+        if not isinstance(cls, type) or cls in seen:
+            continue
+        seen.add(cls)
+        if getattr(cls, "_ds4_sm12_deepgemm_moe_support", False):
+            continue
+
+        @classmethod
+        def is_device_capability_blackwell(platform_cls, device_id: int = 0):  # type: ignore[no-untyped-def]
+            return platform_cls.is_device_capability_family(
+                100, device_id=device_id
+            ) or platform_cls.is_device_capability_family(120, device_id=device_id)
+
+        @classmethod
+        def support_deep_gemm(platform_cls):  # type: ignore[no-untyped-def]
+            return (
+                platform_cls.is_device_capability(90)
+                or platform_cls.is_device_capability_family(100)
+                or platform_cls.is_device_capability_family(120)
+            )
+
+        if not callable(getattr(cls, "is_device_capability_blackwell", None)):
+            cls.is_device_capability_blackwell = is_device_capability_blackwell  # type: ignore[attr-defined]
+        cls.support_deep_gemm = support_deep_gemm  # type: ignore[method-assign]
+        cls._ds4_sm12_deepgemm_moe_support = True  # type: ignore[attr-defined]
+        patched += 1
+    return f"deepgemm_moe_sm12_support:{patched}"
+
+
 def allow_flashmla_sparse_torch_fallback() -> str:
     flashmla_sparse = importlib.import_module(
         "vllm.v1.attention.backends.mla.flashmla_sparse"
@@ -1161,6 +1200,8 @@ def apply_runtime_patches() -> list[str]:
         patches.append(allow_sm12_flashinfer_mla_sparse())
     if env_flag("DS4_VLLM_SM12_FLASHMLA_SPARSE"):
         patches.append(allow_sm12_flashmla_sparse())
+    if env_flag("DS4_VLLM_SM12_DEEPGEMM_MOE"):
+        patches.append(allow_sm12_deepgemm_moe_support())
     if env_flag("DS4_VLLM_FLASHMLA_SPARSE_TORCH_FALLBACK"):
         patches.append(allow_flashmla_sparse_torch_fallback())
     if env_flag("DS4_VLLM_FLASHMLA_SPARSE_TRITON_BF16_FALLBACK"):
