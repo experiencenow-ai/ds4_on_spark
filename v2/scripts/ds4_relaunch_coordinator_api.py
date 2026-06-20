@@ -321,7 +321,18 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str, *, topology_pa
         "DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX": _env_bool_value(coordinator.get("prestage_auto_kv_prefix"), default=False),
     }
     defaults.update(_coordinator_resource_env(coordinator))
+    defaults.update(_coordinator_stream_env(coordinator))
     return defaults
+
+
+def _coordinator_stream_env(coordinator: dict[str, object]) -> dict[str, str]:
+    env_keys = {
+        "completion_stream_wall_timeout_s": "DS4_PIPELINE_COMPLETION_STREAM_WALL_TIMEOUT_S",
+        "sse_cancel_poll_timeout_s": "DS4_PIPELINE_SSE_CANCEL_POLL_TIMEOUT_S",
+        "sse_first_event_timeout_s": "DS4_PIPELINE_SSE_FIRST_EVENT_TIMEOUT_S",
+        "sse_idle_timeout_s": "DS4_PIPELINE_SSE_IDLE_TIMEOUT_S",
+    }
+    return {env_key: str(coordinator[key]) for key, env_key in env_keys.items() if key in coordinator}
 
 
 def _coordinator_resource_env(coordinator: dict[str, object]) -> dict[str, str]:

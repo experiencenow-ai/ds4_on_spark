@@ -34,13 +34,16 @@
       "completion_chunk_concurrency": 1,
       "completion_cohort_max": 128,
       "completion_pp_safe_cohort_max": 128,
+      "completion_stream_wall_timeout_s": 1800,
       "completion_token_budget": 32768,
       "dispatch_cohort_workers": 128,
       "dispatch_kv_capacity_bytes": 8589934592,
       "dispatch_refill_batch": 128,
       "dispatch_window": 128,
       "resource_host_memory_hard_pct": 94,
-      "resource_host_memory_soft_pct": 93
+      "resource_host_memory_soft_pct": 93,
+      "sse_first_event_timeout_s": 900,
+      "sse_idle_timeout_s": 120
     },
     "resident_service_expectations": {
       "cache_backends": {
