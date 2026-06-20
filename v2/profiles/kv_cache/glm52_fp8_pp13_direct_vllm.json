@@ -11,7 +11,7 @@
     "mp",
     "--trust-remote-code",
     "--max-model-len",
-    "8192",
+    "262144",
     "--max-num-batched-tokens",
     "32768",
     "--gpu-memory-utilization",
