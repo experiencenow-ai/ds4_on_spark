@@ -246,7 +246,8 @@ def plan_uses_rolling_admission(plan: ResidentServicePlan) -> bool:
 
 def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weights: dict[str, float], targets: dict[str, int], queue_targets: dict[str, int], lows: dict[str, int], cohort_sizes: dict[str, int], token_limits: dict[str, int], linger: dict[str, float], admission_modes: dict[str, str], default_admission_mode: str) -> ResidentServicePlan:
     service_id = service.service_id
-    target = max(1, int(targets.get(service_id, targets.get(service.profile_id, service_target_active(service)))))
+    target_default = _scheduler_int(service, ("target_active", "resident_target_active", "dispatch_batch_limit", "max_dispatch_cohort"), service_target_active(service))
+    target = max(1, int(targets.get(service_id, targets.get(service.profile_id, target_default))))
     queue_target = max(target, int(queue_targets.get(service_id, queue_targets.get(service.profile_id, _scheduler_int(service, ("queue_depth_target", "vllm_queue_depth_target", "submit_queue_depth_target"), target)))))
     low = int(lows.get(service_id, lows.get(service.profile_id, int(service.scheduler.get("refill_low_watermark") or 0))))
     if low <= 0:

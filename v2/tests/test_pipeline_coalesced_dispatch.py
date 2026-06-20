@@ -301,6 +301,8 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
     def test_glm52_resident_plan_uses_scheduler_token_limit(self) -> None:
         topology = SparkTopology.load(GLM52_TOPOLOGY)
         plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+        self.assertEqual(plans["glm52_fp8_pp13"].target_active, 80)
+        self.assertEqual(plans["glm52_fp8_pp13"].max_cohort_size, 80)
         self.assertEqual(plans["glm52_fp8_pp13"].max_cohort_tokens, 32768)
 
     def test_glm52_dispatcher_status_reports_idle_token_limit(self) -> None:
