@@ -102,6 +102,9 @@ class ResidentServicePlan:
     decode_token_reserve: int = 0
     max_running_batches_per_compute_domain: int = 0
     max_running_batches_per_service: int = 0
+    initial_cohort_min: int = 0
+    initial_cohort_timeout_s: float = 0.0
+    large_request_token_threshold: int = 0
     ready_shape_bucketing: bool = False
     ready_shape_lookahead: int = 1
     weight: float = 1.0
@@ -260,6 +263,9 @@ def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weigh
     decode_reserve = max(0, _scheduler_int(service, ("dispatch_decode_token_reserve", "decode_token_reserve", "vllm_decode_token_reserve"), 0))
     max_domain_batches = max(0, _scheduler_int(service, ("max_running_batches_per_compute_domain",), 0))
     max_service_batches = max(0, _scheduler_int(service, ("max_running_batches_per_service", "max_running_same_service_batches"), 0))
+    initial_min = max(0, _scheduler_int(service, ("initial_cohort_min", "min_initial_cohort_size", "initial_dispatch_min"), 0))
+    initial_timeout = max(0.0, _scheduler_float(service, ("initial_cohort_timeout_s", "cohort_fill_timeout_s", "min_initial_cohort_timeout_s"), 0.0))
+    large_threshold = max(0, _scheduler_int(service, ("large_request_token_threshold", "initial_cohort_large_request_token_threshold"), 0))
     service_linger = float(linger.get(service_id, linger.get(service.profile_id, _scheduler_linger(service, default_batch_linger_s))))
     admission_mode = str(admission_modes.get(service_id, admission_modes.get(service.profile_id, default_admission_mode or service.scheduler.get("admission_mode") or "resident_multimodel_weighted_deficit")))
     shape_bucketing = bool(service.scheduler.get("ready_shape_bucketing", False))
@@ -276,6 +282,9 @@ def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weigh
         decode_token_reserve=decode_reserve,
         max_running_batches_per_compute_domain=max_domain_batches,
         max_running_batches_per_service=max_service_batches,
+        initial_cohort_min=initial_min,
+        initial_cohort_timeout_s=initial_timeout,
+        large_request_token_threshold=large_threshold,
         batch_linger_s=max(0.0, service_linger),
         ready_shape_bucketing=shape_bucketing,
         ready_shape_lookahead=shape_lookahead,
@@ -298,6 +307,17 @@ def _scheduler_int(service: Any, keys: tuple[str, ...], default: int) -> int:
         if value is not None:
             return int(value)
     return int(default)
+
+
+def _scheduler_float(service: Any, keys: tuple[str, ...], default: float) -> float:
+    scheduler = getattr(service, "scheduler", {}) or {}
+    if not isinstance(scheduler, dict):
+        return float(default)
+    for key in keys:
+        value = scheduler.get(key)
+        if value is not None:
+            return float(value)
+    return float(default)
 
 
 def _json_int_env(name: str) -> dict[str, int]:

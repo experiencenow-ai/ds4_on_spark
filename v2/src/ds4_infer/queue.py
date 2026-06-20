@@ -326,18 +326,21 @@ class InferenceQueue:
                 self._refresh_batch(conn, touched_batch_id)
         return made_ready
 
-    def claim_ready_batch(self, *, node_id: str | None, batch_id: str | None, limit: int, leased_by: str, lease_ttl_s: int, batch_linger_s: float = 0.0, kv_shard_layouts_by_profile: Mapping[str, Any] | None = None, batch_limits_by_service: Mapping[str, int] | None = None, batch_token_limits_by_service: Mapping[str, int] | None = None, batch_decode_token_reserves_by_service: Mapping[str, int] | None = None, compute_lease_id: str | None = None, selected_service_id: str | None = None, share_compute_domain: bool = False, ready_shape_bucketing: bool = False, ready_shape_lookahead: int = 1) -> list[QueueClaim]:
+    def claim_ready_batch(self, *, node_id: str | None, batch_id: str | None, limit: int, leased_by: str, lease_ttl_s: int, batch_linger_s: float = 0.0, kv_shard_layouts_by_profile: Mapping[str, Any] | None = None, batch_limits_by_service: Mapping[str, int] | None = None, batch_token_limits_by_service: Mapping[str, int] | None = None, batch_decode_token_reserves_by_service: Mapping[str, int] | None = None, compute_lease_id: str | None = None, selected_service_id: str | None = None, share_compute_domain: bool = False, ready_shape_bucketing: bool = False, ready_shape_lookahead: int = 1, min_ready_rows: int = 0, min_ready_timeout_s: float = 0.0, min_ready_large_token_threshold: int = 0) -> list[QueueClaim]:
         now = time.time()
         with closing(self._connect()) as conn, conn:
             rows = _ready_rows(conn, node_id=node_id, batch_id=batch_id, limit=limit, batch_limits_by_service=batch_limits_by_service or {}, selected_service_id=selected_service_id, ignore_compute_lease=share_compute_domain, ready_shape_bucketing=ready_shape_bucketing, ready_shape_lookahead=ready_shape_lookahead)
             if not rows:
                 return []
+            decode_token_reserve = _service_batch_decode_token_reserve(rows[0]["selected_service_id"], batch_decode_token_reserves_by_service or {})
             rows = _limit_ready_rows_by_token_budget(
                 rows,
                 _service_batch_token_limit(rows[0]["selected_service_id"], batch_token_limits_by_service or {}),
-                decode_token_reserve=_service_batch_decode_token_reserve(rows[0]["selected_service_id"], batch_decode_token_reserves_by_service or {}),
+                decode_token_reserve=decode_token_reserve,
             )
             linger_limit = _service_batch_limit(rows[0]["selected_service_id"], batch_limits_by_service or {}, limit)
+            if _should_wait_for_ready_floor(conn, rows, floor=min_ready_rows, timeout_s=min_ready_timeout_s, large_token_threshold=min_ready_large_token_threshold, decode_token_reserve=decode_token_reserve, node_id=node_id, batch_id=batch_id, now=now):
+                return []
             if len(rows) < linger_limit and batch_linger_s > 0:
                 newest_ready = max(float(row["ready_at"] or row["updated_at"] or now) for row in rows)
                 if (now - newest_ready) < batch_linger_s:
@@ -1619,6 +1622,31 @@ def _has_recent_queued_peer(conn: sqlite3.Connection, first: sqlite3.Row, *, nod
     if row is None or row["newest"] is None:
         return False
     return (now - float(row["newest"])) < max(0.0, float(linger_s))
+
+
+def _should_wait_for_ready_floor(conn: sqlite3.Connection, rows: list[sqlite3.Row], *, floor: int, timeout_s: float, large_token_threshold: int, decode_token_reserve: int, node_id: str | None, batch_id: str | None, now: float) -> bool:
+    floor = max(0, int(floor or 0))
+    if floor <= 1 or len(rows) >= floor:
+        return False
+    if large_token_threshold > 0 and _row_reserved_tokens(rows[0], decode_token_reserve=decode_token_reserve) >= int(large_token_threshold):
+        return False
+    if len(rows) == 1 and _row_batch_request_count(conn, rows[0]) <= 1:
+        if not _has_recent_queued_peer(conn, rows[0], node_id=node_id, batch_id=batch_id, now=now, linger_s=max(0.0, float(timeout_s))):
+            return False
+    if timeout_s <= 0:
+        return True
+    oldest_ready = min(float(row["ready_at"] or row["updated_at"] or now) for row in rows)
+    return (now - oldest_ready) < float(timeout_s)
+
+
+def _row_batch_request_count(conn: sqlite3.Connection, row: sqlite3.Row) -> int:
+    batch_id = row["batch_id"]
+    if batch_id is None:
+        return 1
+    batch = conn.execute("select request_count from batches where batch_id=?", (batch_id,)).fetchone()
+    if batch is None:
+        return 1
+    return max(1, int(batch["request_count"]))
 
 
 def _ready_row_scope(clauses: list[str], params: list[Any], first: sqlite3.Row, *, shape_bucket: bool) -> Any:
