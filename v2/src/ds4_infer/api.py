@@ -549,6 +549,7 @@ class CoordinatorApi:
             return
         state.setdefault("resident_service_targets", {sid: plan.target_active for sid, plan in service_plans.items()})
         state.setdefault("resident_service_queue_depth_targets", {sid: plan.queue_depth_target for sid, plan in service_plans.items()})
+        state.setdefault("resident_service_token_limits", {sid: plan.max_cohort_tokens for sid, plan in service_plans.items() if plan.max_cohort_tokens > 0})
         state.setdefault("resident_service_low_watermarks", {sid: plan.low_watermark for sid, plan in service_plans.items()})
         state["resident_service_active_batches"] = _resident_active_service_batches_from_status(state)
         if not state.get("resident_service_batch_limits"):
