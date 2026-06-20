@@ -166,6 +166,32 @@ class InferenceQueueTests(unittest.TestCase):
             claims = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=1, leased_by="worker", lease_ttl_s=60, batch_token_limits_by_service={"*": 1024})
             self.assertEqual([claim.request_id for claim in claims], ["large"])
 
+    def test_worker_refill_uses_same_token_budget_as_initial_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            requests = [req(f"refill-{idx:03d}", input_tokens=256, output_tokens=512, thinking_tokens=512) for idx in range(3)]
+            queue.submit_requests(requests=requests, registry=registry, batch_id="refill")
+            worker = BatchWorker(queue=queue, registry=registry, runner=BatchRunner(), worker_id="worker")
+            prefilled, claims = worker._claim_refill(
+                3,
+                node_id="spark0",
+                batch_id=None,
+                node_profile_ids=(QWEN,),
+                max_node_depth=0,
+                kv_capacity_bytes=0,
+                kv_shard_layouts_by_profile={},
+                batch_limits_by_service={},
+                batch_token_limits_by_service={"*": 576},
+                batch_decode_token_reserves_by_service={"*": 32},
+                compute_lease_id=None,
+                selected_service_id=None,
+                allow_new_compute_lease=True,
+                share_compute_domain=True,
+            )
+            self.assertEqual(prefilled, 3)
+            self.assertEqual([claim.request_id for claim in claims], ["refill-000", "refill-001"])
+
     def test_ready_shape_bucketing_claims_uniform_output_budget(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             queue = InferenceQueue(tmp)

@@ -821,6 +821,62 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
             self.assertEqual(api.dispatcher_status()["last_summary"]["dispatch_mode"], "rolling_refill")
             self.assertEqual(api.dispatcher_status()["last_summary"]["claimed"], 5)
 
+    def test_resident_submit_passes_token_reserve_to_rolling_refill(self) -> None:
+        class CapturingCoordinatorApi(CoordinatorApi):
+            def __init__(self, *args, **kwargs) -> None:
+                super().__init__(*args, **kwargs)
+                self.captured_submit: dict | None = None
+
+            def _dispatcher_submit_cohort(self, **kwargs) -> None:
+                self.captured_submit = kwargs
+
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CapturingCoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
+            plan = ResidentServicePlan(
+                service_id="glm52_fp8_pp13",
+                profile_id="glm52_fp8_pp13_frontier_v1",
+                compute_domain="spark-ring",
+                target_active=80,
+                queue_depth_target=80,
+                low_watermark=64,
+                max_cohort_size=80,
+                max_cohort_tokens=32768,
+                batch_linger_s=0.0,
+                decode_token_reserve=32,
+                admission_mode="bounded_cohort_refill",
+            )
+            claim = QueueClaim(
+                request_id="glm-refill",
+                batch_id="glm-refill",
+                request_kind="model",
+                selected_profile_id="glm52_fp8_pp13_frontier_v1",
+                selected_node_id="spark0",
+                lease_id="lease",
+                attempt_count=1,
+                request=dsv4_chat_request("glm-refill"),
+                selected_service_id="glm52_fp8_pp13",
+            )
+            worker = BatchWorker(queue=api.queue, registry=ProfileRegistry.load(PROFILES), runner=RecordingPerRequestRunner(), worker_id="test-dispatcher")
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                submitted = api._resident_submit_claims(
+                    executor=executor,
+                    worker=worker,
+                    pending={},
+                    claims=[claim],
+                    plan=plan,
+                    entry_node_id="spark0",
+                    node_profile_ids=("glm52_fp8_pp13_frontier_v1",),
+                    batch_limits_by_service={"glm52_fp8_pp13": 80},
+                    batch_token_limits_by_service={"glm52_fp8_pp13": 1, "other": 7},
+                    kv_shard_layouts_by_profile={},
+                )
+            self.assertEqual(submitted, 1)
+            self.assertIsNotNone(api.captured_submit)
+            assert api.captured_submit is not None
+            self.assertEqual(api.captured_submit["batch_token_limits_by_service"]["glm52_fp8_pp13"], 32768)
+            self.assertEqual(api.captured_submit["batch_token_limits_by_service"]["other"], 7)
+            self.assertEqual(api.captured_submit["batch_decode_token_reserves_by_service"], {"glm52_fp8_pp13": 32})
+
     def test_dispatcher_tick_refreshes_pending_by_service_after_partial_completion(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=TOPOLOGY, runner_kind="fake")
