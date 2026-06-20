@@ -99,6 +99,7 @@ class ResidentServicePlan:
     max_cohort_size: int
     max_cohort_tokens: int
     batch_linger_s: float
+    decode_token_reserve: int = 0
     max_running_batches_per_compute_domain: int = 0
     max_running_batches_per_service: int = 0
     ready_shape_bucketing: bool = False
@@ -256,6 +257,7 @@ def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weigh
     max_cohort = max(1, int(cohort_sizes.get(service_id, cohort_sizes.get(service.profile_id, max_cohort_default))))
     max_tokens_default = _scheduler_int(service, ("dispatch_token_limit", "max_dispatch_tokens", "vllm_max_num_batched_tokens", "max_num_batched_tokens"), 0)
     max_tokens = max(0, int(token_limits.get(service_id, token_limits.get(service.profile_id, max_tokens_default))))
+    decode_reserve = max(0, _scheduler_int(service, ("dispatch_decode_token_reserve", "decode_token_reserve", "vllm_decode_token_reserve"), 0))
     max_domain_batches = max(0, _scheduler_int(service, ("max_running_batches_per_compute_domain",), 0))
     max_service_batches = max(0, _scheduler_int(service, ("max_running_batches_per_service", "max_running_same_service_batches"), 0))
     service_linger = float(linger.get(service_id, linger.get(service.profile_id, _scheduler_linger(service, default_batch_linger_s))))
@@ -271,6 +273,7 @@ def _resident_service_plan(service: Any, *, default_batch_linger_s: float, weigh
         low_watermark=min(queue_target, max(1, low)),
         max_cohort_size=max_cohort,
         max_cohort_tokens=max_tokens,
+        decode_token_reserve=decode_reserve,
         max_running_batches_per_compute_domain=max_domain_batches,
         max_running_batches_per_service=max_service_batches,
         batch_linger_s=max(0.0, service_linger),

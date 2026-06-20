@@ -139,6 +139,24 @@ class InferenceQueueTests(unittest.TestCase):
             claims = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=8, leased_by="worker", lease_ttl_s=60, batch_token_limits_by_service={"*": 1536})
             self.assertEqual([claim.request_id for claim in claims], ["wide-000", "wide-001", "wide-002"])
 
+    def test_ready_claim_can_reserve_decode_step_instead_of_full_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            requests = [req(f"wide-{idx:03d}", input_tokens=256, output_tokens=512, thinking_tokens=512) for idx in range(8)]
+            queue.submit_requests(requests=requests, registry=registry, batch_id="wide")
+            queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=8, leased_by="worker", lease_ttl_s=60)
+            claims = queue.claim_ready_batch(
+                node_id="spark0",
+                batch_id=None,
+                limit=8,
+                leased_by="worker",
+                lease_ttl_s=60,
+                batch_token_limits_by_service={"*": 2304},
+                batch_decode_token_reserves_by_service={"*": 32},
+            )
+            self.assertEqual([claim.request_id for claim in claims], [f"wide-{idx:03d}" for idx in range(8)])
+
     def test_ready_claim_always_allows_one_large_request(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             queue = InferenceQueue(tmp)

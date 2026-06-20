@@ -110,6 +110,7 @@
           "admission_mode": "bounded_cohort_refill",
           "batch_linger_s": 0.5,
           "dispatch_batch_limit": 80,
+          "dispatch_decode_token_reserve": 32,
           "max_running_batches_per_compute_domain": 2,
           "max_running_batches_per_service": 2,
           "queue_depth_target": 80,
