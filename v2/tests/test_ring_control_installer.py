@@ -55,7 +55,7 @@ class RingControlInstallerTests(unittest.TestCase):
         self.assertIn("dev=\"enP2p1s0f0np0\"", text)
         self.assertIn("fallback_dev=\"enp1s0f1np1\"", text)
         self.assertIn("fallback_dev=\"enp1s0f0np0\"", text)
-        self.assertIn("if rail_up \"\\$primary_dev\"", text)
+        self.assertIn("if next_hop_ready \"\\$primary_dev\" \"\\$primary_via\"", text)
         self.assertIn("install -m 0755 \"$tmp_route_apply\" /usr/local/sbin/ds4-ring-200g-apply", text)
         self.assertIn("install -m 0755 \"$tmp_route_extend\" /usr/local/sbin/ds4-ring-200g-extend13", text)
 

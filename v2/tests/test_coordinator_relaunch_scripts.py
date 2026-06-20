@@ -137,9 +137,10 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         limits = json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])
 
         self.assertEqual(defaults["DS4_API_RESIDENT_SERVICE_IDS"], "glm52_fp8_pp13")
-        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "128")
-        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "128")
-        self.assertEqual(defaults["DS4_API_DISPATCH_COHORT_WORKERS"], "128")
+        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "80")
+        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "80")
+        self.assertEqual(defaults["DS4_API_DISPATCH_COHORT_WORKERS"], "80")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_MAX"], "80")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "32768")
         self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_STREAM_WALL_TIMEOUT_S"], "1800")
         self.assertEqual(defaults["DS4_PIPELINE_SSE_FIRST_EVENT_TIMEOUT_S"], "900")
@@ -149,7 +150,7 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT"], "94")
         self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE"], "0")
         self.assertEqual(defaults["DS4_API_JIT_KV_PREFETCH_API"], "0")
-        self.assertEqual(limits, {"glm52_fp8_pp13": 128})
+        self.assertEqual(limits, {"glm52_fp8_pp13": 80})
 
     def test_relaunch_kimi27_profile_selects_kimi_topology_and_lmcache_auto_kv(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)
