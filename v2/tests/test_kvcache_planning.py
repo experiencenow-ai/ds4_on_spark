@@ -25,6 +25,7 @@ KIMI_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "kimi26_pp13_lmcache_hma
 KIMI27_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "kimi27_code_pp13_lmcache_hma.json"
 GLM52_PP13_DIRECT_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "glm52_fp8_pp13_direct_vllm.json"
 GLM52_PP13_PROFILE_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "glm52_fp8_pp13_direct_vllm_torch_profile.json"
+GLM52_PP13_MOE_TRITON_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "glm52_fp8_pp13_direct_vllm_moe_triton.json"
 QWEN_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp13_lmcache_hma.json"
 GEMMA26_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_26b_a4b_it_pp13_lmcache_hma.json"
 QWEN_PP12_PLAIN_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp12_plain.json"
@@ -330,6 +331,24 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertFalse(profiler["torch_profiler_with_stack"])
         self.assertFalse(profiler["torch_profiler_use_gzip"])
         self.assertIn("--headless", rank12["argv"])
+
+    def test_glm52_pp13_moe_triton_canary_changes_only_moe_backend(self) -> None:
+        base = plan_deployment(KvCacheDeployment.load(GLM52_PP13_DIRECT_DEPLOYMENT))
+        triton = plan_deployment(KvCacheDeployment.load(GLM52_PP13_MOE_TRITON_DEPLOYMENT))
+        base_rank0 = base["vllm_nodes"][0]
+        triton_rank0 = triton["vllm_nodes"][0]
+
+        self.assertEqual(triton["profile_id"], "glm52_fp8_pp13_moe_triton_v1")
+        self.assertEqual(triton["layer_partition"], base["layer_partition"])
+        self.assertEqual(triton["pipeline_parallel_size"], base["pipeline_parallel_size"])
+        self.assertEqual(triton_rank0["argv"][triton_rank0["argv"].index("--moe-backend") + 1], "triton")
+        self.assertEqual(base_rank0["argv"][base_rank0["argv"].index("--moe-backend") + 1], "marlin")
+        self.assertEqual(triton_rank0["argv"][triton_rank0["argv"].index("--attention-backend") + 1], "TRITON_MLA")
+        self.assertEqual(triton_rank0["argv"][triton_rank0["argv"].index("--max-model-len") + 1], "262144")
+        self.assertEqual(triton_rank0["argv"][triton_rank0["argv"].index("--max-num-batched-tokens") + 1], "32768")
+        self.assertEqual(triton_rank0["env"], base_rank0["env"])
+        self.assertEqual(triton_rank0["argv"][:triton_rank0["argv"].index("--moe-backend")], base_rank0["argv"][:base_rank0["argv"].index("--moe-backend")])
+        self.assertEqual(triton_rank0["argv"][triton_rank0["argv"].index("--moe-backend") + 2:], base_rank0["argv"][base_rank0["argv"].index("--moe-backend") + 2:])
 
     def test_pp13_lmcache_services_enable_private_cache_admin(self) -> None:
         deployments = (KIMI27_PP13_DEPLOYMENT, QWEN_PP13_DEPLOYMENT, GEMMA26_PP13_DEPLOYMENT)
