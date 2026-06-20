@@ -38,6 +38,7 @@ KIMI_PP13 = "kimi26_pp13_smart_v1"
 KIMI27_PP13 = "kimi27_code_pp13_smart_v1"
 QWEN_PP13 = "qwen3_6_27b_bf16_pp13_efficient_v1"
 GEMMA26_PP13 = "gemma4_26b_a4b_it_pp13_peer_v1"
+GLM52_PP13 = "glm52_fp8_pp13_frontier_v1"
 QWEN_PP12 = "qwen3_6_27b_bf16_pp12_efficient_v1"
 GEMMA26_PP12 = "gemma4_26b_a4b_it_pp12_peer_v1"
 QWEN_PP12_PLAIN = "qwen3_6_27b_bf16_pp12_plain_efficient_v1"
@@ -46,6 +47,7 @@ DSV4_PRODUCTION_PROFILE = ROOT / "profiles" / "production" / "dsv4_flash_pp8_res
 DSV4_KV_PROFILE = ROOT / "profiles" / "kv_cache" / "dsv4_flash_pp8_simple_offload.json"
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 DSV4_KV = json.loads(DSV4_KV_PROFILE.read_text(encoding="utf-8"))
+GLM52_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_glm52_pp13.json"
 
 
 def make_request(request_id: str, *, capability: str, job_class: str, chat: bool = False, immediate: bool = False, model_pin: dict[str, str] | None = None) -> InferenceRequest:
@@ -194,6 +196,27 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(_batch_limits_by_service(topology)["kimi27_pp13"], 128)
         self.assertEqual(_topology_dispatch_window(KIMI27_TOPOLOGY), 256)
         self.assertEqual(_topology_dispatch_cohort_workers(KIMI27_TOPOLOGY), 256)
+
+    def test_glm52_dedicated_topology_separates_long_context_from_batch_width(self) -> None:
+        topology = SparkTopology.load(GLM52_TOPOLOGY)
+        capacity = topology.estimate_capacity_by_profile()
+
+        self.assertEqual(len(topology.nodes), 13)
+        self.assertEqual(capacity[GLM52_PP13], 128)
+        self.assertEqual(topology.routing_policy["active_resident_service_ids"], ["glm52_fp8_pp13"])
+        glm = topology.pipeline_service_by_id("glm52_fp8_pp13")
+        coordinator = topology.routing_policy["resident_coordinator_defaults"]
+        self.assertEqual(glm.scheduler["dispatch_batch_limit"], 128)
+        self.assertEqual(glm.scheduler["queue_depth_target"], 256)
+        self.assertEqual(glm.scheduler["vllm_max_num_batched_tokens"], 32768)
+        self.assertEqual(coordinator["dispatch_window"], 128)
+        self.assertEqual(coordinator["dispatch_refill_batch"], 128)
+        self.assertEqual(coordinator["completion_token_budget"], 32768)
+        self.assertEqual(coordinator["resource_host_memory_soft_pct"], 93)
+        self.assertEqual(coordinator["resource_host_memory_hard_pct"], 94)
+        self.assertEqual(_batch_limits_by_service(topology)["glm52_fp8_pp13"], 128)
+        self.assertEqual(_topology_dispatch_window(GLM52_TOPOLOGY), 128)
+        self.assertEqual(_topology_dispatch_cohort_workers(GLM52_TOPOLOGY), 128)
 
     def test_kimi27_dedicated_readiness_has_gpu_budget(self) -> None:
         topology = SparkTopology.load(KIMI27_TOPOLOGY)
