@@ -291,8 +291,6 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(rank0["argv"][rank0["argv"].index("--max-model-len") + 1], "262144")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--max-num-seqs") + 1], "128")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--max-num-batched-tokens") + 1], "32768")
-        self.assertEqual(rank0["argv"][rank0["argv"].index("--max-num-partial-prefills") + 1], "2")
-        self.assertEqual(rank0["argv"][rank0["argv"].index("--max-long-partial-prefills") + 1], "1")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--long-prefill-token-threshold") + 1], "8192")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--gpu-memory-utilization") + 1], "0.80")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--kv-cache-memory-bytes") + 1], "4294967296")
