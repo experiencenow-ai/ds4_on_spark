@@ -25,6 +25,7 @@ from ds4_infer.worker import BatchWorker
 ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "profiles" / "models"
 TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks.json"
+GLM52_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_glm52_pp13.json"
 
 
 def completion_request(request_id: str, prompt: str = "prompt", *, max_output_tokens: int = 32, input_extra: dict | None = None, profile_id: str | None = None) -> InferenceRequest:
@@ -297,6 +298,11 @@ class BlockingPerRequestRunner(RecordingPerRequestRunner):
 
 
 class PipelineCoalescedDispatchTests(unittest.TestCase):
+    def test_glm52_resident_plan_uses_scheduler_token_limit(self) -> None:
+        topology = SparkTopology.load(GLM52_TOPOLOGY)
+        plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+        self.assertEqual(plans["glm52_fp8_pp13"].max_cohort_tokens, 32768)
+
     def test_runner_sends_one_openai_completion_request_for_compatible_completion_cohort(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
@@ -645,6 +651,7 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
                 queue_depth_target=128,
                 low_watermark=96,
                 max_cohort_size=128,
+                max_cohort_tokens=0,
                 batch_linger_s=0.0,
             )
             self.assertEqual(api._resident_refill_limit(plan, {"qwen27_bf16_pp12": 127}, 0, 192), 0)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -57,6 +57,7 @@ class DispatcherRuntime:
     service_plans: dict[str, Any]
     next_heartbeat_at: float
     last_credit_at: float
+    batch_token_limits_by_service: dict[str, int] = field(default_factory=dict)
 
 
 API_TERMINAL_STATES = {"completed", "completed_with_failures", "completed_with_cancelled", "cancelled", "failed"}
@@ -661,6 +662,7 @@ class CoordinatorApi:
             entry_node_id=entry_node_id,
             node_profile_ids=_node_profile_ids(topology, entry_node_id),
             batch_limits_by_service=_batch_limits_by_service(topology),
+            batch_token_limits_by_service=_batch_token_limits_by_service(topology),
             kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
             service_plans=_resident_service_plans(topology, entry_node_id=entry_node_id, default_batch_linger_s=self.dispatcher_batch_linger_s),
             next_heartbeat_at=time.time() + self.dispatcher_heartbeat_s,
@@ -687,6 +689,7 @@ class CoordinatorApi:
             entry_node_id=runtime.entry_node_id,
             node_profile_ids=runtime.node_profile_ids,
             batch_limits_by_service=runtime.batch_limits_by_service,
+            batch_token_limits_by_service=runtime.batch_token_limits_by_service,
             kv_shard_layouts_by_profile=runtime.kv_shard_layouts_by_profile,
             service_plans=runtime.service_plans,
         )
@@ -728,6 +731,7 @@ class CoordinatorApi:
         entry_node_id: str,
         node_profile_ids: tuple[str, ...],
         batch_limits_by_service: dict[str, int],
+        batch_token_limits_by_service: dict[str, int] | None = None,
         kv_shard_layouts_by_profile: dict[str, Any],
         service_plans: dict[str, ResidentServicePlan] | None = None,
     ) -> int:
@@ -737,6 +741,7 @@ class CoordinatorApi:
         if not self._dispatcher_resource_allows_refill():
             return 0
         service_plans = service_plans or {}
+        batch_token_limits_by_service = batch_token_limits_by_service or {}
         if self.dispatcher_resident_multimodel and service_plans:
             return self._dispatcher_refill_resident_multimodel(
                 worker=worker,
@@ -745,6 +750,7 @@ class CoordinatorApi:
                 entry_node_id=entry_node_id,
                 node_profile_ids=node_profile_ids,
                 batch_limits_by_service=batch_limits_by_service,
+                batch_token_limits_by_service=batch_token_limits_by_service,
                 kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
                 service_plans=service_plans,
             )
@@ -755,6 +761,7 @@ class CoordinatorApi:
             entry_node_id=entry_node_id,
             node_profile_ids=node_profile_ids,
             batch_limits_by_service=batch_limits_by_service,
+            batch_token_limits_by_service=batch_token_limits_by_service,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
         )
 
@@ -787,6 +794,7 @@ class CoordinatorApi:
         entry_node_id: str,
         node_profile_ids: tuple[str, ...],
         batch_limits_by_service: dict[str, int],
+        batch_token_limits_by_service: dict[str, int] | None = None,
         kv_shard_layouts_by_profile: dict[str, Any],
     ) -> int:
         available = self.dispatcher_window - _pending_claim_count(pending)
@@ -814,6 +822,7 @@ class CoordinatorApi:
             batch_linger_s=self.dispatcher_batch_linger_s,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
             batch_limits_by_service=batch_limits_by_service,
+            batch_token_limits_by_service=batch_token_limits_by_service or {},
         )
         if not claims:
             return 0
@@ -823,8 +832,11 @@ class CoordinatorApi:
     def _dispatcher_refill_resident_multimodel(
         self, *, worker: BatchWorker, executor: ThreadPoolExecutor, pending: dict[Any, Any],
         entry_node_id: str, node_profile_ids: tuple[str, ...], batch_limits_by_service: dict[str, int],
-        kv_shard_layouts_by_profile: dict[str, Any], service_plans: dict[str, ResidentServicePlan],
+        batch_token_limits_by_service: dict[str, int] | None = None, kv_shard_layouts_by_profile: dict[str, Any] | None = None, service_plans: dict[str, ResidentServicePlan] | None = None,
     ) -> int:
+        batch_token_limits_by_service = batch_token_limits_by_service or {}
+        kv_shard_layouts_by_profile = kv_shard_layouts_by_profile or {}
+        service_plans = service_plans or {}
         global_available = self.dispatcher_window - _pending_claim_count(pending)
         if global_available <= 0:
             return 0
@@ -847,7 +859,7 @@ class CoordinatorApi:
                 continue
             attempted += 1
             made_ready += self._resident_prepare_ready(worker, plan, entry_node_id, node_profile_ids, limit, kv_shard_layouts_by_profile)
-            claims = self._resident_claim_ready(worker, plan, entry_node_id, limit, kv_shard_layouts_by_profile, batch_limits_by_service)
+            claims = self._resident_claim_ready(worker, plan, entry_node_id, limit, kv_shard_layouts_by_profile, batch_limits_by_service, batch_token_limits_by_service)
             claimed = self._resident_submit_claims(
                 executor=executor,
                 worker=worker,
@@ -942,7 +954,10 @@ class CoordinatorApi:
             share_compute_domain=True,
         )
 
-    def _resident_claim_ready(self, worker: BatchWorker, plan: ResidentServicePlan, entry_node_id: str, limit: int, kv_shard_layouts_by_profile: dict[str, Any], batch_limits_by_service: dict[str, int]) -> list[QueueClaim]:
+    def _resident_claim_ready(self, worker: BatchWorker, plan: ResidentServicePlan, entry_node_id: str, limit: int, kv_shard_layouts_by_profile: dict[str, Any], batch_limits_by_service: dict[str, int], batch_token_limits_by_service: dict[str, int]) -> list[QueueClaim]:
+        token_limits = dict(batch_token_limits_by_service)
+        if int(plan.max_cohort_tokens or 0) > 0:
+            token_limits[plan.service_id] = int(plan.max_cohort_tokens)
         return self.queue.claim_ready_batch(
             node_id=entry_node_id,
             batch_id=None,
@@ -952,6 +967,7 @@ class CoordinatorApi:
             batch_linger_s=plan.batch_linger_s,
             kv_shard_layouts_by_profile=kv_shard_layouts_by_profile,
             batch_limits_by_service=batch_limits_by_service,
+            batch_token_limits_by_service=token_limits,
             selected_service_id=plan.service_id,
             share_compute_domain=True,
             ready_shape_bucketing=plan.ready_shape_bucketing,
@@ -968,6 +984,7 @@ class CoordinatorApi:
             pending_cohort_details=_pending_cohort_details(pending),
             resident_service_targets={sid: plan.target_active for sid, plan in service_plans.items()},
             resident_service_queue_depth_targets={sid: plan.queue_depth_target for sid, plan in service_plans.items()},
+            resident_service_token_limits={sid: plan.max_cohort_tokens for sid, plan in service_plans.items() if plan.max_cohort_tokens > 0},
             resident_service_low_watermarks={sid: plan.low_watermark for sid, plan in service_plans.items()},
             resident_service_admission_modes={sid: plan.admission_mode for sid, plan in service_plans.items()},
             resident_service_deficits={sid: round(plan.deficit, 3) for sid, plan in service_plans.items()},
@@ -1959,6 +1976,32 @@ def _batch_limits_by_service(topology: SparkTopology) -> dict[str, int]:
         for key in (service.service_id, service.profile_id, service.model_id):
             if key in overrides:
                 limits[service.service_id] = max(1, int(overrides[key]))
+                break
+    return limits
+
+
+def _batch_token_limits_by_service(topology: SparkTopology) -> dict[str, int]:
+    limits: dict[str, int] = {}
+    for service in topology.pipeline_services.values():
+        scheduler = getattr(service, "scheduler", {}) or {}
+        if isinstance(scheduler, dict):
+            for key in ("dispatch_token_limit", "max_dispatch_tokens", "vllm_max_num_batched_tokens", "max_num_batched_tokens"):
+                value = scheduler.get(key)
+                if value is not None:
+                    limits[service.service_id] = max(0, int(value))
+                    break
+    overrides = {}
+    raw_overrides = os.environ.get("DS4_API_BATCH_TOKEN_LIMITS_JSON")
+    if raw_overrides:
+        try:
+            parsed = json.loads(raw_overrides)
+        except json.JSONDecodeError:
+            parsed = {}
+        overrides = parsed if isinstance(parsed, dict) else {}
+    for service in topology.pipeline_services.values():
+        for key in (service.service_id, service.profile_id, service.model_id):
+            if key in overrides:
+                limits[service.service_id] = max(0, int(overrides[key]))
                 break
     return limits
 
