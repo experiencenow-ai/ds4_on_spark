@@ -31,9 +31,12 @@ def attach_request_files_to_messages(body: dict[str, Any], profile: ModelProfile
     attachments = _request_attachments(body)
     if not attachments:
         return messages, None
-    chunk_tokens = _positive_int(_setting(body, "ds4_attachment_chunk_tokens"), _positive_env("DS4_API_ATTACHMENT_CHUNK_TOKENS", DEFAULT_CHUNK_TOKENS))
-    chunks = _chunks_for_attachments(attachments, chunk_tokens=chunk_tokens)
     budget = _attachment_context_budget(body, profile, max_output_tokens=max_output_tokens, thinking_budget_tokens=thinking_budget_tokens)
+    chunk_tokens = min(
+        budget,
+        _positive_int(_setting(body, "ds4_attachment_chunk_tokens"), _positive_env("DS4_API_ATTACHMENT_CHUNK_TOKENS", DEFAULT_CHUNK_TOKENS)),
+    )
+    chunks = _chunks_for_attachments(attachments, chunk_tokens=chunk_tokens)
     selected = _select_chunks(chunks, budget_tokens=budget, query=_last_user_text(messages))
     manifest = _manifest(attachments, chunks, selected, budget_tokens=budget, chunk_tokens=chunk_tokens)
     if manifest["omitted_chunk_count"] > 0 and _truthy(_setting(body, "ds4_attachment_require_all")):
