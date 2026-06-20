@@ -303,6 +303,11 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
         plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
         self.assertEqual(plans["glm52_fp8_pp13"].max_cohort_tokens, 32768)
 
+    def test_glm52_dispatcher_status_reports_idle_token_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=GLM52_TOPOLOGY, runner_kind="fake")
+            self.assertEqual(api.dispatcher_status()["resident_service_token_limits"], {"glm52_fp8_pp13": 32768})
+
     def test_runner_sends_one_openai_completion_request_for_compatible_completion_cohort(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("qwen3_6_27b_bf16_pp8_efficient_v1")
