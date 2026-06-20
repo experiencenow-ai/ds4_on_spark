@@ -208,6 +208,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         coordinator = topology.routing_policy["resident_coordinator_defaults"]
         self.assertEqual(glm.scheduler["admission_mode"], "bounded_cohort_refill")
         self.assertEqual(glm.scheduler["dispatch_batch_limit"], 80)
+        self.assertEqual(glm.scheduler["dispatch_decode_token_reserve"], 32)
         self.assertEqual(glm.scheduler["max_running_batches_per_compute_domain"], 2)
         self.assertEqual(glm.scheduler["max_running_batches_per_service"], 2)
         self.assertEqual(glm.scheduler["queue_depth_target"], 80)
