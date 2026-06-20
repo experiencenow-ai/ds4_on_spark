@@ -166,6 +166,72 @@ class InferenceQueueTests(unittest.TestCase):
             claims = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=1, leased_by="worker", lease_ttl_s=60, batch_token_limits_by_service={"*": 1024})
             self.assertEqual([claim.request_id for claim in claims], ["large"])
 
+    def test_ready_claim_waits_for_configured_initial_cohort_floor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            requests = [req(f"floor-{idx:03d}", input_tokens=16, output_tokens=64) for idx in range(4)]
+            queue.submit_requests(requests=requests, registry=registry, batch_id="floor")
+            queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=2, leased_by="worker", lease_ttl_s=60)
+            claims = queue.claim_ready_batch(
+                node_id="spark0",
+                batch_id=None,
+                limit=4,
+                leased_by="worker",
+                lease_ttl_s=60,
+                min_ready_rows=4,
+                min_ready_timeout_s=60,
+            )
+            self.assertEqual(claims, [])
+            queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=4, leased_by="worker", lease_ttl_s=60)
+            claims = queue.claim_ready_batch(
+                node_id="spark0",
+                batch_id=None,
+                limit=4,
+                leased_by="worker",
+                lease_ttl_s=60,
+                min_ready_rows=4,
+                min_ready_timeout_s=60,
+            )
+            self.assertEqual([claim.request_id for claim in claims], [f"floor-{idx:03d}" for idx in range(4)])
+
+    def test_ready_claim_floor_allows_single_one_off_request(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(requests=[req("solo", input_tokens=64, output_tokens=16)], registry=registry, batch_id="solo")
+            queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=1, leased_by="worker", lease_ttl_s=60)
+            claims = queue.claim_ready_batch(
+                node_id="spark0",
+                batch_id=None,
+                limit=80,
+                leased_by="worker",
+                lease_ttl_s=60,
+                min_ready_rows=80,
+                min_ready_timeout_s=60,
+            )
+            self.assertEqual([claim.request_id for claim in claims], ["solo"])
+
+    def test_ready_claim_floor_allows_one_large_request(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            queue.submit_requests(requests=[req("large", input_tokens=70000, output_tokens=1024)], registry=registry, batch_id="large")
+            queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=1, leased_by="worker", lease_ttl_s=60)
+            claims = queue.claim_ready_batch(
+                node_id="spark0",
+                batch_id=None,
+                limit=80,
+                leased_by="worker",
+                lease_ttl_s=60,
+                batch_token_limits_by_service={"*": 32768},
+                batch_decode_token_reserves_by_service={"*": 32},
+                min_ready_rows=80,
+                min_ready_timeout_s=60,
+                min_ready_large_token_threshold=8192,
+            )
+            self.assertEqual([claim.request_id for claim in claims], ["large"])
+
     def test_worker_refill_uses_same_token_budget_as_initial_claim(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             queue = InferenceQueue(tmp)

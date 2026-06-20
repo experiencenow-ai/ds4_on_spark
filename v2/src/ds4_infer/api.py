@@ -883,7 +883,8 @@ class CoordinatorApi:
                 continue
             attempted += 1
             made_ready += self._resident_prepare_ready(worker, plan, entry_node_id, node_profile_ids, limit, kv_shard_layouts_by_profile)
-            claims = self._resident_claim_ready(worker, plan, entry_node_id, limit, kv_shard_layouts_by_profile, batch_limits_by_service, batch_token_limits_by_service)
+            initial_cohort = active_by_service.get(plan.service_id, 0) <= 0 and active_batches_by_service.get(plan.service_id, 0) <= 0
+            claims = self._resident_claim_ready(worker, plan, entry_node_id, limit, kv_shard_layouts_by_profile, batch_limits_by_service, batch_token_limits_by_service, initial_cohort=initial_cohort)
             claimed = self._resident_submit_claims(
                 executor=executor,
                 worker=worker,
@@ -987,10 +988,11 @@ class CoordinatorApi:
             share_compute_domain=True,
         )
 
-    def _resident_claim_ready(self, worker: BatchWorker, plan: ResidentServicePlan, entry_node_id: str, limit: int, kv_shard_layouts_by_profile: dict[str, Any], batch_limits_by_service: dict[str, int], batch_token_limits_by_service: dict[str, int]) -> list[QueueClaim]:
+    def _resident_claim_ready(self, worker: BatchWorker, plan: ResidentServicePlan, entry_node_id: str, limit: int, kv_shard_layouts_by_profile: dict[str, Any], batch_limits_by_service: dict[str, int], batch_token_limits_by_service: dict[str, int], *, initial_cohort: bool = False) -> list[QueueClaim]:
         token_limits = dict(batch_token_limits_by_service)
         if int(plan.max_cohort_tokens or 0) > 0:
             token_limits[plan.service_id] = int(plan.max_cohort_tokens)
+        floor = min(limit, int(plan.initial_cohort_min or 0)) if initial_cohort else 0
         return self.queue.claim_ready_batch(
             node_id=entry_node_id,
             batch_id=None,
@@ -1006,6 +1008,9 @@ class CoordinatorApi:
             share_compute_domain=True,
             ready_shape_bucketing=plan.ready_shape_bucketing,
             ready_shape_lookahead=plan.ready_shape_lookahead,
+            min_ready_rows=floor,
+            min_ready_timeout_s=plan.initial_cohort_timeout_s if floor > 0 else 0.0,
+            min_ready_large_token_threshold=plan.large_request_token_threshold if floor > 0 else 0,
         )
 
     def _dispatcher_note_resident(self, pending: dict[Any, Any], service_plans: dict[str, ResidentServicePlan], *, attempted: int, made_ready: int) -> None:
@@ -1020,6 +1025,9 @@ class CoordinatorApi:
             resident_service_queue_depth_targets={sid: plan.queue_depth_target for sid, plan in service_plans.items()},
             resident_service_token_limits={sid: plan.max_cohort_tokens for sid, plan in service_plans.items() if plan.max_cohort_tokens > 0},
             resident_service_decode_token_reserves={sid: plan.decode_token_reserve for sid, plan in service_plans.items() if plan.decode_token_reserve > 0},
+            resident_service_initial_cohort_mins={sid: plan.initial_cohort_min for sid, plan in service_plans.items() if plan.initial_cohort_min > 0},
+            resident_service_initial_cohort_timeouts={sid: plan.initial_cohort_timeout_s for sid, plan in service_plans.items() if plan.initial_cohort_timeout_s > 0},
+            resident_service_large_request_token_thresholds={sid: plan.large_request_token_threshold for sid, plan in service_plans.items() if plan.large_request_token_threshold > 0},
             resident_service_low_watermarks={sid: plan.low_watermark for sid, plan in service_plans.items()},
             resident_service_admission_modes={sid: plan.admission_mode for sid, plan in service_plans.items()},
             resident_service_deficits={sid: round(plan.deficit, 3) for sid, plan in service_plans.items()},
