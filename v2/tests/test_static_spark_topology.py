@@ -39,6 +39,7 @@ KIMI27_PP13 = "kimi27_code_pp13_smart_v1"
 QWEN_PP13 = "qwen3_6_27b_bf16_pp13_efficient_v1"
 GEMMA26_PP13 = "gemma4_26b_a4b_it_pp13_peer_v1"
 GLM52_PP13 = "glm52_fp8_pp13_frontier_v1"
+GLM52_TRITON_PP13 = "glm52_fp8_pp13_moe_triton_v1"
 QWEN_PP12 = "qwen3_6_27b_bf16_pp12_efficient_v1"
 GEMMA26_PP12 = "gemma4_26b_a4b_it_pp12_peer_v1"
 QWEN_PP12_PLAIN = "qwen3_6_27b_bf16_pp12_plain_efficient_v1"
@@ -48,6 +49,7 @@ DSV4_KV_PROFILE = ROOT / "profiles" / "kv_cache" / "dsv4_flash_pp8_simple_offloa
 DSV4_PRODUCTION = json.loads(DSV4_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
 DSV4_KV = json.loads(DSV4_KV_PROFILE.read_text(encoding="utf-8"))
 GLM52_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_glm52_pp13.json"
+GLM52_TRITON_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_glm52_pp13_moe_triton.json"
 
 
 def make_request(request_id: str, *, capability: str, job_class: str, chat: bool = False, immediate: bool = False, model_pin: dict[str, str] | None = None) -> InferenceRequest:
@@ -239,6 +241,44 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(_batch_limits_by_service(topology)["glm52_fp8_pp13"], 80)
         self.assertEqual(_topology_dispatch_window(GLM52_TOPOLOGY), 80)
         self.assertEqual(_topology_dispatch_cohort_workers(GLM52_TOPOLOGY), 80)
+
+    def test_glm52_triton_topology_uses_measured_96_wide_decode_cohort(self) -> None:
+        topology = SparkTopology.load(GLM52_TRITON_TOPOLOGY)
+        capacity = topology.estimate_capacity_by_profile()
+
+        self.assertEqual(len(topology.nodes), 13)
+        self.assertEqual(capacity[GLM52_TRITON_PP13], 128)
+        self.assertEqual(topology.routing_policy["active_resident_service_ids"], ["glm52_fp8_pp13"])
+        glm = topology.pipeline_service_by_id("glm52_fp8_pp13")
+        coordinator = topology.routing_policy["resident_coordinator_defaults"]
+        self.assertEqual(glm.scheduler["admission_mode"], "rolling_refill")
+        self.assertEqual(glm.scheduler["dispatch_batch_limit"], 96)
+        self.assertEqual(glm.scheduler["dispatch_decode_token_reserve"], 32)
+        self.assertEqual(glm.scheduler["initial_cohort_min"], 96)
+        self.assertEqual(glm.scheduler["initial_cohort_timeout_s"], 2.0)
+        self.assertEqual(glm.scheduler["large_request_token_threshold"], 8192)
+        self.assertEqual(glm.scheduler["max_running_batches_per_compute_domain"], 2)
+        self.assertEqual(glm.scheduler["max_running_batches_per_service"], 2)
+        self.assertEqual(glm.scheduler["queue_depth_target"], 96)
+        self.assertEqual(glm.scheduler["refill_low_watermark"], 72)
+        self.assertEqual(glm.scheduler["vllm_max_num_batched_tokens"], 32768)
+        self.assertEqual(glm.scheduler["vllm_max_num_seqs"], 128)
+        self.assertEqual(coordinator["completion_cohort_max"], 96)
+        self.assertEqual(coordinator["completion_pp_safe_cohort_max"], 96)
+        self.assertEqual(coordinator["dispatch_window"], 96)
+        self.assertEqual(coordinator["dispatch_refill_batch"], 96)
+        self.assertEqual(coordinator["dispatch_cohort_workers"], 96)
+        self.assertTrue(coordinator["prefer_cohort_batch"])
+        self.assertEqual(coordinator["completion_token_budget"], 32768)
+        plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+        self.assertEqual(plans["glm52_fp8_pp13"].target_active, 96)
+        self.assertEqual(plans["glm52_fp8_pp13"].queue_depth_target, 96)
+        self.assertEqual(plans["glm52_fp8_pp13"].initial_cohort_min, 96)
+        self.assertEqual(plans["glm52_fp8_pp13"].initial_cohort_timeout_s, 2.0)
+        self.assertEqual(plans["glm52_fp8_pp13"].large_request_token_threshold, 8192)
+        self.assertEqual(_batch_limits_by_service(topology)["glm52_fp8_pp13"], 96)
+        self.assertEqual(_topology_dispatch_window(GLM52_TRITON_TOPOLOGY), 96)
+        self.assertEqual(_topology_dispatch_cohort_workers(GLM52_TRITON_TOPOLOGY), 96)
 
     def test_kimi27_dedicated_readiness_has_gpu_budget(self) -> None:
         topology = SparkTopology.load(KIMI27_TOPOLOGY)
