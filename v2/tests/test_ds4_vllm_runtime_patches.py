@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import json
 import subprocess
 import sys
 import tempfile
@@ -1159,6 +1160,161 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
             result.stdout.strip().splitlines(),
             ["4096", "7", "64", "bfloat16", "fake-vllm-new"],
         )
+
+    def test_runtime_patch_adds_trim_memory_api_to_old_serve_overlay(self):
+        v2_root = Path(__file__).resolve().parents[1]
+        src_root = v2_root / "src"
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            vllm_root = tmp_path / "vllm_root"
+            fastapi_dir = vllm_root / "fastapi"
+            serve_dir = vllm_root / "vllm/entrypoints/serve"
+            worker_dir = vllm_root / "vllm/v1/worker"
+            fastapi_dir.mkdir(parents=True)
+            serve_dir.mkdir(parents=True)
+            worker_dir.mkdir(parents=True)
+            (fastapi_dir / "__init__.py").write_text(
+                textwrap.dedent(
+                    """
+                    from types import SimpleNamespace
+
+                    class Route:
+                        def __init__(self, path, endpoint):
+                            self.path = path
+                            self.endpoint = endpoint
+                            self.methods = {"POST"}
+
+                    class APIRouter:
+                        def __init__(self):
+                            self.routes = []
+                        def post(self, path):
+                            def decorator(fn):
+                                self.routes.append(Route(path, fn))
+                                return fn
+                            return decorator
+
+                    class FastAPI:
+                        def __init__(self):
+                            self.routes = []
+                            self.state = SimpleNamespace()
+                        def include_router(self, router):
+                            self.routes.extend(router.routes)
+
+                    class HTTPException(Exception):
+                        def __init__(self, status_code, detail):
+                            super().__init__(detail)
+                            self.status_code = status_code
+                            self.detail = detail
+
+                    class Request:
+                        def __init__(self, app):
+                            self.app = app
+
+                    def Query(default=None):
+                        return default
+                    """
+                )
+            )
+            (fastapi_dir / "responses.py").write_text(
+                textwrap.dedent(
+                    """
+                    class JSONResponse:
+                        def __init__(self, content, status_code=200):
+                            self.content = content
+                            self.status_code = status_code
+                    """
+                )
+            )
+            for init_dir in [
+                "vllm",
+                "vllm/entrypoints",
+                "vllm/entrypoints/serve",
+                "vllm/v1",
+                "vllm/v1/worker",
+            ]:
+                (vllm_root / init_dir / "__init__.py").write_text("")
+            (serve_dir / "__init__.py").write_text(
+                textwrap.dedent(
+                    """
+                    def register_vllm_serve_api_routers(app):
+                        app.state.original_router_called = True
+                    """
+                )
+            )
+            (worker_dir / "worker_base.py").write_text(
+                "class WorkerBase:\n    pass\n"
+            )
+            code = textwrap.dedent(
+                """
+                import asyncio
+                import json
+                from fastapi import FastAPI, Request
+                from ds4_vllm_runtime.patches import apply_runtime_patches
+
+                class Engine:
+                    def __init__(self):
+                        self.calls = []
+                    async def pause_generation(self, **kwargs):
+                        self.calls.append(["pause", kwargs])
+                    async def collective_rpc(self, method, timeout=None, args=(), kwargs=None):
+                        self.calls.append(["collective", method, kwargs])
+                        return [{"rank": 0, "process": {"malloc_trim": False}}]
+                    async def reset_prefix_cache(self, reset_running_requests=False, reset_connector=False):
+                        self.calls.append(["prefix", reset_running_requests, reset_connector])
+                        return True
+                    async def reset_mm_cache(self):
+                        self.calls.append(["mm"])
+                    async def reset_encoder_cache(self):
+                        self.calls.append(["encoder"])
+                    async def resume_generation(self):
+                        self.calls.append(["resume"])
+
+                print(json.dumps(apply_runtime_patches()))
+                from vllm.entrypoints.serve import register_vllm_serve_api_routers
+                from vllm.v1.worker.worker_base import WorkerBase
+                app = FastAPI()
+                engine = Engine()
+                app.state.engine_client = engine
+                register_vllm_serve_api_routers(app)
+                route = [r for r in app.routes if r.path == "/v1/trim_memory"][0]
+                response = asyncio.run(
+                    route.endpoint(
+                        Request(app),
+                        mode="wait",
+                        malloc_trim=False,
+                    )
+                )
+                worker_result = WorkerBase().trim_memory(malloc_trim=False)
+                print(json.dumps({
+                    "status_code": response.status_code,
+                    "body": response.content,
+                    "calls": engine.calls,
+                    "original": getattr(app.state, "original_router_called", False),
+                    "worker_keys": sorted(worker_result.keys()),
+                }, sort_keys=True))
+                """
+            )
+            env = os.environ.copy()
+            env["DS4_VLLM_ENABLE_TRIM_MEMORY"] = "1"
+            env["PYTHONPATH"] = os.pathsep.join([str(vllm_root), str(src_root)])
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+        lines = result.stdout.strip().splitlines()
+        patches = json.loads(lines[0])
+        payload = json.loads(lines[1])
+        self.assertIn("trim_memory_api:trim_memory_worker", patches)
+        self.assertEqual(payload["status_code"], 200)
+        self.assertEqual(payload["body"]["status"], "ok")
+        self.assertTrue(payload["original"])
+        self.assertEqual(payload["worker_keys"], ["connector", "process"])
+        self.assertEqual(payload["calls"][0][0], "pause")
+        self.assertEqual(payload["calls"][1][0], "collective")
+        self.assertEqual(payload["calls"][-1][0], "resume")
 
 
 if __name__ == "__main__":
