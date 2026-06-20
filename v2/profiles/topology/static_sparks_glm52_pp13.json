@@ -42,7 +42,7 @@
       "dispatch_window": 80,
       "prefer_cohort_batch": true,
       "resource_host_memory_hard_pct": 94,
-      "resource_host_memory_soft_pct": 93,
+      "resource_host_memory_soft_pct": 85,
       "trim_memory_cooldown_s": 60,
       "trim_memory_mode": "wait",
       "trim_memory_timeout_s": 180,

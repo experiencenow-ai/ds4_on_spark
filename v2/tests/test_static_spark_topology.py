@@ -226,7 +226,7 @@ class StaticSparkTopologyTests(unittest.TestCase):
         self.assertEqual(coordinator["completion_stream_wall_timeout_s"], 1800)
         self.assertEqual(coordinator["sse_first_event_timeout_s"], 900)
         self.assertEqual(coordinator["sse_idle_timeout_s"], 120)
-        self.assertEqual(coordinator["resource_host_memory_soft_pct"], 93)
+        self.assertEqual(coordinator["resource_host_memory_soft_pct"], 85)
         self.assertEqual(coordinator["resource_host_memory_hard_pct"], 94)
         self.assertTrue(coordinator["trim_on_host_memory_pressure"])
         self.assertEqual(coordinator["trim_memory_cooldown_s"], 60)
