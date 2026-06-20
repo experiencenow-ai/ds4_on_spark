@@ -9,6 +9,7 @@ import unittest
 from ds4_infer import api as api_module
 from ds4_infer.api import CoordinatorApi, _resolve_profile
 from ds4_infer.api_stream import _drain_completion_stream_events, openai_chat_stream_events, openai_completion_stream_events
+from ds4_infer.attachments import attach_request_files_to_messages
 from ds4_infer.coalesced_groups import plan_compatible_payload_groups
 from ds4_infer.jit_kv import JitKvCircuitBreaker, run_prefetch
 from ds4_infer.profiles import ProfileRegistry
@@ -297,6 +298,31 @@ class PipelineApiTests(unittest.TestCase):
         self.assertIn("needle.txt", prompt)
         self.assertIn("needle line", prompt)
         self.assertIn("Which attachment mentions needle?", prompt)
+
+    def test_glm52_attachment_budget_uses_8192_context_before_chunking(self) -> None:
+        old_reserve = os.environ.pop("DS4_API_ATTACHMENT_CONTEXT_RESERVE_TOKENS", None)
+        try:
+            registry = ProfileRegistry.load(PROFILES)
+            profile = registry.get("glm52_fp8_pp13_frontier_v1")
+            messages, manifest = attach_request_files_to_messages(
+                {
+                    "attachments": [{"name": "big.c", "content": "needle line\n" * 2000}],
+                    "ds4_attachment_chunk_tokens": 8192,
+                },
+                profile,
+                [{"role": "user", "content": "audit the attached needle code"}],
+                max_output_tokens=5120,
+                thinking_budget_tokens=0,
+            )
+        finally:
+            if old_reserve is not None:
+                os.environ["DS4_API_ATTACHMENT_CONTEXT_RESERVE_TOKENS"] = old_reserve
+        assert manifest is not None
+        self.assertEqual(manifest["budget_tokens"], 1024)
+        self.assertEqual(manifest["chunk_target_tokens"], 1024)
+        self.assertGreater(manifest["included_chunk_count"], 0)
+        self.assertLessEqual(manifest["included_estimated_tokens"], manifest["budget_tokens"])
+        self.assertIn("needle line", messages[0]["content"])
 
     def test_dsv4_openai_payload_defaults_chat_template_thinking_off(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
