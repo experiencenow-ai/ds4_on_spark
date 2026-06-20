@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import ctypes
+import gc
 import importlib
+import inspect
 import json
 import os
 from pathlib import Path
@@ -915,6 +918,228 @@ def allow_missing_ready_response_block_size() -> str:
     return "ready_response_block_size_compat"
 
 
+def _trim_process_memory(
+    *,
+    empty_accelerator_cache: bool,
+    malloc_trim: bool,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {"gc_collected": gc.collect()}
+    if empty_accelerator_cache:
+        try:
+            import torch
+
+            torch.accelerator.empty_cache()
+            result["accelerator_empty_cache"] = True
+        except Exception as exc:
+            result["accelerator_empty_cache"] = False
+            result["accelerator_empty_cache_error"] = repr(exc)
+    if malloc_trim:
+        if sys.platform.startswith("linux"):
+            try:
+                libc = ctypes.CDLL("libc.so.6")
+                libc.malloc_trim.argtypes = [ctypes.c_size_t]
+                libc.malloc_trim.restype = ctypes.c_int
+                result["malloc_trim"] = bool(libc.malloc_trim(0))
+            except Exception as exc:
+                result["malloc_trim"] = False
+                result["malloc_trim_error"] = repr(exc)
+        else:
+            result["malloc_trim"] = None
+    return result
+
+
+def _patch_worker_trim_memory() -> str:
+    worker_base = importlib.import_module("vllm.v1.worker.worker_base")
+    worker_cls = getattr(worker_base, "WorkerBase", None)
+    if worker_cls is None:
+        return "trim_memory_worker_unavailable"
+    if hasattr(worker_cls, "trim_memory"):
+        return "trim_memory_worker_existing"
+
+    def trim_memory(
+        self,
+        *,
+        release_offload_memory: bool = True,
+        malloc_trim: bool = True,
+    ) -> dict[str, object]:
+        connector_result: dict[str, object] | None = None
+        if release_offload_memory:
+            try:
+                kv_module = importlib.import_module(
+                    "vllm.distributed.kv_transfer.kv_connector.v1"
+                )
+                has_group = getattr(kv_module, "has_kv_transfer_group", None)
+                get_group = getattr(kv_module, "get_kv_transfer_group", None)
+                if callable(has_group) and callable(get_group) and has_group():
+                    connector = get_group()
+                    trim = getattr(connector, "trim_memory", None)
+                    if callable(trim):
+                        connector_result = trim(
+                            release_offload_memory=release_offload_memory,
+                            malloc_trim=malloc_trim,
+                        )
+            except Exception as exc:
+                connector_result = {"error": repr(exc)}
+        return {
+            "connector": connector_result,
+            "process": _trim_process_memory(
+                empty_accelerator_cache=True,
+                malloc_trim=malloc_trim,
+            ),
+        }
+
+    trim_memory._ds4_trim_memory_worker_patch = True  # type: ignore[attr-defined]
+    worker_cls.trim_memory = trim_memory
+    return "trim_memory_worker"
+
+
+async def _maybe_await(value: Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+async def _trim_engine_memory(
+    engine: Any,
+    *,
+    mode: str,
+    reset_external: bool,
+    release_offload_memory: bool,
+    malloc_trim: bool,
+    resume: bool,
+) -> dict[str, Any]:
+    actions: dict[str, Any] = {
+        "mode": mode,
+        "paused": False,
+        "resumed": False,
+        "worker_results": "unsupported",
+        "prefix_cache_reset": "skipped",
+        "mm_cache_reset": "skipped",
+        "encoder_cache_reset": "skipped",
+        "process": "skipped",
+    }
+    pause = getattr(engine, "pause_generation", None)
+    if callable(pause):
+        await _maybe_await(pause(mode=mode, clear_cache=False))
+        actions["paused"] = True
+    try:
+        collective = getattr(engine, "collective_rpc", None)
+        if callable(collective):
+            actions["worker_results"] = await _maybe_await(
+                collective(
+                    "trim_memory",
+                    kwargs={
+                        "release_offload_memory": release_offload_memory,
+                        "malloc_trim": malloc_trim,
+                    },
+                )
+            )
+        reset_prefix = getattr(engine, "reset_prefix_cache", None)
+        if callable(reset_prefix):
+            try:
+                actions["prefix_cache_reset"] = await _maybe_await(
+                    reset_prefix(True, reset_external)
+                )
+            except Exception as exc:
+                if not reset_external:
+                    raise
+                actions["prefix_cache_reset_external_error"] = repr(exc)
+                actions["prefix_cache_reset"] = await _maybe_await(
+                    reset_prefix(True, False)
+                )
+        reset_mm = getattr(engine, "reset_mm_cache", None)
+        if callable(reset_mm):
+            await _maybe_await(reset_mm())
+            actions["mm_cache_reset"] = "ok"
+        reset_encoder = getattr(engine, "reset_encoder_cache", None)
+        if callable(reset_encoder):
+            await _maybe_await(reset_encoder())
+            actions["encoder_cache_reset"] = "ok"
+        actions["process"] = _trim_process_memory(
+            empty_accelerator_cache=False,
+            malloc_trim=malloc_trim,
+        )
+    finally:
+        if resume:
+            resume_generation = getattr(engine, "resume_generation", None)
+            if callable(resume_generation):
+                try:
+                    await _maybe_await(resume_generation())
+                    actions["resumed"] = True
+                except Exception as exc:
+                    actions["resume_error"] = repr(exc)
+                    if sys.exc_info()[0] is None:
+                        raise
+    return actions
+
+
+def _ds4_trim_memory_route_exists(app: Any) -> bool:
+    for route in getattr(app, "routes", []):
+        if getattr(route, "path", "") != "/v1/trim_memory":
+            continue
+        methods = set(getattr(route, "methods", set()) or set())
+        if "POST" in methods:
+            return True
+    return False
+
+
+def _attach_ds4_trim_memory_router(app: Any) -> None:
+    if _ds4_trim_memory_route_exists(app):
+        return
+    from fastapi import APIRouter, HTTPException, Query, Request
+    from fastapi.responses import JSONResponse
+
+    router = APIRouter()
+
+    @router.post("/v1/trim_memory")
+    async def trim_memory(  # type: ignore[no-untyped-def]
+        raw_request: Request,
+        mode: str = Query(default="abort"),
+        reset_external: bool = Query(default=True),
+        release_offload_memory: bool = Query(default=True),
+        malloc_trim: bool = Query(default=True),
+        resume: bool = Query(default=True),
+    ):
+        if mode not in {"abort", "wait"}:
+            raise HTTPException(status_code=400, detail="mode must be abort or wait")
+        if release_offload_memory and not reset_external:
+            raise HTTPException(
+                status_code=400,
+                detail="release_offload_memory=true requires reset_external=true",
+            )
+        engine = raw_request.app.state.engine_client
+        result = await _trim_engine_memory(
+            engine,
+            mode=mode,
+            reset_external=reset_external,
+            release_offload_memory=release_offload_memory,
+            malloc_trim=malloc_trim,
+            resume=resume,
+        )
+        return JSONResponse(content={"status": "ok", "result": result})
+
+    app.include_router(router)
+
+
+def enable_trim_memory_api() -> str:
+    worker_status = _patch_worker_trim_memory()
+    serve_module = importlib.import_module("vllm.entrypoints.serve")
+    original = getattr(serve_module, "register_vllm_serve_api_routers", None)
+    if not callable(original):
+        return f"trim_memory_api_no_serve_router:{worker_status}"
+    if getattr(original, "_ds4_trim_memory_api_patch", False):
+        return f"trim_memory_api:{worker_status}"
+
+    def register_vllm_serve_api_routers(app):  # type: ignore[no-untyped-def]
+        result = original(app)
+        _attach_ds4_trim_memory_router(app)
+        return result
+
+    register_vllm_serve_api_routers._ds4_trim_memory_api_patch = True  # type: ignore[attr-defined]
+    serve_module.register_vllm_serve_api_routers = register_vllm_serve_api_routers
+    return f"trim_memory_api:{worker_status}"
+
+
 def apply_runtime_patches() -> list[str]:
     patches = []
     if any(name.startswith("VLLM_DS4_") for name in os.environ) or os.getenv(
@@ -929,6 +1154,8 @@ def apply_runtime_patches() -> list[str]:
         patches.append(patch_ds4_pp_tcp_tensor_transport())
     if env_flag("DS4_VLLM_READY_RESPONSE_COMPAT"):
         patches.append(allow_missing_ready_response_block_size())
+    if env_flag("DS4_VLLM_ENABLE_TRIM_MEMORY"):
+        patches.append(enable_trim_memory_api())
     if env_flag("DS4_VLLM_SM12_FLASHINFER_MLA_SPARSE"):
         patches.append(allow_sm12_flashinfer_mla_sparse())
     if env_flag("DS4_VLLM_SM12_FLASHMLA_SPARSE"):
