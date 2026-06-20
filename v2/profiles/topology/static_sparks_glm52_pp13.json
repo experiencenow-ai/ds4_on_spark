@@ -40,8 +40,13 @@
       "dispatch_kv_capacity_bytes": 8589934592,
       "dispatch_refill_batch": 80,
       "dispatch_window": 80,
+      "prefer_cohort_batch": true,
       "resource_host_memory_hard_pct": 94,
       "resource_host_memory_soft_pct": 93,
+      "trim_memory_cooldown_s": 60,
+      "trim_memory_mode": "wait",
+      "trim_memory_timeout_s": 180,
+      "trim_on_host_memory_pressure": true,
       "sse_first_event_timeout_s": 900,
       "sse_idle_timeout_s": 120
     },
@@ -107,7 +112,7 @@
         "pipeline_parallel_size": 13,
         "profile_id": "glm52_fp8_pp13_frontier_v1",
         "scheduler": {
-          "admission_mode": "bounded_cohort_refill",
+          "admission_mode": "rolling_refill",
           "batch_linger_s": 0.5,
           "dispatch_batch_limit": 80,
           "dispatch_decode_token_reserve": 32,

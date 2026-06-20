@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 
 from ds4_infer.api import CoordinatorApi, DispatcherRuntime, _parse_vllm_metrics_snapshot
 from ds4_infer.dispatcher_resident import PendingDispatcherCohort, ResidentServicePlan, resident_service_plans
@@ -304,11 +305,76 @@ class PipelineCoalescedDispatchTests(unittest.TestCase):
         self.assertEqual(plans["glm52_fp8_pp13"].target_active, 80)
         self.assertEqual(plans["glm52_fp8_pp13"].max_cohort_size, 80)
         self.assertEqual(plans["glm52_fp8_pp13"].max_cohort_tokens, 32768)
+        self.assertEqual(plans["glm52_fp8_pp13"].admission_mode, "rolling_refill")
 
     def test_glm52_dispatcher_status_reports_idle_token_limit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=GLM52_TOPOLOGY, runner_kind="fake")
             self.assertEqual(api.dispatcher_status()["resident_service_token_limits"], {"glm52_fp8_pp13": 32768})
+            self.assertTrue(api.dispatcher_status()["resident_prefer_cohort_batch"])
+
+    def test_host_memory_trim_remediation_allows_dispatcher_refill(self) -> None:
+        old_values = {
+            "DS4_API_RESOURCE_GOVERNOR": os.environ.get("DS4_API_RESOURCE_GOVERNOR"),
+            "DS4_API_RESOURCE_SAMPLE_JSON": os.environ.get("DS4_API_RESOURCE_SAMPLE_JSON"),
+            "DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT": os.environ.get("DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT"),
+            "DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT": os.environ.get("DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT"),
+            "DS4_API_RESOURCE_THROTTLE_STEP_S": os.environ.get("DS4_API_RESOURCE_THROTTLE_STEP_S"),
+            "DS4_API_TRIM_MEMORY_COOLDOWN_S": os.environ.get("DS4_API_TRIM_MEMORY_COOLDOWN_S"),
+            "DS4_API_RESIDENT_PREFER_COHORT_BATCH": os.environ.get("DS4_API_RESIDENT_PREFER_COHORT_BATCH"),
+        }
+        os.environ["DS4_API_RESOURCE_GOVERNOR"] = "1"
+        os.environ["DS4_API_RESOURCE_SAMPLE_JSON"] = json.dumps({"nodes": {"spark0": {"temperature_c": 55, "power_w": 95, "utilization_pct": 72, "host_memory_used_mib": 96, "host_memory_total_mib": 100}}})
+        os.environ["DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT"] = "90"
+        os.environ["DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT"] = "95"
+        os.environ["DS4_API_RESOURCE_THROTTLE_STEP_S"] = "0.1"
+        os.environ["DS4_API_TRIM_MEMORY_COOLDOWN_S"] = "0"
+        os.environ.pop("DS4_API_RESIDENT_PREFER_COHORT_BATCH", None)
+
+        trim_calls: list[dict] = []
+
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                api = CoordinatorApi(queue_dir=tmp, profiles_dir=PROFILES, topology_path=GLM52_TOPOLOGY, runner_kind="fake")
+                registry = ProfileRegistry.load(PROFILES)
+                topology = SparkTopology.load(GLM52_TOPOLOGY)
+                requests = [completion_request("memtrim0", profile_id="glm52_fp8_pp13_frontier_v1")]
+                api.queue.submit_requests(requests=requests, registry=registry, topology=topology, batch_id="memtrim", priority=10)
+                worker = BatchWorker(queue=api.queue, registry=registry, runner=RecordingIncrementalBatchRunner(), worker_id="test-dispatcher", lease_ttl_s=30, heartbeat_interval_s=1.0)
+                pending = {}
+                plans = resident_service_plans(topology, entry_node_id="spark0", default_batch_linger_s=0.0)
+                plans["glm52_fp8_pp13"].batch_linger_s = 0.0
+
+                def fake_trim(**kwargs):
+                    trim_calls.append(kwargs)
+                    api.dispatcher_resource_governor.sample_json = json.dumps({"nodes": {"spark0": {"temperature_c": 55, "power_w": 95, "utilization_pct": 72, "host_memory_used_mib": 50, "host_memory_total_mib": 100}}})
+                    return ({"attempted": True, "ok": True, "mode": "wait", "services": [{"service_id": "glm52_fp8_pp13", "ok": True}]}, 123.0)
+
+                with unittest.mock.patch("ds4_infer.api.try_trim_host_memory", side_effect=fake_trim):
+                    with ThreadPoolExecutor(max_workers=1) as executor:
+                        submitted = api._dispatcher_refill(
+                            worker=worker,
+                            executor=executor,
+                            pending=pending,
+                            entry_node_id="spark0",
+                            node_profile_ids=tuple(topology.pipeline_profiles),
+                            batch_limits_by_service={"glm52_fp8_pp13": 80},
+                            batch_token_limits_by_service={"glm52_fp8_pp13": 32768},
+                            kv_shard_layouts_by_profile=dict(topology.pipeline_profiles),
+                            service_plans=plans,
+                        )
+                status = api.dispatcher_status()
+                self.assertEqual(submitted, 1)
+                self.assertEqual(len(trim_calls), 1)
+                self.assertEqual(status["host_memory_trim_count"], 1)
+                self.assertTrue(status["last_host_memory_trim"]["ok"])
+                self.assertFalse(status["resource_governor"]["throttle_active"])
+        finally:
+            for key, value in old_values.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
     def test_runner_sends_one_openai_completion_request_for_compatible_completion_cohort(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
