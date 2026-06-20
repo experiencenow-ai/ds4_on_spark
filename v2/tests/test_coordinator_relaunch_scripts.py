@@ -146,7 +146,7 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_PIPELINE_SSE_FIRST_EVENT_TIMEOUT_S"], "900")
         self.assertEqual(defaults["DS4_PIPELINE_SSE_IDLE_TIMEOUT_S"], "120")
         self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(coordinator["dispatch_kv_capacity_bytes"]))
-        self.assertEqual(defaults["DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT"], "93")
+        self.assertEqual(defaults["DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT"], "85")
         self.assertEqual(defaults["DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT"], "94")
         self.assertEqual(defaults["DS4_API_RESIDENT_PREFER_COHORT_BATCH"], "1")
         self.assertEqual(defaults["DS4_API_TRIM_ON_HOST_MEMORY_THROTTLE"], "1")
