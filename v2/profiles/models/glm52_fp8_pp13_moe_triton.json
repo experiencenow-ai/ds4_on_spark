@@ -14,8 +14,8 @@
     "max_model_len": 262144,
     "max_num_batched_tokens": 32768,
     "max_num_seqs": 128,
-    "measurement_notes": "One-variable performance canary for GLM-5.2-FP8 PP13. This keeps the 262k dense TRITON_MLA direct-vLLM launch envelope and changes only FP8 MoE from Marlin to Triton so rank logs and throughput can confirm whether the SM12 path escapes weight-only Marlin.",
-    "target": "13-stage GLM-5.2-FP8 frontier pipeline with Triton FP8 MoE canary."
+    "measurement_notes": "One-variable performance canary for GLM-5.2-FP8 PP13. This keeps the 262k dense TRITON_MLA direct-vLLM launch envelope and changes only FP8 MoE from Marlin to Triton so rank logs and throughput can confirm whether the SM12 path escapes weight-only Marlin. Live DSAPI decode-heavy sweeps on 2026-06-20 found 96-wide admission best among tested cohorts: 80x16->256 reached 103.8 aggregate tok/s, 96x16->256 reached 138.9 aggregate tok/s, 104x16->256 fell to 119.2 aggregate tok/s, and 112x16->256 reached 128.4 aggregate tok/s. Keep the Triton canary DSAPI cohort at 96 while native SM120 FP8 block-MoE work remains open.",
+    "target": "13-stage GLM-5.2-FP8 frontier pipeline with Triton FP8 MoE canary and 96-wide DSAPI decode admission."
   },
   "production_eligible": false,
   "profile_id": "glm52_fp8_pp13_moe_triton_v1",
