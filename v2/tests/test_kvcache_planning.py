@@ -24,6 +24,7 @@ GEMMA26_PP_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_26b_a4b_it_pp8_
 KIMI_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "kimi26_pp13_lmcache_hma.json"
 KIMI27_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "kimi27_code_pp13_lmcache_hma.json"
 GLM52_PP13_DIRECT_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "glm52_fp8_pp13_direct_vllm.json"
+GLM52_PP13_PROFILE_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "glm52_fp8_pp13_direct_vllm_torch_profile.json"
 QWEN_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp13_lmcache_hma.json"
 GEMMA26_PP13_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "gemma4_26b_a4b_it_pp13_lmcache_hma.json"
 QWEN_PP12_PLAIN_DEPLOYMENT = ROOT / "profiles" / "kv_cache" / "qwen27_bf16_pp12_plain.json"
@@ -309,6 +310,25 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertNotIn("DS4_VLLM_FLASHMLA_SPARSE_TRITON_BF16_FALLBACK", rank0["env"])
         self.assertIn("--served-model-name", rank0["argv"])
         self.assertEqual(rank0["argv"][rank0["argv"].index("--served-model-name") + 1], "glm-5.2-fp8-pp13")
+        self.assertIn("--headless", rank12["argv"])
+
+    def test_glm52_pp13_profiler_plan_keeps_baseline_and_bounds_trace(self) -> None:
+        deployment = KvCacheDeployment.load(GLM52_PP13_PROFILE_DEPLOYMENT)
+        plan = plan_deployment(deployment)
+        rank0 = plan["vllm_nodes"][0]
+        rank12 = plan["vllm_nodes"][-1]
+
+        self.assertEqual(plan["profile_id"], "glm52_fp8_pp13_profiler_v1")
+        self.assertEqual(plan["layer_partition"], [6, 4, 4, 4, 4, 8, 8, 8, 8, 8, 4, 4, 8])
+        self.assertEqual(rank0["argv"][rank0["argv"].index("--moe-backend") + 1], "marlin")
+        self.assertEqual(rank0["argv"][rank0["argv"].index("--attention-backend") + 1], "TRITON_MLA")
+        profiler = json.loads(rank0["argv"][rank0["argv"].index("--profiler-config") + 1])
+        self.assertEqual(profiler["profiler"], "torch")
+        self.assertEqual(profiler["torch_profiler_dir"], "/home/spark0/ds4_profiles/glm52_fp8_pp13_torch")
+        self.assertEqual(profiler["max_iterations"], 8)
+        self.assertTrue(profiler["ignore_frontend"])
+        self.assertFalse(profiler["torch_profiler_with_stack"])
+        self.assertFalse(profiler["torch_profiler_use_gzip"])
         self.assertIn("--headless", rank12["argv"])
 
     def test_pp13_lmcache_services_enable_private_cache_admin(self) -> None:
