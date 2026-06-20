@@ -1249,6 +1249,7 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                 import asyncio
                 import json
                 from fastapi import FastAPI, Request
+                from typing import get_type_hints
                 from ds4_vllm_runtime.patches import apply_runtime_patches
 
                 class Engine:
@@ -1277,6 +1278,7 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                 app.state.engine_client = engine
                 register_vllm_serve_api_routers(app)
                 route = [r for r in app.routes if r.path == "/v1/trim_memory"][0]
+                request_hint_ok = get_type_hints(route.endpoint)["raw_request"] is Request
                 response = asyncio.run(
                     route.endpoint(
                         Request(app),
@@ -1290,6 +1292,7 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
                     "body": response.content,
                     "calls": engine.calls,
                     "original": getattr(app.state, "original_router_called", False),
+                    "request_hint_ok": request_hint_ok,
                     "worker_keys": sorted(worker_result.keys()),
                 }, sort_keys=True))
                 """
@@ -1311,6 +1314,7 @@ class Ds4VllmRuntimePatchTests(unittest.TestCase):
         self.assertEqual(payload["status_code"], 200)
         self.assertEqual(payload["body"]["status"], "ok")
         self.assertTrue(payload["original"])
+        self.assertTrue(payload["request_hint_ok"])
         self.assertEqual(payload["worker_keys"], ["connector", "process"])
         self.assertEqual(payload["calls"][0][0], "pause")
         self.assertEqual(payload["calls"][1][0], "collective")
