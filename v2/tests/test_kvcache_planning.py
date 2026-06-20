@@ -365,7 +365,10 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(deepgemm_rank0["argv"][deepgemm_rank0["argv"].index("--attention-backend") + 1], "TRITON_MLA")
         self.assertEqual(deepgemm_rank0["argv"][deepgemm_rank0["argv"].index("--max-model-len") + 1], "262144")
         self.assertEqual(deepgemm_rank0["argv"][deepgemm_rank0["argv"].index("--max-num-batched-tokens") + 1], "32768")
-        self.assertEqual(deepgemm_rank0["env"], base_rank0["env"])
+        self.assertEqual(deepgemm_rank0["env"]["DS4_VLLM_SM12_DEEPGEMM_MOE"], "1")
+        deepgemm_env = dict(deepgemm_rank0["env"])
+        deepgemm_env.pop("DS4_VLLM_SM12_DEEPGEMM_MOE")
+        self.assertEqual(deepgemm_env, base_rank0["env"])
         self.assertEqual(deepgemm_rank0["argv"][:deepgemm_rank0["argv"].index("--moe-backend")], base_rank0["argv"][:base_rank0["argv"].index("--moe-backend")])
         self.assertEqual(deepgemm_rank0["argv"][deepgemm_rank0["argv"].index("--moe-backend") + 2:], base_rank0["argv"][base_rank0["argv"].index("--moe-backend") + 2:])
 
