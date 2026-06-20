@@ -288,7 +288,7 @@ class KvCachePlanningTests(unittest.TestCase):
         self.assertEqual(rank0["argv"][3], "/home/spark0/standard-runtimes/vllm-0.23.0-overlay")
         self.assertEqual(rank0["argv"][8], "/home/spark0/models/hf/zai-org/GLM-5.2-FP8")
         self.assertEqual(rank12["argv"][8], "/home/sparkc/models/hf/zai-org/GLM-5.2-FP8")
-        self.assertEqual(rank0["argv"][rank0["argv"].index("--max-model-len") + 1], "8192")
+        self.assertEqual(rank0["argv"][rank0["argv"].index("--max-model-len") + 1], "262144")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--max-num-seqs") + 1], "128")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--max-num-batched-tokens") + 1], "32768")
         self.assertEqual(rank0["argv"][rank0["argv"].index("--gpu-memory-utilization") + 1], "0.80")

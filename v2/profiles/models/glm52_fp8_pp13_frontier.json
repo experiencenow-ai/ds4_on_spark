@@ -11,11 +11,11 @@
   "model_id": "zai-org/GLM-5.2-FP8",
   "performance": {
     "latency_rank": 1.6,
-    "max_model_len": 8192,
+    "max_model_len": 262144,
     "max_num_batched_tokens": 32768,
     "max_num_seqs": 128,
-    "measurement_notes": "PP13 DSAPI throughput profile. GLM-5.2-FP8 has 78 main transformer layers and needs enough queued requests to fill the 13-stage layer pipeline. The merged sparse FlashMLA BF16 fallback launch loaded but timed out on a direct one-token smoke request on Spark GB10, so the service baseline now returns to the completed dense TRITON_MLA path with FP8 E4M3 KV, Marlin FP8 MoE, 128 sequences, 32768 batched tokens, 4 GiB fixed KV per rank, eager execution, and overlapped PP TCP tensor-dict sends. The 64-sequence dense baseline reached 64.9 tok/sec for 64 concurrent 64-token outputs with about 1.1% GPU KV usage, so the next usable-throughput target is batch-128 admission without increasing the fixed KV reservation. A prior 128-sequence/65536-token envelope hit NVIDIA driver NV_ERR_NO_MEMORY during CUDA initialization on 8-layer stages. Native SM12 sparse FlashMLA remains the preferred future path once upstream accepts the architecture without the DS4 Triton BF16 fallback.",
-    "target": "13-stage GLM-5.2-FP8 frontier throughput pipeline with dense TRITON_MLA, FP8 KV, and no external KV connector."
+    "measurement_notes": "PP13 DSAPI large-chat plus throughput profile. GLM-5.2-FP8 has 78 main transformer layers and needs enough queued requests to fill the 13-stage layer pipeline. The resident vLLM lane advertises a 262144-token context while keeping the high-throughput envelope at 128 sequences and 32768 batched tokens; DSAPI token-cohort admission lets one oversized chat run alone, then batches many small and medium requests under the same service. The merged sparse FlashMLA BF16 fallback launch loaded but timed out on a direct one-token smoke request on Spark GB10, so the service baseline stays on the completed dense TRITON_MLA path with FP8 E4M3 KV, Marlin FP8 MoE, 4 GiB fixed KV per rank, eager execution, and overlapped PP TCP tensor-dict sends. The 64-sequence dense baseline reached 64.9 tok/sec for 64 concurrent 64-token outputs with about 1.1% GPU KV usage. A prior 128-sequence/65536-token envelope hit NVIDIA driver NV_ERR_NO_MEMORY during CUDA initialization on 8-layer stages, so the batched-token cohort cap remains 32768 even though single long prompts can be chunk-prefilled. Native SM12 sparse FlashMLA remains the preferred future path once upstream accepts the architecture without the DS4 Triton BF16 fallback.",
+    "target": "13-stage GLM-5.2-FP8 frontier pipeline with 262k context, batch-128 throughput admission, dense TRITON_MLA, FP8 KV, and no external KV connector."
   },
   "production_eligible": false,
   "profile_id": "glm52_fp8_pp13_frontier_v1",

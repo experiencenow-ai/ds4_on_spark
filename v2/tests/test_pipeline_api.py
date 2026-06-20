@@ -50,7 +50,7 @@ class PipelineApiTests(unittest.TestCase):
             else:
                 os.environ.pop("DS4_API_HTTP_REQUEST_QUEUE_SIZE", None)
 
-    def test_glm52_inline_chat_context_gets_prompt_truncation_budget(self) -> None:
+    def test_glm52_inline_chat_context_keeps_medium_large_prompt(self) -> None:
         original = os.environ.pop("DS4_API_CONTEXT_SAFETY_TOKENS", None)
         try:
             registry = ProfileRegistry.load(PROFILES)
@@ -66,10 +66,8 @@ class PipelineApiTests(unittest.TestCase):
                 max_output_tokens=5120,
                 requested_max_output_tokens=5120,
             )
-            self.assertEqual(out["openai"]["truncate_prompt_tokens"], 3008)
-            self.assertEqual(out["metadata"]["context_budget"]["max_model_len"], 8192)
-            self.assertEqual(out["metadata"]["context_budget"]["estimated_prompt_tokens"], 77679)
-            self.assertEqual(out["metadata"]["context_budget"]["prompt_budget_tokens"], 3008)
+            self.assertNotIn("openai", out)
+            self.assertNotIn("context_budget", out.get("metadata", {}))
         finally:
             if original is not None:
                 os.environ["DS4_API_CONTEXT_SAFETY_TOKENS"] = original
@@ -81,7 +79,7 @@ class PipelineApiTests(unittest.TestCase):
         try:
             registry = ProfileRegistry.load(PROFILES)
             profile = registry.get("glm52_fp8_pp13_frontier_v1")
-            self.assertEqual(api_module._context_bounded_output_tokens(profile, 9000), 8127)
+            self.assertEqual(api_module._context_bounded_output_tokens(profile, 300000), 262079)
         finally:
             if original is not None:
                 os.environ["DS4_API_CONTEXT_SAFETY_TOKENS"] = original
@@ -337,7 +335,7 @@ class PipelineApiTests(unittest.TestCase):
         self.assertIn("needle line", prompt)
         self.assertIn("Which attachment mentions needle?", prompt)
 
-    def test_glm52_attachment_budget_uses_8192_context_before_chunking(self) -> None:
+    def test_glm52_attachment_budget_uses_large_context_before_chunking(self) -> None:
         old_reserve = os.environ.pop("DS4_API_ATTACHMENT_CONTEXT_RESERVE_TOKENS", None)
         try:
             registry = ProfileRegistry.load(PROFILES)
@@ -356,8 +354,8 @@ class PipelineApiTests(unittest.TestCase):
             if old_reserve is not None:
                 os.environ["DS4_API_ATTACHMENT_CONTEXT_RESERVE_TOKENS"] = old_reserve
         assert manifest is not None
-        self.assertEqual(manifest["budget_tokens"], 1024)
-        self.assertEqual(manifest["chunk_target_tokens"], 1024)
+        self.assertEqual(manifest["budget_tokens"], 254976)
+        self.assertEqual(manifest["chunk_target_tokens"], 8192)
         self.assertGreater(manifest["included_chunk_count"], 0)
         self.assertLessEqual(manifest["included_estimated_tokens"], manifest["budget_tokens"])
         self.assertIn("needle line", messages[0]["content"])
