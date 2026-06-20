@@ -1774,9 +1774,10 @@ def _row_reserved_tokens(row: sqlite3.Row, *, decode_token_reserve: int = 0) -> 
 def _reserved_prompt_tokens(input_data: dict[str, Any]) -> int:
     metadata = input_data.get("metadata") if isinstance(input_data.get("metadata"), dict) else {}
     context_budget = metadata.get("context_budget") if isinstance(metadata.get("context_budget"), dict) else {}
+    benchmark_shape = input_data.get("benchmark_shape") if isinstance(input_data.get("benchmark_shape"), dict) else {}
     openai = input_data.get("openai") if isinstance(input_data.get("openai"), dict) else {}
     truncate = _safe_int(openai.get("truncate_prompt_tokens"), 0) or _safe_int(context_budget.get("truncate_prompt_tokens"), 0)
-    estimated = _safe_int(input_data.get("estimated_prompt_tokens"), 0) or _safe_int(context_budget.get("estimated_prompt_tokens"), 0)
+    estimated = _safe_int(input_data.get("estimated_prompt_tokens"), 0) or _safe_int(context_budget.get("estimated_prompt_tokens"), 0) or _safe_int(benchmark_shape.get("input_tokens"), 0)
     prompt_budget = _safe_int(context_budget.get("prompt_budget_tokens"), 0)
     if truncate > 0 and estimated > 0:
         return min(truncate, estimated)

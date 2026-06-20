@@ -139,6 +139,40 @@ class InferenceQueueTests(unittest.TestCase):
             claims = queue.claim_ready_batch(node_id="spark0", batch_id=None, limit=8, leased_by="worker", lease_ttl_s=60, batch_token_limits_by_service={"*": 1536})
             self.assertEqual([claim.request_id for claim in claims], ["wide-000", "wide-001", "wide-002"])
 
+    def test_ready_claim_uses_benchmark_shape_input_tokens_for_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = InferenceQueue(tmp)
+            registry = ProfileRegistry.load(PROFILES)
+            requests = []
+            for idx in range(8):
+                raw = {
+                    "format": "ds4-inference-request-v1",
+                    "request_id": f"bench-{idx:03d}",
+                    "capability": "efficient",
+                    "chat": False,
+                    "immediate": False,
+                    "job_class": "summary",
+                    "max_output_tokens": 64,
+                    "thinking_budget_tokens": 0,
+                    "temperature": 0,
+                    "input": {"benchmark_shape": {"input_tokens": 256, "output_tokens": 64}, "prompt": "benchmark " * 256},
+                    "output_contract": {"format": "text"},
+                    "model_pin": {"profile_id": QWEN},
+                }
+                requests.append(InferenceRequest.from_json(raw))
+            queue.submit_requests(requests=requests, registry=registry, batch_id="bench")
+            queue.prepare_ready(node_id="spark0", eligible_profile_ids=(QWEN,), batch_id=None, limit=8, leased_by="worker", lease_ttl_s=60)
+            claims = queue.claim_ready_batch(
+                node_id="spark0",
+                batch_id=None,
+                limit=8,
+                leased_by="worker",
+                lease_ttl_s=60,
+                batch_token_limits_by_service={"*": 2304},
+                batch_decode_token_reserves_by_service={"*": 32},
+            )
+            self.assertEqual([claim.request_id for claim in claims], [f"bench-{idx:03d}" for idx in range(8)])
+
     def test_ready_claim_can_reserve_decode_step_instead_of_full_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             queue = InferenceQueue(tmp)
