@@ -26,6 +26,8 @@ KIMI_QWEN_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_p
 KIMI_QWEN_TOPOLOGY_DATA = json.loads(KIMI_QWEN_TOPOLOGY.read_text(encoding="utf-8"))
 KIMI_QWEN_GEMMA_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_kimi_qwen_gemma_pp13.json"
 KIMI_QWEN_GEMMA_TOPOLOGY_DATA = json.loads(KIMI_QWEN_GEMMA_TOPOLOGY.read_text(encoding="utf-8"))
+GLM52_TOPOLOGY = ROOT / "profiles" / "topology" / "static_sparks_glm52_pp13.json"
+GLM52_TOPOLOGY_DATA = json.loads(GLM52_TOPOLOGY.read_text(encoding="utf-8"))
 
 
 def load_script(path: Path):
@@ -126,6 +128,25 @@ class CoordinatorRelaunchScriptTests(unittest.TestCase):
         self.assertEqual(defaults["DS4_API_JIT_KV_PREFETCH_API"], "0")
         self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE"], "1")
         self.assertEqual(limits, {"gemma4_26b_a4b_pp12": 128, "qwen27_bf16_pp12": 128})
+
+    def test_relaunch_glm52_topology_uses_long_context_admission_guard(self) -> None:
+        relaunch = load_script(RELAUNCH_SCRIPT)
+
+        defaults = relaunch._profile_defaults(DSV4_PRODUCTION["coordinator_profile"], topology_path=GLM52_TOPOLOGY)
+        coordinator = GLM52_TOPOLOGY_DATA["routing_policy"]["resident_coordinator_defaults"]
+        limits = json.loads(defaults["DS4_API_BATCH_LIMITS_JSON"])
+
+        self.assertEqual(defaults["DS4_API_RESIDENT_SERVICE_IDS"], "glm52_fp8_pp13")
+        self.assertEqual(defaults["DS4_API_DISPATCH_WINDOW"], "128")
+        self.assertEqual(defaults["DS4_API_DISPATCH_REFILL_BATCH"], "128")
+        self.assertEqual(defaults["DS4_API_DISPATCH_COHORT_WORKERS"], "128")
+        self.assertEqual(defaults["DS4_PIPELINE_COMPLETION_COHORT_TOKEN_BUDGET"], "32768")
+        self.assertEqual(defaults["DS4_API_DISPATCH_KV_CAPACITY_BYTES"], str(coordinator["dispatch_kv_capacity_bytes"]))
+        self.assertEqual(defaults["DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT"], "93")
+        self.assertEqual(defaults["DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT"], "94")
+        self.assertEqual(defaults["DS4_PIPELINE_AUTO_KV_CACHE"], "0")
+        self.assertEqual(defaults["DS4_API_JIT_KV_PREFETCH_API"], "0")
+        self.assertEqual(limits, {"glm52_fp8_pp13": 128})
 
     def test_relaunch_kimi27_profile_selects_kimi_topology_and_lmcache_auto_kv(self) -> None:
         relaunch = load_script(RELAUNCH_SCRIPT)

@@ -300,7 +300,7 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str, *, topology_pa
     needs_dsv4_prefetch = not topology_services or dsv4_service_id in topology_services
     auto_kv_enabled = _topology_needs_auto_kv(topology_path, topology_services)
     cohort_workers = _topology_cohort_workers(coordinator=coordinator, active_services=topology_services, batch_limits=batch_limits)
-    return {
+    defaults = {
         "DS4_API_RESIDENT_SERVICE_IDS": ",".join(topology_services) if topology_services else "qwen27_bf16_pp8,gemma4_26b_a4b_pp8,dsv4_flash_pp8",
         "DS4_API_JIT_KV_PREFETCH_API": "1" if needs_dsv4_prefetch else "0",
         "DS4_API_DISPATCH_COHORT_WORKERS": str(cohort_workers),
@@ -320,6 +320,28 @@ def _dsv4_profile_defaults(dsv4: dict[str, object], profile: str, *, topology_pa
         "DS4_API_RESIDENT_PREFER_COHORT_BATCH": _env_bool_value(coordinator.get("prefer_cohort_batch"), default=False),
         "DS4_PIPELINE_PRESTAGE_AUTO_KV_PREFIX": _env_bool_value(coordinator.get("prestage_auto_kv_prefix"), default=False),
     }
+    defaults.update(_coordinator_resource_env(coordinator))
+    return defaults
+
+
+def _coordinator_resource_env(coordinator: dict[str, object]) -> dict[str, str]:
+    env_keys = {
+        "resource_governor": "DS4_API_RESOURCE_GOVERNOR",
+        "resource_poll_s": "DS4_API_RESOURCE_POLL_S",
+        "resource_ssh_timeout_s": "DS4_API_RESOURCE_SSH_TIMEOUT_S",
+        "resource_sample_workers": "DS4_API_RESOURCE_SAMPLE_WORKERS",
+        "resource_temp_soft_c": "DS4_API_RESOURCE_TEMP_SOFT_C",
+        "resource_temp_hard_c": "DS4_API_RESOURCE_TEMP_HARD_C",
+        "resource_power_soft_w": "DS4_API_RESOURCE_POWER_SOFT_W",
+        "resource_power_hard_w": "DS4_API_RESOURCE_POWER_HARD_W",
+        "resource_total_power_soft_w": "DS4_API_RESOURCE_TOTAL_POWER_SOFT_W",
+        "resource_total_power_hard_w": "DS4_API_RESOURCE_TOTAL_POWER_HARD_W",
+        "resource_host_memory_soft_pct": "DS4_API_RESOURCE_HOST_MEMORY_SOFT_PCT",
+        "resource_host_memory_hard_pct": "DS4_API_RESOURCE_HOST_MEMORY_HARD_PCT",
+        "resource_throttle_step_s": "DS4_API_RESOURCE_THROTTLE_STEP_S",
+        "resource_throttle_max_s": "DS4_API_RESOURCE_THROTTLE_MAX_S",
+    }
+    return {env_key: str(coordinator[key]) for key, env_key in env_keys.items() if key in coordinator}
 
 
 def _env_bool_value(value: object, *, default: bool) -> str:
