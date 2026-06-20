@@ -1089,6 +1089,7 @@ def _attach_ds4_trim_memory_router(app: Any) -> None:
     from fastapi import APIRouter, HTTPException, Query, Request
     from fastapi.responses import JSONResponse
 
+    globals()["Request"] = Request
     router = APIRouter()
 
     @router.post("/v1/trim_memory")
