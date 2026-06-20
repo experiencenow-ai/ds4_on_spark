@@ -86,6 +86,32 @@ class PipelineApiTests(unittest.TestCase):
             else:
                 os.environ.pop("DS4_API_CONTEXT_SAFETY_TOKENS", None)
 
+    def test_glm52_large_context_rejects_oversized_generation_budget(self) -> None:
+        old_prompt = os.environ.get("DS4_API_LARGE_CONTEXT_PROMPT_TOKENS")
+        old_budget = os.environ.get("DS4_API_LARGE_CONTEXT_GENERATION_BUDGET_TOKENS")
+        os.environ["DS4_API_LARGE_CONTEXT_PROMPT_TOKENS"] = "65536"
+        os.environ["DS4_API_LARGE_CONTEXT_GENERATION_BUDGET_TOKENS"] = "8192"
+        try:
+            registry = ProfileRegistry.load(PROFILES)
+            profile = registry.get("glm52_fp8_pp13_frontier_v1")
+            payload = {
+                "rendered_prompt": "inline attachment text",
+                "estimated_prompt_tokens": 77679,
+                "metadata": {},
+            }
+            api_module._enforce_large_context_generation_budget(payload, profile, max_output_tokens=5120, thinking_budget_tokens=0)
+            with self.assertRaisesRegex(ValueError, "large-context generation budget exceeded"):
+                api_module._enforce_large_context_generation_budget(payload, profile, max_output_tokens=10000, thinking_budget_tokens=4096)
+        finally:
+            if old_prompt is not None:
+                os.environ["DS4_API_LARGE_CONTEXT_PROMPT_TOKENS"] = old_prompt
+            else:
+                os.environ.pop("DS4_API_LARGE_CONTEXT_PROMPT_TOKENS", None)
+            if old_budget is not None:
+                os.environ["DS4_API_LARGE_CONTEXT_GENERATION_BUDGET_TOKENS"] = old_budget
+            else:
+                os.environ.pop("DS4_API_LARGE_CONTEXT_GENERATION_BUDGET_TOKENS", None)
+
     def test_pipeline_openai_payload_uses_served_model_name(self) -> None:
         registry = ProfileRegistry.load(PROFILES)
         profile = registry.get("dsv4_vllm_mtp_pp8_smartest_v1")

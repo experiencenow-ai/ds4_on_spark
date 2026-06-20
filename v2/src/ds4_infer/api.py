@@ -247,6 +247,7 @@ class CoordinatorApi:
         max_tokens = _context_bounded_output_tokens(profile, requested_max_tokens, thinking_budget_tokens=thinking_budget)
         input_payload = openai_chat_input_payload(body, profile=profile, metadata=metadata, thinking_budget_tokens=thinking_budget, max_output_tokens=max_tokens)
         input_payload = _apply_profile_context_budget(_input_with_api_kv(input_payload, body, profile, topology), profile, max_output_tokens=max_tokens, thinking_budget_tokens=thinking_budget, requested_max_output_tokens=requested_max_tokens)
+        _enforce_large_context_generation_budget(input_payload, profile, max_output_tokens=max_tokens, thinking_budget_tokens=thinking_budget)
         raw_request = _make_inference_request_json(
             request_id=request_id,
             profile=profile,
@@ -306,6 +307,7 @@ class CoordinatorApi:
         max_tokens = _context_bounded_output_tokens(profile, requested_max_tokens, thinking_budget_tokens=thinking_budget)
         input_payload = anthropic_messages_input_payload(body, profile=profile, metadata=metadata, thinking_budget_tokens=thinking_budget, max_output_tokens=max_tokens)
         input_payload = _apply_profile_context_budget(_input_with_api_kv(input_payload, body, profile, topology), profile, max_output_tokens=max_tokens, thinking_budget_tokens=thinking_budget, requested_max_output_tokens=requested_max_tokens)
+        _enforce_large_context_generation_budget(input_payload, profile, max_output_tokens=max_tokens, thinking_budget_tokens=thinking_budget)
         raw_request = _make_inference_request_json(
             request_id=request_id,
             profile=profile,
@@ -1463,6 +1465,48 @@ def _apply_profile_context_budget(
         }
         out["metadata"] = metadata
     return out
+
+
+def _enforce_large_context_generation_budget(
+    input_payload: dict[str, Any],
+    profile: ModelProfile,
+    *,
+    max_output_tokens: int,
+    thinking_budget_tokens: int = 0,
+) -> None:
+    estimated_prompt_tokens = _estimated_prompt_tokens(input_payload)
+    if estimated_prompt_tokens is None:
+        return
+    prompt_threshold = _large_context_prompt_threshold_tokens()
+    generation_budget = _large_context_generation_budget_tokens()
+    if prompt_threshold <= 0 or generation_budget <= 0:
+        return
+    if estimated_prompt_tokens < prompt_threshold:
+        return
+    max_output = max(1, int(max_output_tokens))
+    thinking = max(0, int(thinking_budget_tokens))
+    requested_generation_budget = max_output + thinking
+    if requested_generation_budget <= generation_budget:
+        return
+    raise ValueError(
+        "large-context generation budget exceeded: "
+        f"profile_id={profile.profile_id} "
+        f"estimated_prompt_tokens={estimated_prompt_tokens} "
+        f"max_output_tokens={max_output} "
+        f"thinking_budget_tokens={thinking} "
+        f"total_generation_budget_tokens={requested_generation_budget} "
+        f"limit_tokens={generation_budget} "
+        f"prompt_threshold_tokens={prompt_threshold}; "
+        "lower max_tokens/max_completion_tokens or thinking_budget_tokens"
+    )
+
+
+def _large_context_prompt_threshold_tokens() -> int:
+    return max(0, _env_int("DS4_API_LARGE_CONTEXT_PROMPT_TOKENS", 65536))
+
+
+def _large_context_generation_budget_tokens() -> int:
+    return max(0, _env_int("DS4_API_LARGE_CONTEXT_GENERATION_BUDGET_TOKENS", 8192))
 
 
 def _profile_context_window_tokens(profile: ModelProfile) -> int:

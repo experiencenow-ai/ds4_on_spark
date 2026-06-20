@@ -31,6 +31,7 @@ def openai_completion_requests(body: dict[str, Any], registry: ProfileRegistry, 
         request_id = base_request_id if len(prompts) == 1 else f"{base_request_id}-{index:06d}"
         input_payload = api_module._input_with_api_kv({"prompt": prompt}, body, profile, topology)
         input_payload = api_module._apply_profile_context_budget(input_payload, profile, max_output_tokens=max_tokens, thinking_budget_tokens=thinking_budget, requested_max_output_tokens=requested_max_tokens)
+        api_module._enforce_large_context_generation_budget(input_payload, profile, max_output_tokens=max_tokens, thinking_budget_tokens=thinking_budget)
         if client_stream:
             input_payload["ds4_client_stream"] = True
         raw_requests.append(
@@ -82,6 +83,7 @@ def openai_chat_stream_events(api: Any, body: dict[str, Any]):
     max_tokens = api_module._context_bounded_output_tokens(profile, requested_max_tokens, thinking_budget_tokens=thinking_budget)
     input_payload = openai_chat_input_payload(body, profile=profile, metadata=metadata, thinking_budget_tokens=thinking_budget, max_output_tokens=max_tokens)
     input_payload = api_module._apply_profile_context_budget(api_module._input_with_api_kv(input_payload, body, profile, topology), profile, max_output_tokens=max_tokens, thinking_budget_tokens=thinking_budget, requested_max_output_tokens=requested_max_tokens)
+    api_module._enforce_large_context_generation_budget(input_payload, profile, max_output_tokens=max_tokens, thinking_budget_tokens=thinking_budget)
     input_payload["ds4_client_stream"] = True
     raw_request = api_module._make_inference_request_json(
         request_id=request_id,
