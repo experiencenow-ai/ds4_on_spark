@@ -39,6 +39,8 @@ commands:
     ssh spark0 'cd ~/src/ds4_on_spark && python3 scripts/ds4_waterfall_stage_model.py --source-full-dir /home/spark0/ds4_nvme/models/hf/lukealonso/GLM-5.2-NVFP4 --repo-id lukealonso/GLM-5.2-NVFP4 --ssh-host-template "{node}@{node}-200g"'
   waterfall_stage: |
     ssh spark0 'cd ~/src/ds4_on_spark && python3 scripts/ds4_waterfall_stage_model.py --source-full-dir /home/spark0/ds4_nvme/models/hf/lukealonso/GLM-5.2-NVFP4 --repo-id lukealonso/GLM-5.2-NVFP4 --ssh-host-template "{node}@{node}-200g" --replace-existing --execute'
+  archive_to_mac_22tb0: |
+    ssh spark0 'mkdir -p /mnt/mac/22tb0/models/hf/lukealonso/GLM-5.2-NVFP4 && rsync -aH --info=progress2 --exclude "*.part" /home/spark0/ds4_nvme/models/hf/lukealonso/GLM-5.2-NVFP4/ /mnt/mac/22tb0/models/hf/lukealonso/GLM-5.2-NVFP4/'
   audit_dsapi_profile: |
     cd v2
     PYTHONPATH=src python3 scripts/ds4_pipeline_lifecycle.py audit --topology profiles/topology/static_sparks_glm52_nvfp4_pp13.json --service glm52_nvfp4_pp13
