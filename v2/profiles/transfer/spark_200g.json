@@ -1,6 +1,6 @@
 {
   "format": "ds4-transfer-topology-v1",
-  "fabric_id": "spark_200g_static_v1",
+  "fabric_id": "spark_200g_static_v2_13node",
   "fabric_hint": "200Gbps Spark interconnect. Bulk payloads use parallel unencrypted streams on the sparkN-200g / 10.10.100.N fabric; the Mac Studio is control plane only.",
   "bulk_method": "parallel_nc_fanout_200g_v1",
   "default_jobs_per_edge": 16,
@@ -20,6 +20,21 @@
     ],
     [
       {"source_node": "spark6", "destination_node": "spark7"}
+    ],
+    [
+      {"source_node": "spark7", "destination_node": "spark8"}
+    ],
+    [
+      {"source_node": "spark8", "destination_node": "spark9"}
+    ],
+    [
+      {"source_node": "spark9", "destination_node": "sparka"}
+    ],
+    [
+      {"source_node": "sparka", "destination_node": "sparkb"}
+    ],
+    [
+      {"source_node": "sparkb", "destination_node": "sparkc"}
     ]
   ],
   "ssh_options": [
@@ -29,13 +44,18 @@
     "-x"
   ],
   "nodes": [
-    {"node_id": "spark0", "host": "spark0", "fabric_host": "spark0-200g", "fabric_ip": "10.10.100.10", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark0/models"]},
-    {"node_id": "spark1", "host": "spark1", "fabric_host": "spark1-200g", "fabric_ip": "10.10.100.11", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark1/models"]},
-    {"node_id": "spark2", "host": "spark2", "fabric_host": "spark2-200g", "fabric_ip": "10.10.100.12", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark2/models"]},
-    {"node_id": "spark3", "host": "spark3", "fabric_host": "spark3-200g", "fabric_ip": "10.10.100.13", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark3/models"]},
-    {"node_id": "spark4", "host": "spark4", "fabric_host": "spark4-200g", "fabric_ip": "10.10.100.14", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark4/models"]},
-    {"node_id": "spark5", "host": "spark5", "fabric_host": "spark5-200g", "fabric_ip": "10.10.100.15", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark5/models"]},
-    {"node_id": "spark6", "host": "spark6", "fabric_host": "spark6-200g", "fabric_ip": "10.10.100.16", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark6/models"]},
-    {"node_id": "spark7", "host": "spark7", "fabric_host": "spark7-200g", "fabric_ip": "10.10.100.17", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark7/models"]}
+    {"node_id": "spark0", "host": "spark0@10.20.0.10", "management_ip": "10.20.0.10", "fabric_host": "spark0-200g", "fabric_ip": "10.10.100.10", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark0/models", "/home/spark0/.cache/huggingface"]},
+    {"node_id": "spark1", "host": "spark1@10.20.0.11", "management_ip": "10.20.0.11", "fabric_host": "spark1-200g", "fabric_ip": "10.10.100.11", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark1/models", "/home/spark1/.cache/huggingface"]},
+    {"node_id": "spark2", "host": "spark2@10.20.0.12", "management_ip": "10.20.0.12", "fabric_host": "spark2-200g", "fabric_ip": "10.10.100.12", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark2/models", "/home/spark2/.cache/huggingface"]},
+    {"node_id": "spark3", "host": "spark3@10.20.0.13", "management_ip": "10.20.0.13", "fabric_host": "spark3-200g", "fabric_ip": "10.10.100.13", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark3/models", "/home/spark3/.cache/huggingface"]},
+    {"node_id": "spark4", "host": "spark4@10.20.0.14", "management_ip": "10.20.0.14", "fabric_host": "spark4-200g", "fabric_ip": "10.10.100.14", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark4/models", "/home/spark4/.cache/huggingface"]},
+    {"node_id": "spark5", "host": "spark5@10.20.0.15", "management_ip": "10.20.0.15", "fabric_host": "spark5-200g", "fabric_ip": "10.10.100.15", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark5/models", "/home/spark5/.cache/huggingface"]},
+    {"node_id": "spark6", "host": "spark6@10.20.0.16", "management_ip": "10.20.0.16", "fabric_host": "spark6-200g", "fabric_ip": "10.10.100.16", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark6/models", "/home/spark6/.cache/huggingface"]},
+    {"node_id": "spark7", "host": "spark7@10.20.0.17", "management_ip": "10.20.0.17", "fabric_host": "spark7-200g", "fabric_ip": "10.10.100.17", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark7/models", "/home/spark7/.cache/huggingface"]},
+    {"node_id": "spark8", "host": "spark8@10.20.0.18", "management_ip": "10.20.0.18", "fabric_host": "spark8-200g", "fabric_ip": "10.10.100.18", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark8/models", "/home/spark8/.cache/huggingface"]},
+    {"node_id": "spark9", "host": "spark9@10.20.0.19", "management_ip": "10.20.0.19", "fabric_host": "spark9-200g", "fabric_ip": "10.10.100.19", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/spark9/models", "/home/spark9/.cache/huggingface"]},
+    {"node_id": "sparka", "host": "sparka@10.20.0.20", "management_ip": "10.20.0.20", "fabric_host": "sparka-200g", "fabric_ip": "10.10.100.20", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/sparka/models", "/home/sparka/.cache/huggingface"]},
+    {"node_id": "sparkb", "host": "sparkb@10.20.0.21", "management_ip": "10.20.0.21", "fabric_host": "sparkb-200g", "fabric_ip": "10.10.100.21", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/sparkb/models", "/home/sparkb/.cache/huggingface"]},
+    {"node_id": "sparkc", "host": "sparkc@10.20.0.22", "management_ip": "10.20.0.22", "fabric_host": "sparkc-200g", "fabric_ip": "10.10.100.22", "root_allowlist": ["/mnt", "/data", "/tmp", "/home/sparkc/models", "/home/sparkc/.cache/huggingface"]}
   ]
 }

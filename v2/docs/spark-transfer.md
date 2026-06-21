@@ -4,6 +4,8 @@ Bulk model payloads must use the Spark fabric, not the office/control-plane
 network. Plain `sparkN` names are for control commands. Bulk data targets are
 `sparkN-200g`, which must resolve to `10.10.100.N`, or the explicit
 `10.10.100.N` address from `profiles/transfer/spark_200g.json`.
+That profile is also the canonical fleet inventory for operational scripts:
+node IDs, management IPs, and fabric IPs should be changed there first.
 
 The canonical copy method is `parallel_nc_fanout_200g_v1`:
 
@@ -13,7 +15,9 @@ The canonical copy method is `parallel_nc_fanout_200g_v1`:
 - Workers bind one unencrypted `nc` stream per rail and copy many files in
   parallel.
 - Large cluster replication fans out from the seed node instead of copying from
-  the seed to every node serially.
+  the seed to every node serially. The current 13-node profile extends the old
+  eight-node fabric through `spark8`, `spark9`, `sparka`, `sparkb`, and
+  `sparkc`.
 
 ## Proof Check
 
@@ -58,6 +62,11 @@ stage 1: spark3 -> spark2, spark3 -> spark4
 stage 2: spark2 -> spark1, spark4 -> spark5
 stage 3: spark1 -> spark0, spark5 -> spark6
 stage 4: spark6 -> spark7
+stage 5: spark7 -> spark8
+stage 6: spark8 -> spark9
+stage 7: spark9 -> sparka
+stage 8: sparka -> sparkb
+stage 9: sparkb -> sparkc
 ```
 
 Run:
@@ -78,7 +87,7 @@ Use `--dry-run` first to print the stage plan without opening data streams.
 ## Policy
 
 - Do not use the office/control-plane hostname for model payload bytes.
-- Do not serialize cluster replication from one seed to seven destinations.
+- Do not serialize cluster replication from one seed to twelve destinations.
 - Do not add compressed or encrypted payload paths to the 200G transfer docs.
 - Keep `sparkN-200g` resolver entries in sync with `10.10.100.N`.
 - For file trees produced by Hugging Face downloads, the copier excludes

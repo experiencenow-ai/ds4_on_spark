@@ -12,6 +12,9 @@ import time
 
 from .service import TransferTopology
 
+STAGE_PORT_SPAN = 1000
+EDGE_PORT_SPAN = 200
+
 
 @dataclass(frozen=True)
 class FileItem:
@@ -29,8 +32,9 @@ class Rail:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     topology = TransferTopology.load(args.topology)
-    files = _list_files(topology, args.source_node, args.source_path, args.timeout_s)
+    files = _list_files(topology, args.source_node, args.source_path, args.include_from, args.timeout_s)
     stages = _selected_stages(topology, args)
+    _validate_port_ranges(args, stages)
     plan = {
         "method": "parallel_nc_fanout_200g_v1",
         "source_node": args.source_node,
@@ -58,6 +62,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--topology", required=True)
     parser.add_argument("--source-node", required=True)
     parser.add_argument("--source-path", required=True)
+    parser.add_argument("--include-from")
     parser.add_argument("--destination-node")
     parser.add_argument("--destination-path")
     parser.add_argument("--destination-path-template")
@@ -83,6 +88,19 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     if args.fanout_all and args.destination_path_template is None:
         parser.error("--fanout-all requires --destination-path-template")
     return args
+
+
+def _validate_port_ranges(args: argparse.Namespace, stages: list[list[tuple[str, str]]]) -> None:
+    stripe_ports = max(1, args.striped_file_stripes)
+    ports_per_edge = args.jobs_per_edge * stripe_ports
+    max_edges = max((len(stage) for stage in stages), default=0)
+    max_port = args.port_base + ((max(len(stages), 1) - 1) * STAGE_PORT_SPAN) + (max(max_edges - 1, 0) * EDGE_PORT_SPAN) + ports_per_edge - 1
+    if ports_per_edge > EDGE_PORT_SPAN:
+        raise ValueError(f"jobs_per_edge * striped_file_stripes must fit within {EDGE_PORT_SPAN} ports")
+    if max_edges * EDGE_PORT_SPAN > STAGE_PORT_SPAN:
+        raise ValueError(f"fanout stage has too many edges for {STAGE_PORT_SPAN} port span")
+    if max_port > 65535:
+        raise ValueError(f"port range exceeds 65535: {max_port}")
 
 
 def _selected_stages(topology: TransferTopology, args: argparse.Namespace) -> list[list[tuple[str, str]]]:
@@ -115,7 +133,7 @@ def _copy_edge(topology: TransferTopology, args: argparse.Namespace, files: list
 
 def _copy_shard(topology: TransferTopology, args: argparse.Namespace, files: list[FileItem], rails: list[Rail], source_node: str, source_path: str, destination_node: str, destination_path: str, stage_index: int, edge_index: int, slot: int) -> int:
     copied = 0
-    port = args.port_base + (stage_index * 1000) + (edge_index * 100) + slot
+    port = _port_for_shard(args, stage_index, edge_index, slot)
     for index, item in enumerate(files):
         rail = rails[(slot + index) % len(rails)]
         if _destination_has_size(topology, destination_node, destination_path, item, args.timeout_s):
@@ -123,6 +141,11 @@ def _copy_shard(topology: TransferTopology, args: argparse.Namespace, files: lis
         _copy_file(topology, args, item, source_node, source_path, destination_node, destination_path, rail, port)
         copied += 1
     return copied
+
+
+def _port_for_shard(args: argparse.Namespace, stage_index: int, edge_index: int, slot: int) -> int:
+    stripe_ports = max(1, args.striped_file_stripes)
+    return args.port_base + (stage_index * STAGE_PORT_SPAN) + (edge_index * EDGE_PORT_SPAN) + (slot * stripe_ports)
 
 
 def _copy_file(topology: TransferTopology, args: argparse.Namespace, item: FileItem, source_node: str, source_path: str, destination_node: str, destination_path: str, rail: Rail, port: int) -> None:
@@ -173,7 +196,15 @@ def _copy_file_striped(topology: TransferTopology, args: argparse.Namespace, ite
 
 
 def _striped_remote_python(args: argparse.Namespace) -> str:
-    return "cd {v2}; PYTHONPATH=src python3 -m ds4_transfer.striped_channel".format(v2=shlex.quote(args.remote_v2_dir))
+    return "cd {v2}; PYTHONPATH=src python3 -m ds4_transfer.striped_channel".format(v2=_quote_remote_path(args.remote_v2_dir))
+
+
+def _quote_remote_path(path: str) -> str:
+    if path == "~":
+        return "~"
+    if path.startswith("~/"):
+        return "~/" + "/".join(shlex.quote(part) for part in path[2:].split("/"))
+    return shlex.quote(path)
 
 
 def _striped_server_script(
@@ -235,14 +266,30 @@ def _run_striped_copy(
 ) -> None:
     server = _popen_ssh(topology, destination_node, server_script)
     time.sleep(0.3)
+    client = _popen_ssh(topology, source_node, client_script)
+    deadline = time.monotonic() + args.timeout_s
     try:
-        client = _run_ssh(topology, source_node, client_script, args.timeout_s)
+        while client.poll() is None:
+            if server.poll() is not None:
+                if server.returncode != 0:
+                    _, server_stderr = server.communicate()
+                    client.kill()
+                    _, client_stderr = client.communicate()
+                    raise RuntimeError(f"striped copy server failed for {item.relpath}: {server_stderr[-1000:] or client_stderr[-1000:]}")
+            if time.monotonic() > deadline:
+                client.kill()
+                server.kill()
+                raise TimeoutError(f"striped copy timed out for {item.relpath}")
+            time.sleep(0.1)
+        _, client_stderr = client.communicate()
         if client.returncode != 0:
             if server.poll() is None:
                 server.kill()
-            raise RuntimeError(f"striped copy client failed for {item.relpath}: {client.stderr[-1000:]}")
-        rc = server.wait(timeout=args.timeout_s)
+            raise RuntimeError(f"striped copy client failed for {item.relpath}: {client_stderr[-1000:]}")
+        rc = server.wait(timeout=max(1.0, deadline - time.monotonic()))
     finally:
+        if client.poll() is None:
+            client.kill()
         if server.poll() is None:
             server.kill()
     if rc != 0:
@@ -262,7 +309,13 @@ def _verify_striped_destination(
         raise RuntimeError(f"destination size mismatch for {destination_node}:{dst}")
 
 
-def _list_files(topology: TransferTopology, source_node: str, source_path: str, timeout_s: int) -> list[FileItem]:
+def _list_files(topology: TransferTopology, source_node: str, source_path: str, include_from: str | None, timeout_s: int) -> list[FileItem]:
+    if include_from is not None:
+        return _list_included_files(topology, source_node, source_path, include_from, timeout_s)
+    return _list_all_files(topology, source_node, source_path, timeout_s)
+
+
+def _list_all_files(topology: TransferTopology, source_node: str, source_path: str, timeout_s: int) -> list[FileItem]:
     script = "cd {path}; find . -type f ! -path './.cache/*' -printf '%P\\t%s\\n' | sort".format(path=shlex.quote(source_path))
     result = _run_ssh(topology, source_node, script, timeout_s)
     if result.returncode != 0:
@@ -278,6 +331,48 @@ def _list_files(topology: TransferTopology, source_node: str, source_path: str, 
     return files
 
 
+def _read_include_manifest(path: str) -> list[str]:
+    relpaths: list[str] = []
+    seen: set[str] = set()
+    with open(path, "r", encoding="utf-8") as handle:
+        for raw in handle:
+            line = raw.strip()
+            if line == "" or line.startswith("#"):
+                continue
+            relpath = line.removeprefix("./")
+            if relpath.startswith("../") or relpath.startswith("/"):
+                raise ValueError(f"include path must be relative: {line}")
+            if relpath not in seen:
+                relpaths.append(relpath)
+                seen.add(relpath)
+    if not relpaths:
+        raise ValueError(f"include manifest is empty: {path}")
+    return sorted(relpaths)
+
+
+def _list_included_files(topology: TransferTopology, source_node: str, source_path: str, include_from: str, timeout_s: int) -> list[FileItem]:
+    relpaths = _read_include_manifest(include_from)
+    body = "; ".join(
+        "test -f {rel} && printf '%s\\t%s\\n' {rel} $(stat -c %s {rel})".format(rel=shlex.quote(relpath))
+        for relpath in relpaths
+    )
+    script = "set -eu; cd {path}; {body}".format(path=shlex.quote(source_path), body=body)
+    result = _run_ssh(topology, source_node, script, timeout_s)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr)
+    files: list[FileItem] = []
+    for line in result.stdout.splitlines():
+        if line.strip() == "":
+            continue
+        relpath, size = line.rsplit("\t", 1)
+        files.append(FileItem(relpath=relpath, size=int(size)))
+    found = {item.relpath for item in files}
+    missing = [relpath for relpath in relpaths if relpath not in found]
+    if missing:
+        raise ValueError(f"include manifest has missing source files: {missing[:10]}")
+    return files
+
+
 def _discover_rails(topology: TransferTopology, source_node: str, destination_node: str, timeout_s: int) -> list[Rail]:
     destination = topology.get_node(destination_node)
     target = destination.fabric_ip or destination.fabric_host
@@ -288,9 +383,14 @@ def _discover_rails(topology: TransferTopology, source_node: str, destination_no
     tokens = route.stdout.replace("\n", " ").split()
     for index, token in enumerate(tokens):
         if token == "via" and index + 3 < len(tokens) and tokens[index + 2] == "dev":
-            dst_ip = tokens[index + 1]
+            candidate_ip = tokens[index + 1]
             dev = tokens[index + 3]
-            src_ip = _source_ip_for_dev(topology, source_node, dev, timeout_s)
+            if _node_has_ip(topology, destination_node, candidate_ip, timeout_s):
+                dst_ip = candidate_ip
+                src_ip = _source_ip_for_dev(topology, source_node, dev, timeout_s)
+            else:
+                dst_ip = target
+                src_ip = topology.get_node(source_node).fabric_ip or topology.get_node(source_node).fabric_host
             rails.append(Rail(source_ip=src_ip, destination_ip=dst_ip, dev=dev))
     if rails:
         return rails
@@ -300,9 +400,17 @@ def _discover_rails(topology: TransferTopology, source_node: str, destination_no
     words = fallback.stdout.split()
     if "via" not in words or "dev" not in words:
         raise RuntimeError(f"could not discover 200G rail from {source_node} to {destination_node}: {fallback.stdout}")
-    dst_ip = words[words.index("via") + 1]
+    candidate_ip = words[words.index("via") + 1]
     dev = words[words.index("dev") + 1]
-    return [Rail(source_ip=_source_ip_for_dev(topology, source_node, dev, timeout_s), destination_ip=dst_ip, dev=dev)]
+    if _node_has_ip(topology, destination_node, candidate_ip, timeout_s):
+        return [Rail(source_ip=_source_ip_for_dev(topology, source_node, dev, timeout_s), destination_ip=candidate_ip, dev=dev)]
+    return [Rail(source_ip=topology.get_node(source_node).fabric_ip or topology.get_node(source_node).fabric_host, destination_ip=target, dev=dev)]
+
+
+def _node_has_ip(topology: TransferTopology, node: str, ip: str, timeout_s: int) -> bool:
+    script = "ip -4 -o addr show scope global | awk -v ip={ip} '{{split($4,a,\"/\"); if (a[1] == ip) found=1}} END {{exit(found ? 0 : 1)}}'".format(ip=shlex.quote(ip))
+    result = _run_ssh(topology, node, script, timeout_s)
+    return result.returncode == 0
 
 
 def _source_ip_for_dev(topology: TransferTopology, node: str, dev: str, timeout_s: int) -> str:
