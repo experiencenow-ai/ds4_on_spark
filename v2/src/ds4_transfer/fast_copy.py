@@ -159,8 +159,8 @@ def _copy_file_striped(topology: TransferTopology, args: argparse.Namespace, ite
     stripe_count = _stripe_count_for_item(args, item)
     server_script = _striped_server_script(args, item, dst, rail, port, stripe_count)
     client_script = _striped_client_script(args, src, rail, port, stripe_count)
+    # Receiver validates the byte count before rename; waterfall consumers may immediately move/delete the final path.
     _run_striped_copy(topology, args, item, source_node, destination_node, server_script, client_script)
-    _verify_striped_destination(topology, args, item, destination_node, dst)
 
 
 def _stripe_count_for_item(args: argparse.Namespace, item: FileItem) -> int:
@@ -271,18 +271,6 @@ def _run_striped_copy(
     if rc != 0:
         stderr = server.stderr.read()[-1000:] if server.stderr is not None else ""
         raise RuntimeError(f"striped copy server failed for {item.relpath}: {stderr}")
-
-
-def _verify_striped_destination(
-    topology: TransferTopology,
-    args: argparse.Namespace,
-    item: FileItem,
-    destination_node: str,
-    dst: str,
-) -> None:
-    result = _run_node(topology, args, destination_node, f"test $(stat -c %s {shlex.quote(dst)}) -eq {item.size}", args.timeout_s)
-    if result.returncode != 0:
-        raise RuntimeError(f"destination size mismatch for {destination_node}:{dst}")
 
 
 def _list_files(topology: TransferTopology, args: argparse.Namespace, source_node: str, source_path: str, include_from: str | None, timeout_s: int) -> list[FileItem]:
