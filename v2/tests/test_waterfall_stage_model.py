@@ -184,6 +184,24 @@ class WaterfallStageModelTests(unittest.TestCase):
         )
         self.assertEqual(calls[0][0], "rsync")
 
+    def test_worker_forwards_before_local_install(self) -> None:
+        mod = load_script()
+        calls = []
+        mod.send_file = lambda *args, **kwargs: calls.append("send")
+        mod.install_local = lambda *args, **kwargs: calls.append("install")
+        mod.process_worker_file(
+            mod.FilePlan(rel="model-00001-of-00002.safetensors", size=123, needed_ranks=(1, 2), is_safetensors=True),
+            rank=1,
+            src=Path("/handoff/model-00001-of-00002.safetensors"),
+            stage_dir=Path("/stage"),
+            handoff_dir=Path("/handoff"),
+            next_node="spark2",
+            next_host="spark2@spark2-200g",
+            next_handoff="/next",
+            manifest={"nodes": ["spark0", "spark1", "spark2"], "link_mode": "auto", "cleanup_handoff": False},
+        )
+        self.assertEqual(calls, ["send", "install"])
+
 
 if __name__ == "__main__":
     unittest.main()

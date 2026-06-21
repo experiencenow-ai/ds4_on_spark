@@ -434,8 +434,6 @@ def process_worker_file(
 ) -> None:
     nodes = list(manifest["nodes"])
     max_rank = max(item.needed_ranks)
-    if rank in item.needed_ranks:
-        install_local(src, stage_dir / item.rel, item.size, link_mode=str(manifest["link_mode"]))
     if rank < max_rank:
         send_file(
             src,
@@ -448,6 +446,8 @@ def process_worker_file(
             dest_base=next_handoff,
             manifest=manifest,
         )
+    if rank in item.needed_ranks:
+        install_local(src, stage_dir / item.rel, item.size, link_mode=str(manifest["link_mode"]))
     if manifest["cleanup_handoff"]:
         try:
             src.unlink()
@@ -548,10 +548,10 @@ def orchestrator_stream_files(files: list[FilePlan], *, source_dir: Path, stage0
             src = source_dir / item.rel
             if not ready_file(src, item.size):
                 continue
-            if 0 in item.needed_ranks:
-                install_local(src, stage0 / item.rel, item.size, link_mode=args.link_mode)
             if max(item.needed_ranks) > 0:
                 send_file(src, rel=item.rel, size=item.size, source_node=args.nodes[0], source_base=str(source_dir), dest_node=first_node, host=first_host, dest_base=first_handoff, manifest=manifest)
+            if 0 in item.needed_ranks:
+                install_local(src, stage0 / item.rel, item.size, link_mode=args.link_mode)
             pending.remove(item)
             progressed = True
             print(json.dumps({"status": "streamed", "rel": item.rel, "remaining": len(pending)}), flush=True)
@@ -632,10 +632,10 @@ def orchestrator_main(args: argparse.Namespace) -> int:
     else:
         for item in files:
             src = source_dir / item.rel
-            if 0 in item.needed_ranks:
-                install_local(src, stage0 / item.rel, item.size, link_mode=args.link_mode)
             if max(item.needed_ranks) > 0:
                 send_file(src, rel=item.rel, size=item.size, source_node=args.nodes[0], source_base=str(source_dir), dest_node=first_node, host=first_host, dest_base=first_handoff, manifest=manifest)
+            if 0 in item.needed_ranks:
+                install_local(src, stage0 / item.rel, item.size, link_mode=args.link_mode)
     write_marker(stage0, manifest, 0, files)
     for host, pid, log_path in workers:
         wait_worker(host, pid, log_path)
