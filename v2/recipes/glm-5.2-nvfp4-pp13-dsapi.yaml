@@ -22,6 +22,7 @@ notes:
   - The active full archive lives on spark0 external NVMe. Mac 22TB is an inactive/archive target, not the active source for launch.
   - Stage every node with the waterfall script: spark0 keeps the full archive on external NVMe, while /home/{node}/models/hf/lukealonso/GLM-5.2-NVFP4 contains only the files needed by that pipeline rank.
   - Once the HF index is present, use --watch-source to overlap download, archive mirror, and Spark waterfall staging. Completed files can move immediately; never copy *.part files.
+  - Canonical runbook: docs/spark-waterfall-model-staging.md.
 paths:
   active_full_archive: /home/spark0/ds4_nvme/models/hf/lukealonso/GLM-5.2-NVFP4
   inactive_mac_archive: /mnt/mac/22tb0/models/hf/lukealonso/GLM-5.2-NVFP4
