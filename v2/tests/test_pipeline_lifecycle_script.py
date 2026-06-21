@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -46,6 +47,19 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
                 self.assertEqual(deployment["connector"]["connector_id"], service_kv["connector_id"])
             if service_kv.get("cache_root"):
                 self.assertEqual(deployment["cache_directories"][0], service_kv["cache_root"])
+
+    def test_catalog_accepts_relative_topology_and_profiles_paths(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(ROOT)
+            entries = lifecycle._load_entries("profiles/topology/static_sparks.json", "profiles/models")
+        finally:
+            os.chdir(old_cwd)
+
+        self.assertEqual({entry["service_id"] for entry in entries}, set(TOPOLOGY["routing_policy"]["pipeline_services"]))
+        for entry in entries:
+            self.assertTrue((ROOT / str(entry["profile_path"])).exists(), entry["service_id"])
 
     def test_selector_accepts_service_profile_and_model_ids(self) -> None:
         lifecycle = load_script(SCRIPT)
@@ -98,6 +112,183 @@ class PipelineLifecycleScriptTests(unittest.TestCase):
         self.assertIn("export VLLM_DS4_KV_PREFETCH_API=1", script)
         self.assertIn("export VLLM_DS4_KV_PREFETCH_TOKEN=unit-test-token", script)
         self.assertLess(script.index("export VLLM_DS4_KV_PREFETCH_API=1"), script.index('nohup bash "$script"'))
+
+    def test_remote_launch_rewrites_generated_script_env_overrides(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        entry = {
+            "service_id": "dsv4_flash_pp8",
+            "deployment_rel": "profiles/kv_cache/dsv4_flash_pp8_simple_offload.json",
+        }
+        args = type("Args", (), {
+            "remote_repo": "$HOME/src/ds4_on_spark",
+            "launch_root": "$HOME/.cache/ds4_pipeline_lifecycle",
+            "log_dir": "$HOME/ds4_logs/pipeline_lifecycle",
+            "remote_env": ["VLLM_DS4_DSV4_SPARSE_MLA_PREFILL_BACKEND=gathered-unsafe"],
+            "remote_arg": [],
+        })()
+
+        script = lifecycle._remote_launch(entry, 0, "spark0", args)
+
+        self.assertIn("DS4_REMOTE_ENV_OVERRIDES=", script)
+        self.assertIn("re.subn", script)
+        self.assertLess(script.index("SCRIPT=\"$script\" python3 -c"), script.index('nohup bash "$script"'))
+
+    def test_remote_launch_rewrites_exec_env_assignment(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        code = lifecycle._remote_launch_script_env_override_code()
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "start.sh"
+            script.write_text(
+                "\n".join(
+                    [
+                        "#!/usr/bin/env bash",
+                        "export VLLM_DS4_DSV4_SPARSE_MLA_PREFILL_BACKEND='indexed'",
+                        "exec env A=1 VLLM_DS4_DSV4_SPARSE_MLA_PREFILL_BACKEND=indexed /bin/echo ok",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            old_script = os.environ.get("SCRIPT")
+            old_overrides = os.environ.get("DS4_REMOTE_ENV_OVERRIDES")
+            try:
+                os.environ["SCRIPT"] = str(script)
+                os.environ["DS4_REMOTE_ENV_OVERRIDES"] = json.dumps(
+                    {"VLLM_DS4_DSV4_SPARSE_MLA_PREFILL_BACKEND": "gathered-unsafe"}
+                )
+                exec(code, {})
+            finally:
+                if old_script is None:
+                    os.environ.pop("SCRIPT", None)
+                else:
+                    os.environ["SCRIPT"] = old_script
+                if old_overrides is None:
+                    os.environ.pop("DS4_REMOTE_ENV_OVERRIDES", None)
+                else:
+                    os.environ["DS4_REMOTE_ENV_OVERRIDES"] = old_overrides
+
+            rewritten = script.read_text(encoding="utf-8")
+
+        self.assertIn("export VLLM_DS4_DSV4_SPARSE_MLA_PREFILL_BACKEND='gathered-unsafe'", rewritten)
+        self.assertIn("VLLM_DS4_DSV4_SPARSE_MLA_PREFILL_BACKEND=gathered-unsafe", rewritten)
+        self.assertNotIn("VLLM_DS4_DSV4_SPARSE_MLA_PREFILL_BACKEND=indexed", rewritten)
+
+    def test_remote_launch_rewrites_generated_script_arg_overrides(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        entry = {
+            "service_id": "dsv4_flash_pp8",
+            "deployment_rel": "profiles/kv_cache/dsv4_flash_pp8_simple_offload.json",
+        }
+        args = type("Args", (), {
+            "remote_repo": "$HOME/src/ds4_on_spark",
+            "launch_root": "$HOME/.cache/ds4_pipeline_lifecycle",
+            "log_dir": "$HOME/ds4_logs/pipeline_lifecycle",
+            "remote_env": [],
+            "remote_arg": ["--enforce-eager"],
+        })()
+
+        script = lifecycle._remote_launch(entry, 0, "spark0", args)
+
+        self.assertIn("DS4_REMOTE_ARG_OVERRIDES=", script)
+        self.assertLess(script.index("SCRIPT=\"$script\" python3 -c"), script.index('nohup bash "$script"'))
+
+    def test_remote_launch_appends_exec_args(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        code = lifecycle._remote_launch_script_env_override_code()
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "start.sh"
+            script.write_text(
+                "\n".join(
+                    [
+                        "#!/usr/bin/env bash",
+                        "exec env A=1 /bin/echo ok",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            old_script = os.environ.get("SCRIPT")
+            old_env_overrides = os.environ.get("DS4_REMOTE_ENV_OVERRIDES")
+            old_arg_overrides = os.environ.get("DS4_REMOTE_ARG_OVERRIDES")
+            try:
+                os.environ["SCRIPT"] = str(script)
+                os.environ["DS4_REMOTE_ENV_OVERRIDES"] = "{}"
+                os.environ["DS4_REMOTE_ARG_OVERRIDES"] = json.dumps(["--enforce-eager"])
+                exec(code, {})
+            finally:
+                if old_script is None:
+                    os.environ.pop("SCRIPT", None)
+                else:
+                    os.environ["SCRIPT"] = old_script
+                if old_env_overrides is None:
+                    os.environ.pop("DS4_REMOTE_ENV_OVERRIDES", None)
+                else:
+                    os.environ["DS4_REMOTE_ENV_OVERRIDES"] = old_env_overrides
+                if old_arg_overrides is None:
+                    os.environ.pop("DS4_REMOTE_ARG_OVERRIDES", None)
+                else:
+                    os.environ["DS4_REMOTE_ARG_OVERRIDES"] = old_arg_overrides
+
+            rewritten = script.read_text(encoding="utf-8")
+
+        self.assertIn("exec env A=1 /bin/echo ok --enforce-eager", rewritten)
+
+    def test_remote_launch_replaces_exec_arg_values_from_kv_override(self) -> None:
+        lifecycle = load_script(SCRIPT)
+        code = lifecycle._remote_launch_script_env_override_code()
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "start.sh"
+            script.write_text(
+                "\n".join(
+                    [
+                        "#!/usr/bin/env bash",
+                        "exec env A=1 /bin/echo ok --linear-backend flashinfer-cutlass --moe-backend flashinfer-cutlass",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            old_script = os.environ.get("SCRIPT")
+            old_env_overrides = os.environ.get("DS4_REMOTE_ENV_OVERRIDES")
+            old_arg_overrides = os.environ.get("DS4_REMOTE_ARG_OVERRIDES")
+            old_set_arg_overrides = os.environ.get("DS4_REMOTE_SET_ARG_OVERRIDES")
+            try:
+                os.environ["SCRIPT"] = str(script)
+                os.environ["DS4_REMOTE_ENV_OVERRIDES"] = "{}"
+                os.environ["DS4_REMOTE_ARG_OVERRIDES"] = "[]"
+                os.environ["DS4_REMOTE_SET_ARG_OVERRIDES"] = json.dumps(
+                    lifecycle._parse_remote_set_args(
+                        [],
+                        [
+                            "--linear-backend=cutlass",
+                            "--moe-backend=flashinfer_trtllm",
+                        ],
+                    )
+                )
+                exec(code, {})
+            finally:
+                if old_script is None:
+                    os.environ.pop("SCRIPT", None)
+                else:
+                    os.environ["SCRIPT"] = old_script
+                if old_env_overrides is None:
+                    os.environ.pop("DS4_REMOTE_ENV_OVERRIDES", None)
+                else:
+                    os.environ["DS4_REMOTE_ENV_OVERRIDES"] = old_env_overrides
+                if old_arg_overrides is None:
+                    os.environ.pop("DS4_REMOTE_ARG_OVERRIDES", None)
+                else:
+                    os.environ["DS4_REMOTE_ARG_OVERRIDES"] = old_arg_overrides
+                if old_set_arg_overrides is None:
+                    os.environ.pop("DS4_REMOTE_SET_ARG_OVERRIDES", None)
+                else:
+                    os.environ["DS4_REMOTE_SET_ARG_OVERRIDES"] = old_set_arg_overrides
+
+            rewritten = script.read_text(encoding="utf-8")
+
+        self.assertIn("--linear-backend cutlass", rewritten)
+        self.assertIn("--moe-backend flashinfer_trtllm", rewritten)
+        self.assertNotIn("flashinfer-cutlass", rewritten)
 
     def test_remote_launch_auto_injects_declared_prefetch_token_file(self) -> None:
         lifecycle = load_script(SCRIPT)

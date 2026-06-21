@@ -53,6 +53,9 @@ def _args() -> argparse.Namespace:
     parser.add_argument("--probe-timeout-s", type=float, default=15.0)
     parser.add_argument("--stagger-s", type=float, default=2.0)
     parser.add_argument("--remote-env", action="append", default=[], metavar="KEY=VALUE", help="export KEY=VALUE before launch scripts on each Spark node")
+    parser.add_argument("--remote-arg", action="append", default=[], metavar="ARG", help="append ARG to each generated vLLM launch command before starting it")
+    parser.add_argument("--remote-set-arg", action="append", nargs=2, default=[], metavar=("OPTION", "VALUE"), help="set or replace an OPTION VALUE pair in each generated vLLM launch command before starting it")
+    parser.add_argument("--remote-set-arg-kv", action="append", default=[], metavar="OPTION=VALUE", help="set or replace an OPTION VALUE pair; use this when OPTION starts with --")
     parser.add_argument("--prefetch-token-file", default=str(DEFAULT_PREFETCH_TOKEN_FILE), help="Local token file to inject into token-gated vLLM DS4 KV prefetch services; falls back to /tmp on Linux.")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--allow-all-services", action="store_true")
@@ -73,8 +76,10 @@ def _is_dangerous_all_services(args: argparse.Namespace, actions: list[str]) -> 
 
 
 def _load_entries(topology_path: str, profiles_dir: str) -> list[dict[str, object]]:
-    topology = _load(Path(topology_path))
-    profiles = {str(data["profile_id"]): (path, data) for path, data in _profile_items(Path(profiles_dir))}
+    topology_file = _resolve_input_path(topology_path)
+    profiles_path = _resolve_input_path(profiles_dir)
+    topology = _load(topology_file)
+    profiles = {str(data["profile_id"]): (path, data) for path, data in _profile_items(profiles_path)}
     services = topology["routing_policy"]["pipeline_services"]
     entries = []
     for service_id, service in services.items():
@@ -102,6 +107,13 @@ def _load_entries(topology_path: str, profiles_dir: str) -> list[dict[str, objec
             "deployment": deployment,
         })
     return sorted(entries, key=lambda item: str(item["service_id"]))
+
+
+def _resolve_input_path(path: str) -> Path:
+    item = Path(path)
+    if not item.is_absolute():
+        item = Path.cwd() / item
+    return item.resolve()
 
 
 def _profile_items(profiles_dir: Path) -> list[tuple[Path, dict[str, object]]]:
@@ -243,7 +255,10 @@ def _remote_launch(entry: dict[str, object], rank: int, node: str, args: argpars
     env_exports = _remote_env_exports(entry, args)
     if env_exports:
         env_exports = "\n" + env_exports
-    return _remote_write(entry, args) + f'\n{log_dir}{env_exports}\ninstall="$launch_dir/00_install_kv_cache_deps.sh"\nscript="$launch_dir/start_vllm_rank{rank}_{node}.sh"\nlog="$log_dir/rank{rank}_{stamp}.log"\nmkdir -p "$log_dir"\ntest -x "$install"\ntest -x "$script"\nDS4_NODE_ID={shlex.quote(node)} bash "$install"\nnohup bash "$script" > "$log" 2>&1 < /dev/null &\nprintf "started {entry["service_id"]} rank={rank} node={node} pid=%s log=%s\\n" "$!" "$log"'
+    script_overrides = _remote_launch_script_env_override(args)
+    if script_overrides:
+        script_overrides = "\n" + script_overrides
+    return _remote_write(entry, args) + f'\n{log_dir}{env_exports}\ninstall="$launch_dir/00_install_kv_cache_deps.sh"\nscript="$launch_dir/start_vllm_rank{rank}_{node}.sh"\nlog="$log_dir/rank{rank}_{stamp}.log"\nmkdir -p "$log_dir"\ntest -x "$install"\ntest -x "$script"{script_overrides}\nDS4_NODE_ID={shlex.quote(node)} bash "$install"\nnohup bash "$script" > "$log" 2>&1 < /dev/null &\nprintf "started {entry["service_id"]} rank={rank} node={node} pid=%s log=%s\\n" "$!" "$log"'
 
 
 def _remote_env_exports(entry: dict[str, object], args: argparse.Namespace) -> str:
@@ -255,6 +270,103 @@ def _remote_env_exports(entry: dict[str, object], args: argparse.Namespace) -> s
     for key, value in pairs:
         lines.append(f"export {key}={shlex.quote(value)}")
     return "\n".join(lines)
+
+
+def _remote_launch_script_env_override(args: argparse.Namespace) -> str:
+    pairs = _parse_remote_env(getattr(args, "remote_env", []) or [])
+    remote_args = _parse_remote_args(getattr(args, "remote_arg", []) or [])
+    remote_set_args = _parse_remote_set_args(
+        getattr(args, "remote_set_arg", []) or [],
+        getattr(args, "remote_set_arg_kv", []) or [],
+    )
+    if not pairs and not remote_args and not remote_set_args:
+        return ""
+    data = json.dumps(dict(pairs), separators=(",", ":"))
+    arg_data = json.dumps(remote_args, separators=(",", ":"))
+    set_arg_data = json.dumps(remote_set_args, separators=(",", ":"))
+    code = _remote_launch_script_env_override_code()
+    return f"DS4_REMOTE_ENV_OVERRIDES={shlex.quote(data)} DS4_REMOTE_ARG_OVERRIDES={shlex.quote(arg_data)} DS4_REMOTE_SET_ARG_OVERRIDES={shlex.quote(set_arg_data)} SCRIPT=\"$script\" python3 -c {shlex.quote(code)}"
+
+
+def _remote_launch_script_env_override_code() -> str:
+    code = (
+        "import json,os,re,shlex\n"
+        "path=os.environ['SCRIPT']\n"
+        "overrides=json.loads(os.environ.get('DS4_REMOTE_ENV_OVERRIDES','{}'))\n"
+        "extra_args=json.loads(os.environ.get('DS4_REMOTE_ARG_OVERRIDES','[]'))\n"
+        "set_args=json.loads(os.environ.get('DS4_REMOTE_SET_ARG_OVERRIDES','[]'))\n"
+        "with open(path,encoding='utf-8') as f:\n"
+        "    text=f.read()\n"
+        "def rewrite_exec_env(line,key,value):\n"
+        "    if not line.startswith('exec env '):\n"
+        "        return line\n"
+        "    parts=shlex.split(line)\n"
+        "    insert_at=2\n"
+        "    found=False\n"
+        "    for i in range(2,len(parts)):\n"
+        "        if '=' not in parts[i]:\n"
+        "            break\n"
+        "        insert_at=i+1\n"
+        "        name=parts[i].split('=',1)[0]\n"
+        "        if name == key:\n"
+        "            parts[i]=f'{key}={value}'\n"
+        "            found=True\n"
+        "    if not found:\n"
+        "        parts.insert(insert_at,f'{key}={value}')\n"
+        "    return shlex.join(parts)\n"
+        "def rewrite_exec_args(line,args):\n"
+        "    if not line.startswith('exec env '):\n"
+        "        return line\n"
+        "    parts=shlex.split(line)\n"
+        "    for arg in args:\n"
+        "        if arg not in parts:\n"
+        "            parts.append(arg)\n"
+        "    return shlex.join(parts)\n"
+        "def rewrite_exec_set_args(line,args):\n"
+        "    if not line.startswith('exec env '):\n"
+        "        return line\n"
+        "    parts=shlex.split(line)\n"
+        "    for opt,value in args:\n"
+        "        replaced=False\n"
+        "        prefix=opt+'='\n"
+        "        for i,part in enumerate(parts):\n"
+        "            if part == opt:\n"
+        "                if i+1 < len(parts) and not parts[i+1].startswith('--'):\n"
+        "                    parts[i+1]=value\n"
+        "                else:\n"
+        "                    parts.insert(i+1,value)\n"
+        "                replaced=True\n"
+        "                break\n"
+        "            if part.startswith(prefix):\n"
+        "                parts[i]=prefix+value\n"
+        "                replaced=True\n"
+        "                break\n"
+        "        if not replaced:\n"
+        "            parts.extend([opt,value])\n"
+        "    return shlex.join(parts)\n"
+        "for key,value in overrides.items():\n"
+        "    line=f'export {key}={value!r}'\n"
+        "    text,count=re.subn(rf'^export {re.escape(key)}=.*$',line,text,flags=re.M)\n"
+        "    if count == 0:\n"
+        "        text=text.replace('\\n','\\n'+line+'\\n',1)\n"
+        "    had_newline=text.endswith('\\n')\n"
+        "    text='\\n'.join(rewrite_exec_env(line,key,value) for line in text.splitlines())\n"
+        "    if had_newline:\n"
+        "        text+='\\n'\n"
+        "if extra_args:\n"
+        "    had_newline=text.endswith('\\n')\n"
+        "    text='\\n'.join(rewrite_exec_args(line,extra_args) for line in text.splitlines())\n"
+        "    if had_newline:\n"
+        "        text+='\\n'\n"
+        "if set_args:\n"
+        "    had_newline=text.endswith('\\n')\n"
+        "    text='\\n'.join(rewrite_exec_set_args(line,set_args) for line in text.splitlines())\n"
+        "    if had_newline:\n"
+        "        text+='\\n'\n"
+        "with open(path,'w',encoding='utf-8') as f:\n"
+        "    f.write(text)\n"
+    )
+    return code
 
 
 def _entry_needs_prefetch_token(entry: dict[str, object]) -> bool:
@@ -284,6 +396,33 @@ def _parse_remote_env(items: list[str]) -> list[tuple[str, str]]:
             raise ValueError(f"invalid --remote-env name: {key}")
         out.append((key, value))
     return out
+
+
+def _parse_remote_args(items: list[str]) -> list[str]:
+    out = []
+    for item in items:
+        if not item or "\n" in item or "\x00" in item:
+            raise ValueError(f"invalid --remote-arg value: {item!r}")
+        out.append(item)
+    return out
+
+
+def _parse_remote_set_args(items: list[list[str]], kv_items: list[str] | None = None) -> list[list[str]]:
+    out = []
+    for opt, value in items:
+        _append_remote_set_arg(out, opt, value, "--remote-set-arg")
+    for item in kv_items or []:
+        if "=" not in item:
+            raise ValueError(f"invalid --remote-set-arg-kv value: {item!r}")
+        opt, value = item.split("=", 1)
+        _append_remote_set_arg(out, opt, value, "--remote-set-arg-kv")
+    return out
+
+
+def _append_remote_set_arg(out: list[list[str]], opt: str, value: str, label: str) -> None:
+    if not opt.startswith("--") or not value or "\n" in opt or "\n" in value or "\x00" in opt or "\x00" in value:
+        raise ValueError(f"invalid {label} value: {opt!r} {value!r}")
+    out.append([opt, value])
 
 
 def _valid_env_name(name: str) -> bool:
