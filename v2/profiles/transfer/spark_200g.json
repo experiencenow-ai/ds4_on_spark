@@ -41,6 +41,8 @@
     "-T",
     "-o", "Compression=no",
     "-o", "BatchMode=yes",
+    "-o", "StrictHostKeyChecking=no",
+    "-o", "UserKnownHostsFile=/dev/null",
     "-x"
   ],
   "nodes": [
