@@ -97,12 +97,42 @@ class WaterfallStageModelTests(unittest.TestCase):
                 extra_safetensors="all",
                 skip_cache=True,
                 allow_partial=False,
+                watch_source=False,
             )
             with self.assertRaises(SystemExit):
                 mod.build_plan(args)
             args.allow_partial = True
             by_rel = {item.rel: item for item in mod.build_plan(args)}
             self.assertIn("model-00001-of-00002.safetensors", by_rel)
+
+    def test_watch_source_keeps_missing_indexed_shards_pending(self) -> None:
+        mod = load_script()
+        with tempfile.TemporaryDirectory() as tmp:
+            model_dir = Path(tmp) / "model"
+            model_dir.mkdir()
+            (model_dir / "model-00001-of-00002.safetensors").write_bytes(b"a")
+            index = {
+                "metadata": {},
+                "weight_map": {
+                    "model.layers.0.self_attn.q_proj.weight": "model-00001-of-00002.safetensors",
+                    "model.layers.1.self_attn.q_proj.weight": "model-00002-of-00002.safetensors",
+                },
+            }
+            (model_dir / "model.safetensors.index.json").write_text(json.dumps(index), encoding="utf-8")
+            args = Namespace(
+                source_full_dir=str(model_dir),
+                partition=[1, 1],
+                nodes=["spark0", "spark1"],
+                layer_regex=mod.DEFAULT_LAYER_REGEX,
+                extra_safetensors="all",
+                skip_cache=True,
+                allow_partial=False,
+                watch_source=True,
+            )
+            by_rel = {item.rel: item for item in mod.build_plan(args)}
+            self.assertEqual(by_rel["model-00001-of-00002.safetensors"].size, 1)
+            self.assertEqual(by_rel["model-00002-of-00002.safetensors"].size, -1)
+            self.assertEqual(by_rel["model-00002-of-00002.safetensors"].needed_ranks, (1,))
 
 
 if __name__ == "__main__":

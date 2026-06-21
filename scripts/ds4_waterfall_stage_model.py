@@ -153,13 +153,15 @@ def build_plan(args: argparse.Namespace) -> list[FilePlan]:
         raise SystemExit("partition width must match --nodes count")
     ranks_by_shard = shard_rank_sets(source_dir, partition, args.layer_regex)
     allow_partial = bool(getattr(args, "allow_partial", False))
+    watch_source = bool(getattr(args, "watch_source", False))
     partials = partial_downloads(source_dir, skip_cache=args.skip_cache)
-    if partials and not allow_partial:
+    if partials and not allow_partial and not watch_source:
         raise SystemExit("partial download files present: " + ",".join(partials[:8]))
     missing_shards = sorted(shard for shard in ranks_by_shard if not (source_dir / shard).is_file())
-    if missing_shards and not allow_partial:
+    if missing_shards and not allow_partial and not watch_source:
         raise SystemExit("missing indexed shards: " + ",".join(missing_shards[:8]))
     file_plans: list[FilePlan] = []
+    planned: set[str] = set()
     for rel_path in iter_files(source_dir, skip_cache=args.skip_cache):
         rel = rel_path.as_posix()
         if rel_path.name.endswith(".part"):
@@ -177,6 +179,11 @@ def build_plan(args: argparse.Namespace) -> list[FilePlan]:
             ranks = set(range(len(partition)))
         if ranks:
             file_plans.append(FilePlan(rel=rel, size=path.stat().st_size, needed_ranks=tuple(sorted(ranks)), is_safetensors=is_safetensors))
+            planned.add(rel)
+    if watch_source:
+        for rel, ranks in sorted(ranks_by_shard.items()):
+            if rel not in planned and ranks:
+                file_plans.append(FilePlan(rel=rel, size=-1, needed_ranks=tuple(sorted(ranks)), is_safetensors=True))
     return file_plans
 
 
@@ -189,7 +196,9 @@ def host_for(node: str, template_text: str) -> str:
 
 
 def same_size(path: Path, size: int) -> bool:
-    return path.exists() and path.is_file() and path.stat().st_size == size
+    if not path.exists() or not path.is_file():
+        return False
+    return size < 0 or path.stat().st_size == size
 
 
 def install_local(src: Path, dst: Path, size: int, *, link_mode: str) -> None:
@@ -212,7 +221,10 @@ def install_local(src: Path, dst: Path, size: int, *, link_mode: str) -> None:
 
 
 def remote_final_exists(host: str, dst: str, size: int) -> bool:
-    cmd = f"test -f {shlex.quote(dst)} && test $(stat -c%s {shlex.quote(dst)}) -eq {int(size)}"
+    if size < 0:
+        cmd = f"test -f {shlex.quote(dst)}"
+    else:
+        cmd = f"test -f {shlex.quote(dst)} && test $(stat -c%s {shlex.quote(dst)}) -eq {int(size)}"
     return run(ssh_argv(host, cmd), check=False).returncode == 0
 
 
@@ -297,6 +309,10 @@ def wait_for_file(path: Path, size: int, *, timeout_s: int, poll_s: float) -> No
         time.sleep(poll_s)
 
 
+def ready_file(path: Path, size: int) -> bool:
+    return same_size(path, size) and not path.name.endswith(".part")
+
+
 def load_manifest(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -311,6 +327,39 @@ def file_plans_from_manifest(manifest: dict[str, Any]) -> list[FilePlan]:
         )
         for item in manifest["files"]
     ]
+
+
+def process_worker_file(item: FilePlan, *, rank: int, src: Path, stage_dir: Path, next_host: str, next_handoff: str, manifest: dict[str, Any]) -> None:
+    max_rank = max(item.needed_ranks)
+    if rank in item.needed_ranks:
+        install_local(src, stage_dir / item.rel, item.size, link_mode=str(manifest["link_mode"]))
+    if rank < max_rank:
+        send_file(src, rel=item.rel, size=item.size, host=next_host, dest_base=next_handoff, rsync_bwlimit=manifest.get("rsync_bwlimit"))
+    if manifest["cleanup_handoff"]:
+        try:
+            src.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def worker_stream_main(manifest: dict[str, Any], files: list[FilePlan], rank: int, stage_dir: Path, handoff_dir: Path, next_host: str, next_handoff: str) -> None:
+    pending = [item for item in files if rank <= max(item.needed_ranks)]
+    start = time.monotonic()
+    while pending:
+        progressed = False
+        for item in list(pending):
+            src = handoff_dir / item.rel
+            if not ready_file(src, item.size):
+                continue
+            process_worker_file(item, rank=rank, src=src, stage_dir=stage_dir, next_host=next_host, next_handoff=next_handoff, manifest=manifest)
+            pending.remove(item)
+            progressed = True
+        if progressed:
+            continue
+        timeout_s = int(manifest["wait_timeout_s"])
+        if timeout_s > 0 and time.monotonic() - start > timeout_s:
+            raise SystemExit(f"timed out waiting for {len(pending)} files in {handoff_dir}")
+        time.sleep(float(manifest["poll_s"]))
 
 
 def worker_main(args: argparse.Namespace) -> int:
@@ -329,21 +378,17 @@ def worker_main(args: argparse.Namespace) -> int:
         next_node = nodes[rank + 1]
         next_host = host_for(next_node, str(manifest["ssh_host_template"]))
         next_handoff = template(manifest["handoff_dir_template"], node=next_node, rank=rank + 1, run_id=run_id, repo_id=repo_id)
+    if manifest.get("watch_source"):
+        worker_stream_main(manifest, files, rank, stage_dir, handoff_dir, next_host, next_handoff)
+        write_marker(stage_dir, manifest, rank, files)
+        return 0
     for item in files:
         max_rank = max(item.needed_ranks)
         if rank > max_rank:
             continue
         src = handoff_dir / item.rel
         wait_for_file(src, item.size, timeout_s=int(manifest["wait_timeout_s"]), poll_s=float(manifest["poll_s"]))
-        if rank in item.needed_ranks:
-            install_local(src, stage_dir / item.rel, item.size, link_mode=str(manifest["link_mode"]))
-        if rank < max_rank:
-            send_file(src, rel=item.rel, size=item.size, host=next_host, dest_base=next_handoff, rsync_bwlimit=manifest.get("rsync_bwlimit"))
-        if manifest["cleanup_handoff"]:
-            try:
-                src.unlink()
-            except FileNotFoundError:
-                pass
+        process_worker_file(item, rank=rank, src=src, stage_dir=stage_dir, next_host=next_host, next_handoff=next_handoff, manifest=manifest)
     write_marker(stage_dir, manifest, rank, files)
     return 0
 
@@ -353,18 +398,18 @@ def summarize(files: list[FilePlan], node_count: int) -> dict[str, Any]:
     by_edge = []
     for rank in range(node_count):
         selected = [item for item in files if rank in item.needed_ranks]
-        by_rank.append({"rank": rank, "files": len(selected), "bytes": sum(item.size for item in selected)})
+        by_rank.append({"rank": rank, "files": len(selected), "bytes": sum(max(0, item.size) for item in selected)})
     for edge in range(node_count - 1):
         crossing = [item for item in files if max(item.needed_ranks) > edge]
-        by_edge.append({"edge": [edge, edge + 1], "files": len(crossing), "bytes": sum(item.size for item in crossing)})
+        by_edge.append({"edge": [edge, edge + 1], "files": len(crossing), "bytes": sum(max(0, item.size) for item in crossing)})
     return {"rank_stage_totals": by_rank, "edge_transfer_totals": by_edge}
 
 
 def start_worker(host: str, rank: int, remote_script: str, remote_manifest: str, log_path: str) -> int:
     cmd = (
-        f"mkdir -p {shlex.quote(str(Path(log_path).parent))} && "
+        f"mkdir -p {shlex.quote(str(Path(log_path).parent))}; "
         f"nohup python3 {shlex.quote(remote_script)} --worker --manifest {shlex.quote(remote_manifest)} "
-        f"--worker-rank {rank} > {shlex.quote(log_path)} 2>&1 & echo $!"
+        f"--worker-rank {rank} < /dev/null > {shlex.quote(log_path)} 2>&1 & echo $!"
     )
     proc = run(ssh_argv(host, cmd))
     return int(proc.stdout.strip().splitlines()[-1])
@@ -379,6 +424,29 @@ def wait_worker(host: str, pid: int, log_path: str) -> None:
     proc = run(ssh_argv(host, f"tail -n 20 {shlex.quote(log_path)}"), check=False)
     if proc.stdout:
         print(proc.stdout, end="")
+
+
+def orchestrator_stream_files(files: list[FilePlan], *, source_dir: Path, stage0: Path, first_host: str, first_handoff: str, args: argparse.Namespace) -> None:
+    pending = list(files)
+    start = time.monotonic()
+    while pending:
+        progressed = False
+        for item in list(pending):
+            src = source_dir / item.rel
+            if not ready_file(src, item.size):
+                continue
+            if 0 in item.needed_ranks:
+                install_local(src, stage0 / item.rel, item.size, link_mode=args.link_mode)
+            if max(item.needed_ranks) > 0:
+                send_file(src, rel=item.rel, size=item.size, host=first_host, dest_base=first_handoff, rsync_bwlimit=args.rsync_bwlimit)
+            pending.remove(item)
+            progressed = True
+            print(json.dumps({"status": "streamed", "rel": item.rel, "remaining": len(pending)}), flush=True)
+        if progressed:
+            continue
+        if args.wait_timeout_s > 0 and time.monotonic() - start > args.wait_timeout_s:
+            raise SystemExit(f"timed out waiting for {len(pending)} source files in {source_dir}")
+        time.sleep(args.poll_s)
 
 
 def orchestrator_main(args: argparse.Namespace) -> int:
@@ -407,6 +475,7 @@ def orchestrator_main(args: argparse.Namespace) -> int:
         "wait_timeout_s": args.wait_timeout_s,
         "poll_s": args.poll_s,
         "rsync_bwlimit": args.rsync_bwlimit,
+        "watch_source": args.watch_source,
         "files": [item.__dict__ for item in files],
         "summary": summarize(files, len(args.nodes)),
     }
@@ -436,12 +505,15 @@ def orchestrator_main(args: argparse.Namespace) -> int:
         print(json.dumps({"status": "worker_started", "rank": rank, "node": node, "pid": pid, "log": log_path}))
     first_handoff = template(args.handoff_dir_template, node=args.nodes[1], rank=1, run_id=run_id, repo_id=args.repo_id) if len(args.nodes) > 1 else ""
     first_host = host_for(args.nodes[1], args.ssh_host_template) if len(args.nodes) > 1 else ""
-    for item in files:
-        src = source_dir / item.rel
-        if 0 in item.needed_ranks:
-            install_local(src, stage0 / item.rel, item.size, link_mode=args.link_mode)
-        if max(item.needed_ranks) > 0:
-            send_file(src, rel=item.rel, size=item.size, host=first_host, dest_base=first_handoff, rsync_bwlimit=args.rsync_bwlimit)
+    if args.watch_source:
+        orchestrator_stream_files(files, source_dir=source_dir, stage0=stage0, first_host=first_host, first_handoff=first_handoff, args=args)
+    else:
+        for item in files:
+            src = source_dir / item.rel
+            if 0 in item.needed_ranks:
+                install_local(src, stage0 / item.rel, item.size, link_mode=args.link_mode)
+            if max(item.needed_ranks) > 0:
+                send_file(src, rel=item.rel, size=item.size, host=first_host, dest_base=first_handoff, rsync_bwlimit=args.rsync_bwlimit)
     write_marker(stage0, manifest, 0, files)
     for host, pid, log_path in workers:
         wait_worker(host, pid, log_path)
@@ -471,6 +543,7 @@ def main() -> int:
     parser.add_argument("--keep-handoff", action="store_false", dest="cleanup_handoff")
     parser.add_argument("--skip-cache", action="store_true", default=True)
     parser.add_argument("--allow-partial", action="store_true")
+    parser.add_argument("--watch-source", action="store_true", help="Execute a streaming waterfall and forward source files as they appear")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--worker", action="store_true")
     parser.add_argument("--worker-rank", type=int, default=-1)
