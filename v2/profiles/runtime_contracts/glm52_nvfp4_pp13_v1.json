@@ -1,0 +1,107 @@
+{
+  "contract_id": "glm52_nvfp4_pp13_v1",
+  "description": "GLM-5.2-NVFP4 13-stage vLLM layer-pipeline runtime for Spark-ring frontier testing through DSAPI. The first-pass recipe keeps MTP off and requires ModelOpt NVFP4 kernels without emulation fallback.",
+  "format": "ds4-runtime-contract-v1",
+  "kv_cache": {
+    "cache_root": "/home/{node}/ds4_nvme/ds4_lmcache/glm52_nvfp4_pp13_fp8kv/p6_4_4_4_4_8_8_8_8_8_4_4_8",
+    "connector": "LMCacheConnectorV1",
+    "deployment": "profiles/kv_cache/glm52_nvfp4_pp13_lmcache_hma.json",
+    "dtype": "fp8_e4m3",
+    "external_backend": "lmcache_hma",
+    "expected_node_fraction": "1/13",
+    "fixed_kv_cache_memory_bytes": 4294967296,
+    "sharding": "pipeline_layers"
+  },
+  "admission": {
+    "max_num_batched_tokens": 8192,
+    "max_num_seqs": 4,
+    "power_policy": "GLM-5.2-NVFP4 should have much lower weight memory than FP8, but still needs a clean full-ring handoff for first launch. Do not launch over resident frontier services without a live memory check."
+  },
+  "launch": {
+    "api_base_url": "http://127.0.0.1:8153",
+    "host": "0.0.0.0",
+    "master_addr": "10.10.100.10",
+    "master_port": 29653,
+    "port": 8153,
+    "socket_ifname": "ds4ring0"
+  },
+  "serving_capabilities": {
+    "default_chat_template_kwargs": {
+      "enable_thinking": false
+    },
+    "mtp_speculative_tokens": 0,
+    "prefix_caching": true,
+    "reasoning_parser": "glm45",
+    "tool_call_parser": "glm47"
+  },
+  "model": {
+    "model_id": "lukealonso/GLM-5.2-NVFP4",
+    "model_path": "/home/{node}/models/hf/lukealonso/GLM-5.2-NVFP4",
+    "served_model_name": "glm-5.2-nvfp4-pp13"
+  },
+  "pipeline": {
+    "dtype": "bfloat16",
+    "entry_base_url": "http://127.0.0.1:8153",
+    "head_node": "spark0",
+    "layer_partition": [
+      6,
+      4,
+      4,
+      4,
+      4,
+      8,
+      8,
+      8,
+      8,
+      8,
+      4,
+      4,
+      8
+    ],
+    "pipeline_parallel_size": 13,
+    "tensor_parallel_size": 1,
+    "text_only": true,
+    "total_layers": 78
+  },
+  "profile_ids": [
+    "glm52_nvfp4_pp13_frontier_v1"
+  ],
+  "required_nodes": [
+    "spark0",
+    "spark1",
+    "spark2",
+    "spark3",
+    "spark4",
+    "spark5",
+    "spark6",
+    "spark7",
+    "spark8",
+    "spark9",
+    "sparka",
+    "sparkb",
+    "sparkc"
+  ],
+  "vllm": {
+    "forbidden_runtime_flags": [
+      "--kv-cache-dtype nvfp4",
+      "--linear-backend emulation",
+      "--linear-backend marlin",
+      "--moe-backend emulation",
+      "--moe-backend marlin"
+    ],
+    "required_architecture": "GlmMoeDsaForCausalLM",
+    "required_model_type": "glm_moe_dsa",
+    "required_quantization": "modelopt_fp4",
+    "required_runtime_flags": [
+      "--quantization modelopt_fp4",
+      "--kv-cache-dtype fp8_e4m3",
+      "--linear-backend flashinfer-cutlass",
+      "--moe-backend flashinfer-cutlass",
+      "--reasoning-parser glm45",
+      "--tool-call-parser glm47",
+      "--enable-auto-tool-choice"
+    ],
+    "required_source": "vLLM 0.23.0 or newer with GlmMoeDsaForCausalLM and ModelOptNvFp4Config support",
+    "required_source_root": "/home/{node}/standard-runtimes/vllm-0.23.0-overlay"
+  }
+}
