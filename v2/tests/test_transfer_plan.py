@@ -5,7 +5,7 @@ from pathlib import Path
 from argparse import Namespace
 import unittest
 
-from ds4_transfer.fast_copy import _port_for_shard, _striped_remote_python, _validate_port_ranges
+from ds4_transfer.fast_copy import _is_local_node, _port_for_shard, _striped_remote_python, _validate_port_ranges
 from ds4_transfer.service import TransferRequest, TransferTopology, plan_transfer, run_transfer
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -101,6 +101,10 @@ class TransferPlanTests(unittest.TestCase):
         bad = Namespace(port_base=49300, jobs_per_edge=32, striped_file_stripes=8)
         with self.assertRaises(ValueError):
             _validate_port_ranges(bad, [[("spark7", "spark8")]])
+
+    def test_local_node_marks_self_for_non_ssh_source_commands(self) -> None:
+        self.assertTrue(_is_local_node(Namespace(local_node="spark8"), "spark8"))
+        self.assertFalse(_is_local_node(Namespace(local_node="spark8"), "spark9"))
 
 
 if __name__ == "__main__":

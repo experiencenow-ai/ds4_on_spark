@@ -32,7 +32,7 @@ class Rail:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     topology = TransferTopology.load(args.topology)
-    files = _list_files(topology, args.source_node, args.source_path, args.include_from, args.timeout_s)
+    files = _list_files(topology, args, args.source_node, args.source_path, args.include_from, args.timeout_s)
     stages = _selected_stages(topology, args)
     _validate_port_ranges(args, stages)
     plan = {
@@ -73,6 +73,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--striped-file-stripes", type=int, default=8)
     parser.add_argument("--striped-file-threshold-bytes", type=int, default=64 * 1024 * 1024)
     parser.add_argument("--remote-v2-dir", default="~/src/ds4_on_spark/v2")
+    parser.add_argument("--local-node", default="")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     if args.jobs_per_edge < 1:
@@ -113,10 +114,10 @@ def _selected_stages(topology: TransferTopology, args: argparse.Namespace) -> li
 
 
 def _copy_edge(topology: TransferTopology, args: argparse.Namespace, files: list[FileItem], stage_index: int, edge_index: int, source_node: str, destination_node: str) -> None:
-    rails = _discover_rails(topology, source_node, destination_node, args.timeout_s)
+    rails = _discover_rails(topology, args, source_node, destination_node, args.timeout_s)
     source_path = _path_for_node(args, source_node)
     destination_path = _path_for_node(args, destination_node)
-    _run_ssh(topology, destination_node, f"mkdir -p {shlex.quote(destination_path)}", args.timeout_s)
+    _run_node(topology, args, destination_node, f"mkdir -p {shlex.quote(destination_path)}", args.timeout_s)
     started = time.time()
     copied = 0
     with ThreadPoolExecutor(max_workers=args.jobs_per_edge) as pool:
@@ -136,7 +137,7 @@ def _copy_shard(topology: TransferTopology, args: argparse.Namespace, files: lis
     port = _port_for_shard(args, stage_index, edge_index, slot)
     for index, item in enumerate(files):
         rail = rails[(slot + index) % len(rails)]
-        if _destination_has_size(topology, destination_node, destination_path, item, args.timeout_s):
+        if _destination_has_size(topology, args, destination_node, destination_path, item, args.timeout_s):
             continue
         _copy_file(topology, args, item, source_node, source_path, destination_node, destination_path, rail, port)
         copied += 1
@@ -169,10 +170,10 @@ def _copy_file(topology: TransferTopology, args: argparse.Namespace, item: FileI
         port=port,
         src=shlex.quote(src),
     )
-    server = _popen_ssh(topology, destination_node, server_script)
+    server = _popen_node(topology, args, destination_node, server_script)
     time.sleep(0.2)
     try:
-        client = _run_ssh(topology, source_node, client_script, args.timeout_s)
+        client = _run_node(topology, args, source_node, client_script, args.timeout_s)
         if client.returncode != 0:
             if server.poll() is None:
                 server.kill()
@@ -184,7 +185,7 @@ def _copy_file(topology: TransferTopology, args: argparse.Namespace, item: FileI
     if rc != 0:
         stderr = server.stderr.read()[-1000:] if server.stderr is not None else ""
         raise RuntimeError(f"copy server failed for {item.relpath}: {stderr}")
-    if not _destination_has_size(topology, destination_node, destination_path, item, args.timeout_s):
+    if not _destination_has_size(topology, args, destination_node, destination_path, item, args.timeout_s):
         raise RuntimeError(f"destination size mismatch for {destination_node}:{dst}")
 
 
@@ -264,9 +265,9 @@ def _run_striped_copy(
     server_script: str,
     client_script: str,
 ) -> None:
-    server = _popen_ssh(topology, destination_node, server_script)
+    server = _popen_node(topology, args, destination_node, server_script)
     time.sleep(0.3)
-    client = _popen_ssh(topology, source_node, client_script)
+    client = _popen_node(topology, args, source_node, client_script)
     deadline = time.monotonic() + args.timeout_s
     try:
         while client.poll() is None:
@@ -304,20 +305,20 @@ def _verify_striped_destination(
     destination_node: str,
     dst: str,
 ) -> None:
-    result = _run_ssh(topology, destination_node, f"test $(stat -c %s {shlex.quote(dst)}) -eq {item.size}", args.timeout_s)
+    result = _run_node(topology, args, destination_node, f"test $(stat -c %s {shlex.quote(dst)}) -eq {item.size}", args.timeout_s)
     if result.returncode != 0:
         raise RuntimeError(f"destination size mismatch for {destination_node}:{dst}")
 
 
-def _list_files(topology: TransferTopology, source_node: str, source_path: str, include_from: str | None, timeout_s: int) -> list[FileItem]:
+def _list_files(topology: TransferTopology, args: argparse.Namespace, source_node: str, source_path: str, include_from: str | None, timeout_s: int) -> list[FileItem]:
     if include_from is not None:
-        return _list_included_files(topology, source_node, source_path, include_from, timeout_s)
-    return _list_all_files(topology, source_node, source_path, timeout_s)
+        return _list_included_files(topology, args, source_node, source_path, include_from, timeout_s)
+    return _list_all_files(topology, args, source_node, source_path, timeout_s)
 
 
-def _list_all_files(topology: TransferTopology, source_node: str, source_path: str, timeout_s: int) -> list[FileItem]:
+def _list_all_files(topology: TransferTopology, args: argparse.Namespace, source_node: str, source_path: str, timeout_s: int) -> list[FileItem]:
     script = "cd {path}; find . -type f ! -path './.cache/*' -printf '%P\\t%s\\n' | sort".format(path=shlex.quote(source_path))
-    result = _run_ssh(topology, source_node, script, timeout_s)
+    result = _run_node(topology, args, source_node, script, timeout_s)
     if result.returncode != 0:
         raise RuntimeError(result.stderr)
     files: list[FileItem] = []
@@ -350,14 +351,14 @@ def _read_include_manifest(path: str) -> list[str]:
     return sorted(relpaths)
 
 
-def _list_included_files(topology: TransferTopology, source_node: str, source_path: str, include_from: str, timeout_s: int) -> list[FileItem]:
+def _list_included_files(topology: TransferTopology, args: argparse.Namespace, source_node: str, source_path: str, include_from: str, timeout_s: int) -> list[FileItem]:
     relpaths = _read_include_manifest(include_from)
     body = "; ".join(
         "test -f {rel} && printf '%s\\t%s\\n' {rel} $(stat -c %s {rel})".format(rel=shlex.quote(relpath))
         for relpath in relpaths
     )
     script = "set -eu; cd {path}; {body}".format(path=shlex.quote(source_path), body=body)
-    result = _run_ssh(topology, source_node, script, timeout_s)
+    result = _run_node(topology, args, source_node, script, timeout_s)
     if result.returncode != 0:
         raise RuntimeError(result.stderr)
     files: list[FileItem] = []
@@ -373,10 +374,10 @@ def _list_included_files(topology: TransferTopology, source_node: str, source_pa
     return files
 
 
-def _discover_rails(topology: TransferTopology, source_node: str, destination_node: str, timeout_s: int) -> list[Rail]:
+def _discover_rails(topology: TransferTopology, args: argparse.Namespace, source_node: str, destination_node: str, timeout_s: int) -> list[Rail]:
     destination = topology.get_node(destination_node)
     target = destination.fabric_ip or destination.fabric_host
-    route = _run_ssh(topology, source_node, f"ip route show {shlex.quote(target)}", timeout_s)
+    route = _run_node(topology, args, source_node, f"ip route show {shlex.quote(target)}", timeout_s)
     if route.returncode != 0:
         raise RuntimeError(route.stderr)
     rails: list[Rail] = []
@@ -385,16 +386,16 @@ def _discover_rails(topology: TransferTopology, source_node: str, destination_no
         if token == "via" and index + 3 < len(tokens) and tokens[index + 2] == "dev":
             candidate_ip = tokens[index + 1]
             dev = tokens[index + 3]
-            if _node_has_ip(topology, destination_node, candidate_ip, timeout_s):
+            if _node_has_ip(topology, args, destination_node, candidate_ip, timeout_s):
                 dst_ip = candidate_ip
-                src_ip = _source_ip_for_dev(topology, source_node, dev, timeout_s)
+                src_ip = _source_ip_for_dev(topology, args, source_node, dev, timeout_s)
             else:
                 dst_ip = target
                 src_ip = topology.get_node(source_node).fabric_ip or topology.get_node(source_node).fabric_host
             rails.append(Rail(source_ip=src_ip, destination_ip=dst_ip, dev=dev))
     if rails:
         return rails
-    fallback = _run_ssh(topology, source_node, f"ip route get {shlex.quote(target)}", timeout_s)
+    fallback = _run_node(topology, args, source_node, f"ip route get {shlex.quote(target)}", timeout_s)
     if fallback.returncode != 0:
         raise RuntimeError(fallback.stderr)
     words = fallback.stdout.split()
@@ -402,28 +403,28 @@ def _discover_rails(topology: TransferTopology, source_node: str, destination_no
         raise RuntimeError(f"could not discover 200G rail from {source_node} to {destination_node}: {fallback.stdout}")
     candidate_ip = words[words.index("via") + 1]
     dev = words[words.index("dev") + 1]
-    if _node_has_ip(topology, destination_node, candidate_ip, timeout_s):
-        return [Rail(source_ip=_source_ip_for_dev(topology, source_node, dev, timeout_s), destination_ip=candidate_ip, dev=dev)]
+    if _node_has_ip(topology, args, destination_node, candidate_ip, timeout_s):
+        return [Rail(source_ip=_source_ip_for_dev(topology, args, source_node, dev, timeout_s), destination_ip=candidate_ip, dev=dev)]
     return [Rail(source_ip=topology.get_node(source_node).fabric_ip or topology.get_node(source_node).fabric_host, destination_ip=target, dev=dev)]
 
 
-def _node_has_ip(topology: TransferTopology, node: str, ip: str, timeout_s: int) -> bool:
+def _node_has_ip(topology: TransferTopology, args: argparse.Namespace, node: str, ip: str, timeout_s: int) -> bool:
     script = "ip -4 -o addr show scope global | awk -v ip={ip} '{{split($4,a,\"/\"); if (a[1] == ip) found=1}} END {{exit(found ? 0 : 1)}}'".format(ip=shlex.quote(ip))
-    result = _run_ssh(topology, node, script, timeout_s)
+    result = _run_node(topology, args, node, script, timeout_s)
     return result.returncode == 0
 
 
-def _source_ip_for_dev(topology: TransferTopology, node: str, dev: str, timeout_s: int) -> str:
+def _source_ip_for_dev(topology: TransferTopology, args: argparse.Namespace, node: str, dev: str, timeout_s: int) -> str:
     script = "ip -4 -o addr show dev {dev} scope global | awk '{{split($4,a,\"/\"); print a[1]; exit}}'".format(dev=shlex.quote(dev))
-    result = _run_ssh(topology, node, script, timeout_s)
+    result = _run_node(topology, args, node, script, timeout_s)
     if result.returncode != 0 or result.stdout.strip() == "":
         raise RuntimeError(f"no source ip for {node}:{dev}: {result.stderr}")
     return result.stdout.strip()
 
 
-def _destination_has_size(topology: TransferTopology, node: str, destination_path: str, item: FileItem, timeout_s: int) -> bool:
+def _destination_has_size(topology: TransferTopology, args: argparse.Namespace, node: str, destination_path: str, item: FileItem, timeout_s: int) -> bool:
     dst = _join(destination_path, item.relpath)
-    result = _run_ssh(topology, node, f"stat -c %s {shlex.quote(dst)} 2>/dev/null || true", timeout_s)
+    result = _run_node(topology, args, node, f"stat -c %s {shlex.quote(dst)} 2>/dev/null || true", timeout_s)
     return result.returncode == 0 and result.stdout.strip() == str(item.size)
 
 
@@ -439,12 +440,20 @@ def _join(root: str, relpath: str) -> str:
     return str(PurePosixPath(root) / relpath)
 
 
-def _run_ssh(topology: TransferTopology, node: str, script: str, timeout_s: int) -> subprocess.CompletedProcess[str]:
+def _is_local_node(args: argparse.Namespace, node: str) -> bool:
+    return str(getattr(args, "local_node", "") or "") == node
+
+
+def _run_node(topology: TransferTopology, args: argparse.Namespace, node: str, script: str, timeout_s: int) -> subprocess.CompletedProcess[str]:
+    if _is_local_node(args, node):
+        return subprocess.run(["bash", "-lc", script], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout_s, check=False)
     host = topology.get_node(node).host
     return subprocess.run(["ssh", *topology.ssh_options, host, script], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout_s, check=False)
 
 
-def _popen_ssh(topology: TransferTopology, node: str, script: str) -> subprocess.Popen[str]:
+def _popen_node(topology: TransferTopology, args: argparse.Namespace, node: str, script: str) -> subprocess.Popen[str]:
+    if _is_local_node(args, node):
+        return subprocess.Popen(["bash", "-lc", script], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     host = topology.get_node(node).host
     return subprocess.Popen(["ssh", *topology.ssh_options, host, script], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 

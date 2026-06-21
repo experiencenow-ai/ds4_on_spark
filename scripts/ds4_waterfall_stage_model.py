@@ -290,6 +290,8 @@ def fast_copy_file(
             str(manifest["fast_copy_timeout_s"]),
             "--remote-v2-dir",
             str(manifest["remote_v2_dir"]),
+            "--local-node",
+            source_node,
         ]
         cmd = f"cd {quote_shell_path(str(manifest['remote_v2_dir']))}; PYTHONPATH=src {shell_join(argv)}"
         run_passthrough(["bash", "-lc", cmd])
