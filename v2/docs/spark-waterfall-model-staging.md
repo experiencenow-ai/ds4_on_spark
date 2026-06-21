@@ -73,6 +73,12 @@ The waterfall is per completed file:
    Spark.
 5. The set of files shrinks at every hop.
 
+Spark-to-Spark payload bytes must use the repo fast transfer module
+(`ds4_transfer.fast_copy` / `parallel_nc_fanout_200g_v1`). The script defaults
+to `--transfer-mode fast-copy`, which launches striped unencrypted `nc` streams
+on the static 200G fabric for each adjacent hop. Use `--transfer-mode rsync`
+only as an emergency/debug fallback.
+
 Use explicit Spark fabric hosts and users:
 
 ```bash
@@ -82,6 +88,7 @@ ssh spark0 'mkdir -p /home/spark0/ds4_logs/waterfall; \
     --source-full-dir /home/spark0/ds4_nvme/models/hf/lukealonso/GLM-5.2-NVFP4 \
     --repo-id lukealonso/GLM-5.2-NVFP4 \
     --ssh-host-template "{node}@{node}-200g" \
+    --transfer-mode fast-copy \
     --replace-existing \
     --execute \
     --watch-source \
@@ -115,6 +122,8 @@ done
 - Do not wait for all shards to finish before beginning archive or waterfall
   transfer.
 - Do not copy `.part` files.
+- Do not use Spark-to-Spark `rsync` for normal waterfall staging. It is
+  encrypted, single-file-at-a-time, and far slower than the 200G fast-copy path.
 - Do not use plain `{node}` for worker-to-worker transfer when the sender user
   differs from the target user. Use `{node}@{node}-200g`.
 - Do not use `&& ... & echo $!` for background launchers; it can background the

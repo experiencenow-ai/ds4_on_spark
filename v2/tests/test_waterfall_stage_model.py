@@ -134,6 +134,56 @@ class WaterfallStageModelTests(unittest.TestCase):
             self.assertEqual(by_rel["model-00002-of-00002.safetensors"].size, -1)
             self.assertEqual(by_rel["model-00002-of-00002.safetensors"].needed_ranks, (1,))
 
+    def test_send_file_defaults_to_fast_copy(self) -> None:
+        mod = load_script()
+        calls = []
+        mod.remote_final_exists = lambda host, dst, size: False
+        mod.fast_copy_file = lambda **kwargs: calls.append(("fast-copy", kwargs))
+        mod.rsync_file = lambda *args, **kwargs: calls.append(("rsync", kwargs))
+        manifest = {
+            "transfer_mode": "fast-copy",
+            "transfer_topology": "profiles/transfer/spark_200g.json",
+            "remote_v2_dir": "~/src/ds4_on_spark/v2",
+            "fast_copy_jobs_per_edge": 16,
+            "fast_copy_port_base": 49300,
+            "fast_copy_timeout_s": 7200,
+            "striped_file_stripes": 8,
+            "striped_file_threshold_bytes": 64 * 1024 * 1024,
+        }
+        mod.send_file(
+            Path("/src/model-00001-of-00002.safetensors"),
+            rel="model-00001-of-00002.safetensors",
+            size=123,
+            source_node="spark0",
+            source_base="/src",
+            dest_node="spark1",
+            host="spark1@spark1-200g",
+            dest_base="/dst",
+            manifest=manifest,
+        )
+        self.assertEqual(calls[0][0], "fast-copy")
+        self.assertEqual(calls[0][1]["source_node"], "spark0")
+        self.assertEqual(calls[0][1]["dest_node"], "spark1")
+
+    def test_send_file_can_use_rsync_fallback(self) -> None:
+        mod = load_script()
+        calls = []
+        mod.remote_final_exists = lambda host, dst, size: False
+        mod.fast_copy_file = lambda **kwargs: calls.append(("fast-copy", kwargs))
+        mod.rsync_file = lambda *args, **kwargs: calls.append(("rsync", kwargs))
+        mod.send_file(
+            Path("/src/config.json"),
+            rel="config.json",
+            size=123,
+            source_node="spark0",
+            source_base="/src",
+            dest_node="spark1",
+            host="spark1@spark1-200g",
+            dest_base="/dst",
+            manifest={"transfer_mode": "rsync", "rsync_bwlimit": ""},
+        )
+        self.assertEqual(calls[0][0], "rsync")
+
 
 if __name__ == "__main__":
     unittest.main()

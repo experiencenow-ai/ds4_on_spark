@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import re
@@ -18,6 +19,7 @@ import shutil
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +31,8 @@ DEFAULT_STAGE_TEMPLATE = "/home/{node}/models/hf/{repo_id}"
 DEFAULT_HANDOFF_TEMPLATE = "/home/{node}/ds4_waterfall/{run_id}"
 DEFAULT_REMOTE_SCRIPT = "/tmp/ds4_waterfall_stage_model.py"
 DEFAULT_REMOTE_MANIFEST = "/tmp/ds4_waterfall_manifest_{run_id}.json"
+DEFAULT_REMOTE_V2_DIR = "~/src/ds4_on_spark/v2"
+DEFAULT_TRANSFER_TOPOLOGY = "profiles/transfer/spark_200g.json"
 DEFAULT_SSH_OPTIONS = [
     "-o",
     "BatchMode=yes",
@@ -67,6 +71,18 @@ def scp_argv(src: str, dst: str) -> list[str]:
 
 def rsync_ssh() -> str:
     return " ".join(shlex.quote(item) for item in ["ssh", *DEFAULT_SSH_OPTIONS])
+
+
+def shell_join(argv: list[str]) -> str:
+    return " ".join(shlex.quote(item) for item in argv)
+
+
+def quote_shell_path(path: str) -> str:
+    if path == "~":
+        return "~"
+    if path.startswith("~/"):
+        return "~/" + "/".join(shlex.quote(part) for part in path[2:].split("/"))
+    return shlex.quote(path)
 
 
 def parse_csv(text: str) -> list[str]:
@@ -228,10 +244,64 @@ def remote_final_exists(host: str, dst: str, size: int) -> bool:
     return run(ssh_argv(host, cmd), check=False).returncode == 0
 
 
-def send_file(src: Path, *, rel: str, size: int, host: str, dest_base: str, rsync_bwlimit: str | None) -> None:
+def write_include_manifest(rel: str) -> Path:
+    digest = hashlib.sha256(rel.encode("utf-8")).hexdigest()[:16]
+    path = Path(tempfile.gettempdir()) / f"ds4_waterfall_include_{os.getpid()}_{digest}.txt"
+    path.write_text(rel + "\n", encoding="utf-8")
+    return path
+
+
+def fast_copy_file(
+    *,
+    rel: str,
+    source_node: str,
+    source_base: str,
+    dest_node: str,
+    dest_base: str,
+    manifest: dict[str, Any],
+) -> None:
+    include_path = write_include_manifest(rel)
+    try:
+        argv = [
+            "python3",
+            "-m",
+            "ds4_transfer.fast_copy",
+            "--topology",
+            str(manifest["transfer_topology"]),
+            "--source-node",
+            source_node,
+            "--source-path",
+            source_base,
+            "--include-from",
+            str(include_path),
+            "--destination-node",
+            dest_node,
+            "--destination-path",
+            dest_base,
+            "--jobs-per-edge",
+            str(manifest["fast_copy_jobs_per_edge"]),
+            "--port-base",
+            str(manifest["fast_copy_port_base"]),
+            "--striped-file-stripes",
+            str(manifest["striped_file_stripes"]),
+            "--striped-file-threshold-bytes",
+            str(manifest["striped_file_threshold_bytes"]),
+            "--timeout-s",
+            str(manifest["fast_copy_timeout_s"]),
+            "--remote-v2-dir",
+            str(manifest["remote_v2_dir"]),
+        ]
+        cmd = f"cd {quote_shell_path(str(manifest['remote_v2_dir']))}; PYTHONPATH=src {shell_join(argv)}"
+        run_passthrough(["bash", "-lc", cmd])
+    finally:
+        try:
+            include_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def rsync_file(src: Path, *, rel: str, host: str, dest_base: str, rsync_bwlimit: str | None) -> None:
     dest = f"{dest_base.rstrip('/')}/{rel}"
-    if remote_final_exists(host, dest, size):
-        return
     dest_parent = str(Path(dest).parent)
     tmp = dest + ".part"
     run(ssh_argv(host, f"mkdir -p {shlex.quote(dest_parent)}"))
@@ -241,6 +311,27 @@ def send_file(src: Path, *, rel: str, size: int, host: str, dest_base: str, rsyn
     rsync.extend([str(src), f"{host}:{tmp}"])
     run_passthrough(rsync)
     run(ssh_argv(host, f"mv -f {shlex.quote(tmp)} {shlex.quote(dest)}"))
+
+
+def send_file(
+    src: Path,
+    *,
+    rel: str,
+    size: int,
+    source_node: str,
+    source_base: str,
+    dest_node: str,
+    host: str,
+    dest_base: str,
+    manifest: dict[str, Any],
+) -> None:
+    dest = f"{dest_base.rstrip('/')}/{rel}"
+    if remote_final_exists(host, dest, size):
+        return
+    if manifest.get("transfer_mode") == "rsync":
+        rsync_file(src, rel=rel, host=host, dest_base=dest_base, rsync_bwlimit=manifest.get("rsync_bwlimit"))
+        return
+    fast_copy_file(rel=rel, source_node=source_node, source_base=source_base, dest_node=dest_node, dest_base=dest_base, manifest=manifest)
 
 
 def prepare_local_stage(stage_dir: Path, *, replace_existing: bool, run_id: str) -> None:
@@ -329,12 +420,34 @@ def file_plans_from_manifest(manifest: dict[str, Any]) -> list[FilePlan]:
     ]
 
 
-def process_worker_file(item: FilePlan, *, rank: int, src: Path, stage_dir: Path, next_host: str, next_handoff: str, manifest: dict[str, Any]) -> None:
+def process_worker_file(
+    item: FilePlan,
+    *,
+    rank: int,
+    src: Path,
+    stage_dir: Path,
+    handoff_dir: Path,
+    next_node: str,
+    next_host: str,
+    next_handoff: str,
+    manifest: dict[str, Any],
+) -> None:
+    nodes = list(manifest["nodes"])
     max_rank = max(item.needed_ranks)
     if rank in item.needed_ranks:
         install_local(src, stage_dir / item.rel, item.size, link_mode=str(manifest["link_mode"]))
     if rank < max_rank:
-        send_file(src, rel=item.rel, size=item.size, host=next_host, dest_base=next_handoff, rsync_bwlimit=manifest.get("rsync_bwlimit"))
+        send_file(
+            src,
+            rel=item.rel,
+            size=item.size,
+            source_node=nodes[rank],
+            source_base=str(handoff_dir),
+            dest_node=next_node,
+            host=next_host,
+            dest_base=next_handoff,
+            manifest=manifest,
+        )
     if manifest["cleanup_handoff"]:
         try:
             src.unlink()
@@ -351,7 +464,7 @@ def worker_stream_main(manifest: dict[str, Any], files: list[FilePlan], rank: in
             src = handoff_dir / item.rel
             if not ready_file(src, item.size):
                 continue
-            process_worker_file(item, rank=rank, src=src, stage_dir=stage_dir, next_host=next_host, next_handoff=next_handoff, manifest=manifest)
+            process_worker_file(item, rank=rank, src=src, stage_dir=stage_dir, handoff_dir=handoff_dir, next_node=str(manifest["nodes"][rank + 1]) if rank + 1 < len(manifest["nodes"]) else "", next_host=next_host, next_handoff=next_handoff, manifest=manifest)
             pending.remove(item)
             progressed = True
         if progressed:
@@ -388,7 +501,7 @@ def worker_main(args: argparse.Namespace) -> int:
             continue
         src = handoff_dir / item.rel
         wait_for_file(src, item.size, timeout_s=int(manifest["wait_timeout_s"]), poll_s=float(manifest["poll_s"]))
-        process_worker_file(item, rank=rank, src=src, stage_dir=stage_dir, next_host=next_host, next_handoff=next_handoff, manifest=manifest)
+        process_worker_file(item, rank=rank, src=src, stage_dir=stage_dir, handoff_dir=handoff_dir, next_node=next_node if rank + 1 < len(nodes) else "", next_host=next_host, next_handoff=next_handoff, manifest=manifest)
     write_marker(stage_dir, manifest, rank, files)
     return 0
 
@@ -426,7 +539,7 @@ def wait_worker(host: str, pid: int, log_path: str) -> None:
         print(proc.stdout, end="")
 
 
-def orchestrator_stream_files(files: list[FilePlan], *, source_dir: Path, stage0: Path, first_host: str, first_handoff: str, args: argparse.Namespace) -> None:
+def orchestrator_stream_files(files: list[FilePlan], *, source_dir: Path, stage0: Path, first_node: str, first_host: str, first_handoff: str, manifest: dict[str, Any], args: argparse.Namespace) -> None:
     pending = list(files)
     start = time.monotonic()
     while pending:
@@ -438,7 +551,7 @@ def orchestrator_stream_files(files: list[FilePlan], *, source_dir: Path, stage0
             if 0 in item.needed_ranks:
                 install_local(src, stage0 / item.rel, item.size, link_mode=args.link_mode)
             if max(item.needed_ranks) > 0:
-                send_file(src, rel=item.rel, size=item.size, host=first_host, dest_base=first_handoff, rsync_bwlimit=args.rsync_bwlimit)
+                send_file(src, rel=item.rel, size=item.size, source_node=args.nodes[0], source_base=str(source_dir), dest_node=first_node, host=first_host, dest_base=first_handoff, manifest=manifest)
             pending.remove(item)
             progressed = True
             print(json.dumps({"status": "streamed", "rel": item.rel, "remaining": len(pending)}), flush=True)
@@ -475,6 +588,14 @@ def orchestrator_main(args: argparse.Namespace) -> int:
         "wait_timeout_s": args.wait_timeout_s,
         "poll_s": args.poll_s,
         "rsync_bwlimit": args.rsync_bwlimit,
+        "transfer_mode": args.transfer_mode,
+        "remote_v2_dir": args.remote_v2_dir,
+        "transfer_topology": args.transfer_topology,
+        "fast_copy_jobs_per_edge": args.fast_copy_jobs_per_edge,
+        "fast_copy_port_base": args.fast_copy_port_base,
+        "fast_copy_timeout_s": args.fast_copy_timeout_s,
+        "striped_file_stripes": args.striped_file_stripes,
+        "striped_file_threshold_bytes": args.striped_file_threshold_bytes,
         "watch_source": args.watch_source,
         "files": [item.__dict__ for item in files],
         "summary": summarize(files, len(args.nodes)),
@@ -505,15 +626,16 @@ def orchestrator_main(args: argparse.Namespace) -> int:
         print(json.dumps({"status": "worker_started", "rank": rank, "node": node, "pid": pid, "log": log_path}))
     first_handoff = template(args.handoff_dir_template, node=args.nodes[1], rank=1, run_id=run_id, repo_id=args.repo_id) if len(args.nodes) > 1 else ""
     first_host = host_for(args.nodes[1], args.ssh_host_template) if len(args.nodes) > 1 else ""
+    first_node = args.nodes[1] if len(args.nodes) > 1 else ""
     if args.watch_source:
-        orchestrator_stream_files(files, source_dir=source_dir, stage0=stage0, first_host=first_host, first_handoff=first_handoff, args=args)
+        orchestrator_stream_files(files, source_dir=source_dir, stage0=stage0, first_node=first_node, first_host=first_host, first_handoff=first_handoff, manifest=manifest, args=args)
     else:
         for item in files:
             src = source_dir / item.rel
             if 0 in item.needed_ranks:
                 install_local(src, stage0 / item.rel, item.size, link_mode=args.link_mode)
             if max(item.needed_ranks) > 0:
-                send_file(src, rel=item.rel, size=item.size, host=first_host, dest_base=first_handoff, rsync_bwlimit=args.rsync_bwlimit)
+                send_file(src, rel=item.rel, size=item.size, source_node=args.nodes[0], source_base=str(source_dir), dest_node=first_node, host=first_host, dest_base=first_handoff, manifest=manifest)
     write_marker(stage0, manifest, 0, files)
     for host, pid, log_path in workers:
         wait_worker(host, pid, log_path)
@@ -537,6 +659,14 @@ def main() -> int:
     parser.add_argument("--remote-script", default=DEFAULT_REMOTE_SCRIPT)
     parser.add_argument("--wait-timeout-s", type=int, default=0)
     parser.add_argument("--poll-s", type=float, default=1.0)
+    parser.add_argument("--transfer-mode", choices=("fast-copy", "rsync"), default="fast-copy")
+    parser.add_argument("--remote-v2-dir", default=DEFAULT_REMOTE_V2_DIR)
+    parser.add_argument("--transfer-topology", default=DEFAULT_TRANSFER_TOPOLOGY)
+    parser.add_argument("--fast-copy-jobs-per-edge", type=int, default=16)
+    parser.add_argument("--fast-copy-port-base", type=int, default=49300)
+    parser.add_argument("--fast-copy-timeout-s", type=int, default=7200)
+    parser.add_argument("--striped-file-stripes", type=int, default=8)
+    parser.add_argument("--striped-file-threshold-bytes", type=int, default=64 * 1024 * 1024)
     parser.add_argument("--rsync-bwlimit", default="")
     parser.add_argument("--replace-existing", action="store_true")
     parser.add_argument("--cleanup-handoff", action="store_true", default=True)
