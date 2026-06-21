@@ -202,6 +202,22 @@ class WaterfallStageModelTests(unittest.TestCase):
         )
         self.assertEqual(calls, ["send", "install"])
 
+    def test_prune_stage_dir_removes_only_unrequired_files(self) -> None:
+        mod = load_script()
+        with tempfile.TemporaryDirectory() as tmp:
+            stage = Path(tmp) / "stage"
+            (stage / "nested").mkdir(parents=True)
+            (stage / "config.json").write_text("{}", encoding="utf-8")
+            (stage / "nested" / "keep.txt").write_text("keep", encoding="utf-8")
+            (stage / "nested" / "extra.bin").write_bytes(b"extra")
+            (stage / ".ds4_stage_view.json").write_text("{}", encoding="utf-8")
+            result = mod.prune_stage_dir(stage, {"config.json", "nested/keep.txt"})
+            self.assertEqual(result["removed_files"], 1)
+            self.assertTrue((stage / "config.json").exists())
+            self.assertTrue((stage / "nested" / "keep.txt").exists())
+            self.assertTrue((stage / ".ds4_stage_view.json").exists())
+            self.assertFalse((stage / "nested" / "extra.bin").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -394,6 +394,48 @@ def write_marker(stage_dir: Path, manifest: dict[str, Any], rank: int, files: li
     (stage_dir / ".ds4_stage_view.json").write_text(json.dumps(marker, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def required_files_for_rank(files: list[FilePlan], rank: int) -> set[str]:
+    return {item.rel for item in files if rank in item.needed_ranks}
+
+
+def prune_stage_dir(stage_dir: Path, required: set[str], *, dry_run: bool = False) -> dict[str, Any]:
+    removed: list[dict[str, Any]] = []
+    kept_extra = {".ds4_stage_view.json"}
+    for path in sorted(stage_dir.rglob("*"), key=lambda item: len(item.parts), reverse=True):
+        if path.is_dir():
+            continue
+        rel = path.relative_to(stage_dir).as_posix()
+        if rel in required or rel in kept_extra:
+            continue
+        size = path.stat().st_size
+        removed.append({"rel": rel, "bytes": size})
+        if not dry_run:
+            path.unlink()
+    if not dry_run:
+        for path in sorted((item for item in stage_dir.rglob("*") if item.is_dir()), key=lambda item: len(item.parts), reverse=True):
+            try:
+                path.rmdir()
+            except OSError:
+                pass
+    return {"removed_files": len(removed), "removed_bytes": sum(item["bytes"] for item in removed), "removed": removed}
+
+
+def prune_stage_main(args: argparse.Namespace) -> int:
+    manifest = load_manifest(Path(args.manifest))
+    files = file_plans_from_manifest(manifest)
+    rank = args.worker_rank
+    nodes = list(manifest["nodes"])
+    if rank < 0 or rank >= len(nodes):
+        raise SystemExit("--worker-rank outside manifest node list")
+    node = nodes[rank]
+    run_id = str(manifest["run_id"])
+    repo_id = str(manifest["repo_id"])
+    stage_dir = Path(template(manifest["stage_dir_template"], node=node, rank=rank, run_id=run_id, repo_id=repo_id))
+    result = prune_stage_dir(stage_dir, required_files_for_rank(files, rank), dry_run=args.prune_dry_run)
+    print(json.dumps({"status": "planned" if args.prune_dry_run else "pruned", "rank": rank, "node": node, "stage_dir": str(stage_dir), **result}, sort_keys=True))
+    return 0
+
+
 def wait_for_file(path: Path, size: int, *, timeout_s: int, poll_s: float) -> None:
     start = time.monotonic()
     while not same_size(path, size):
@@ -678,9 +720,15 @@ def main() -> int:
     parser.add_argument("--watch-source", action="store_true", help="Execute a streaming waterfall and forward source files as they appear")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--worker", action="store_true")
+    parser.add_argument("--prune-stage", action="store_true", help="Remove rank-local stage files that are not required by the manifest")
+    parser.add_argument("--prune-dry-run", action="store_true")
     parser.add_argument("--worker-rank", type=int, default=-1)
     parser.add_argument("--manifest", default="")
     args = parser.parse_args()
+    if args.prune_stage:
+        if not args.manifest or args.worker_rank < 0:
+            raise SystemExit("--prune-stage requires --manifest and --worker-rank")
+        return prune_stage_main(args)
     if args.worker:
         if not args.manifest or args.worker_rank < 0:
             raise SystemExit("--worker requires --manifest and --worker-rank")
