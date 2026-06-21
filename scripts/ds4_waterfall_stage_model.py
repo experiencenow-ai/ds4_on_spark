@@ -581,6 +581,10 @@ def summarize(files: list[FilePlan], node_count: int) -> dict[str, Any]:
     return {"rank_stage_totals": by_rank, "edge_transfer_totals": by_edge}
 
 
+def effective_cleanup_handoff(args: argparse.Namespace) -> bool:
+    return bool(args.cleanup_handoff and not args.watch_source)
+
+
 def start_worker(host: str, rank: int, remote_script: str, remote_manifest: str, log_path: str) -> int:
     cmd = (
         f"mkdir -p {shlex.quote(str(Path(log_path).parent))}; "
@@ -647,7 +651,7 @@ def orchestrator_main(args: argparse.Namespace) -> int:
         "handoff_dir_template": args.handoff_dir_template,
         "ssh_host_template": args.ssh_host_template,
         "link_mode": args.link_mode,
-        "cleanup_handoff": args.cleanup_handoff,
+        "cleanup_handoff": effective_cleanup_handoff(args),
         "wait_timeout_s": args.wait_timeout_s,
         "poll_s": args.poll_s,
         "rsync_bwlimit": args.rsync_bwlimit,

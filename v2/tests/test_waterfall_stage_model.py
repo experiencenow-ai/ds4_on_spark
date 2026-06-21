@@ -75,6 +75,11 @@ class WaterfallStageModelTests(unittest.TestCase):
         mod = load_script()
         self.assertEqual(mod.parse_partition([6, 4, 4]), [6, 4, 4])
 
+    def test_watch_source_keeps_handoff_for_resume_safety(self) -> None:
+        mod = load_script()
+        self.assertFalse(mod.effective_cleanup_handoff(Namespace(cleanup_handoff=True, watch_source=True)))
+        self.assertTrue(mod.effective_cleanup_handoff(Namespace(cleanup_handoff=True, watch_source=False)))
+
     def test_missing_indexed_shards_are_rejected(self) -> None:
         mod = load_script()
         with tempfile.TemporaryDirectory() as tmp:
