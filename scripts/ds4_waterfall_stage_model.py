@@ -33,6 +33,7 @@ DEFAULT_REMOTE_SCRIPT = "/tmp/ds4_waterfall_stage_model.py"
 DEFAULT_REMOTE_MANIFEST = "/tmp/ds4_waterfall_manifest_{run_id}.json"
 DEFAULT_REMOTE_V2_DIR = "~/src/ds4_on_spark/v2"
 DEFAULT_TRANSFER_TOPOLOGY = "profiles/transfer/spark_200g.json"
+DEFAULT_WATCH_REQUIRED_FILES = "tokenizer.json,tokenizer_config.json"
 DEFAULT_SSH_OPTIONS = [
     "-o",
     "BatchMode=yes",
@@ -197,6 +198,14 @@ def build_plan(args: argparse.Namespace) -> list[FilePlan]:
             file_plans.append(FilePlan(rel=rel, size=path.stat().st_size, needed_ranks=tuple(sorted(ranks)), is_safetensors=is_safetensors))
             planned.add(rel)
     if watch_source:
+        for rel in parse_csv(str(getattr(args, "watch_required_files", DEFAULT_WATCH_REQUIRED_FILES))):
+            rel_path = Path(rel)
+            if rel in planned or rel_path.is_absolute() or ".." in rel_path.parts:
+                continue
+            path = source_dir / rel_path
+            size = path.stat().st_size if path.is_file() else -1
+            file_plans.append(FilePlan(rel=rel, size=size, needed_ranks=tuple(range(len(partition))), is_safetensors=False))
+            planned.add(rel)
         for rel, ranks in sorted(ranks_by_shard.items()):
             if rel not in planned and ranks:
                 file_plans.append(FilePlan(rel=rel, size=-1, needed_ranks=tuple(sorted(ranks)), is_safetensors=True))
@@ -741,6 +750,7 @@ def main() -> int:
     parser.add_argument("--skip-cache", action="store_true", default=True)
     parser.add_argument("--allow-partial", action="store_true")
     parser.add_argument("--watch-source", action="store_true", help="Execute a streaming waterfall and forward source files as they appear")
+    parser.add_argument("--watch-required-files", default=DEFAULT_WATCH_REQUIRED_FILES, help="Comma-separated non-shard metadata files that must be present on every rank even if they appear after --watch-source starts")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--worker", action="store_true")
     parser.add_argument("--prune-stage", action="store_true", help="Remove rank-local stage files that are not required by the manifest")

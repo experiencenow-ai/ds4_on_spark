@@ -18,7 +18,7 @@ notes:
   - Use the same IndexShare-safe PP13 partition as FP8: 6,4,4,4,4,8,8,8,8,8,4,4,8. Stage starts are full-indexer layers, so the sparse-attention shared-indexer constraint is preserved.
   - First launch keeps MTP disabled even though the repo includes model-mtp.safetensors. Enable MTP only after the separate PP-safe MTP preflight and canary pass.
   - KV cache remains fp8_e4m3. Do not switch GLM MLA to nvfp4 KV cache unless vLLM explicitly supports nvfp4 KV with MLA.
-  - Native FP4 is required. The profile pins flashinfer-cutlass for linear and MoE and disables MarlinNvFp4LinearKernel plus EmulationNvFp4LinearKernel so a bad fallback fails early.
+  - Native FP4 is required. The profile pins FlashInfer sparse MLA attention plus flashinfer-cutlass for linear and MoE, and disables MarlinNvFp4LinearKernel plus EmulationNvFp4LinearKernel so a bad fallback fails early.
   - The active full archive lives on spark0 external NVMe. Mac 22TB is an inactive/archive target, not the active source for launch.
   - Stage every node with the fast-copy waterfall script: spark0 keeps the full archive on external NVMe, while /home/{node}/models/hf/lukealonso/GLM-5.2-NVFP4 contains only the files needed by that pipeline rank.
   - Once the HF index is present, use --watch-source to overlap download, archive mirror, and Spark waterfall staging. Completed files can move immediately; never copy *.part files.

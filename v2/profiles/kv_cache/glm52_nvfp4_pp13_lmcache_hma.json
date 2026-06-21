@@ -42,7 +42,7 @@
     "--kv-cache-dtype",
     "fp8_e4m3",
     "--attention-backend",
-    "TRITON_MLA",
+    "FLASHINFER_MLA_SPARSE",
     "--linear-backend",
     "flashinfer-cutlass",
     "--moe-backend",

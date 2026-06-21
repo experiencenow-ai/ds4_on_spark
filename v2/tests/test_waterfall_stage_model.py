@@ -80,6 +80,36 @@ class WaterfallStageModelTests(unittest.TestCase):
         self.assertFalse(mod.effective_cleanup_handoff(Namespace(cleanup_handoff=True, watch_source=True)))
         self.assertTrue(mod.effective_cleanup_handoff(Namespace(cleanup_handoff=True, watch_source=False)))
 
+    def test_watch_source_tracks_required_metadata_that_arrives_late(self) -> None:
+        mod = load_script()
+        with tempfile.TemporaryDirectory() as tmp:
+            model_dir = Path(tmp) / "GLM-5.2-NVFP4"
+            model_dir.mkdir()
+            (model_dir / "model-00001-of-00001.safetensors").write_bytes(b"weights")
+            index = {
+                "metadata": {},
+                "weight_map": {
+                    "model.layers.0.self_attn.q_proj.weight": "model-00001-of-00001.safetensors",
+                },
+            }
+            (model_dir / "model.safetensors.index.json").write_text(json.dumps(index), encoding="utf-8")
+            args = Namespace(
+                source_full_dir=str(model_dir),
+                partition=[1, 1],
+                nodes=["spark0", "spark1"],
+                layer_regex=mod.DEFAULT_LAYER_REGEX,
+                extra_safetensors="all",
+                skip_cache=True,
+                allow_partial=True,
+                watch_source=True,
+                watch_required_files="tokenizer.json,tokenizer_config.json",
+            )
+            by_rel = {item.rel: item for item in mod.build_plan(args)}
+            self.assertEqual(by_rel["tokenizer.json"].needed_ranks, (0, 1))
+            self.assertEqual(by_rel["tokenizer_config.json"].needed_ranks, (0, 1))
+            self.assertEqual(by_rel["tokenizer.json"].size, -1)
+            self.assertFalse(by_rel["tokenizer.json"].is_safetensors)
+
     def test_missing_indexed_shards_are_rejected(self) -> None:
         mod = load_script()
         with tempfile.TemporaryDirectory() as tmp:
