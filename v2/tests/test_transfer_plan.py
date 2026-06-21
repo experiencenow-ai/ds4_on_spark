@@ -5,7 +5,7 @@ from pathlib import Path
 from argparse import Namespace
 import unittest
 
-from ds4_transfer.fast_copy import _is_local_node, _port_for_shard, _striped_remote_python, _validate_port_ranges
+from ds4_transfer.fast_copy import FileItem, _is_local_node, _port_for_shard, _stripe_count_for_item, _striped_remote_python, _validate_port_ranges
 from ds4_transfer.service import TransferRequest, TransferTopology, plan_transfer, run_transfer
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -105,6 +105,11 @@ class TransferPlanTests(unittest.TestCase):
     def test_local_node_marks_self_for_non_ssh_source_commands(self) -> None:
         self.assertTrue(_is_local_node(Namespace(local_node="spark8"), "spark8"))
         self.assertFalse(_is_local_node(Namespace(local_node="spark8"), "spark9"))
+
+    def test_small_files_use_single_python_stripe(self) -> None:
+        args = Namespace(striped_file_threshold_bytes=64 * 1024 * 1024, striped_file_stripes=8)
+        self.assertEqual(_stripe_count_for_item(args, FileItem(".gitattributes", 1521)), 1)
+        self.assertEqual(_stripe_count_for_item(args, FileItem("model-00001-of-00087.safetensors", 5_368_709_120)), 8)
 
 
 if __name__ == "__main__":

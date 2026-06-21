@@ -152,48 +152,21 @@ def _port_for_shard(args: argparse.Namespace, stage_index: int, edge_index: int,
 def _copy_file(topology: TransferTopology, args: argparse.Namespace, item: FileItem, source_node: str, source_path: str, destination_node: str, destination_path: str, rail: Rail, port: int) -> None:
     src = _join(source_path, item.relpath)
     dst = _join(destination_path, item.relpath)
-    if item.size >= args.striped_file_threshold_bytes and args.striped_file_stripes > 1:
-        _copy_file_striped(topology, args, item, source_node, src, destination_node, dst, rail, port)
-        return
-    tmp = f"{dst}.ds4tmp"
-    parent = str(PurePosixPath(dst).parent)
-    server_script = "set -eu; mkdir -p {parent}; rm -f {tmp}; nc -l -s {bind} -p {port} > {tmp}; mv {tmp} {dst}".format(
-        parent=shlex.quote(parent),
-        tmp=shlex.quote(tmp),
-        bind=shlex.quote(rail.destination_ip),
-        port=port,
-        dst=shlex.quote(dst),
-    )
-    client_script = "set -eu; for i in $(seq 1 50); do nc -N -s {bind} {dst_ip} {port} < {src} && exit 0; sleep 0.2; done; exit 1".format(
-        bind=shlex.quote(rail.source_ip),
-        dst_ip=shlex.quote(rail.destination_ip),
-        port=port,
-        src=shlex.quote(src),
-    )
-    server = _popen_node(topology, args, destination_node, server_script)
-    time.sleep(0.2)
-    try:
-        client = _run_node(topology, args, source_node, client_script, args.timeout_s)
-        if client.returncode != 0:
-            if server.poll() is None:
-                server.kill()
-            raise RuntimeError(f"copy client failed for {item.relpath}: {client.stderr[-1000:]}")
-        rc = server.wait(timeout=args.timeout_s)
-    finally:
-        if server.poll() is None:
-            server.kill()
-    if rc != 0:
-        stderr = server.stderr.read()[-1000:] if server.stderr is not None else ""
-        raise RuntimeError(f"copy server failed for {item.relpath}: {stderr}")
-    if not _destination_has_size(topology, args, destination_node, destination_path, item, args.timeout_s):
-        raise RuntimeError(f"destination size mismatch for {destination_node}:{dst}")
+    _copy_file_striped(topology, args, item, source_node, src, destination_node, dst, rail, port)
 
 
 def _copy_file_striped(topology: TransferTopology, args: argparse.Namespace, item: FileItem, source_node: str, src: str, destination_node: str, dst: str, rail: Rail, port: int) -> None:
-    server_script = _striped_server_script(args, item, dst, rail, port)
-    client_script = _striped_client_script(args, src, rail, port)
+    stripe_count = _stripe_count_for_item(args, item)
+    server_script = _striped_server_script(args, item, dst, rail, port, stripe_count)
+    client_script = _striped_client_script(args, src, rail, port, stripe_count)
     _run_striped_copy(topology, args, item, source_node, destination_node, server_script, client_script)
     _verify_striped_destination(topology, args, item, destination_node, dst)
+
+
+def _stripe_count_for_item(args: argparse.Namespace, item: FileItem) -> int:
+    if item.size >= args.striped_file_threshold_bytes and args.striped_file_stripes > 1:
+        return args.striped_file_stripes
+    return 1
 
 
 def _striped_remote_python(args: argparse.Namespace) -> str:
@@ -214,6 +187,7 @@ def _striped_server_script(
     dst: str,
     rail: Rail,
     port: int,
+    stripe_count: int,
 ) -> str:
     tmp = f"{dst}.ds4tmp"
     parent = str(PurePosixPath(dst).parent)
@@ -228,7 +202,7 @@ def _striped_server_script(
         python=_striped_remote_python(args),
         bind=shlex.quote(rail.destination_ip),
         port=port,
-        stripes=args.striped_file_stripes,
+        stripes=stripe_count,
         size=item.size,
         timeout=args.timeout_s,
         dst=shlex.quote(dst),
@@ -240,6 +214,7 @@ def _striped_client_script(
     src: str,
     rail: Rail,
     port: int,
+    stripe_count: int,
 ) -> str:
     return (
         "set -eu; {python} send-file --source {src} --source-ip {source_ip} "
@@ -251,7 +226,7 @@ def _striped_client_script(
         source_ip=shlex.quote(rail.source_ip),
         destination_ip=shlex.quote(rail.destination_ip),
         port=port,
-        stripes=args.striped_file_stripes,
+        stripes=stripe_count,
         timeout=args.timeout_s,
     )
 
