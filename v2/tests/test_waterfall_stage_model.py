@@ -217,6 +217,11 @@ class WaterfallStageModelTests(unittest.TestCase):
             self.assertTrue((stage / "nested" / "keep.txt").exists())
             self.assertTrue((stage / ".ds4_stage_view.json").exists())
             self.assertFalse((stage / "nested" / "extra.bin").exists())
+            files = [
+                mod.FilePlan(rel="config.json", size=2, needed_ranks=(0,), is_safetensors=False),
+                mod.FilePlan(rel="nested/keep.txt", size=4, needed_ranks=(0,), is_safetensors=False),
+            ]
+            self.assertEqual(mod.validate_stage_dir(stage, files, 0), {"missing_required": [], "wrong_size": []})
 
 
 if __name__ == "__main__":

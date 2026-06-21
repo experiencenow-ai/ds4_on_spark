@@ -420,6 +420,20 @@ def prune_stage_dir(stage_dir: Path, required: set[str], *, dry_run: bool = Fals
     return {"removed_files": len(removed), "removed_bytes": sum(item["bytes"] for item in removed), "removed": removed}
 
 
+def validate_stage_dir(stage_dir: Path, files: list[FilePlan], rank: int) -> dict[str, Any]:
+    missing: list[str] = []
+    wrong_size: list[str] = []
+    for item in files:
+        if rank not in item.needed_ranks:
+            continue
+        path = stage_dir / item.rel
+        if not path.is_file():
+            missing.append(item.rel)
+        elif item.size >= 0 and path.stat().st_size != item.size:
+            wrong_size.append(item.rel)
+    return {"missing_required": missing, "wrong_size": wrong_size}
+
+
 def prune_stage_main(args: argparse.Namespace) -> int:
     manifest = load_manifest(Path(args.manifest))
     files = file_plans_from_manifest(manifest)
@@ -431,8 +445,13 @@ def prune_stage_main(args: argparse.Namespace) -> int:
     run_id = str(manifest["run_id"])
     repo_id = str(manifest["repo_id"])
     stage_dir = Path(template(manifest["stage_dir_template"], node=node, rank=rank, run_id=run_id, repo_id=repo_id))
+    validation = validate_stage_dir(stage_dir, files, rank)
+    if validation["missing_required"] or validation["wrong_size"]:
+        raise SystemExit(json.dumps({"status": "invalid", "rank": rank, "node": node, **validation}, sort_keys=True))
     result = prune_stage_dir(stage_dir, required_files_for_rank(files, rank), dry_run=args.prune_dry_run)
-    print(json.dumps({"status": "planned" if args.prune_dry_run else "pruned", "rank": rank, "node": node, "stage_dir": str(stage_dir), **result}, sort_keys=True))
+    if not args.prune_dry_run:
+        write_marker(stage_dir, manifest, rank, files)
+    print(json.dumps({"status": "planned" if args.prune_dry_run else "pruned", "rank": rank, "node": node, "stage_dir": str(stage_dir), **validation, **result}, sort_keys=True))
     return 0
 
 
