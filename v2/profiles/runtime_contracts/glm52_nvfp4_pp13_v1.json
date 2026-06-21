@@ -96,6 +96,7 @@
       "--quantization modelopt_fp4",
       "--kv-cache-dtype fp8_e4m3",
       "--attention-backend FLASHINFER_MLA_SPARSE",
+      "--enforce-eager",
       "--linear-backend flashinfer-cutlass",
       "--moe-backend flashinfer-cutlass",
       "--reasoning-parser glm45",
