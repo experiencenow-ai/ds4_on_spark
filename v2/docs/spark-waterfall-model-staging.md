@@ -116,6 +116,50 @@ for n in spark1 spark2 spark3 spark4 spark5 spark6 spark7 spark8 spark9 sparka s
 done
 ```
 
+## Launch Isolation Notes
+
+Do not confuse model staging with model quality. A successful waterfall means
+the full archive is on spark0 external NVMe and each Spark internal NVMe has
+only the files needed by that pipeline rank. The next checks are vLLM load,
+`/v1/models`, first-forward, and output sanity.
+
+For GLM-5.2-NVFP4 on the Spark SM120/SM121 GPUs, FlashInfer XQA MLA requires
+FP8 KV cache. The BF16-KV path can finish loading but fail on first forward
+with:
+
+```text
+XQA MLA only supports fp8 operation on SM120/SM121 GPUs
+```
+
+This still uses FP4 weights. `--kv-cache-dtype fp8_e4m3` is the KV-cache dtype,
+not a return to the FP8 model.
+
+Use lifecycle overrides to isolate launch behavior without hand-editing
+generated scripts. For example, removing the generated KV-transfer connector is
+the supported no-LMCache canary path:
+
+```bash
+PYTHONPATH=src python3 scripts/ds4_pipeline_lifecycle.py launch \
+  --topology profiles/topology/static_sparks_glm52_nvfp4_pp13.json \
+  --service glm52_nvfp4_pp13 \
+  --execute --stagger-s 3 --probe-timeout-s 900 \
+  --remote-env VLLM_USE_FLASHINFER_MOE_FP4=0 \
+  --remote-remove-arg=--kv-transfer-config \
+  --remote-set-arg-kv=--attention-backend=FLASHINFER_MLA_SPARSE \
+  --remote-set-arg-kv=--kv-cache-dtype=fp8_e4m3 \
+  --remote-set-arg-kv=--linear-backend=cutlass \
+  --remote-set-arg-kv=--moe-backend=cutlass \
+  --remote-set-arg-kv=--max-num-seqs=1 \
+  --remote-set-arg-kv=--max-num-batched-tokens=4096 \
+  --remote-arg=--no-enable-flashinfer-autotune
+```
+
+Live evidence from the 2026-06-22 canary: all 13 ranks loaded and `/v1/models`
+served `glm-5.2-nvfp4-pp13`; a one-token completion executed through the ring.
+The output was not coherent, and the logs warned that FP8 KV scaling fell back
+to `1.0`, so treat bad text here as a backend/KV-scale investigation, not a
+waterfall-staging failure.
+
 ## Pitfalls
 
 - Do not confuse `/mnt/mac/22tb0` with spark0 external NVMe.

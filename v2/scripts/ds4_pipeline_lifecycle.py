@@ -54,6 +54,7 @@ def _args() -> argparse.Namespace:
     parser.add_argument("--stagger-s", type=float, default=2.0)
     parser.add_argument("--remote-env", action="append", default=[], metavar="KEY=VALUE", help="export KEY=VALUE before launch scripts on each Spark node")
     parser.add_argument("--remote-arg", action="append", default=[], metavar="ARG", help="append ARG to each generated vLLM launch command before starting it")
+    parser.add_argument("--remote-remove-arg", action="append", default=[], metavar="OPTION", help="remove an OPTION and its value from each generated vLLM launch command before starting it")
     parser.add_argument("--remote-set-arg", action="append", nargs=2, default=[], metavar=("OPTION", "VALUE"), help="set or replace an OPTION VALUE pair in each generated vLLM launch command before starting it")
     parser.add_argument("--remote-set-arg-kv", action="append", default=[], metavar="OPTION=VALUE", help="set or replace an OPTION VALUE pair; use this when OPTION starts with --")
     parser.add_argument("--prefetch-token-file", default=str(DEFAULT_PREFETCH_TOKEN_FILE), help="Local token file to inject into token-gated vLLM DS4 KV prefetch services; falls back to /tmp on Linux.")
@@ -275,17 +276,19 @@ def _remote_env_exports(entry: dict[str, object], args: argparse.Namespace) -> s
 def _remote_launch_script_env_override(args: argparse.Namespace) -> str:
     pairs = _parse_remote_env(getattr(args, "remote_env", []) or [])
     remote_args = _parse_remote_args(getattr(args, "remote_arg", []) or [])
+    remote_remove_args = _parse_remote_remove_args(getattr(args, "remote_remove_arg", []) or [])
     remote_set_args = _parse_remote_set_args(
         getattr(args, "remote_set_arg", []) or [],
         getattr(args, "remote_set_arg_kv", []) or [],
     )
-    if not pairs and not remote_args and not remote_set_args:
+    if not pairs and not remote_args and not remote_remove_args and not remote_set_args:
         return ""
     data = json.dumps(dict(pairs), separators=(",", ":"))
     arg_data = json.dumps(remote_args, separators=(",", ":"))
+    remove_arg_data = json.dumps(remote_remove_args, separators=(",", ":"))
     set_arg_data = json.dumps(remote_set_args, separators=(",", ":"))
     code = _remote_launch_script_env_override_code()
-    return f"DS4_REMOTE_ENV_OVERRIDES={shlex.quote(data)} DS4_REMOTE_ARG_OVERRIDES={shlex.quote(arg_data)} DS4_REMOTE_SET_ARG_OVERRIDES={shlex.quote(set_arg_data)} SCRIPT=\"$script\" python3 -c {shlex.quote(code)}"
+    return f"DS4_REMOTE_ENV_OVERRIDES={shlex.quote(data)} DS4_REMOTE_ARG_OVERRIDES={shlex.quote(arg_data)} DS4_REMOTE_REMOVE_ARG_OVERRIDES={shlex.quote(remove_arg_data)} DS4_REMOTE_SET_ARG_OVERRIDES={shlex.quote(set_arg_data)} SCRIPT=\"$script\" python3 -c {shlex.quote(code)}"
 
 
 def _remote_launch_script_env_override_code() -> str:
@@ -294,6 +297,7 @@ def _remote_launch_script_env_override_code() -> str:
         "path=os.environ['SCRIPT']\n"
         "overrides=json.loads(os.environ.get('DS4_REMOTE_ENV_OVERRIDES','{}'))\n"
         "extra_args=json.loads(os.environ.get('DS4_REMOTE_ARG_OVERRIDES','[]'))\n"
+        "remove_args=json.loads(os.environ.get('DS4_REMOTE_REMOVE_ARG_OVERRIDES','[]'))\n"
         "set_args=json.loads(os.environ.get('DS4_REMOTE_SET_ARG_OVERRIDES','[]'))\n"
         "with open(path,encoding='utf-8') as f:\n"
         "    text=f.read()\n"
@@ -322,6 +326,30 @@ def _remote_launch_script_env_override_code() -> str:
         "        if arg not in parts:\n"
         "            parts.append(arg)\n"
         "    return shlex.join(parts)\n"
+        "def rewrite_exec_remove_args(line,args):\n"
+        "    if not line.startswith('exec env '):\n"
+        "        return line\n"
+        "    parts=shlex.split(line)\n"
+        "    out=[]\n"
+        "    i=0\n"
+        "    while i < len(parts):\n"
+        "        part=parts[i]\n"
+        "        removed=False\n"
+        "        for opt in args:\n"
+        "            if part == opt:\n"
+        "                i+=1\n"
+        "                if i < len(parts) and not parts[i].startswith('--'):\n"
+        "                    i+=1\n"
+        "                removed=True\n"
+        "                break\n"
+        "            if part.startswith(opt+'='):\n"
+        "                i+=1\n"
+        "                removed=True\n"
+        "                break\n"
+        "        if not removed:\n"
+        "            out.append(part)\n"
+        "            i+=1\n"
+        "    return shlex.join(out)\n"
         "def rewrite_exec_set_args(line,args):\n"
         "    if not line.startswith('exec env '):\n"
         "        return line\n"
@@ -356,6 +384,11 @@ def _remote_launch_script_env_override_code() -> str:
         "if extra_args:\n"
         "    had_newline=text.endswith('\\n')\n"
         "    text='\\n'.join(rewrite_exec_args(line,extra_args) for line in text.splitlines())\n"
+        "    if had_newline:\n"
+        "        text+='\\n'\n"
+        "if remove_args:\n"
+        "    had_newline=text.endswith('\\n')\n"
+        "    text='\\n'.join(rewrite_exec_remove_args(line,remove_args) for line in text.splitlines())\n"
         "    if had_newline:\n"
         "        text+='\\n'\n"
         "if set_args:\n"
@@ -403,6 +436,15 @@ def _parse_remote_args(items: list[str]) -> list[str]:
     for item in items:
         if not item or "\n" in item or "\x00" in item:
             raise ValueError(f"invalid --remote-arg value: {item!r}")
+        out.append(item)
+    return out
+
+
+def _parse_remote_remove_args(items: list[str]) -> list[str]:
+    out = []
+    for item in items:
+        if not item.startswith("--") or "=" in item or "\n" in item or "\x00" in item:
+            raise ValueError(f"invalid --remote-remove-arg value: {item!r}")
         out.append(item)
     return out
 
