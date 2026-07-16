@@ -10,7 +10,7 @@ import subprocess
 import sys
 import time
 
-from .service import TransferTopology
+from .service import TransferFabricRail, TransferTopology
 
 
 @dataclass(frozen=True)
@@ -293,32 +293,13 @@ def _list_files(topology: TransferTopology, source_node: str, source_path: str, 
 def _discover_rails(topology: TransferTopology, source_node: str, destination_node: str, timeout_s: int) -> list[Rail]:
     configured = topology.get_fabric_rails(source_node, destination_node)
     if configured:
-        live = [
-            Rail(
-                source_ip=rail.source_ip,
-                destination_ip=rail.destination_ip,
-                dev=rail.name or "configured",
-            )
-            for rail in configured
-            if _configured_rail_is_live(
-                topology,
-                source_node,
-                destination_node,
-                rail.source_ip,
-                rail.destination_ip,
-                timeout_s,
-            )
-        ]
-        if not live:
-            details = ", ".join(
-                f"{rail.source_ip}->{rail.destination_ip}"
-                for rail in configured
-            )
-            raise RuntimeError(
-                f"no configured 200G rail is live for "
-                f"{source_node}->{destination_node}: {details}"
-            )
-        return live
+        return _qualified_configured_rails(
+            topology,
+            source_node,
+            destination_node,
+            configured,
+            timeout_s,
+        )
     destination = topology.get_node(destination_node)
     target = destination.fabric_ip or destination.fabric_host
     route = _run_ssh(topology, source_node, f"ip route show {shlex.quote(target)}", timeout_s)
@@ -343,6 +324,41 @@ def _discover_rails(topology: TransferTopology, source_node: str, destination_no
     dst_ip = words[words.index("via") + 1]
     dev = words[words.index("dev") + 1]
     return [Rail(source_ip=_source_ip_for_dev(topology, source_node, dev, timeout_s), destination_ip=dst_ip, dev=dev)]
+
+
+def _qualified_configured_rails(
+    topology: TransferTopology,
+    source_node: str,
+    destination_node: str,
+    configured: tuple[TransferFabricRail, ...],
+    timeout_s: int,
+) -> list[Rail]:
+    live = [
+        Rail(
+            source_ip=rail.source_ip,
+            destination_ip=rail.destination_ip,
+            dev=rail.name or "configured",
+        )
+        for rail in configured
+        if _configured_rail_is_live(
+            topology,
+            source_node,
+            destination_node,
+            rail.source_ip,
+            rail.destination_ip,
+            timeout_s,
+        )
+    ]
+    if live:
+        return live
+    details = ", ".join(
+        f"{rail.source_ip}->{rail.destination_ip}"
+        for rail in configured
+    )
+    raise RuntimeError(
+        f"no configured 200G rail is live for "
+        f"{source_node}->{destination_node}: {details}"
+    )
 
 
 def _configured_rail_is_live(
