@@ -1,0 +1,113 @@
+{
+  "format": "ds4-spark-ssh-failover-v1",
+  "ssh_binary": "/usr/bin/ssh",
+  "direct_timeout_s": 0.75,
+  "ring_timeout_s": 3.0,
+  "wifi_timeout_s": 10.0,
+  "route_log": "~/.local/state/ds4/spark_ssh_routes.log",
+  "spark_known_hosts": "~/.ssh/ds4_spark_known_hosts",
+  "emergency": {
+    "user": "sparkemerg",
+    "port": 2222,
+    "known_hosts": "~/.ssh/ds4_emergency_known_hosts"
+  },
+  "ring_bastions": ["spark8", "spark9"],
+  "wifi_bastions": ["spark8", "spark9"],
+  "nodes": [
+    {
+      "node_id": "spark0",
+      "user": "spark0",
+      "management_ip": "10.20.0.10",
+      "fabric_ip": "10.10.100.10",
+      "wifi_hosts": []
+    },
+    {
+      "node_id": "spark1",
+      "user": "spark1",
+      "management_ip": "10.20.0.11",
+      "fabric_ip": "10.10.100.11",
+      "wifi_hosts": ["fe80::89e:c09e:2d88:7d37%en1", "edgexpert-d623.local"]
+    },
+    {
+      "node_id": "spark2",
+      "user": "spark2",
+      "management_ip": "10.20.0.12",
+      "fabric_ip": "10.10.100.12",
+      "wifi_hosts": ["fe80::174f:f2bf:b7fa:20e6%en1", "aitopatom-931a.local"]
+    },
+    {
+      "node_id": "spark3",
+      "user": "spark3",
+      "management_ip": "10.20.0.13",
+      "fabric_ip": "10.10.100.13",
+      "wifi_hosts": ["fe80::d8f8:a6ea:14e2:4cd6%en1", "aitopatom-a18f.local"]
+    },
+    {
+      "node_id": "spark4",
+      "user": "spark4",
+      "management_ip": "10.20.0.14",
+      "fabric_ip": "10.10.100.14",
+      "wifi_hosts": ["fe80::f1ca:61d7:aa71:30af%en1", "aitopatom-c342.local"]
+    },
+    {
+      "node_id": "spark5",
+      "user": "spark5",
+      "management_ip": "10.20.0.15",
+      "fabric_ip": "10.10.100.15",
+      "wifi_hosts": []
+    },
+    {
+      "node_id": "spark6",
+      "user": "spark6",
+      "management_ip": "10.20.0.16",
+      "fabric_ip": "10.10.100.16",
+      "wifi_hosts": ["fe80::e20c:71c7:6538:9d87%en1", "aitopatom-c637.local"]
+    },
+    {
+      "node_id": "spark7",
+      "user": "spark7",
+      "management_ip": "10.20.0.17",
+      "fabric_ip": "10.10.100.17",
+      "wifi_hosts": [
+        "fe80::f070:ea24:a754:e48e%en1",
+        "thinkstation-pgx.local",
+        "thinkstationpgx-1449.local"
+      ]
+    },
+    {
+      "node_id": "spark8",
+      "user": "spark8",
+      "management_ip": "10.20.0.18",
+      "fabric_ip": "10.10.100.18",
+      "wifi_hosts": ["spark8.local", "fe80::4636:4335:53b8:70f2%en1"]
+    },
+    {
+      "node_id": "spark9",
+      "user": "spark9",
+      "management_ip": "10.20.0.19",
+      "fabric_ip": "10.10.100.19",
+      "wifi_hosts": ["spark9.local", "fe80::4d6c:b613:855e:8aa1%en1"]
+    },
+    {
+      "node_id": "sparka",
+      "user": "sparka",
+      "management_ip": "10.20.0.20",
+      "fabric_ip": "10.10.100.20",
+      "wifi_hosts": ["fe80::ea3c:e72b:1979:2b32%en1", "sparka.local"]
+    },
+    {
+      "node_id": "sparkb",
+      "user": "sparkb",
+      "management_ip": "10.20.0.21",
+      "fabric_ip": "10.10.100.21",
+      "wifi_hosts": ["fe80::1f44:cc8a:7198:d696%en1", "sparkb.local"]
+    },
+    {
+      "node_id": "sparkc",
+      "user": "sparkc",
+      "management_ip": "10.20.0.22",
+      "fabric_ip": "10.10.100.22",
+      "wifi_hosts": ["fe80::b5c8:69b7:189d:95da%en1", "sparkc.local"]
+    }
+  ]
+}

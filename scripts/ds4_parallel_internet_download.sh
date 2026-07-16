@@ -7,39 +7,34 @@ OUT_DIR="${OUT_DIR:-/private/tmp/ds4_parallel_internet_download}"
 SSH_CONNECT_TIMEOUT="${SSH_CONNECT_TIMEOUT:-8}"
 SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout="$SSH_CONNECT_TIMEOUT" -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_transfer_known_hosts)
 NODES=(
-	"spark0 10.20.0.10"
-	"spark1 10.20.0.11"
-	"spark2 10.20.0.12"
-	"spark3 10.20.0.13"
-	"spark4 10.20.0.14"
-	"spark5 10.20.0.15"
-	"spark6 10.20.0.16"
-	"spark7 10.20.0.17"
-	"spark8 10.20.0.18"
-	"spark9 10.20.0.19"
-	"sparka 10.20.0.20"
-	"sparkb 10.20.0.21"
-	"sparkc 10.20.0.22"
+	spark0
+	spark1
+	spark2
+	spark3
+	spark4
+	spark5
+	spark6
+	spark7
+	spark8
+	spark9
+	sparka
+	sparkb
+	sparkc
 )
 
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
 start_ms="$(python3 -c 'import time; print(int(time.time() * 1000))')"
-for pair in "${NODES[@]}"; do
-	set -- $pair
-	node="$1"
-	ip="$2"
+for node in "${NODES[@]}"; do
 	(
-		ssh "${SSH_OPTS[@]}" "$node@$ip" "curl -4 -L -o /dev/null -sS --connect-timeout 5 --max-time 30 -w 'node=$node http_code=%{http_code} remote_ip=%{remote_ip} time_connect=%{time_connect} time_starttransfer=%{time_starttransfer} time_total=%{time_total} size_download=%{size_download} speed_download=%{speed_download}\n' '$URL'"
+		ssh "${SSH_OPTS[@]}" "$node" "curl -4 -L -o /dev/null -sS --connect-timeout 5 --max-time 30 -w 'node=$node http_code=%{http_code} remote_ip=%{remote_ip} time_connect=%{time_connect} time_starttransfer=%{time_starttransfer} time_total=%{time_total} size_download=%{size_download} speed_download=%{speed_download}\n' '$URL'"
 	) > "$OUT_DIR/$node.out" 2> "$OUT_DIR/$node.err" &
 	echo "$!" > "$OUT_DIR/$node.pid"
 done
 
 status=0
-for pair in "${NODES[@]}"; do
-	set -- $pair
-	node="$1"
+for node in "${NODES[@]}"; do
 	pid="$(cat "$OUT_DIR/$node.pid")"
 	if ! wait "$pid"; then
 		status=1
@@ -97,4 +92,3 @@ for r in rows:
 PY
 
 exit "$status"
-
