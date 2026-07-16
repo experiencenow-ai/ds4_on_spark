@@ -29,22 +29,11 @@ SPARK_NODES = (
 )
 SPARK_NODE_COUNT = len(SPARK_NODES)
 DEFAULT_NODES = ",".join(SPARK_NODES)
-SPARK_10G_TARGETS = {
-    "spark0": "spark0-10g",
-    "spark1": "spark1-10g",
-    "spark2": "spark2-10g",
-    "spark3": "spark3-10g",
-    "spark4": "spark4-10g",
-    "spark5": "spark5-10g",
-    "spark6": "spark6-10g",
-    "spark7": "spark7-10g",
-    "spark8": "spark8@10.20.0.18",
-    "spark9": "spark9@10.20.0.19",
-    "sparka": "sparka@10.20.0.20",
-    "sparkb": "sparkb@10.20.0.21",
-    "sparkc": "sparkc@10.20.0.22",
-}
-DEFAULT_NODE_TARGETS = ",".join("%s=%s" % (node,SPARK_10G_TARGETS[node]) for node in SPARK_NODES)
+SPARK_MANAGEMENT_TARGETS = {node:node for node in SPARK_NODES}
+DEFAULT_NODE_TARGETS = ",".join(
+    "%s=%s" % (node,SPARK_MANAGEMENT_TARGETS[node])
+    for node in SPARK_NODES
+)
 LEGACY_EIGHT_NODES = tuple("spark%d" % i for i in range(8))
 TELEMETRY_DIR = "/tmp/ds4_telemetry"
 MAC_TELEMETRY_DIR = os.path.join(TELEMETRY_DIR,"mac")

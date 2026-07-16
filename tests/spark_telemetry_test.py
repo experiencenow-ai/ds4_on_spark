@@ -38,8 +38,8 @@ class SparkTelemetryTest(unittest.TestCase):
         self.assertEqual(telemetry.parse_nodes(""), list(expected))
         self.assertEqual(telemetry.parse_nodes("8x"), legacy)
         self.assertEqual(telemetry.parse_nodes("spark8"), ["spark8"])
-        self.assertEqual(telemetry.SPARK_10G_TARGETS["sparka"], "sparka@10.20.0.20")
-        self.assertIn("sparkc=sparkc@10.20.0.22", telemetry.DEFAULT_NODE_TARGETS)
+        self.assertEqual(telemetry.SPARK_MANAGEMENT_TARGETS["sparka"], "sparka")
+        self.assertIn("sparkc=sparkc", telemetry.DEFAULT_NODE_TARGETS)
         self.assertEqual(telemetry.parse_node_targets("spark4=spark4-10g,spark5"), [("spark4","spark4-10g"), ("spark5","spark5")])
         self.assertEqual(collect.telemetry.DEFAULT_NODE_TARGETS, telemetry.DEFAULT_NODE_TARGETS)
         self.assertEqual(node_mon.CSV_FIELDS, telemetry.CSV_FIELDS)
@@ -100,8 +100,8 @@ class SparkTelemetryTest(unittest.TestCase):
     def test_launchd_collector_template_targets_thirteen_sparks(self):
         with Path("deploy/launchd/com.ds4.spark-telemetry-collector.plist").open("rb") as fp:
             args = plistlib.load(fp)["ProgramArguments"]
-        self.assertIn("spark0=spark0-10g", args[args.index("--nodes") + 1])
-        self.assertIn("sparkc=sparkc@10.20.0.22", args[args.index("--nodes") + 1])
+        self.assertIn("spark0=spark0", args[args.index("--nodes") + 1])
+        self.assertIn("sparkc=sparkc", args[args.index("--nodes") + 1])
         self.assertEqual(args[args.index("--ssh-timeout") + 1],"8")
         self.assertEqual(args[args.index("--fetch-workers") + 1],"13")
 
