@@ -29,6 +29,7 @@ class SparkUplinkPlanTest(unittest.TestCase):
             "sparkf": (15,"10.20.0.25/24","192.168.50.143/24"),
             "spark10": (16,"10.20.0.26/24","192.168.50.144/24"),
             "spark1c": (28,"10.20.0.38/24","192.168.50.156/24"),
+            "spark1f": (31,"10.20.0.41/24","192.168.50.159/24"),
         }
         for node_id,(rank,management,wired) in expected.items():
             plan = MODULE.plan_for_node(node_id)

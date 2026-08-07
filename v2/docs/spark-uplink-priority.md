@@ -20,7 +20,9 @@ uses the upper half of the `/24`.
 
 Spark suffixes are hexadecimal, so `sparkf` is rank 15 and `spark10` is rank
 16. The current 13 nodes, the next three, and another sixteen nodes occupy
-`.128-.156`; no existing address changes when nodes are added.
+`.128-.159`; no existing address changes when nodes are added. Spark addresses
+may continue through `.248`; `.249` remains the Mac, and `.250-.254` remain
+unassigned infrastructure addresses.
 
 ## Failure Behavior
 
