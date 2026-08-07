@@ -31,6 +31,14 @@ TPLINK_METRIC = 200
 ASUS_RETRY_SECONDS = 300
 PROBE_ADDRESS = "1.1.1.1"
 PROBE_URL = "https://1.1.1.1/cdn-cgi/trace"
+NMCLI_RECOVERY_SECONDS = 30
+NMCLI_RECOVERY_INTERVAL_SECONDS = 1
+NMCLI_RECOVERABLE_ERRORS = (
+    "networkmanager is not running",
+    "message recipient disconnected from message bus",
+    "could not create nmclient object",
+    "networkmanager is not available",
+)
 DEFAULT_CONFIG = Path("/etc/ds4-uplink/config.json")
 DEFAULT_STATE_DIR = Path("/run/ds4-uplink")
 
@@ -63,6 +71,11 @@ class UplinkPlan:
         return(self.asus_wired_cidr.split("/",1)[0])
 
 
+def nmcli_failure_is_recoverable(result: subprocess.CompletedProcess[str]) -> bool:
+    detail = f"{result.stderr}\n{result.stdout}".lower()
+    return(any(marker in detail for marker in NMCLI_RECOVERABLE_ERRORS))
+
+
 class Runner:
     def run(
         self,
@@ -71,12 +84,27 @@ class Runner:
         check: bool = True,
         timeout: int = 30,
     ) -> subprocess.CompletedProcess[str]:
-        result = subprocess.run(
-            argv,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
+        deadline = time.monotonic() + NMCLI_RECOVERY_SECONDS
+        recovery_reported = False
+        while True:
+            result = subprocess.run(
+                argv,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            if result.returncode == 0 or argv[0] != "nmcli":
+                break
+            if not nmcli_failure_is_recoverable(result):
+                break
+            if time.monotonic() >= deadline:
+                break
+            if not recovery_reported:
+                print("uplink_recovery networkmanager=waiting",file=sys.stderr)
+                recovery_reported = True
+            time.sleep(NMCLI_RECOVERY_INTERVAL_SECONDS)
+        if recovery_reported and result.returncode == 0:
+            print("uplink_recovery networkmanager=ready",file=sys.stderr)
         if check and result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip()
             raise UplinkError(f"command failed ({result.returncode}): {argv[0]}: {detail}")

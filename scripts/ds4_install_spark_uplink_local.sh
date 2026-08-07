@@ -27,6 +27,7 @@ psk_file="/etc/ds4-uplink/asus.psk"
 [ "$(stat -c %a "$psk_file")" = "600" ] || { echo "ASUS PSK must have mode 0600: $psk_file" >&2; exit 4; }
 install -d -m 0755 /usr/local/sbin /etc/ds4-uplink /var/lib/ds4-uplink
 install -m 0755 "$script_dir/ds4_spark_uplink.py" /usr/local/sbin/ds4_spark_uplink.py
+install -m 0755 "$script_dir/ds4_spark_uplink_canary.sh" /usr/local/sbin/ds4_spark_uplink_canary.sh
 install -m 0644 "$repo_root/deploy/systemd/ds4-uplink-monitor.service" /etc/systemd/system/ds4-uplink-monitor.service
 install -m 0644 "$repo_root/deploy/systemd/ds4-uplink-monitor.timer" /etc/systemd/system/ds4-uplink-monitor.timer
 /usr/local/sbin/ds4_spark_uplink.py plan --node-id "$node_id" --output /etc/ds4-uplink/config.json

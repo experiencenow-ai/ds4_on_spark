@@ -35,6 +35,12 @@ interrupting a working TP-Link fallback. Every transition and failed probe is
 written to the system journal; if no path works the service exits nonzero.
 There is no silent fallback.
 
+Transient NetworkManager restarts are explicit recovery events. Every `nmcli`
+operation retries only the D-Bus/unavailable errors that identify a restart,
+prints `networkmanager=waiting`, and either prints `networkmanager=ready`
+within 30 seconds or fails. The systemd monitor also retries a failed run after
+five seconds.
+
 ## Installation
 
 Install only from a clean checkout pulled from merged `main`. Put the ASUS PSK
@@ -60,3 +66,14 @@ journalctl -u ds4-uplink-monitor.service -n 20
 Acceptance requires both static wired addresses, the wired default at metric
 10, all three canonical profiles, successful Internet traffic bound to
 `enP7s7`, and unchanged `10.10.*`/`ds4ring0` state.
+
+Run the destructive failover canary over the management address only:
+
+```bash
+sudo /usr/local/sbin/ds4_spark_uplink_canary.sh
+```
+
+The canary blocks traffic from the currently selected source addresses with
+temporary policy rules. It does not modify SSIDs, credentials, connection
+profiles, or ring interfaces. A cleanup trap removes both rules and restores
+the ordered monitor even when a canary assertion fails.
