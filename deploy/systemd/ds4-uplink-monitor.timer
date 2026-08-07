@@ -1,0 +1,13 @@
+[Unit]
+Description=Refresh DS4 ordered Spark Internet uplink
+
+[Timer]
+OnBootSec=20s
+OnUnitActiveSec=15s
+RandomizedDelaySec=3s
+AccuracySec=1s
+Persistent=true
+Unit=ds4-uplink-monitor.service
+
+[Install]
+WantedBy=timers.target

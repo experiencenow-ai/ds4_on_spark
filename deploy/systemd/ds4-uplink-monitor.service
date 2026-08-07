@@ -1,0 +1,11 @@
+[Unit]
+Description=DS4 ordered Spark Internet uplink monitor
+After=NetworkManager.service network-online.target
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ds4_spark_uplink.py monitor
+
+[Install]
+WantedBy=multi-user.target
