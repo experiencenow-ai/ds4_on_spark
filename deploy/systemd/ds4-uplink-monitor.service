@@ -6,6 +6,9 @@ Wants=NetworkManager.service
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/ds4_spark_uplink.py monitor
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=60s
 
 [Install]
 WantedBy=multi-user.target

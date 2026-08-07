@@ -68,6 +68,43 @@ class SparkUplinkPlanTest(unittest.TestCase):
                 MODULE.plan_for_node(node_id)
 
 
+class SparkUplinkRunnerTest(unittest.TestCase):
+    def test_nmcli_retries_after_networkmanager_restart(self) -> None:
+        failed = MODULE.subprocess.CompletedProcess(
+            ["nmcli","general"],
+            1,
+            "",
+            "Error: NetworkManager is not running.",
+        )
+        passed = MODULE.subprocess.CompletedProcess(
+            ["nmcli","general"],0,"running\n",""
+        )
+        with (
+            mock.patch.object(MODULE.subprocess,"run",side_effect=[failed,passed]) as run,
+            mock.patch.object(MODULE.time,"sleep") as sleep,
+        ):
+            result = MODULE.Runner().run(["nmcli","general"],check=False)
+        self.assertEqual(result.returncode,0)
+        self.assertEqual(run.call_count,2)
+        sleep.assert_called_once_with(MODULE.NMCLI_RECOVERY_INTERVAL_SECONDS)
+
+    def test_nmcli_does_not_retry_normal_activation_failure(self) -> None:
+        failed = MODULE.subprocess.CompletedProcess(
+            ["nmcli","con","up"],
+            4,
+            "",
+            "Error: Connection activation failed: SSID not found.",
+        )
+        with (
+            mock.patch.object(MODULE.subprocess,"run",return_value=failed) as run,
+            mock.patch.object(MODULE.time,"sleep") as sleep,
+        ):
+            result = MODULE.Runner().run(["nmcli","con","up"],check=False)
+        self.assertEqual(result.returncode,4)
+        run.assert_called_once()
+        sleep.assert_not_called()
+
+
 class SparkUplinkMonitorTest(unittest.TestCase):
     def setUp(self) -> None:
         self.plan = MODULE.plan_for_node("spark0")
