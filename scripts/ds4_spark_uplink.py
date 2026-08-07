@@ -146,7 +146,9 @@ def require_root() -> None:
 
 
 def connection_uuid(runner: Runner,name: str) -> str:
-    result = runner.run(["nmcli","-g","UUID","con","show","id",name],check=False)
+    result = runner.run([
+        "nmcli","-g","connection.uuid","con","show","id",name,
+    ],check=False)
     if result.returncode != 0:
         return("")
     values = [item.strip() for item in result.stdout.splitlines() if item.strip()]
