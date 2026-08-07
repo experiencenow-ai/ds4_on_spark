@@ -75,10 +75,13 @@ def scan_complexity(root, limit=25, full=False, product_scope="ignore_aware", in
 
 
 def write_fake_centaur(root: Path) -> Path:
-    centaur = root / "centaur"
-    centaur.mkdir()
-    (centaur / "centaur_complexity.py").write_text(textwrap.dedent(FAKE_CENTAUR), encoding="utf-8")
-    return centaur
+    source = root / "centaur-source"
+    package = source / "centaur" / "core"
+    package.mkdir(parents=True)
+    (source / "centaur" / "__init__.py").write_text("",encoding="utf-8")
+    (package / "__init__.py").write_text("",encoding="utf-8")
+    (package / "complexity.py").write_text(textwrap.dedent(FAKE_CENTAUR),encoding="utf-8")
+    return source
 
 
 def write_sample(root: Path, text: str) -> None:

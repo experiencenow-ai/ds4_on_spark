@@ -19,9 +19,9 @@ CENTAUR_REPO = Path(os.environ.get("CENTAUR_REPO", "../centaur")).resolve()
 if str(CENTAUR_REPO) not in sys.path:
     sys.path.insert(0, str(CENTAUR_REPO))
 
-from centaur_complexity import build_complexity_profile
-from centaur_complexity import compact_complexity_scan
-from centaur_complexity import scan_complexity
+from centaur.core.complexity import build_complexity_profile
+from centaur.core.complexity import compact_complexity_scan
+from centaur.core.complexity import scan_complexity
 
 
 FORMAT = "ds4-repo-centaur-complexity-v1"
@@ -94,7 +94,7 @@ def _build_scan(root: Path, limit: int, full: bool, product_scope: str) -> dict[
         "format": FORMAT,
         "status": "success",
         "profile_id": scan.get("profile_id"),
-        "profile_source": "centaur_complexity",
+        "profile_source": "centaur.core.complexity",
         "profile_direction": profile.get("direction"),
         "root": str(root),
         "include_patterns": DEFAULT_INCLUDE_PATTERNS,
