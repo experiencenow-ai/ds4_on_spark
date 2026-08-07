@@ -105,6 +105,43 @@ class SparkUplinkRunnerTest(unittest.TestCase):
         sleep.assert_not_called()
 
 
+class SparkUplinkActivationTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.plan = MODULE.plan_for_node("spark0")
+        self.runner = mock.Mock()
+
+    def test_in_progress_asus_activation_is_not_restarted(self) -> None:
+        with (
+            mock.patch.object(
+                MODULE,"current_wifi_profile",return_value=self.plan.asus_profile
+            ),
+            mock.patch.object(MODULE,"wait_for_wifi_profile",return_value=True) as wait,
+        ):
+            MODULE.ensure_asus_active(self.runner,self.plan,"asus-uuid")
+        self.runner.run.assert_not_called()
+        wait.assert_called_once_with(
+            self.runner,
+            self.plan,
+            self.plan.asus_profile,
+            MODULE.WIFI_ACTIVATION_SECONDS,
+        )
+
+    def test_inactive_asus_profile_gets_one_bounded_activation(self) -> None:
+        result = MODULE.subprocess.CompletedProcess(["nmcli"],0,""," ")
+        self.runner.run.return_value = result
+        with (
+            mock.patch.object(
+                MODULE,"current_wifi_profile",return_value=self.plan.tplink_profile
+            ),
+            mock.patch.object(MODULE,"wait_for_wifi_profile",return_value=True),
+        ):
+            MODULE.ensure_asus_active(self.runner,self.plan,"asus-uuid")
+        self.runner.run.assert_called_once_with([
+            "nmcli","--wait",str(MODULE.WIFI_ACTIVATION_SECONDS),
+            "con","up","uuid","asus-uuid","ifname",self.plan.wifi_interface,
+        ],check=False,timeout=MODULE.WIFI_ACTIVATION_SECONDS + 10)
+
+
 class SparkUplinkMonitorTest(unittest.TestCase):
     def setUp(self) -> None:
         self.plan = MODULE.plan_for_node("spark0")

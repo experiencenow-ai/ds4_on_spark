@@ -29,6 +29,7 @@ WIRED_METRIC = 10
 ASUS_METRIC = 100
 TPLINK_METRIC = 200
 ASUS_RETRY_SECONDS = 300
+WIFI_ACTIVATION_SECONDS = 45
 PROBE_ADDRESS = "1.1.1.1"
 PROBE_URL = "https://1.1.1.1/cdn-cgi/trace"
 NMCLI_RECOVERY_SECONDS = 30
@@ -297,6 +298,54 @@ def read_psk(path: Path) -> str:
     return(psk)
 
 
+def current_wifi_profile(runner: Runner,plan: UplinkPlan) -> str:
+    result = runner.run([
+        "nmcli","-g","GENERAL.CONNECTION","device","show",plan.wifi_interface,
+    ],check=False)
+    return(result.stdout.strip() if result.returncode == 0 else "")
+
+
+def wifi_profile_ready(runner: Runner,plan: UplinkPlan,profile: str) -> bool:
+    if current_wifi_profile(runner,plan) != profile:
+        return(False)
+    result = runner.run([
+        "nmcli","-g","GENERAL.STATE","device","show",plan.wifi_interface,
+    ],check=False)
+    if result.returncode != 0:
+        return(False)
+    return(result.stdout.strip().split(" ",1)[0] == "100")
+
+
+def wait_for_wifi_profile(
+    runner: Runner,
+    plan: UplinkPlan,
+    profile: str,
+    timeout_seconds: int,
+) -> bool:
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        if wifi_profile_ready(runner,plan,profile):
+            return(True)
+        if time.monotonic() >= deadline:
+            return(False)
+        time.sleep(1)
+
+
+def ensure_asus_active(runner: Runner,plan: UplinkPlan,asus_uuid: str) -> None:
+    if current_wifi_profile(runner,plan) == plan.asus_profile:
+        if wait_for_wifi_profile(runner,plan,plan.asus_profile,WIFI_ACTIVATION_SECONDS):
+            return
+        raise UplinkError("ASUS WiFi did not reach connected state")
+    result = runner.run([
+        "nmcli","--wait",str(WIFI_ACTIVATION_SECONDS),
+        "con","up","uuid",asus_uuid,"ifname",plan.wifi_interface,
+    ],check=False,timeout=WIFI_ACTIVATION_SECONDS + 10)
+    if wait_for_wifi_profile(runner,plan,plan.asus_profile,10):
+        return
+    detail = result.stderr.strip() or result.stdout.strip()
+    raise UplinkError(f"ASUS WiFi activation failed: {detail or 'not connected'}")
+
+
 def apply_profiles(runner: Runner,plan: UplinkPlan) -> None:
     require_root()
     for interface in (plan.wired_interface,plan.wifi_interface):
@@ -307,14 +356,7 @@ def apply_profiles(runner: Runner,plan: UplinkPlan) -> None:
     asus_uuid = ensure_asus_profile(runner,plan,psk)
     tplink_uuid = ensure_tplink_profile(runner,plan)
     runner.run(["nmcli","--wait","15","con","up","uuid",wired_uuid,"ifname",plan.wired_interface])
-    asus_result = runner.run(
-        ["nmcli","--wait","15","con","up","uuid",asus_uuid,"ifname",plan.wifi_interface],
-        check=False,
-        timeout=25,
-    )
-    if asus_result.returncode != 0:
-        detail = asus_result.stderr.strip() or asus_result.stdout.strip()
-        raise UplinkError(f"ASUS WiFi activation failed: {detail}")
+    ensure_asus_active(runner,plan,asus_uuid)
     print(
         f"uplink_profiles_ready node={plan.node_id} wired={wired_uuid} "
         f"asus={asus_uuid} tplink={tplink_uuid}"
@@ -366,13 +408,6 @@ def set_wired_default(runner: Runner,plan: UplinkPlan,enabled: bool) -> None:
             "via",plan.asus_gateway,"dev",plan.wired_interface,
             "metric",str(plan.wired_metric),
         ],check=False)
-
-
-def current_wifi_profile(runner: Runner,plan: UplinkPlan) -> str:
-    result = runner.run([
-        "nmcli","-g","GENERAL.CONNECTION","device","show",plan.wifi_interface,
-    ],check=False)
-    return(result.stdout.strip() if result.returncode == 0 else "")
 
 
 def activate_wifi(runner: Runner,plan: UplinkPlan,profile: str) -> bool:
