@@ -5,6 +5,7 @@ controller="/usr/local/sbin/ds4_spark_uplink.py"
 timer="ds4-uplink-monitor.timer"
 wired_rule_priority="10420"
 asus_rule_priority="10421"
+asus_retry_file="/run/ds4-uplink/asus_retry_after"
 timer_was_active="no"
 
 fail()
@@ -28,6 +29,7 @@ restore()
 	local restored="no"
 	remove_rule "$asus_rule_priority"
 	remove_rule "$wired_rule_priority"
+	rm -f "$asus_retry_file"
 	for attempt in $(seq 1 12)
 	do
 		if "$controller" monitor
@@ -87,6 +89,8 @@ wired_address="${wired_cidr%/*}"
 [ -n "$wired_address" ] || fail "wired_address_missing"
 "$controller" monitor
 expect_path "wired"
+active_wifi=$(nmcli -g GENERAL.CONNECTION device show wlP9s9)
+[ "$active_wifi" = "ds4-uplink-asus" ] || fail "baseline_wifi_${active_wifi:-missing}"
 ip rule add priority "$wired_rule_priority" from "$wired_address/32" blackhole
 "$controller" monitor
 expect_path "asus_wifi"
@@ -102,4 +106,6 @@ expect_path "wired"
 curl -4 --interface enP7s7 --connect-timeout 2 --max-time 5 --silent --show-error --fail --output /dev/null https://1.1.1.1/cdn-cgi/trace
 trap - EXIT INT TERM
 restore
+active_wifi=$(nmcli -g GENERAL.CONNECTION device show wlP9s9)
+[ "$active_wifi" = "ds4-uplink-asus" ] || fail "restore_wifi_${active_wifi:-missing}"
 echo "uplink_canary_passed wired_to_asus_to_tplink_to_wired=1"
