@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "description": "Canonical small-file layout for an individual Spark node.",
+  "node_root": "/home/{node}",
+  "roots": {
+    "repo": "sparkpipe",
+    "sparkdata": "sparkdata",
+    "srcdata": "srcdata",
+    "extnvme": "extnvme"
+  },
+  "legacy_aliases": {
+    "ds4_nvme": "extnvme"
+  },
+  "repo_source_candidates": [
+    "src/ds4_on_spark",
+    "src/sparkpipe-main-live"
+  ],
+  "model_name_pattern": "^[a-z0-9][a-z0-9_.-]*$",
+  "sparkdata_name_pattern": "^[a-z0-9][a-z0-9_.-]*\\.(pp[0-9]+|tp[0-9]+|dp[0-9]+)(\\.[a-z0-9][a-z0-9_.-]*)?$",
+  "storage_roles": {
+    "sparkpipe": "git",
+    "sparkdata": "rank-local-serving-payload",
+    "srcdata": "local-build-inputs-only",
+    "extnvme": "warm-full-model-archive"
+  },
+  "rules": [
+    "The Git checkout contains code and configuration only.",
+    "Full model archives do not belong on internal root storage.",
+    "Rank-local payloads are flat files plus a manifest; topology and encoding belong in the dataset name or manifest.",
+    "A complete source model belongs on extnvme or cold storage; srcdata on a node is only a local build input.",
+    "Legacy paths are reported until their contents are migrated and verified; audit never deletes them."
+  ]
+}
