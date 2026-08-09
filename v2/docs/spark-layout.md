@@ -48,6 +48,8 @@ python3 scripts/ds4_layout_audit.py --node-root /home/spark0
 model data. Cleanup must be performed from an explicit, verified manifest.
 Mount detection is exact: a path is considered mounted only when the filesystem
 mount target is that path, not merely because it resides on the root volume.
+Re-run `ds4_layout_apply.sh --apply` after an external-NVMe reconnect; it repairs
+only a stale `extnvme` alias or an empty canonical directory.
 
 ## Lifecycle policy
 
