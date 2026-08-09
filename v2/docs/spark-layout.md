@@ -46,3 +46,44 @@ python3 scripts/ds4_layout_audit.py --node-root /home/spark0
 
 `ds4_layout_apply.sh` only creates roots and aliases. It never moves or deletes
 model data. Cleanup must be performed from an explicit, verified manifest.
+
+## Lifecycle policy
+
+`layout/model_storage_policy.json` is the checked-in source of truth for model
+roles. In particular, MiniMax H3 is warm full-model data but has no stage
+payload until a component-aware runtime adapter exists. QuantTrio GLM-5.2 is
+cold-only; its internal copies must not be treated as production inputs.
+
+Inspect a node without changing it:
+
+```bash
+python3 scripts/ds4_layout_inventory.py --node-root /home/spark0
+```
+
+The inventory reports both visible path allocation and hardlink-deduplicated
+allocation. Use the JSON output to create a per-node cleanup manifest. Cleanup
+is then checked against the recorded byte and file counts, refuses canonical
+roots, mounts, symlinks, Git trees, and open paths, and writes a receipt under
+`sparkdata/.layout/receipts`:
+
+```bash
+python3 scripts/ds4_layout_cleanup.py \
+  --node-root /home/spark0 \
+  --manifest /path/to/spark0-cleanup.json
+python3 scripts/ds4_layout_cleanup.py \
+  --node-root /home/spark0 \
+  --manifest /path/to/spark0-cleanup.json \
+  --apply
+```
+
+An archive operation additionally requires an explicit mounted archive root:
+
+```bash
+python3 scripts/ds4_layout_cleanup.py \
+  --node-root /home/spark0 \
+  --manifest /path/to/spark0-archive.json \
+  --archive-root /home/spark0/extnvme/archive
+```
+
+There is no recursive "clean old models" mode. A model is removed only after
+its complete replacement has a verified manifest in warm or cold storage.
