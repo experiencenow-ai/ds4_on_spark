@@ -89,12 +89,15 @@ def is_mount(path: Path) -> bool:
     if findmnt is None:
         return False
     result = subprocess.run(
-        [findmnt, "-T", str(path), "-n"],
+        [findmnt, "-T", str(path), "-n", "-o", "TARGET"],
         check=False,
         capture_output=True,
         text=True,
     )
-    return result.returncode == 0 and bool(result.stdout.strip())
+    if result.returncode != 0 or not result.stdout.strip():
+        return False
+    target = result.stdout.strip().splitlines()[-1].strip()
+    return Path(target).resolve() == path.resolve()
 
 
 def validate_entry(entry: dict[str, Any], node_root: Path) -> list[str]:

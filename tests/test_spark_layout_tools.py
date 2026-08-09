@@ -22,6 +22,7 @@ def test_inventory_reports_canonical_and_legacy_roots(tmp_path):
         ["python3", str(INVENTORY), "--node-root", str(node_root), "--json"]
     )
     assert report["canonical"]["sparkdata"]["kind"] == "directory"
+    assert report["canonical"]["sparkdata"]["mount"]["is_mount"] is False
     assert report["legacy"]["models"]["kind"] == "missing"
 
 
