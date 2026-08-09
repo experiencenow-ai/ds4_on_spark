@@ -81,6 +81,9 @@ python3 scripts/ds4_layout_manifest.py \
   --reason "retired experimental artifacts; no live references"
 ```
 
+The generator preserves the lexical path while validating it, so a symlink
+cannot be resolved into a deletable target.
+
 ```bash
 python3 scripts/ds4_layout_cleanup.py \
   --node-root /home/spark0 \

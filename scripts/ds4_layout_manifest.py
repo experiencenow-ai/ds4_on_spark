@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -44,7 +45,7 @@ def make_manifest(node_root: Path, paths: list[str], action: str, reason: str) -
         path = Path(raw_path).expanduser()
         if not path.is_absolute():
             path = node_root / path
-        path = path.resolve(strict=False)
+        path = Path(os.path.abspath(path))
         path_errors = validate_path(path, node_root)
         if path_errors:
             errors.append({"path": str(path), "errors": path_errors})
