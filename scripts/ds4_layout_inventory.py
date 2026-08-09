@@ -113,8 +113,10 @@ def mount_state(path: Path) -> dict[str, Any]:
         text=True,
     )
     if findmnt.returncode == 0 and findmnt.stdout.strip():
-        result["findmnt"] = findmnt.stdout.strip()
-        result["is_mount"] = True
+        line = findmnt.stdout.strip()
+        result["findmnt"] = line
+        target = line.split()[-1]
+        result["is_mount"] = Path(target).resolve() == path.resolve()
     return result
 
 

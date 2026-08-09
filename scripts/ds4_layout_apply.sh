@@ -35,8 +35,11 @@ if [ ! -e "$node_root/extnvme" ]; then
   mounted=0
   if command -v mountpoint >/dev/null 2>&1 && mountpoint -q "$node_root/ds4_nvme"; then
     mounted=1
-  elif command -v findmnt >/dev/null 2>&1 && findmnt -T "$node_root/ds4_nvme" -n >/dev/null 2>&1; then
-    mounted=1
+  elif command -v findmnt >/dev/null 2>&1; then
+    mount_target="$(findmnt -T "$node_root/ds4_nvme" -n -o TARGET 2>/dev/null || true)"
+    if [ "$mount_target" = "$node_root/ds4_nvme" ]; then
+      mounted=1
+    fi
   fi
   if [ "$mounted" = 1 ]; then
     ln -s "$node_root/ds4_nvme" "$node_root/extnvme"

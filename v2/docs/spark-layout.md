@@ -46,6 +46,8 @@ python3 scripts/ds4_layout_audit.py --node-root /home/spark0
 
 `ds4_layout_apply.sh` only creates roots and aliases. It never moves or deletes
 model data. Cleanup must be performed from an explicit, verified manifest.
+Mount detection is exact: a path is considered mounted only when the filesystem
+mount target is that path, not merely because it resides on the root volume.
 
 ## Lifecycle policy
 
