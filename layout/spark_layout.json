@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "description": "Canonical small-file layout for an individual Spark node.",
+  "model_policy": "model_storage_policy.json",
   "node_root": "/home/{node}",
   "roots": {
     "repo": "sparkpipe",
