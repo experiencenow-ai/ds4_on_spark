@@ -70,6 +70,17 @@ is then checked against the recorded byte and file counts, refuses canonical
 roots, mounts, symlinks, Git trees, and open paths, and writes a receipt under
 `sparkdata/.layout/receipts`:
 
+Generate the manifest with the repository tool so its snapshot fields cannot be
+forgotten:
+
+```bash
+python3 scripts/ds4_layout_manifest.py \
+  --node-root /home/spark0 \
+  --path /home/spark0/sparkpipe_artifacts \
+  --action delete \
+  --reason "retired experimental artifacts; no live references"
+```
+
 ```bash
 python3 scripts/ds4_layout_cleanup.py \
   --node-root /home/spark0 \
