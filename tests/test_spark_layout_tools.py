@@ -123,3 +123,29 @@ def test_manifest_records_size_and_reason(tmp_path):
     assert entry["reason"] == "test cleanup"
     assert entry["files"] == 1
     assert entry["bytes_on_disk"] == old_log.stat().st_blocks * 512
+
+
+def test_manifest_rejects_symlinks(tmp_path):
+    node_root = tmp_path / "spark0"
+    node_root.mkdir()
+    target = node_root / "real.log"
+    target.write_text("old\n", encoding="utf-8")
+    link = node_root / "link.log"
+    link.symlink_to(target)
+    result = subprocess.run(
+        [
+            "python3",
+            str(MANIFEST),
+            "--node-root",
+            str(node_root),
+            "--path",
+            str(link),
+            "--reason",
+            "test cleanup",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "symlinks are not cleanup targets" in result.stderr
