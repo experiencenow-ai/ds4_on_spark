@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 INVENTORY = ROOT / "scripts" / "ds4_layout_inventory.py"
 CLEANUP = ROOT / "scripts" / "ds4_layout_cleanup.py"
+MANIFEST = ROOT / "scripts" / "ds4_layout_manifest.py"
 
 
 def run_json(command):
@@ -99,3 +100,26 @@ def test_cleanup_requires_exact_snapshot_and_protects_canonical_roots(tmp_path):
     )
     assert refused.returncode == 1
     assert "canonical root is protected" in refused.stdout
+
+
+def test_manifest_records_size_and_reason(tmp_path):
+    node_root = tmp_path / "spark0"
+    node_root.mkdir()
+    old_log = node_root / "old.log"
+    old_log.write_text("old\n", encoding="utf-8")
+    result = run_json(
+        [
+            "python3",
+            str(MANIFEST),
+            "--node-root",
+            str(node_root),
+            "--path",
+            str(old_log),
+            "--reason",
+            "test cleanup",
+        ]
+    )
+    entry = result["entries"][0]
+    assert entry["reason"] == "test cleanup"
+    assert entry["files"] == 1
+    assert entry["bytes_on_disk"] == old_log.stat().st_blocks * 512
