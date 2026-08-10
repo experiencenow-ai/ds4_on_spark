@@ -7,28 +7,35 @@
     "repo": "sparkpipe",
     "sparkdata": "sparkdata",
     "srcdata": "srcdata",
-    "extnvme": "extnvme"
+    "extnvme": "extnvme",
+    "kvcache": "kvcache"
   },
-  "legacy_aliases": {
-    "ds4_nvme": "extnvme"
+  "legacy_paths": {
+    "ds4_nvme": "retired-external-nvme-mount"
   },
-  "repo_source_candidates": [
-    "src/ds4_on_spark",
-    "src/sparkpipe-main-live"
+  "sparkpipe_origins": [
+    "https://github.com/sparkpipe/sparkpipe.git",
+    "git@github.com:sparkpipe/sparkpipe.git"
   ],
   "model_name_pattern": "^[a-z0-9][a-z0-9_.-]*$",
   "sparkdata_name_pattern": "^[a-z0-9][a-z0-9_.-]*\\.(pp[0-9]+|tp[0-9]+|dp[0-9]+)(\\.[a-z0-9][a-z0-9_.-]*)?$",
+  "kvcache_dataset_pattern": "^(pp[0-9]+|tp[0-9]+|dp[0-9]+)\\.[a-z0-9][a-z0-9_.-]*$",
   "storage_roles": {
-    "sparkpipe": "git",
+    "sparkpipe": "official-sparkpipe-git",
     "sparkdata": "rank-local-serving-payload",
-    "srcdata": "local-build-inputs-only",
-    "extnvme": "warm-full-model-archive"
+    "srcdata": "rank-local-reference-and-build-inputs",
+    "extnvme": "warm-full-model-archive",
+    "kvcache": "rank-local-kv-backing"
   },
   "rules": [
+    "Every canonical root is a real directory; symbolic-link compatibility paths are forbidden.",
+    "The sparkpipe checkout remote is the official sparkpipe/sparkpipe repository.",
     "The Git checkout contains code and configuration only.",
     "Full model archives do not belong on internal root storage.",
     "Rank-local payloads are flat files plus a manifest; topology and encoding belong in the dataset name or manifest.",
-    "A complete source model belongs on extnvme or cold storage; srcdata on a node is only a local build input.",
+    "KV backing lives in kvcache/<model>/<topology>.<format> and has a finite configured capacity.",
+    "A complete source model belongs on extnvme or cold storage; srcdata holds only the rank-local layer slice plus common reference files.",
+    "When an external disk is attached, extnvme is its exact mount target; otherwise extnvme is an empty real directory.",
     "Legacy paths are reported until their contents are migrated and verified; audit never deletes them."
   ]
 }

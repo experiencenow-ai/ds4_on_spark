@@ -5,37 +5,54 @@
     "repo": "sparkpipe",
     "sparkdata": "sparkdata",
     "srcdata": "srcdata",
-    "extnvme": "extnvme"
+    "extnvme": "extnvme",
+    "kvcache": "kvcache"
+  },
+  "internal_capacity_targets_bytes": {
+    "srcdata_and_sparkdata": 1000000000000,
+    "kvcache": 2500000000000
   },
   "policies": {
     "qwen3.6_27b": {
       "warm_full": true,
       "stage_payload": true,
       "stage_topologies": ["pp13", "pp16"],
+      "kvcache_datasets": ["pp13.bf16", "pp16.bf16"],
       "internal_full_copy": false
     },
     "dsv4_flash": {
       "warm_full": true,
       "stage_payload": true,
       "stage_topologies": ["pp13", "pp16"],
+      "kvcache_datasets": ["pp13.bf16", "pp16.bf16"],
       "internal_full_copy": false
     },
     "dsv4_pro": {
       "warm_full": true,
       "stage_payload": true,
       "stage_topologies": ["pp13", "pp16"],
+      "kvcache_datasets": ["pp13.bf16", "pp16.bf16"],
+      "internal_full_copy": false
+    },
+    "glm52": {
+      "warm_full": true,
+      "stage_payload": true,
+      "stage_topologies": ["pp13", "pp16"],
+      "kvcache_datasets": ["pp13.bf16", "pp16.bf16"],
       "internal_full_copy": false
     },
     "gemma4_26b_a4b": {
       "warm_full": true,
       "stage_payload": true,
       "stage_topologies": ["pp13", "pp16"],
+      "kvcache_datasets": ["pp13.bf16", "pp16.bf16"],
       "internal_full_copy": false
     },
     "kimi_k3": {
       "warm_full": true,
       "stage_payload": true,
       "stage_topologies": ["pp13", "pp16"],
+      "kvcache_datasets": ["pp13.native-v1", "pp16.native-v1"],
       "internal_full_copy": false
     },
     "minimax_h3": {
@@ -56,8 +73,9 @@
   },
   "rules": [
     "A full model copy belongs in extnvme or verified cold storage, never in internal root storage.",
-    "A stage payload belongs in sparkdata/<model>.<topology>[.<encoding>] and must have a manifest.",
-    "srcdata/<model> is temporary local build input, not a second model archive.",
+    "A stage payload belongs in sparkdata/<model>.<weight-encoding>.<topology> and must have a manifest.",
+    "KV backing belongs in kvcache/<model>/<topology>.<format> and is never a symlink.",
+    "A rank-local checkpoint slice and common reference files belong in srcdata/<model>.<encoding>.<topology> and must have a manifest.",
     "Models not listed here are report-only until explicitly classified.",
     "Cleanup requires a per-node manifest with recorded size and file count; broad path deletion is forbidden."
   ]

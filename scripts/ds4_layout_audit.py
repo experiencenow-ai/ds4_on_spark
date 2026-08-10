@@ -59,6 +59,8 @@ def file_count(path: Path) -> int:
 
 
 def git_state(path: Path) -> dict[str, Any]:
+    if path.is_symlink():
+        return {"is_git": False, "error": "checkout is a symlink"}
     probe = subprocess.run(
         ["git", "-C", str(path), "rev-parse", "--is-inside-work-tree"],
         check=False,
@@ -79,15 +81,22 @@ def git_state(path: Path) -> dict[str, Any]:
         capture_output=True,
         text=True,
     )
+    origin = subprocess.run(
+        ["git", "-C", str(path), "config", "--get", "remote.origin.url"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
     return {
         "is_git": True,
         "head": head.stdout.strip(),
         "dirty": bool(result.stdout.strip()),
+        "origin": origin.stdout.strip(),
     }
 
 
 def direct_children(path: Path) -> list[dict[str, Any]]:
-    if not path.is_dir():
+    if path.is_symlink() or not path.is_dir():
         return []
     rows = []
     for item in sorted(path.iterdir()):
@@ -103,7 +112,7 @@ def direct_children(path: Path) -> list[dict[str, Any]]:
 
 
 def validate_dataset_names(path: Path, pattern: str) -> dict[str, Any]:
-    if not path.is_dir():
+    if path.is_symlink() or not path.is_dir():
         return {"unknown": [], "invalid": []}
     matcher = re.compile(pattern)
     unknown = []
@@ -116,6 +125,36 @@ def validate_dataset_names(path: Path, pattern: str) -> dict[str, Any]:
         elif not matcher.fullmatch(item.name):
             invalid.append(item.name)
     return {"unknown": unknown, "invalid": invalid}
+
+
+def validate_kvcache_names(
+    path: Path, model_pattern: str, dataset_pattern: str
+) -> dict[str, Any]:
+    report: dict[str, Any] = {
+        "unknown": [],
+        "invalid_models": [],
+        "invalid_datasets": [],
+    }
+    if path.is_symlink() or not path.is_dir():
+        return report
+    model_matcher = re.compile(model_pattern)
+    dataset_matcher = re.compile(dataset_pattern)
+    for model in sorted(path.iterdir()):
+        if model.is_symlink() or not model.is_dir():
+            report["unknown"].append(model.name)
+            continue
+        if not model_matcher.fullmatch(model.name):
+            report["invalid_models"].append(model.name)
+            continue
+        for dataset in sorted(model.iterdir()):
+            relative = f"{model.name}/{dataset.name}"
+            if (
+                dataset.is_symlink()
+                or not dataset.is_dir()
+                or not dataset_matcher.fullmatch(dataset.name)
+            ):
+                report["invalid_datasets"].append(relative)
+    return report
 
 
 def audit(node_root: Path) -> dict[str, Any]:
@@ -141,10 +180,10 @@ def audit(node_root: Path) -> dict[str, Any]:
             "files": file_count(path),
             "children": direct_children(path),
         }
-    for legacy, canonical in contract["legacy_aliases"].items():
+    for legacy, role in contract["legacy_paths"].items():
         path = node_root / legacy
         report["legacy"][legacy] = {
-            "canonical": canonical,
+            "role": role,
             "path": str(path),
             "kind": path_kind(path),
             "target": os.readlink(path) if path.is_symlink() else None,
@@ -157,16 +196,24 @@ def audit(node_root: Path) -> dict[str, Any]:
     report["datasets"]["srcdata"] = validate_dataset_names(
         node_root / roots["srcdata"], contract["model_name_pattern"]
     )
+    report["datasets"]["kvcache"] = validate_kvcache_names(
+        node_root / roots["kvcache"],
+        contract["model_name_pattern"],
+        contract["kvcache_dataset_pattern"],
+    )
     repo = node_root / roots["repo"]
     report["repo"] = git_state(repo)
     report["ok"] = (
-        report["paths"]["repo"]["kind"] in {"directory", "symlink"}
-        and report["paths"]["sparkdata"]["kind"] == "directory"
-        and report["paths"]["srcdata"]["kind"] == "directory"
+        all(data["kind"] == "directory" for data in report["paths"].values())
+        and report["repo"].get("is_git") is True
+        and report["repo"].get("origin") in contract["sparkpipe_origins"]
         and report["datasets"]["sparkdata"]["unknown"] == []
         and report["datasets"]["sparkdata"]["invalid"] == []
         and report["datasets"]["srcdata"]["unknown"] == []
         and report["datasets"]["srcdata"]["invalid"] == []
+        and report["datasets"]["kvcache"]["unknown"] == []
+        and report["datasets"]["kvcache"]["invalid_models"] == []
+        and report["datasets"]["kvcache"]["invalid_datasets"] == []
     )
     return report
 
@@ -176,7 +223,7 @@ def main() -> int:
     parser.add_argument("--node-root", default=str(Path.home()))
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
-    report = audit(Path(args.node_root).expanduser().resolve())
+    report = audit(Path(os.path.abspath(Path(args.node_root).expanduser())))
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
@@ -189,6 +236,12 @@ def main() -> int:
             print("invalid sparkdata: " + ",".join(report["datasets"]["sparkdata"]["invalid"]))
         if report["datasets"]["srcdata"]["invalid"]:
             print("invalid srcdata: " + ",".join(report["datasets"]["srcdata"]["invalid"]))
+        if report["datasets"]["kvcache"]["unknown"]:
+            print("unknown kvcache: " + ",".join(report["datasets"]["kvcache"]["unknown"]))
+        if report["datasets"]["kvcache"]["invalid_models"]:
+            print("invalid kvcache models: " + ",".join(report["datasets"]["kvcache"]["invalid_models"]))
+        if report["datasets"]["kvcache"]["invalid_datasets"]:
+            print("invalid kvcache datasets: " + ",".join(report["datasets"]["kvcache"]["invalid_datasets"]))
         if report["repo"]:
             print("repo=" + json.dumps(report["repo"], sort_keys=True))
     return 0 if report["ok"] else 1

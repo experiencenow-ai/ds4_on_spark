@@ -7,13 +7,15 @@ is `/home/<node>/sparkpipe`; model files never live inside that Git tree.
 /home/<node>/
 ├── sparkpipe/                 Git checkout
 ├── sparkdata/                 rank-local serving payloads
-├── srcdata/                   local build inputs only
-└── extnvme/                   warm full-model storage when attached
+├── srcdata/                   rank-local reference and build inputs
+├── extnvme/                   warm full-model storage when attached
+└── kvcache/                   bounded rank-local KV backing
 ```
 
-`ds4_nvme` is a legacy path. During migration, `extnvme` may be a symlink to a
-mounted `ds4_nvme` filesystem so existing services remain readable. The
-canonical name in new configuration is `extnvme`.
+Every canonical root is a real directory. Symlink compatibility paths are
+forbidden. When a node has an external disk, `extnvme` is that filesystem's
+exact mount target; on a node without one it is an empty real directory.
+`ds4_nvme` is a retired path and is reported as legacy state if it reappears.
 
 ## Naming
 
@@ -23,19 +25,39 @@ Use one short model name and an optional topology/encoding suffix:
 sparkdata/qwen3.6_27b.fp8.pp13/
 sparkdata/dsv4_flash.fp8.pp13/
 sparkdata/kimi_k3.mxfp4.pp13/
-srcdata/dsv4_flash/
+srcdata/dsv4_flash.fp8.pp13/
 extnvme/dsv4_flash/
+kvcache/dsv4_flash/pp13.bf16/
 ```
 
-Rank-local payload directories contain flat files and a manifest. Do not add
-organization, revision, checkpoint, or snapshot directory layers below the
-dataset directory. If PP13 and PP16 use the same layer files, keep one shared
-payload and put both topology manifests beside it; do not duplicate the
-payload merely because the topology differs.
+Rank-local payload directories are one manifest-controlled dataset tree. Do
+not add organization, revision, checkpoint, or snapshot directory layers
+above or below that dataset merely to preserve an old source layout. If PP13
+and PP16 use the same layer files, keep one shared payload and put both
+topology manifests beside it; do not duplicate the payload merely because the
+topology differs.
+
+The KV suffix names the cache representation, not the model's weight format.
+The deployment selects the complete dataset name explicitly, so independent
+experiments may coexist, for example `pp13.bf16`, `pp13.fp8`, and
+`pp13.bf16.zstd`. A dataset manifest must pin the exact logical KV format and
+backing codec. The current SparkPipe file-backed page store persists opaque
+driver-native pages without transcoding, so only the driver's native format is
+runnable today; a quantized or compressed suffix is a provisioned namespace,
+not a claim that its codec has been implemented. Activation must fail loudly
+unless both the driver and the generic page store advertise the selected
+format.
+
+The per-node internal-storage target is 1,000,000,000,000 bytes total for
+`srcdata` plus `sparkdata`, and 2,500,000,000,000 bytes for `kvcache`. These are
+end-state allocation ceilings, not permission to overcommit a filesystem.
+Before enabling the KV ceiling, use the fleet's minimum measured free space
+after canonical cleanup and retain room for the checkout, logs, manifests, and
+the operating system.
 
 Full source models belong on `extnvme` or cold storage. A node-local `srcdata`
-tree is permitted only when that node is actively building a payload and must
-contain the local build input, not a second full archive.
+dataset contains only the checkpoint shards needed for that rank's layers plus
+common model metadata, pinned by a manifest. It is not a second full archive.
 
 The contract is `layout/spark_layout.json`. Use the audit script before and
 after migration:
@@ -44,12 +66,13 @@ after migration:
 python3 scripts/ds4_layout_audit.py --node-root /home/spark0
 ```
 
-`ds4_layout_apply.sh` only creates roots and aliases. It never moves or deletes
-model data. Cleanup must be performed from an explicit, verified manifest.
+`ds4_layout_apply.sh` creates missing data roots and verifies that `sparkpipe`
+is a real checkout of `sparkpipe/sparkpipe`. It never creates aliases, moves,
+or deletes model data. Cleanup must be performed from an explicit, verified manifest.
 Mount detection is exact: a path is considered mounted only when the filesystem
 mount target is that path, not merely because it resides on the root volume.
-Re-run `ds4_layout_apply.sh --apply` after an external-NVMe reconnect; it repairs
-only a stale `extnvme` alias or an empty canonical directory.
+Re-run `ds4_layout_apply.sh --apply` after an external-NVMe reconnect; it fails
+loudly if any canonical root is a symlink or the checkout origin is wrong.
 
 ## Lifecycle policy
 
@@ -62,6 +85,24 @@ Inspect a node without changing it:
 
 ```bash
 python3 scripts/ds4_layout_inventory.py --node-root /home/spark0
+```
+
+Stage a rank-local reference or processed payload by hardlinking it on the
+same filesystem (or copying across filesystems), then hashing every file into
+an immutable canonical manifest:
+
+```bash
+python3 scripts/ds4_layout_stage.py \
+  --node-root /home/spark0 \
+  --root srcdata \
+  --dataset dsv4_flash.fp8.pp13 \
+  --source /path/to/rank0-stage-source \
+  --apply
+python3 scripts/ds4_layout_stage.py \
+  --node-root /home/spark0 \
+  --root srcdata \
+  --dataset dsv4_flash.fp8.pp13 \
+  --verify
 ```
 
 The inventory reports both visible path allocation and hardlink-deduplicated

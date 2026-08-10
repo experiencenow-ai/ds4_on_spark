@@ -148,6 +148,7 @@ def inventory(node_root: Path) -> dict[str, Any]:
         "vllm-logs",
         "vllm-lazy-logs",
     }
+    legacy.update(contract["legacy_paths"])
     rows: dict[str, Any] = {
         "schema_version": 1,
         "node": node_root.name,
