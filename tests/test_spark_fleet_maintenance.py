@@ -9,6 +9,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PREFLIGHT = ROOT / "scripts" / "ds4_spark_fleet_preflight.py"
 PROXY = ROOT / "scripts" / "ds4_spark_fleet_proxy.py"
+PACKAGE_ALIGN = ROOT / "scripts" / "ds4_spark_package_align.py"
+SWITCHED_APPLY = ROOT / "scripts" / "ds4_switched_fabric_apply.sh"
 
 
 def load_module(path: Path, name: str):
@@ -22,6 +24,25 @@ def load_module(path: Path, name: str):
 
 
 class SparkFleetMaintenanceTests(unittest.TestCase):
+    def test_package_alignment_excludes_platform_and_role_cohorts(self) -> None:
+        module = load_module(PACKAGE_ALIGN,"ds4_spark_package_align_test")
+        self.assertTrue(module.is_protected("linux-image-6.17.0-1026-nvidia"))
+        self.assertTrue(module.is_protected("librados2"))
+        self.assertTrue(module.is_protected("podman"))
+        self.assertTrue(module.is_protected("libcublas-13-0"))
+        self.assertFalse(module.is_protected("python3-numpy"))
+
+    def test_switched_fabric_script_has_one_canonical_network_baseline(self) -> None:
+        source = SWITCHED_APPLY.read_text(encoding="utf-8")
+        self.assertIn("/etc/sysctl.d/99-ds4-fleet.conf",source)
+        self.assertIn("ethtool -G \"${FABRIC_DEVICE}\" rx 8192 tx 8192",source)
+        self.assertIn("ethtool -K \"${FABRIC_DEVICE}\" tx-tcp-mangleid-segmentation off",source)
+        self.assertIn("99-ds4-rescue.conf",source)
+        self.assertIn("retire_legacy_mac_mounts",source)
+        self.assertIn("retire_legacy_nat",source)
+        self.assertIn("iptables -P FORWARD ACCEPT",source)
+        self.assertNotIn("zz-retired-switched-fabric.conf",source)
+
     def test_proxy_reads_addresses_from_topology(self) -> None:
         module = load_module(PROXY,"ds4_spark_fleet_proxy_test")
         records = module.load_topology(str(ROOT / "v2/profiles/transfer/spark_200g.json"))

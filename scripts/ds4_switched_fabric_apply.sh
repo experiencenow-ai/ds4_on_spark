@@ -6,6 +6,7 @@ FABRIC_PREFIX="${DS4_SWITCHED_FABRIC_PREFIX:-10.10.100}"
 FABRIC_MTU="${DS4_SWITCHED_FABRIC_MTU:-9000}"
 CX7_HOTPLUG_MARKER="${DS4_CX7_HOTPLUG_MARKER:-/etc/nvidia/cx7-hotplug-enabled}"
 CX7_HOTPLUG_HANDLER="${DS4_CX7_HOTPLUG_HANDLER:-/opt/nvidia/dgx-spark-mlnx-hotplug/mtk-hotplug-handler.sh}"
+FLEET_SYSCTL_PATH="${DS4_FLEET_SYSCTL_PATH:-/etc/sysctl.d/99-ds4-fleet.conf}"
 
 fabric_devices()
 {
@@ -109,21 +110,168 @@ EOF
     systemctl enable ds4-switched-fabric.service
 }
 
-disable_legacy_ring()
+backup_and_remove()
 {
-    local unit dropin
-    for unit in ds4-ring-200g.service ds4-ring-control-iface.service; do
+    local path backup_root
+    path="$1"
+    [ -e "${path}" ] || return 0
+    backup_root="/var/backups/ds4-fleet/$(date -u +%Y%m%dT%H%M%SZ)"
+    mkdir -p "${backup_root}$(dirname "${path}")"
+    cp -a "${path}" "${backup_root}${path}"
+    rm -rf "${path}"
+}
+
+retire_legacy_units()
+{
+    local unit path
+    for unit in \
+        ds4-ring-200g.service \
+        ds4-ring-control-iface.service \
+        ds4-10g-client-gateway.service \
+        ds4-10g-nat-gateway.service \
+        ds4-internet-client.service \
+        ds4-internet-client.timer \
+        ds4-internet-gateway.service \
+        ds4-internet-gateway.timer \
+        ds4-mac-fast-internet-gateway.service \
+        ds4-mac-fast-internet-gateway.timer \
+        spark-fabric-tune.service; do
         systemctl disable --now "${unit}" 2>/dev/null || true
-        dropin="/etc/systemd/system/${unit}.d/zz-retired-switched-fabric.conf"
-        mkdir -p "${dropin%/*}"
-        cat > "${dropin}" <<'EOF'
-[Unit]
-ConditionPathExists=/run/ds4-ring-explicitly-enabled
-EOF
         systemctl reset-failed "${unit}" 2>/dev/null || true
+        backup_and_remove "/etc/systemd/system/${unit}"
+        backup_and_remove "/etc/systemd/system/${unit}.d"
+        backup_and_remove "/etc/systemd/system/multi-user.target.wants/${unit}"
+        backup_and_remove "/etc/systemd/system/timers.target.wants/${unit}"
     done
+    for path in \
+        /usr/local/sbin/ds4-ring-200g \
+        /usr/local/sbin/ds4-ring-200g-apply \
+        /usr/local/sbin/ds4-ring-200g-extend13 \
+        /usr/local/sbin/ds4-ring-control-iface \
+        /usr/local/sbin/ds4-10g-client-gateway-apply \
+        /usr/local/sbin/ds4-10g-nat-gateway-apply \
+        /usr/local/sbin/ds4-mac-fast-internet-gateway \
+        /usr/local/sbin/spark-fabric-tune.sh; do
+        backup_and_remove "${path}"
+    done
+    backup_and_remove /etc/ssh/sshd_config.d/99-ds4-rescue.conf
+    if command -v sshd >/dev/null 2>&1; then
+        sshd -t
+        systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+    fi
     systemctl daemon-reload
     ip link delete ds4ring0 2>/dev/null || true
+}
+
+write_fleet_sysctl()
+{
+    local security_path
+    cat > "${FLEET_SYSCTL_PATH}" <<'EOF'
+net.core.rmem_max = 536870912
+net.core.wmem_max = 536870912
+net.core.rmem_default = 134217728
+net.core.wmem_default = 134217728
+net.core.netdev_max_backlog = 250000
+net.ipv4.tcp_rmem = 4096 87380 536870912
+net.ipv4.tcp_wmem = 4096 65536 536870912
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.ip_forward = 1
+net.ipv4.conf.all.rp_filter = 0
+net.ipv4.conf.default.rp_filter = 0
+EOF
+    backup_and_remove /etc/sysctl.d/90-ds4-ring-200g.conf
+    backup_and_remove /etc/sysctl.d/99-spark-fabric.conf
+    security_path=/etc/sysctl.d/10-network-security.conf
+    if [ -f "${security_path}" ]; then
+        local security_backup
+        security_backup="/var/backups/ds4-fleet/$(date -u +%Y%m%dT%H%M%SZ)${security_path}"
+        mkdir -p "$(dirname "${security_backup}")"
+        cp -a "${security_path}" "${security_backup}"
+        sed -i -E \
+            '/^[[:space:]]*net\.ipv4\.conf\.(all|default)\.rp_filter[[:space:]]*=/d' \
+            "${security_path}"
+    fi
+    sysctl -p "${FLEET_SYSCTL_PATH}" >/dev/null
+    while read -r device; do
+        [ -e "/proc/sys/net/ipv4/conf/${device}/rp_filter" ] || continue
+        sysctl -w "net.ipv4.conf.${device}.rp_filter=0" >/dev/null
+    done < <(find /sys/class/net -mindepth 1 -maxdepth 1 -printf '%f\n')
+}
+
+configure_fabric_link()
+{
+    ethtool -G "${FABRIC_DEVICE}" rx 8192 tx 8192
+    ethtool -K "${FABRIC_DEVICE}" tx-tcp-mangleid-segmentation off
+    ip link set dev "${FABRIC_DEVICE}" mtu "${FABRIC_MTU}"
+}
+
+configure_management_link()
+{
+    local rank management_ip lan_ip
+    command -v nmcli >/dev/null 2>&1 || return 0
+    rank="$(node_rank)"
+    management_ip="10.20.0.$((10 + rank))/24"
+    lan_ip="192.168.50.$((128 + rank))/24"
+    if ! nmcli -t -f NAME con show | grep -Fxq ds4-uplink-wired; then
+        nmcli con add type ethernet ifname enP7s7 con-name ds4-uplink-wired >/dev/null
+    fi
+    nmcli con mod ds4-uplink-wired \
+        connection.interface-name enP7s7 \
+        connection.autoconnect yes \
+        connection.autoconnect-priority 300 \
+        ipv4.method manual \
+        ipv4.addresses "${management_ip},${lan_ip}" \
+        ipv4.gateway 192.168.50.1 \
+        ipv4.dns "192.168.50.1,1.1.1.1" \
+        ipv4.never-default no \
+        ipv4.ignore-auto-routes yes \
+        ipv4.ignore-auto-dns yes \
+        ipv4.route-metric 10 \
+        ipv6.method disabled >/dev/null
+    nmcli con up ds4-uplink-wired >/dev/null
+    nmcli con mod ds4-uplink-asus connection.autoconnect yes connection.autoconnect-priority 200 ipv4.route-metric 100 >/dev/null 2>&1 || true
+    nmcli con mod ds4-uplink-tplink connection.autoconnect yes connection.autoconnect-priority 100 ipv4.route-metric 200 >/dev/null 2>&1 || true
+    while IFS=: read -r name uuid device; do
+        [ "${device}" = enP7s7 ] || continue
+        [ "${name}" = ds4-uplink-wired ] && continue
+        nmcli con delete uuid "${uuid}" >/dev/null 2>&1 || true
+    done < <(nmcli -t -f NAME,UUID,DEVICE con show)
+}
+
+retire_legacy_mac_mounts()
+{
+    local fstab_path fstab_backup fstab_temp unit
+    fstab_path=/etc/fstab
+    if [ -f "${fstab_path}" ] && grep -Eq '^[^#].*[[:space:]]/mnt/mac/' "${fstab_path}"; then
+        fstab_backup="/var/backups/ds4-fleet/$(date -u +%Y%m%dT%H%M%SZ)${fstab_path}"
+        mkdir -p "$(dirname "${fstab_backup}")"
+        cp -a "${fstab_path}" "${fstab_backup}"
+        fstab_temp="$(mktemp)"
+        awk '$2 !~ /^\/mnt\/mac\// {print}' "${fstab_path}" > "${fstab_temp}"
+        install -m 0644 -o root -g root "${fstab_temp}" "${fstab_path}"
+        rm -f "${fstab_temp}"
+    fi
+    for unit in mnt-mac-16tb0.mount mnt-mac-16tb1.mount mnt-mac-16tb2.mount \
+        mnt-mac-22tb0.mount mnt-mac-22tb1.mount mnt-mac-22tb2.mount \
+        mnt-mac-16tb0.automount mnt-mac-16tb1.automount mnt-mac-16tb2.automount \
+        mnt-mac-22tb0.automount mnt-mac-22tb1.automount mnt-mac-22tb2.automount; do
+        systemctl stop "${unit}" 2>/dev/null || true
+        systemctl reset-failed "${unit}" 2>/dev/null || true
+    done
+}
+
+retire_legacy_nat()
+{
+    while iptables -C FORWARD -s 10.20.0.0/24 -i enP7s7 -o enP7s7 -j ACCEPT 2>/dev/null; do
+        iptables -D FORWARD -s 10.20.0.0/24 -i enP7s7 -o enP7s7 -j ACCEPT
+    done
+    while iptables -C FORWARD -d 10.20.0.0/24 -i enP7s7 -o enP7s7 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null; do
+        iptables -D FORWARD -d 10.20.0.0/24 -i enP7s7 -o enP7s7 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+    done
+    while iptables -t nat -C POSTROUTING -s 10.20.0.0/24 -o enP7s7 -j MASQUERADE 2>/dev/null; do
+        iptables -t nat -D POSTROUTING -s 10.20.0.0/24 -o enP7s7 -j MASQUERADE
+    done
+    iptables -P FORWARD ACCEPT
 }
 
 remove_legacy_addresses()
@@ -175,12 +323,16 @@ apply_switched_fabric()
     fi
     FABRIC_DEVICE="$(select_fabric_device)"
     address="${FABRIC_PREFIX}.$((10 + rank))/24"
-    disable_legacy_ring
+    retire_legacy_units
+    retire_legacy_mac_mounts
+    retire_legacy_nat
+    write_fleet_sysctl
     remove_legacy_profiles
     configure_unmanaged_fabric
     remove_legacy_addresses
     ip link set dev "${FABRIC_DEVICE}" up
-    ip link set dev "${FABRIC_DEVICE}" mtu "${FABRIC_MTU}" 2>/dev/null || true
+    configure_fabric_link
+    configure_management_link
     ip address replace "${address}" dev "${FABRIC_DEVICE}"
     printf 'switched_fabric node=%s rank=%s device=%s address=%s mtu=%s cx7_hotplug=disabled\n' \
         "${DS4_NODE_ID:-$(node_name)}" "${rank}" "${FABRIC_DEVICE}" "${address}" "${FABRIC_MTU}"

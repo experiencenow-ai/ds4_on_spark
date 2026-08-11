@@ -53,6 +53,25 @@ in the receipt, while the retired `/etc/ds4-ring-rank` name is a hard failure.
 7. Start the ring only after a final all-node preflight has exit code 0.
 8. Keep the release receipt, preflight receipt, and benchmark receipt together.
 
+For package convergence, use the bounded planner after the network baseline is
+active:
+
+```bash
+python3 scripts/ds4_spark_package_align.py \
+  --nodes spark1,spark2,spark3,spark4,spark5,spark6,spark7,spark8,spark9,\
+sparka,sparkb,sparkc,sparkd,sparke,sparkf \
+  --apply --wave-size 4
+```
+
+The planner compares installed names and versions against `spark0`, but only
+the reference node's explicit manual package set is managed. The apply path
+installs measured missing names in bounded waves, refuses an existing dpkg
+lock or non-clean dpkg audit, uses `--no-remove`, and verifies that the
+running kernel and NVIDIA driver are unchanged. Vendor, CUDA, RDMA, Ceph,
+container, and external-storage packages remain role cohorts. A full installed
+package-list copy is intentionally unsupported because it turns dependencies
+into accidental manual packages and can enable unrelated services.
+
 The preflight has an explicit `--allow-workload` escape hatch for observing a
 running system. That mode is for post-start inspection, never for deciding
 whether a new release is safe to start.
@@ -119,8 +138,11 @@ substitute for a failed 100G readiness check.
   tests. Staging nodes may intentionally use a different management default,
   but that role split must be explicit in the release record.
 - Establish one package, enabled-unit, firewall, and `/etc/systemd/system`
-  baseline for the original 13. Do not silently accept per-node additions such
-  as Ceph or container tooling in a correctness/performance comparison.
+  baseline for the original 13. Package convergence uses the reference node's
+  explicit `apt-mark showmanual` set and installs only measured missing names;
+  it never installs the entire dependency closure or silently changes kernel,
+  NVIDIA, RDMA, CUDA, Ceph, or container cohorts. Ceph and container tooling
+  remain explicit storage/service roles and are audited separately.
 - Keep the known kernel/driver split on d/e/f as an explicit warning until a
   canary upgrade is planned; do not blanket-upgrade the fleet from a preflight.
 - Treat external NVMe filesystem and model-storage differences as role data.
@@ -129,3 +151,8 @@ substitute for a failed 100G readiness check.
 - Treat any new Xid warning as an investigation trigger, but distinguish
   historical boot-buffer entries from an active GPU fault before declaring a
   node bad.
+- The six `/home/mac-volumes/*` CIFS mount units are optional external-storage
+  roles. Their failure means the corresponding Mac SMB share or server is not
+  currently available; it is not a reason to alter the 100G or compute baseline.
+  The legacy `/mnt/mac/*` entries are retired by the switched-fabric apply
+  script.
