@@ -259,7 +259,14 @@ def proxy_option(node: Node, route: str, topology: str) -> str:
     return " ".join(shlex.quote(item) for item in argv)
 
 
-def probe_node(node: Node, route: str, topology: str, ssh_options: list[str], timeout_s: int) -> dict[str,object]:
+def run_remote_payload(
+    node: Node,
+    route: str,
+    topology: str,
+    ssh_options: list[str],
+    payload: str,
+    timeout_s: int,
+) -> tuple[str,bytes,str]:
     try:
         route_result = subprocess.run(
             [
@@ -282,14 +289,14 @@ def probe_node(node: Node, route: str, topology: str, ssh_options: list[str], ti
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
-        return {"probe_error": str(error),"route": "unreachable"}
+        return("unreachable",b"",str(error))
     if route_result.returncode != 0:
         detail = route_result.stderr.strip() or route_result.stdout.strip()
-        return {"probe_error": detail or "route probe failed","route": "unreachable"}
+        return("unreachable",b"",detail or "route probe failed")
     try:
         selected_route = json.loads(route_result.stdout).get("route",route)
     except json.JSONDecodeError as error:
-        return {"probe_error": f"invalid route probe JSON: {error}","route": "unreachable"}
+        return("unreachable",b"",f"invalid route probe JSON: {error}")
     options = list(ssh_options)
     options.extend([
         "-o",
@@ -306,19 +313,28 @@ def probe_node(node: Node, route: str, topology: str, ssh_options: list[str], ti
     try:
         result = subprocess.run(
             ["ssh",*options,node.node_id,"python3","-"],
-            input=REMOTE_PROBE.encode("utf-8"),
+            input=payload.encode("utf-8"),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=timeout_s + 8,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
-        return {"probe_error": str(error),"route": "unreachable"}
+        return("unreachable",b"",str(error))
     if result.returncode != 0:
         detail = result.stderr.decode("utf-8",errors="replace").strip()
-        return {"probe_error": detail or f"ssh exited {result.returncode}","route": "unreachable"}
+        return("unreachable",b"",detail or f"ssh exited {result.returncode}")
+    return(selected_route,result.stdout,b"")
+
+
+def probe_node(node: Node, route: str, topology: str, ssh_options: list[str], timeout_s: int) -> dict[str,object]:
+    selected_route,stdout,error = run_remote_payload(
+        node,route,topology,ssh_options,REMOTE_PROBE,timeout_s
+    )
+    if error:
+        return {"probe_error": error,"route": "unreachable"}
     try:
-        observed = json.loads(result.stdout.decode("utf-8"))
+        observed = json.loads(stdout.decode("utf-8"))
     except json.JSONDecodeError as error:
         return {"probe_error": f"invalid probe JSON: {error}","route": "unreachable"}
     observed["route"] = selected_route

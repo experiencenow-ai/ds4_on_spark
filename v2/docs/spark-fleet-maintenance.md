@@ -57,6 +57,40 @@ The preflight has an explicit `--allow-workload` escape hatch for observing a
 running system. That mode is for post-start inspection, never for deciding
 whether a new release is safe to start.
 
+## Deep Drift Audit
+
+The preflight answers admission readiness. For hardware and software
+comparability, run the read-only deep audit while the fleet is idle:
+
+```bash
+python3 scripts/ds4_spark_fleet_audit.py \
+  --json-output /private/tmp/ds4_spark_fleet_audit_latest.json
+```
+
+The audit reads the same topology and transport policy as the preflight and
+collects identity, GPU/CUDA, 100G interface and RDMA state, queues/offloads,
+routes, sysctls, filesystems, block/NVMe/PCI/USB inventory, package and systemd
+state, firewall state, failed units, time sync, and workload processes. It
+compares identity-bearing addresses and node-specific rank files separately so
+they do not create false drift. Receipts belong under `/private/tmp` or another
+private evidence directory; do not commit them because they contain private
+fleet topology and host inventory.
+
+Use the full-duplex fabric check separately for data-plane evidence:
+
+```bash
+python3 scripts/ds4_spark_full_duplex_matrix.py \
+  --duration-s 10 --omit-s 2 --parallel-streams 16 \
+  --output-dir /private/tmp/ds4_spark_fabric_audit_latest
+```
+
+An audit is not clean merely because every link negotiates at 100G. Before a
+ring release, resolve unexpected within-cohort drift in the active port/RDMA
+mapping, queue sizes and offloads, routes, sysctls, packages, enabled units,
+firewall rules, and systemd configuration. Hardware and storage differences
+must be explicitly assigned to a role; they must not be mistaken for code
+parity.
+
 ## Route Policy
 
 The fleet proxy supports:
@@ -74,11 +108,24 @@ substitute for a failed 100G readiness check.
 
 ## Current Cleanup Items
 
-- Migrate the original 13 nodes from `/etc/ds4-ring-rank` to
-  `/etc/ds4-node-rank` under a separate guarded maintenance step, then remove
-  the legacy file. Preflight remains red until this is complete.
+- Keep `/etc/ds4-node-rank` as the only rank contract. A legacy
+  `/etc/ds4-ring-rank` file is a hard failure and must be removed, not
+  supported as a second configuration path.
+- Normalize the 100G data-plane port and RDMA mapping before comparing ring
+  behavior. The active port, queue sizes, and offload state are measured
+  independently of management SSH connectivity; a management-route audit does
+  not prove the data plane is equivalent.
+- Resolve route and sysctl drift, especially `rp_filter`, before performance
+  tests. Staging nodes may intentionally use a different management default,
+  but that role split must be explicit in the release record.
+- Establish one package, enabled-unit, firewall, and `/etc/systemd/system`
+  baseline for the original 13. Do not silently accept per-node additions such
+  as Ceph or container tooling in a correctness/performance comparison.
 - Keep the known kernel/driver split on d/e/f as an explicit warning until a
   canary upgrade is planned; do not blanket-upgrade the fleet from a preflight.
+- Treat external NVMe filesystem and model-storage differences as role data.
+  The root filesystem should be uniform; external storage should be inventoried
+  and excluded from runtime parity only when the workload does not read it.
 - Treat any new Xid warning as an investigation trigger, but distinguish
   historical boot-buffer entries from an active GPU fault before declaring a
   node bad.
