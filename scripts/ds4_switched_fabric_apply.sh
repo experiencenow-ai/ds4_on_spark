@@ -240,23 +240,27 @@ configure_management_link()
 
 retire_legacy_mac_mounts()
 {
-    local fstab_path fstab_backup fstab_temp unit
+    local fstab_path fstab_backup fstab_temp mount_path unit automount
     fstab_path=/etc/fstab
-    if [ -f "${fstab_path}" ] && grep -Eq '^[^#].*[[:space:]]/mnt/mac/' "${fstab_path}"; then
+    if [ -f "${fstab_path}" ] && grep -Eq '^[^#].*[[:space:]]/(mnt/mac|home/mac-volumes)/' "${fstab_path}"; then
         fstab_backup="/var/backups/ds4-fleet/$(date -u +%Y%m%dT%H%M%SZ)${fstab_path}"
         mkdir -p "$(dirname "${fstab_backup}")"
         cp -a "${fstab_path}" "${fstab_backup}"
         fstab_temp="$(mktemp)"
-        awk '$2 !~ /^\/mnt\/mac\// {print}' "${fstab_path}" > "${fstab_temp}"
+        awk '$2 !~ /^\/(mnt\/mac|home\/mac-volumes)\// {print}' "${fstab_path}" > "${fstab_temp}"
         install -m 0644 -o root -g root "${fstab_temp}" "${fstab_path}"
         rm -f "${fstab_temp}"
     fi
-    for unit in mnt-mac-16tb0.mount mnt-mac-16tb1.mount mnt-mac-16tb2.mount \
-        mnt-mac-22tb0.mount mnt-mac-22tb1.mount mnt-mac-22tb2.mount \
-        mnt-mac-16tb0.automount mnt-mac-16tb1.automount mnt-mac-16tb2.automount \
-        mnt-mac-22tb0.automount mnt-mac-22tb1.automount mnt-mac-22tb2.automount; do
+    for mount_path in /mnt/mac/16tb0 /mnt/mac/16tb1 /mnt/mac/16tb2 \
+        /mnt/mac/22tb0 /mnt/mac/22tb1 /mnt/mac/22tb2 \
+        /home/mac-volumes/16tb0 /home/mac-volumes/16tb1 /home/mac-volumes/16tb2 \
+        /home/mac-volumes/22tb0 /home/mac-volumes/22tb1 /home/mac-volumes/22tb2; do
+        unit="$(systemd-escape --path --suffix=mount "${mount_path}")"
+        automount="$(systemd-escape --path --suffix=automount "${mount_path}")"
         systemctl stop "${unit}" 2>/dev/null || true
         systemctl reset-failed "${unit}" 2>/dev/null || true
+        systemctl stop "${automount}" 2>/dev/null || true
+        systemctl reset-failed "${automount}" 2>/dev/null || true
     done
 }
 

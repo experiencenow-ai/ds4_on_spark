@@ -39,6 +39,8 @@ class SparkFleetMaintenanceTests(unittest.TestCase):
         self.assertIn("ethtool -K \"${FABRIC_DEVICE}\" tx-tcp-mangleid-segmentation off",source)
         self.assertIn("99-ds4-rescue.conf",source)
         self.assertIn("retire_legacy_mac_mounts",source)
+        self.assertIn("/home/mac-volumes",source)
+        self.assertIn("systemd-escape --path",source)
         self.assertIn("retire_legacy_nat",source)
         self.assertIn("iptables -P FORWARD ACCEPT",source)
         self.assertNotIn("zz-retired-switched-fabric.conf",source)

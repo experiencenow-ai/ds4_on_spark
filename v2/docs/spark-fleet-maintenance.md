@@ -151,8 +151,7 @@ substitute for a failed 100G readiness check.
 - Treat any new Xid warning as an investigation trigger, but distinguish
   historical boot-buffer entries from an active GPU fault before declaring a
   node bad.
-- The six `/home/mac-volumes/*` CIFS mount units are optional external-storage
-  roles. Their failure means the corresponding Mac SMB share or server is not
-  currently available; it is not a reason to alter the 100G or compute baseline.
-  The legacy `/mnt/mac/*` entries are retired by the switched-fabric apply
-  script.
+- The Mac Studio SATA archive is hosted on spark0. The six obsolete Mac SMB
+  mount families (`/mnt/mac/*` and `/home/mac-volumes/*`) are retired by the
+  switched-fabric apply script; this removes mount configuration only and does
+  not delete archive data on spark0.
