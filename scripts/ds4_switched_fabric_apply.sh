@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FABRIC_DEVICE="${DS4_SWITCHED_FABRIC_DEVICE:-}"
+FABRIC_DEVICE="${DS4_SWITCHED_FABRIC_DEVICE:-enp1s0f1np1}"
 FABRIC_PREFIX="${DS4_SWITCHED_FABRIC_PREFIX:-10.10.100}"
 FABRIC_MTU="${DS4_SWITCHED_FABRIC_MTU:-9000}"
 CX7_HOTPLUG_MARKER="${DS4_CX7_HOTPLUG_MARKER:-/etc/nvidia/cx7-hotplug-enabled}"
@@ -156,6 +156,7 @@ retire_legacy_units()
     done
     backup_and_remove /etc/ssh/sshd_config.d/99-ds4-rescue.conf
     if command -v sshd >/dev/null 2>&1; then
+        install -d -m 0755 -o root -g root /run/sshd
         sshd -t
         systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
     fi

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 import sys
 import unittest
@@ -11,6 +12,7 @@ PREFLIGHT = ROOT / "scripts" / "ds4_spark_fleet_preflight.py"
 PROXY = ROOT / "scripts" / "ds4_spark_fleet_proxy.py"
 PACKAGE_ALIGN = ROOT / "scripts" / "ds4_spark_package_align.py"
 SWITCHED_APPLY = ROOT / "scripts" / "ds4_switched_fabric_apply.sh"
+DIRECT_APPLY = ROOT / "scripts" / "ds4_direct_pair_fabric_apply.sh"
 
 
 def load_module(path: Path, name: str):
@@ -43,7 +45,32 @@ class SparkFleetMaintenanceTests(unittest.TestCase):
         self.assertIn("systemd-escape --path",source)
         self.assertIn("retire_legacy_nat",source)
         self.assertIn("iptables -P FORWARD ACCEPT",source)
+        self.assertIn('FABRIC_DEVICE="${DS4_SWITCHED_FABRIC_DEVICE:-enp1s0f1np1}"',source)
+        self.assertIn("install -d -m 0755 -o root -g root /run/sshd",source)
         self.assertNotIn("zz-retired-switched-fabric.conf",source)
+
+    def test_direct_pair_fabric_is_explicit_and_rank_derived(self) -> None:
+        topology = json.loads((ROOT / "v2/profiles/transfer/spark_200g.json").read_text(encoding="utf-8"))
+        direct = topology["direct_pair_fabric"]
+        expected = [
+            ("spark0", "spark1"),
+            ("spark2", "spark3"),
+            ("spark4", "spark5"),
+            ("spark6", "spark7"),
+            ("spark8", "spark9"),
+            ("sparka", "sparkb"),
+            ("sparkc", "sparkd"),
+            ("sparke", "sparkf"),
+        ]
+        pairs = [(item["node_a"], item["node_b"]) for item in direct["pairs"]]
+        self.assertEqual(pairs,expected)
+        self.assertEqual(direct["device"],"enp1s0f0np0")
+        self.assertEqual(direct["addressing"],"rank-derived-/31")
+        self.assertEqual(direct["link_rate_mbps"],200000)
+        source = DIRECT_APPLY.read_text(encoding="utf-8")
+        self.assertIn('DIRECT_DEVICE="${DS4_DIRECT_FABRIC_DEVICE:-enp1s0f0np0}"',source)
+        self.assertIn('address="${DIRECT_PREFIX}.${rank}/31"',source)
+        self.assertIn("/etc/ds4-node-rank",source)
 
     def test_proxy_reads_addresses_from_topology(self) -> None:
         module = load_module(PROXY,"ds4_spark_fleet_proxy_test")
