@@ -149,16 +149,42 @@ Boot0002* ubuntu HD(1,GPT,def)
     def test_apply_restarts_emergency_ssh_and_always_rebuilds_initramfs(self) -> None:
         source = SCRIPT.read_text()
         self.assertIn('run(["systemctl","restart","ssh-emergency.service"])',source)
-        self.assertIn('run(["update-initramfs","-u"],timeout=600)',source)
+        self.assertIn('run(["update-initramfs",mode,"-k",release],timeout=600)',source)
         self.assertIn('line.endswith("/.ssh/authorized_keys")',source)
 
-    def test_running_kernel_modules_are_a_required_package(self) -> None:
+    def test_kernel_image_and_modules_are_required_packages(self) -> None:
         self.assertEqual(MODULE.required_packages("6.17.0-test"),(
             "earlyoom",
             "dropbear-initramfs",
             "efibootmgr",
+            "linux-image-6.17.0-test",
             "linux-modules-6.17.0-test",
         ))
+
+    def test_boot_kernel_release_comes_from_canonical_vmlinuz_link(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = root / "vmlinuz-6.17.0-test"
+            link = root / "vmlinuz"
+            image.touch()
+            link.symlink_to(image.name)
+            self.assertEqual(MODULE.kernel_release_from_vmlinuz(link),"6.17.0-test")
+
+    def test_boot_kernel_release_rejects_ambiguous_image_name(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / "kernel"
+            image.touch()
+            with self.assertRaises(MODULE.BrickproofError):
+                MODULE.kernel_release_from_vmlinuz(image)
+
+    def test_hosts_remove_vendor_and_node_loopback_aliases(self) -> None:
+        source = "127.0.0.1 localhost local-api\n127.0.0.1 aitopatom-test spark2\n10.10.100.12 spark2 spark2-fabric\n"
+        self.assertEqual(MODULE.canonical_hosts(source,{"aitopatom-test","spark2"}),"127.0.0.1\tlocalhost local-api\n10.10.100.12 spark2 spark2-fabric\n")
+
+    def test_hosts_canonicalization_is_idempotent(self) -> None:
+        source = "127.0.0.1 localhost localhost.localdomain\n::1 localhost ip6-localhost\n"
+        once = MODULE.canonical_hosts(source,{"spark2"})
+        self.assertEqual(MODULE.canonical_hosts(once,{"spark2"}),once)
 
     def test_network_kernel_modules_have_one_canonical_load_list(self) -> None:
         self.assertEqual(MODULE.REQUIRED_KERNEL_MODULES,("sch_fq_codel",))

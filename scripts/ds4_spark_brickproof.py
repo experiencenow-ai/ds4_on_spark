@@ -275,20 +275,88 @@ def package_installed(name: str) -> bool:
     return(result.returncode == 0 and b"install ok installed" in result.stdout)
 
 
+def kernel_release_from_vmlinuz(path: Path) -> str:
+    try:
+        target = path.resolve(strict=True)
+    except FileNotFoundError as error:
+        raise BrickproofError(f"missing boot kernel link: {path}") from error
+    prefix = "vmlinuz-"
+    if not target.name.startswith(prefix) or len(target.name) == len(prefix):
+        raise BrickproofError(f"cannot derive boot kernel release from {target}")
+    return(target.name[len(prefix):])
+
+
+def boot_kernel_release() -> str:
+    return(kernel_release_from_vmlinuz(Path("/boot/vmlinuz")))
+
+
+def kernel_releases() -> tuple[str,...]:
+    return(tuple(dict.fromkeys((os.uname().release,boot_kernel_release()))))
+
+
+def kernel_packages(kernel_release: str) -> tuple[str,...]:
+    return(f"linux-image-{kernel_release}",f"linux-modules-{kernel_release}")
+
+
 def required_packages(kernel_release: str) -> tuple[str,...]:
-    return("earlyoom","dropbear-initramfs","efibootmgr",f"linux-modules-{kernel_release}")
+    return("earlyoom","dropbear-initramfs","efibootmgr",*kernel_packages(kernel_release))
+
+
+def package_verification_lines(name: str) -> tuple[str,...]:
+    result = run(["dpkg","-V",name],check=False)
+    text = (result.stdout + result.stderr).decode("utf-8",errors="replace")
+    return(tuple(line for line in text.splitlines() if line.strip()))
 
 
 def install_packages() -> None:
-    missing = [name for name in required_packages(os.uname().release) if not package_installed(name)]
+    packages = list(required_packages(os.uname().release))
+    for release in kernel_releases():
+        packages.extend(kernel_packages(release))
+    packages = list(dict.fromkeys(packages))
+    missing = [name for name in packages if not package_installed(name)]
     if missing:
         run(["apt-get","install","-y",*missing],timeout=600)
+    damaged = [name for release in kernel_releases() for name in kernel_packages(release) if package_verification_lines(name)]
+    damaged = list(dict.fromkeys(damaged))
+    if damaged:
+        run(["apt-get","install","--reinstall","-y",*damaged],timeout=600)
+
+
+def rebuild_initramfs() -> None:
+    for release in kernel_releases():
+        mode = "-u" if Path(f"/boot/initrd.img-{release}").exists() else "-c"
+        run(["update-initramfs",mode,"-k",release],timeout=600)
 
 
 def install_required_kernel_modules() -> None:
     atomic_write(Path("/etc/modules-load.d/90-ds4-network.conf"),KERNEL_MODULES_LOAD,0o644)
     for module in REQUIRED_KERNEL_MODULES:
         run(["modprobe",module])
+
+
+def canonical_hosts(text: str,removed_aliases: set[str]) -> str:
+    output = []
+    for line in text.splitlines():
+        fields = line.split()
+        if fields and fields[0] in ("127.0.0.1","127.0.1.1"):
+            aliases = [alias for alias in fields[1:] if alias not in removed_aliases]
+            if aliases:
+                output.append(f"{fields[0]}\t{' '.join(aliases)}")
+            continue
+        output.append(line)
+    return("\n".join(output).rstrip() + "\n")
+
+
+def install_node_identity(payload: dict[str,object]) -> bool:
+    hostname = str(payload["recovery_network"]["node_id"])
+    previous_hostname = command(["hostname","-s"],check=False)
+    changed = previous_hostname != hostname
+    if changed:
+        run(["hostnamectl","set-hostname",hostname])
+    atomic_write(Path("/etc/hostname"),f"{hostname}\n",0o644)
+    hosts = Path("/etc/hosts")
+    hosts_changed = atomic_write(hosts,canonical_hosts(hosts.read_text(),{hostname,previous_hostname}),0o644)
+    return(changed or hosts_changed)
 
 
 def ensure_swap_file(path_text: str,size_gib: int) -> None:
@@ -467,6 +535,7 @@ def remote_apply(payload_path: Path) -> dict[str,object]:
         raise BrickproofError(f"user-1000.slice already uses {memory_current} bytes; refusing a 108G cap")
     install_packages()
     install_required_kernel_modules()
+    identity_changed = install_node_identity(payload)
     ensure_swap()
     install_assets(payload)
     atomic_write(Path("/etc/systemd/system/user-1000.slice.d/20-ds4-brickproof.conf"),USER_SLICE,0o644)
@@ -486,10 +555,10 @@ def remote_apply(payload_path: Path) -> dict[str,object]:
     keys_changed = install_recovery_keys(str(payload["fleet_public_key"]))
     grub_changed = install_grub_policy(payload["recovery_network"])
     efi_boot_order_changed = install_efi_boot_order()
-    run(["update-initramfs","-u"],timeout=600)
+    rebuild_initramfs()
     decouple_optional_boot_work()
     enable_policy_services()
-    return({"efi_boot_order_changed":efi_boot_order_changed,"grub_changed":grub_changed,"keys_changed":keys_changed,"memory_current_before":memory_current,"source_commit":payload["source_commit"]})
+    return({"efi_boot_order_changed":efi_boot_order_changed,"grub_changed":grub_changed,"identity_changed":identity_changed,"keys_changed":keys_changed,"memory_current_before":memory_current,"source_commit":payload["source_commit"]})
 
 
 def read_optional(path: Path) -> str:
@@ -520,10 +589,31 @@ def remote_audit(payload_path: Path) -> dict[str,object]:
         failures.append("swap<63GiB")
     observations["swappiness"] = command(["sysctl","-n","vm.swappiness"],check=False)
     observations["panic"] = command(["sysctl","-n","kernel.panic"],check=False)
-    kernel_modules_package = f"linux-modules-{os.uname().release}"
-    observations["kernel_modules_package"] = package_installed(kernel_modules_package)
-    if not observations["kernel_modules_package"]:
-        failures.append(f"missing-package:{kernel_modules_package}")
+    running_kernel = os.uname().release
+    try:
+        boot_kernel = boot_kernel_release()
+    except BrickproofError as error:
+        boot_kernel = ""
+        failures.append(str(error))
+    observations["running_kernel"] = running_kernel
+    observations["boot_kernel"] = boot_kernel
+    kernel_state: dict[str,object] = {}
+    for release in dict.fromkeys((running_kernel,boot_kernel)):
+        if not release:
+            continue
+        release_state: dict[str,object] = {"module_tree":Path(f"/lib/modules/{release}").is_dir()}
+        if not release_state["module_tree"]:
+            failures.append(f"missing-module-tree:{release}")
+        for package in kernel_packages(release):
+            installed = package_installed(package)
+            verification_lines = package_verification_lines(package) if installed else ()
+            release_state[package] = {"installed":installed,"verification_lines":len(verification_lines)}
+            if not installed:
+                failures.append(f"missing-package:{package}")
+            elif verification_lines:
+                failures.append(f"damaged-package:{package}:{len(verification_lines)}")
+        kernel_state[release] = release_state
+    observations["kernel_releases"] = kernel_state
     modules_load = read_optional(Path("/etc/modules-load.d/90-ds4-network.conf"))
     if modules_load != KERNEL_MODULES_LOAD:
         failures.append("kernel-modules-load-config")
@@ -645,6 +735,11 @@ def remote_audit(payload_path: Path) -> dict[str,object]:
     if "rw" not in root_options.split(","):
         failures.append("root-read-only")
     observations["hostname"] = command(["hostname","-s"],check=False)
+    if observations["hostname"] != payload["recovery_network"]["node_id"]:
+        failures.append(f"hostname:{observations['hostname']}")
+    hosts = read_optional(Path("/etc/hosts"))
+    if hosts != canonical_hosts(hosts,{str(payload["recovery_network"]["node_id"])}):
+        failures.append("hosts-loopback-alias")
     observations["kernel"] = command(["uname","-r"],check=False)
     observations["system_state"] = command(["systemctl","is-system-running"],check=False)
     health_path = Path("/var/lib/sparkpipe/fsck-health/last.json")
