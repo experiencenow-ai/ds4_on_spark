@@ -173,6 +173,7 @@ def canonical_authorized_keys(text: str,required_key: str) -> str:
     rendered: list[str] = []
     seen: set[tuple[str,str]] = set()
     pending_type = ""
+    required_present = False
     for raw_line in repaired.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -187,9 +188,13 @@ def canonical_authorized_keys(text: str,required_key: str) -> str:
             if (key_index + 1) >= len(fields):
                 continue
             material = (fields[key_index],fields[key_index + 1])
-            if not public_key_material_is_valid(*material) or material == required_material or material in seen:
+            if not public_key_material_is_valid(*material) or material in seen:
                 continue
-            rendered.append(line if key_index > 0 else f"{material[0]} {material[1]}")
+            if material == required_material:
+                if key_index > 0:
+                    continue
+                required_present = True
+            rendered.append(line)
             seen.add(material)
             continue
         if pending_type and fields and public_key_material_is_valid(pending_type,fields[0]):
@@ -198,7 +203,8 @@ def canonical_authorized_keys(text: str,required_key: str) -> str:
                 rendered.append(f"{material[0]} {material[1]}")
                 seen.add(material)
         pending_type = ""
-    rendered.append(f"{required_material[0]} {required_material[1]}")
+    if not required_present:
+        rendered.append(required_key.strip())
     return("\n".join(rendered) + "\n")
 
 

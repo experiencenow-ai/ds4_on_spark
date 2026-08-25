@@ -72,9 +72,9 @@ class BrickproofTest(unittest.TestCase):
         twice = MODULE.canonical_authorized_keys(once,required)
         self.assertEqual(once,twice)
         self.assertEqual(once.splitlines(),[
-            f"ssh-ed25519 {first}",
+            f"ssh-ed25519 {first} ceph-a",
             f"ssh-ed25519 {second}",
-            " ".join(required.split()[:2]),
+            required,
         ])
 
     def test_public_key_repair_preserves_options_and_ignores_comments(self) -> None:
@@ -86,7 +86,7 @@ class BrickproofTest(unittest.TestCase):
         result = MODULE.canonical_authorized_keys(source,required)
         self.assertEqual(result.splitlines(),[
             restricted,
-            " ".join(required.split()[:2]),
+            required,
         ])
 
     def test_efi_boot_order_moves_pxe_before_ubuntu(self) -> None:
