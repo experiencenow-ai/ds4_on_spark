@@ -44,22 +44,30 @@ class BrickproofTest(unittest.TestCase):
         self.assertIn(old.strip(),once)
         self.assertIn(new,once)
 
-    def test_efi_boot_order_moves_ubuntu_before_pxe(self) -> None:
+    def test_efi_boot_order_moves_pxe_before_ubuntu(self) -> None:
         source = """BootCurrent: 0007
-BootOrder: 0005,0007
+BootOrder: 0007,0005
 Boot0005* UEFI: PXE IPv4 Realtek PCIe 10 GBE Family Controller
 Boot0007* ubuntu HD(1,GPT,abc)
 """
-        self.assertEqual(MODULE.desired_efi_boot_order(source),["0007","0005"])
+        self.assertEqual(MODULE.desired_efi_boot_order(source),["0005","0007"])
 
-    def test_efi_boot_order_preserves_dgx_os_first(self) -> None:
+    def test_efi_boot_order_moves_pxe_before_dgx_os(self) -> None:
         source = """BootCurrent: 0000
 BootOrder: 0000,0002,0003
 Boot0000* DGX OS HD(1,GPT,abc)
 Boot0002* UEFI: PXE IPv4 Realtek PCIe 10 GBE Family Controller
 Boot0003* UEFI:CD/DVD Drive
 """
-        self.assertEqual(MODULE.desired_efi_boot_order(source),["0000","0002","0003"])
+        self.assertEqual(MODULE.desired_efi_boot_order(source),["0002","0000","0003"])
+
+    def test_efi_boot_order_requires_pxe_ipv4(self) -> None:
+        source = """BootOrder: 0001,0002
+Boot0001* ubuntu HD(1,GPT,abc)
+Boot0002* UEFI:CD/DVD Drive
+"""
+        with self.assertRaises(MODULE.BrickproofError):
+            MODULE.desired_efi_boot_order(source)
 
     def test_efi_boot_order_rejects_ambiguous_linux_entries(self) -> None:
         source = """BootOrder: 0001,0002

@@ -191,10 +191,19 @@ def linux_efi_boot_entry(entries: dict[str,str]) -> str:
     return(candidates[0])
 
 
+def pxe_ipv4_efi_boot_entries(order: list[str],entries: dict[str,str]) -> list[str]:
+    candidates = [entry for entry in order if "pxe ipv4" in entries[entry].casefold()]
+    if not candidates:
+        raise BrickproofError("expected at least one PXE IPv4 EFI boot entry")
+    return(candidates)
+
+
 def desired_efi_boot_order(text: str) -> list[str]:
     order,entries = parse_efi_boot_entries(text)
     linux_entry = linux_efi_boot_entry(entries)
-    return([linux_entry,*[entry for entry in order if entry != linux_entry]])
+    pxe_entries = pxe_ipv4_efi_boot_entries(order,entries)
+    leading = [*pxe_entries,linux_entry]
+    return([*leading,*[entry for entry in order if entry not in leading]])
 
 
 def package_installed(name: str) -> bool:
@@ -496,8 +505,9 @@ def remote_audit(payload_path: Path) -> dict[str,object]:
     observations["efi_boot"] = efi_boot
     try:
         efi_order,efi_entries = parse_efi_boot_entries(efi_boot)
-        if efi_order[0] != linux_efi_boot_entry(efi_entries):
-            failures.append("efi-linux-not-first")
+        desired_efi = desired_efi_boot_order(efi_boot)
+        if efi_order != desired_efi:
+            failures.append("efi-pxe-not-first")
     except BrickproofError as error:
         failures.append(f"efi-boot:{error}")
     listeners = command(["ss","-ltn"],check=False)
