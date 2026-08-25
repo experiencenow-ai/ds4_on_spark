@@ -337,6 +337,10 @@ def remote_apply(payload_path: Path) -> dict[str,object]:
     obsolete = Path("/etc/systemd/system/sparkpipe_model_residentd.service.d/10-oom-guardrails.conf")
     if obsolete.exists():
         obsolete.unlink()
+    for unit in ("ds4-switched-fabric.service","ds4-direct-pair-fabric.service"):
+        legacy_timeout = Path(f"/etc/systemd/system/{unit}.d/10-boot-timeout.conf")
+        if legacy_timeout.exists():
+            legacy_timeout.unlink()
     keys_changed = install_recovery_keys(str(payload["fleet_public_key"]))
     grub_changed = install_grub_policy()
     if keys_changed:
@@ -398,9 +402,13 @@ def remote_audit(payload_path: Path) -> dict[str,object]:
             failures.append(f"optional-boot-unit:{unit}={state}")
     for unit in ("ds4-switched-fabric.service","ds4-direct-pair-fabric.service"):
         before = service_value(unit,"Before")
+        timeout = service_value(unit,"TimeoutStartUSec")
         observations[f"{unit}.before"] = before
+        observations[f"{unit}.timeout"] = timeout
         if "network-online.target" in before or "multi-user.target" in before:
             failures.append(f"fabric-boot-order:{unit}")
+        if timeout not in ("1min","60s"):
+            failures.append(f"fabric-timeout:{unit}={timeout}")
     firewall_timeout = service_value("spark-firewall.service","TimeoutStartUSec")
     observations["spark-firewall.timeout"] = firewall_timeout
     if firewall_timeout not in ("15s","15sec"):
