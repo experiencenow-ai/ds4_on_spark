@@ -47,7 +47,8 @@ python3 scripts/ds4_parallel_pxe_rescue.py stop --server spark0
 ```
 
 Every controller action writes a JSON receipt under the local temporary
-directory. `probe` concurrently fetches and hashes `grub.cfg` through TFTP from
+directory. `probe` concurrently fetches and hashes `grub/grub.cfg`, the path
+embedded in Canonical's network GRUB, through TFTP from
 the surviving Sparks. `status --require-active` fails if the signed assets differ from the
 manifest, DHCP/TFTP listeners are absent, the temporary firewall rule is absent,
 or the service is unexpectedly enabled persistently.

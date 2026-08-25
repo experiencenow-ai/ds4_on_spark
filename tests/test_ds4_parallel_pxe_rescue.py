@@ -37,6 +37,10 @@ class ParallelPxeRescueTest(unittest.TestCase):
         self.assertNotIn("ds4_spark_brickproof",result)
         self.assertNotIn("10.20.0.",result)
 
+    def test_grub_config_covers_the_embedded_network_prefix(self) -> None:
+        self.assertEqual(MODULE.GRUB_CONFIG_NAMES,("grub.cfg","grub/grub.cfg"))
+        self.assertEqual(MODULE.EFFECTIVE_GRUB_CONFIG,MODULE.STATE_DIR / "grub" / "grub.cfg")
+
     def test_service_is_manual_and_bounded(self) -> None:
         result = MODULE.service_config()
         self.assertNotIn("[Install]",result)

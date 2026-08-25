@@ -38,6 +38,8 @@ ARM64_UEFI_ARCH = 11
 SHIM_SOURCE = Path("/usr/lib/shim/shimaa64.efi.signed.latest")
 GRUB_SOURCE = Path("/usr/lib/grub/arm64-efi-signed/grubnetaa64.efi.signed")
 MOK_SOURCE = Path("/usr/lib/shim/mmaa64.efi")
+GRUB_CONFIG_NAMES = ("grub.cfg","grub/grub.cfg")
+EFFECTIVE_GRUB_CONFIG = STATE_DIR / "grub" / "grub.cfg"
 
 
 class PxeRescueError(RuntimeError):
@@ -250,7 +252,7 @@ def build_manifest(config: dict[str,str],sources: dict[str,Path]) -> dict[str,ob
             "sha256":sha256_file(target),
             "source":str(source),
         }
-    for name in ("dnsmasq.conf","grub.cfg"):
+    for name in ("dnsmasq.conf",*GRUB_CONFIG_NAMES):
         target = STATE_DIR / name
         files[name] = {"bytes":target.stat().st_size,"sha256":sha256_file(target)}
     return({
@@ -280,8 +282,10 @@ def remote_install(config: dict[str,str]) -> dict[str,object]:
             changed.append(str(STATE_DIR / name))
     if atomic_write(STATE_DIR / "dnsmasq.conf",dnsmasq_config(config),0o644):
         changed.append(str(STATE_DIR / "dnsmasq.conf"))
-    if atomic_write(STATE_DIR / "grub.cfg",grub_config(config),0o644):
-        changed.append(str(STATE_DIR / "grub.cfg"))
+    for name in GRUB_CONFIG_NAMES:
+        path = STATE_DIR / name
+        if atomic_write(path,grub_config(config),0o644):
+            changed.append(str(path))
     manifest = build_manifest(config,sources)
     if atomic_write(STATE_DIR / "manifest.json",json.dumps(manifest,indent=2,sort_keys=True) + "\n",0o644):
         changed.append(str(STATE_DIR / "manifest.json"))
@@ -428,7 +432,10 @@ def remote_status(require_active: bool = False) -> dict[str,object]:
     config = load_config()
     failures = verify_manifest()
     dnsmasq = (STATE_DIR / "dnsmasq.conf").read_text(encoding="utf-8")
-    grub = (STATE_DIR / "grub.cfg").read_text(encoding="utf-8")
+    grub_files = [(STATE_DIR / name).read_text(encoding="utf-8") for name in GRUB_CONFIG_NAMES]
+    grub = grub_files[0]
+    if any(text != grub for text in grub_files[1:]):
+        failures.append("grub-config-drift")
     if "dhcp-host=" in dnsmasq or "dhcp-ignore=" in dnsmasq:
         failures.append("identity-restricted-dnsmasq")
     if f"option:client-arch,{ARM64_UEFI_ARCH}" not in dnsmasq:
@@ -519,7 +526,7 @@ def parse_nodes(value: str) -> tuple[str,...]:
 
 
 def probe_client(node: str,server_ip: str,expected_sha256: str) -> dict[str,object]:
-    result = ssh(node,"curl","--silent","--show-error",f"tftp://{server_ip}/grub.cfg",timeout=30)
+    result = ssh(node,"curl","--silent","--show-error",f"tftp://{server_ip}/grub/grub.cfg",timeout=30)
     actual_sha256 = hashlib.sha256(result.stdout).hexdigest()
     return({
         "bytes":len(result.stdout),
