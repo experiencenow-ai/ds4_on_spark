@@ -1,13 +1,13 @@
 [Unit]
 Description=DS4 direct 200G pair fabric
-After=ds4-switched-fabric.service network-pre.target
-Before=network-online.target
-Wants=network-pre.target
+After=ds4-switched-fabric.service
+Wants=ds4-switched-fabric.service
+StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/ds4-direct-pair-fabric-apply
 RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
+TimeoutStartSec=60
+Restart=on-failure
+RestartSec=30

@@ -5,7 +5,6 @@ DIRECT_DEVICE="${DS4_DIRECT_FABRIC_DEVICE:-enp1s0f0np0}"
 DIRECT_PREFIX="${DS4_DIRECT_FABRIC_PREFIX:-10.10.200}"
 DIRECT_MTU="${DS4_DIRECT_FABRIC_MTU:-9000}"
 RUNTIME_PATH="${DS4_DIRECT_FABRIC_RUNTIME_PATH:-/usr/local/sbin/ds4-direct-pair-fabric-apply}"
-SERVICE_PATH="/etc/systemd/system/ds4-direct-pair-fabric.service"
 
 node_rank()
 {
@@ -20,23 +19,7 @@ node_rank()
 install_service()
 {
     install -m 0755 "$0" "${RUNTIME_PATH}"
-    cat > "${SERVICE_PATH}" <<'EOF'
-[Unit]
-Description=DS4 direct 200G pair fabric
-After=ds4-switched-fabric.service network-pre.target
-Before=network-online.target
-Wants=network-pre.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/sbin/ds4-direct-pair-fabric-apply
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    systemctl daemon-reload
-    systemctl enable ds4-direct-pair-fabric.service
+    printf '%s\n' '--install only installs the runtime; install deploy/systemd/ds4-direct-pair-fabric.{service,timer} with the fleet tool' >&2
 }
 
 configure_direct_pair()

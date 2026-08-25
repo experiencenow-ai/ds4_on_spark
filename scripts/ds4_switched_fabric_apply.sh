@@ -91,23 +91,7 @@ node_rank()
 install_service()
 {
     install -m 0755 "$0" /usr/local/sbin/ds4-switched-fabric-apply
-    cat > /etc/systemd/system/ds4-switched-fabric.service <<'EOF'
-[Unit]
-Description=DS4 single-switch 100G fabric address
-After=NetworkManager.service network-pre.target
-Before=network-online.target
-Wants=network-pre.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/sbin/ds4-switched-fabric-apply
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    systemctl daemon-reload
-    systemctl enable ds4-switched-fabric.service
+    printf '%s\n' '--install only installs the runtime; install deploy/systemd/ds4-switched-fabric.{service,timer} with the fleet tool' >&2
 }
 
 backup_and_remove()
@@ -328,16 +312,8 @@ apply_switched_fabric()
     fi
     FABRIC_DEVICE="$(select_fabric_device)"
     address="${FABRIC_PREFIX}.$((10 + rank))/24"
-    retire_legacy_units
-    retire_legacy_mac_mounts
-    retire_legacy_nat
-    write_fleet_sysctl
-    remove_legacy_profiles
-    configure_unmanaged_fabric
-    remove_legacy_addresses
     ip link set dev "${FABRIC_DEVICE}" up
     configure_fabric_link
-    configure_management_link
     ip address replace "${address}" dev "${FABRIC_DEVICE}"
     printf 'switched_fabric node=%s rank=%s device=%s address=%s mtu=%s cx7_hotplug=disabled\n' \
         "${DS4_NODE_ID:-$(node_name)}" "${rank}" "${FABRIC_DEVICE}" "${address}" "${FABRIC_MTU}"
@@ -349,5 +325,13 @@ fi
 
 if [ "${1:-}" = "--install" ]; then
     install_service
+    retire_legacy_units
+    retire_legacy_mac_mounts
+    retire_legacy_nat
+    write_fleet_sysctl
+    remove_legacy_profiles
+    configure_unmanaged_fabric
+    remove_legacy_addresses
+    configure_management_link
 fi
 apply_switched_fabric

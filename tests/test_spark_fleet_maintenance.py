@@ -13,6 +13,10 @@ PROXY = ROOT / "scripts" / "ds4_spark_fleet_proxy.py"
 PACKAGE_ALIGN = ROOT / "scripts" / "ds4_spark_package_align.py"
 SWITCHED_APPLY = ROOT / "scripts" / "ds4_switched_fabric_apply.sh"
 DIRECT_APPLY = ROOT / "scripts" / "ds4_direct_pair_fabric_apply.sh"
+SWITCHED_SERVICE = ROOT / "deploy" / "systemd" / "ds4-switched-fabric.service"
+SWITCHED_TIMER = ROOT / "deploy" / "systemd" / "ds4-switched-fabric.timer"
+DIRECT_SERVICE = ROOT / "deploy" / "systemd" / "ds4-direct-pair-fabric.service"
+DIRECT_TIMER = ROOT / "deploy" / "systemd" / "ds4-direct-pair-fabric.timer"
 
 
 def load_module(path: Path, name: str):
@@ -48,6 +52,23 @@ class SparkFleetMaintenanceTests(unittest.TestCase):
         self.assertIn('FABRIC_DEVICE="${DS4_SWITCHED_FABRIC_DEVICE:-enp1s0f1np1}"',source)
         self.assertIn("install -d -m 0755 -o root -g root /run/sshd",source)
         self.assertNotIn("zz-retired-switched-fabric.conf",source)
+
+    def test_fabric_is_not_in_boot_critical_path(self) -> None:
+        for path in (SWITCHED_SERVICE,DIRECT_SERVICE):
+            source = path.read_text(encoding="utf-8")
+            self.assertNotIn("Before=network-online.target",source)
+            self.assertNotIn("WantedBy=multi-user.target",source)
+            self.assertIn("TimeoutStartSec=60",source)
+        for path in (SWITCHED_TIMER,DIRECT_TIMER):
+            source = path.read_text(encoding="utf-8")
+            self.assertIn("WantedBy=timers.target",source)
+
+    def test_switched_runtime_does_not_reconfigure_management(self) -> None:
+        source = SWITCHED_APPLY.read_text(encoding="utf-8")
+        body = source.split("apply_switched_fabric()",1)[1].split('if [ "$(id -u)"',1)[0]
+        self.assertNotIn("configure_management_link",body)
+        self.assertNotIn("retire_legacy_units",body)
+        self.assertNotIn("retire_legacy_mac_mounts",body)
 
     def test_direct_pair_fabric_is_explicit_and_rank_derived(self) -> None:
         topology = json.loads((ROOT / "v2/profiles/transfer/spark_200g.json").read_text(encoding="utf-8"))

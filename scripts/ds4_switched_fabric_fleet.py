@@ -15,6 +15,12 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 APPLY_SCRIPT = ROOT / "scripts" / "ds4_switched_fabric_apply.sh"
+SYSTEMD_FILES = {
+    "ds4-switched-fabric.service": ROOT / "deploy" / "systemd" / "ds4-switched-fabric.service",
+    "ds4-switched-fabric.timer": ROOT / "deploy" / "systemd" / "ds4-switched-fabric.timer",
+    "ds4-direct-pair-fabric.service": ROOT / "deploy" / "systemd" / "ds4-direct-pair-fabric.service",
+    "ds4-direct-pair-fabric.timer": ROOT / "deploy" / "systemd" / "ds4-direct-pair-fabric.timer",
+}
 DEFAULT_NODES = tuple(f"spark{rank:x}" for rank in range(16))
 
 
@@ -47,7 +53,16 @@ def rank(node: str) -> int:
     return(value)
 
 
-def install(node: str,payload: bytes,expected_sha256: str) -> dict[str,object]:
+def install_systemd_file(node: str,name: str,payload: bytes) -> None:
+    temporary = f"/tmp/{name}"
+    ssh(node,"tee",temporary,input_bytes=payload)
+    try:
+        ssh(node,"sudo","-n","install","-m","0644","-o","root","-g","root",temporary,f"/etc/systemd/system/{name}")
+    finally:
+        ssh(node,"rm","-f",temporary,check=False)
+
+
+def install(node: str,payload: bytes,expected_sha256: str,systemd_payloads: dict[str,bytes]) -> dict[str,object]:
     temporary = "/tmp/ds4-switched-fabric-apply"
     rank_temporary = "/tmp/ds4-node-rank"
     rank_payload = f"{rank(node)}\n".encode()
@@ -62,12 +77,19 @@ def install(node: str,payload: bytes,expected_sha256: str) -> dict[str,object]:
         ssh(node,"sudo","-n","bash",temporary,"--install",timeout=90)
     finally:
         ssh(node,"rm","-f",temporary,check=False)
+    for name,systemd_payload in systemd_payloads.items():
+        install_systemd_file(node,name,systemd_payload)
+    ssh(node,"sudo","-n","systemctl","daemon-reload")
+    ssh(node,"sudo","-n","systemctl","disable","ds4-switched-fabric.service",check=False)
+    ssh(node,"sudo","-n","systemctl","disable","ds4-direct-pair-fabric.service",check=False)
+    ssh(node,"sudo","-n","systemctl","enable","--now","ds4-switched-fabric.timer")
+    ssh(node,"sudo","-n","systemctl","enable","--now","ds4-direct-pair-fabric.timer")
     remote_sha256 = text(ssh(node,"sha256sum","/usr/local/sbin/ds4-switched-fabric-apply")).split()[0]
     if remote_sha256 != expected_sha256:
         raise FleetError(f"{node}: installed script hash mismatch")
     if ssh(node,"sudo","-n","test","!","-e","/etc/nvidia/cx7-hotplug-enabled",check=False).returncode != 0:
         raise FleetError(f"{node}: CX7 hot-plug marker remains present")
-    return({"installed_sha256":remote_sha256,"node":node})
+    return({"installed_sha256":remote_sha256,"node":node,"timers_enabled":True})
 
 
 def canonicalize_rank(node: str) -> dict[str,object]:
@@ -148,11 +170,14 @@ def verify(node: str) -> dict[str,object]:
     ping = ssh(node,"ping","-c","3","-M","do","-s","8972","10.10.100.10",timeout=15,check=False)
     if ping.returncode != 0:
         raise FleetError(f"{node}: jumbo ping failed")
-    fabric_unit = "ds4-switched-fabric.service"
-    if text(ssh(node,"systemctl","is-enabled",fabric_unit,check=False)) != "enabled":
-        raise FleetError(f"{node}: {fabric_unit} is not enabled")
-    if text(ssh(node,"systemctl","is-active",fabric_unit,check=False)) != "active":
-        raise FleetError(f"{node}: {fabric_unit} is not active")
+    for fabric_timer in ("ds4-switched-fabric.timer","ds4-direct-pair-fabric.timer"):
+        if text(ssh(node,"systemctl","is-enabled",fabric_timer,check=False)) != "enabled":
+            raise FleetError(f"{node}: {fabric_timer} is not enabled")
+        if text(ssh(node,"systemctl","is-active",fabric_timer,check=False)) != "active":
+            raise FleetError(f"{node}: {fabric_timer} is not active")
+    for fabric_unit in ("ds4-switched-fabric.service","ds4-direct-pair-fabric.service"):
+        if text(ssh(node,"systemctl","is-enabled",fabric_unit,check=False)) != "disabled":
+            raise FleetError(f"{node}: boot-critical {fabric_unit} link remains enabled")
     failed_units = [
         row for row in text(ssh(node,"systemctl","--failed","--no-legend",check=False)).splitlines()
         if row.strip()
@@ -210,9 +235,10 @@ def main() -> int:
         raise FleetError("--reboot cannot be combined with --canonicalize-ranks")
     payload = APPLY_SCRIPT.read_bytes()
     expected_sha256 = hashlib.sha256(payload).hexdigest()
+    systemd_payloads = {name:path.read_bytes() for name,path in SYSTEMD_FILES.items()}
     receipt: dict[str,object] = {"apply_sha256":expected_sha256,"nodes":nodes}
     if args.apply:
-        receipt["install"] = parallel(nodes,lambda node:install(node,payload,expected_sha256),args.wave_size)
+        receipt["install"] = parallel(nodes,lambda node:install(node,payload,expected_sha256,systemd_payloads),args.wave_size)
     if args.canonicalize_ranks:
         receipt["canonicalize_ranks"] = parallel(nodes,canonicalize_rank,args.wave_size)
     if args.reboot:
