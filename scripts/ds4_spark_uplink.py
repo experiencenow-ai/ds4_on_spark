@@ -21,6 +21,7 @@ ASUS_STATIC_BASE = 128
 MAC_STATIC_ADDRESS = "192.168.50.249"
 MAX_SPARK_RANK = 120
 MANAGEMENT_BASE = 10
+MANAGEMENT_GATEWAY = "10.20.0.1"
 WIRED_PROFILE = "ds4-uplink-wired"
 ASUS_PROFILE = "ds4-uplink-asus"
 TPLINK_PROFILE = "ds4-uplink-tplink"
@@ -66,6 +67,7 @@ class UplinkPlan:
     asus_metric: int
     tplink_metric: int
     asus_psk_file: str
+    management_gateway: str = MANAGEMENT_GATEWAY
 
     @property
     def asus_wired_address(self) -> str:

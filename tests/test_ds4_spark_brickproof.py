@@ -1,5 +1,7 @@
 import importlib.util
+import base64
 from pathlib import Path
+import struct
 import tempfile
 import unittest
 
@@ -13,9 +15,17 @@ SPEC.loader.exec_module(MODULE)
 
 
 class BrickproofTest(unittest.TestCase):
+    RECOVERY = {
+        "address":"10.20.0.12",
+        "gateway":"10.20.0.1",
+        "interface":"enP7s7",
+        "netmask":"255.255.255.0",
+        "node_id":"spark2",
+    }
+
     def test_grub_policy_preserves_recovery_network_and_serial(self) -> None:
         source = 'GRUB_DEFAULT="ds4-fastboot"\nGRUB_CMDLINE_LINUX_DEFAULT="quiet ip=10.20.0.12::10.20.0.1:255.255.255.0:spark2:enP7s7:none console=tty0 console=ttyS0,921600n8"\n'
-        result = MODULE.canonical_grub(source)
+        result = MODULE.canonical_grub(source,self.RECOVERY)
         self.assertEqual(MODULE.shell_assignment(result,"GRUB_DEFAULT"),"0")
         tokens = MODULE.shell_assignment(result,"GRUB_CMDLINE_LINUX_DEFAULT").split()
         self.assertIn("fsck.mode=skip",tokens)
@@ -23,26 +33,61 @@ class BrickproofTest(unittest.TestCase):
         self.assertTrue(any(token.startswith("ip=") for token in tokens))
         self.assertTrue(any(token.startswith("console=ttyS0") for token in tokens))
 
-    def test_grub_policy_rejects_unrecoverable_entry(self) -> None:
-        with self.assertRaises(MODULE.BrickproofError):
-            MODULE.canonical_grub('GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"\n')
+    def test_grub_policy_repairs_unrecoverable_entry(self) -> None:
+        result = MODULE.canonical_grub('GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"\n',self.RECOVERY)
+        tokens = MODULE.shell_assignment(result,"GRUB_CMDLINE_LINUX_DEFAULT").split()
+        self.assertIn("console=tty0",tokens)
+        self.assertIn("console=ttyS0,921600",tokens)
+        self.assertIn(MODULE.recovery_ip_token(self.RECOVERY),tokens)
 
     def test_grub_policy_is_idempotent(self) -> None:
         source = 'GRUB_DEFAULT=0\nGRUB_CMDLINE_LINUX_DEFAULT="ip=dhcp console=ttyS0 fsck.mode=force fsck.repair=yes"\n'
-        once = MODULE.canonical_grub(source)
-        self.assertEqual(MODULE.canonical_grub(once),once)
+        once = MODULE.canonical_grub(source,self.RECOVERY)
+        self.assertEqual(MODULE.canonical_grub(once,self.RECOVERY),once)
         tokens = MODULE.shell_assignment(once,"GRUB_CMDLINE_LINUX_DEFAULT").split()
         self.assertEqual(tokens.count("fsck.mode=skip"),1)
         self.assertEqual(tokens.count("fsck.repair=no"),1)
 
-    def test_public_key_merge_preserves_keys_and_deduplicates(self) -> None:
-        old = "ssh-ed25519 AAAAold operator\n"
-        new = "ssh-ed25519 AAAAnew recovery"
-        once = MODULE.merge_public_key(old,new)
-        twice = MODULE.merge_public_key(once,new)
+    def test_recovery_network_uses_uplink_plan(self) -> None:
+        self.assertEqual(MODULE.recovery_network_for_node("spark8"),{
+            "address":"10.20.0.18",
+            "gateway":"10.20.0.1",
+            "interface":"enP7s7",
+            "netmask":"255.255.255.0",
+            "node_id":"spark8",
+        })
+
+    @staticmethod
+    def public_key_blob(seed: int) -> str:
+        key_type = b"ssh-ed25519"
+        payload = struct.pack(">I",len(key_type)) + key_type + bytes([seed]) * 32
+        return(base64.b64encode(payload).decode("ascii"))
+
+    def test_public_key_repair_recovers_split_keys_and_deduplicates(self) -> None:
+        first = self.public_key_blob(1)
+        second = self.public_key_blob(2)
+        required = f"ssh-ed25519 {self.public_key_blob(3)} recovery"
+        corrupt = f"ssh-ed25519 {first} ceph-anssh-ed25519\n{second}\nceph-b\nssh-ed25519 {first} duplicate\n"
+        once = MODULE.canonical_authorized_keys(corrupt,required)
+        twice = MODULE.canonical_authorized_keys(once,required)
         self.assertEqual(once,twice)
-        self.assertIn(old.strip(),once)
-        self.assertIn(new,once)
+        self.assertEqual(once.splitlines(),[
+            f"ssh-ed25519 {first}",
+            f"ssh-ed25519 {second}",
+            " ".join(required.split()[:2]),
+        ])
+
+    def test_public_key_repair_preserves_options_and_ignores_comments(self) -> None:
+        restricted_blob = self.public_key_blob(4)
+        comment_blob = self.public_key_blob(5)
+        required = f"ssh-ed25519 {self.public_key_blob(6)} recovery"
+        restricted = f'from="10.20.0.0/24",no-agent-forwarding ssh-ed25519 {restricted_blob} ceph'
+        source = f"# ssh-ed25519 {comment_blob} disabled\n{restricted}\n"
+        result = MODULE.canonical_authorized_keys(source,required)
+        self.assertEqual(result.splitlines(),[
+            restricted,
+            " ".join(required.split()[:2]),
+        ])
 
     def test_efi_boot_order_moves_pxe_before_ubuntu(self) -> None:
         source = """BootCurrent: 0007
@@ -100,6 +145,12 @@ Boot0002* ubuntu HD(1,GPT,def)
         install = source.split('if [ "${1:-}" = "--install" ]; then',1)[1].split("\nfi\n",1)[0]
         self.assertIn("configure_management_link",install)
         self.assertIn("retire_legacy_mac_mounts",install)
+
+    def test_apply_restarts_emergency_ssh_and_always_rebuilds_initramfs(self) -> None:
+        source = SCRIPT.read_text()
+        self.assertIn('run(["systemctl","restart","ssh-emergency.service"])',source)
+        self.assertIn('run(["update-initramfs","-u"],timeout=600)',source)
+        self.assertIn('line.endswith("/.ssh/authorized_keys")',source)
 
 
 if __name__ == "__main__":

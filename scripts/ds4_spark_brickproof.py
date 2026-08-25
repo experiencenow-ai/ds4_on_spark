@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import concurrent.futures
 import datetime
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -146,25 +149,78 @@ def set_shell_assignment(text: str,name: str,value: str) -> str:
     return(f"{text}{suffix}{line}\n")
 
 
-def canonical_grub(text: str) -> str:
+def public_key_material_is_valid(key_type: str,blob: str) -> bool:
+    if not key_type.startswith(("ssh-","ecdsa-","sk-")):
+        return(False)
+    try:
+        decoded = base64.b64decode(blob,validate=True)
+    except (binascii.Error,ValueError):
+        return(False)
+    if len(decoded) < 4:
+        return(False)
+    name_length = int.from_bytes(decoded[:4],"big")
+    if name_length == 0 or (4 + name_length) > len(decoded):
+        return(False)
+    return(decoded[4:4 + name_length].decode("ascii",errors="replace") == key_type)
+
+
+def canonical_authorized_keys(text: str,required_key: str) -> str:
+    required_tokens = required_key.split()
+    if len(required_tokens) < 2 or not public_key_material_is_valid(required_tokens[0],required_tokens[1]):
+        raise BrickproofError("fleet recovery public key is invalid")
+    required_material = (required_tokens[0],required_tokens[1])
+    repaired = re.sub(r"(?<=\S)n(?=ssh-(?:ed25519|rsa|dss|ecdsa-|sk-))","\n",text)
+    rendered: list[str] = []
+    seen: set[tuple[str,str]] = set()
+    pending_type = ""
+    for raw_line in repaired.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            fields = shlex.split(line)
+        except ValueError:
+            fields = line.split()
+        key_index = next((index for index,field in enumerate(fields) if field.startswith(("ssh-","ecdsa-","sk-"))),-1)
+        if key_index >= 0:
+            pending_type = fields[key_index] if key_index == 0 and len(fields) == 1 else ""
+            if (key_index + 1) >= len(fields):
+                continue
+            material = (fields[key_index],fields[key_index + 1])
+            if not public_key_material_is_valid(*material) or material == required_material or material in seen:
+                continue
+            rendered.append(line if key_index > 0 else f"{material[0]} {material[1]}")
+            seen.add(material)
+            continue
+        if pending_type and fields and public_key_material_is_valid(pending_type,fields[0]):
+            material = (pending_type,fields[0])
+            if material != required_material and material not in seen:
+                rendered.append(f"{material[0]} {material[1]}")
+                seen.add(material)
+        pending_type = ""
+    rendered.append(f"{required_material[0]} {required_material[1]}")
+    return("\n".join(rendered) + "\n")
+
+
+def recovery_ip_token(recovery_network: object) -> str:
+    if not isinstance(recovery_network,dict):
+        raise BrickproofError("recovery network is invalid")
+    names = ("address","gateway","netmask","node_id","interface")
+    values = [str(recovery_network.get(name,"")) for name in names]
+    if any(not value for value in values):
+        raise BrickproofError("recovery network is incomplete")
+    return(f"ip={values[0]}::{values[1]}:{values[2]}:{values[3]}:{values[4]}:none")
+
+
+def canonical_grub(text: str,recovery_network: object) -> str:
     cmdline = shell_assignment(text,"GRUB_CMDLINE_LINUX_DEFAULT")
     tokens = shlex.split(cmdline)
-    if not any(token.startswith("ip=") for token in tokens):
-        raise BrickproofError("GRUB_CMDLINE_LINUX_DEFAULT has no static initramfs ip= argument")
-    if not any(token.startswith("console=ttyS0") for token in tokens):
-        raise BrickproofError("GRUB_CMDLINE_LINUX_DEFAULT has no serial console argument")
-    tokens = [token for token in tokens if not token.startswith("fsck.mode=") and not token.startswith("fsck.repair=")]
-    tokens.extend(("fsck.mode=skip","fsck.repair=no"))
+    tokens = [token for token in tokens if not token.startswith(("ip=","fsck.mode=","fsck.repair=","console=ttyS0"))]
+    if "console=tty0" not in tokens:
+        tokens.append("console=tty0")
+    tokens.extend(("console=ttyS0,921600",recovery_ip_token(recovery_network),"fsck.mode=skip","fsck.repair=no"))
     text = set_shell_assignment(text,"GRUB_CMDLINE_LINUX_DEFAULT",shlex.join(tokens))
     return(set_shell_assignment(text,"GRUB_DEFAULT","0"))
-
-
-def merge_public_key(text: str,public_key: str) -> str:
-    lines = [line.rstrip() for line in text.splitlines() if line.strip()]
-    fingerprint = " ".join(public_key.strip().split()[:2])
-    if not any(" ".join(line.split()[:2]) == fingerprint for line in lines):
-        lines.append(public_key.strip())
-    return("\n".join(lines) + "\n")
 
 
 def parse_efi_boot_entries(text: str) -> tuple[list[str],dict[str,str]]:
@@ -265,12 +321,12 @@ def install_recovery_keys(public_key: str) -> bool:
     root_keys = Path("/root/.ssh/authorized_keys")
     root_keys.parent.mkdir(parents=True,exist_ok=True)
     root_text = root_keys.read_text() if root_keys.exists() else ""
-    changed |= atomic_write(root_keys,merge_public_key(root_text,public_key),0o600)
+    changed |= atomic_write(root_keys,canonical_authorized_keys(root_text,public_key),0o600)
     os.chmod(root_keys.parent,0o700)
     dropbear_keys = Path("/etc/dropbear/initramfs/authorized_keys")
     dropbear_keys.parent.mkdir(parents=True,exist_ok=True)
     dropbear_text = dropbear_keys.read_text() if dropbear_keys.exists() else ""
-    changed |= atomic_write(dropbear_keys,merge_public_key(dropbear_text,public_key),0o600)
+    changed |= atomic_write(dropbear_keys,canonical_authorized_keys(dropbear_text,public_key),0o600)
     return(changed)
 
 
@@ -286,10 +342,10 @@ def install_assets(payload: dict[str,object]) -> bool:
     return(changed)
 
 
-def install_grub_policy() -> bool:
+def install_grub_policy(recovery_network: object) -> bool:
     path = Path("/etc/default/grub")
     before = path.read_text()
-    changed = atomic_write(path,canonical_grub(before),0o644)
+    changed = atomic_write(path,canonical_grub(before,recovery_network),0o644)
     legacy = Path("/etc/grub.d/40_ds4_fastboot")
     if legacy.exists():
         legacy.unlink()
@@ -317,7 +373,8 @@ def enable_policy_services() -> None:
     run(["sysctl","--system"],timeout=180)
     run(["systemctl","enable","earlyoom.service"])
     run(["systemctl","restart","earlyoom.service"])
-    run(["systemctl","enable","--now","ssh-emergency.service"])
+    run(["systemctl","enable","ssh-emergency.service"])
+    run(["systemctl","restart","ssh-emergency.service"])
     run(["systemctl","disable","sparkpipe-fsck-health.service"],check=False)
     run(["systemctl","enable","--now","sparkpipe-fsck-health.timer"])
     run(["systemctl","enable","serial-getty@ttyS0.service"])
@@ -395,10 +452,9 @@ def remote_apply(payload_path: Path) -> dict[str,object]:
         if legacy_timeout.exists():
             legacy_timeout.unlink()
     keys_changed = install_recovery_keys(str(payload["fleet_public_key"]))
-    grub_changed = install_grub_policy()
+    grub_changed = install_grub_policy(payload["recovery_network"])
     efi_boot_order_changed = install_efi_boot_order()
-    if keys_changed:
-        run(["update-initramfs","-u"],timeout=600)
+    run(["update-initramfs","-u"],timeout=600)
     decouple_optional_boot_work()
     enable_policy_services()
     return({"efi_boot_order_changed":efi_boot_order_changed,"grub_changed":grub_changed,"keys_changed":keys_changed,"memory_current_before":memory_current,"source_commit":payload["source_commit"]})
@@ -444,10 +500,13 @@ def remote_audit(payload_path: Path) -> dict[str,object]:
         observations[f"{unit}.enabled"] = state
         if state != "enabled":
             failures.append(f"{unit}:not-enabled")
+    cmdline_tokens = shlex.split(read_optional(Path("/proc/cmdline")))
+    runtime_masks = {token.split("=",1)[1] for token in cmdline_tokens if token.startswith("systemd.mask=")}
     for unit in ("ds4-switched-fabric.service","ds4-direct-pair-fabric.service","sparkpipe-fsck-health.service","sparkpipe_model_residentd.service"):
         state = is_enabled(unit)
         observations[f"{unit}.enabled"] = state
-        if state not in ("disabled","static"):
+        rescue_masked = state == "masked-runtime" and unit in runtime_masks
+        if state not in ("disabled","static") and not rescue_masked:
             failures.append(f"boot-critical-link:{unit}={state}")
     for unit in ("rbdmap.service","nvmf-autoconnect.service","open-iscsi.service","iscsid.service","srp_daemon.service","cloud-init.service","cloud-init-local.service","cloud-config.service","cloud-final.service","pollinate.service","nvidia-spark-run-apt-upgrade-once.service","systemd-networkd-wait-online.service"):
         state = is_enabled(unit)
@@ -457,11 +516,14 @@ def remote_audit(payload_path: Path) -> dict[str,object]:
     for unit in ("ds4-switched-fabric.service","ds4-direct-pair-fabric.service"):
         before = service_value(unit,"Before")
         timeout = service_value(unit,"TimeoutStartUSec")
+        installed = read_optional(Path("/etc/systemd/system") / unit)
+        rescue_masked = unit in runtime_masks
         observations[f"{unit}.before"] = before
         observations[f"{unit}.timeout"] = timeout
-        if "network-online.target" in before or "multi-user.target" in before:
+        observations[f"{unit}.rescue_masked"] = rescue_masked
+        if "network-online.target" in installed or "multi-user.target" in installed:
             failures.append(f"fabric-boot-order:{unit}")
-        if timeout not in ("1min","60s"):
+        if "TimeoutStartSec=60" not in installed:
             failures.append(f"fabric-timeout:{unit}={timeout}")
     firewall_timeout = service_value("spark-firewall.service","TimeoutStartUSec")
     observations["spark-firewall.timeout"] = firewall_timeout
@@ -482,10 +544,18 @@ def remote_audit(payload_path: Path) -> dict[str,object]:
         failures.append("obsolete-resident-dropin")
     key_id = " ".join(public_key.split()[:2])
     for path in (Path("/root/.ssh/authorized_keys"),Path("/etc/dropbear/initramfs/authorized_keys")):
-        present = any(" ".join(line.split()[:2]) == key_id for line in read_optional(path).splitlines())
+        key_text = read_optional(path)
+        present = any(" ".join(line.split()[:2]) == key_id for line in key_text.splitlines())
         observations[f"key:{path}"] = present
         if not present:
             failures.append(f"missing-key:{path}")
+        if key_text != canonical_authorized_keys(key_text,public_key):
+            failures.append(f"noncanonical-key:{path}")
+    initrd = command(["readlink","-f","/boot/initrd.img"],check=False)
+    initrd_files = command(["lsinitramfs",initrd],timeout=180,check=False) if initrd else ""
+    observations["initramfs_recovery_key"] = any(line.endswith("/.ssh/authorized_keys") for line in initrd_files.splitlines())
+    if not observations["initramfs_recovery_key"]:
+        failures.append("missing-key:initramfs")
     grub = read_optional(Path("/etc/default/grub"))
     cmdline = shell_assignment(grub,"GRUB_CMDLINE_LINUX_DEFAULT")
     observations["grub_default"] = shell_assignment(grub,"GRUB_DEFAULT")
@@ -495,8 +565,9 @@ def remote_audit(payload_path: Path) -> dict[str,object]:
     for token in ("fsck.mode=skip","fsck.repair=no"):
         if token not in shlex.split(cmdline):
             failures.append(f"grub-missing:{token}")
-    if not any(token.startswith("ip=") for token in shlex.split(cmdline)):
-        failures.append("grub-missing:ip")
+    expected_recovery_ip = recovery_ip_token(payload["recovery_network"])
+    if expected_recovery_ip not in shlex.split(cmdline):
+        failures.append("grub-recovery-ip")
     if not any(token.startswith("console=ttyS0") for token in shlex.split(cmdline)):
         failures.append("grub-missing:serial")
     if Path("/etc/grub.d/40_ds4_fastboot").exists():
@@ -555,6 +626,21 @@ def build_payload(repo: Path,ref: str) -> dict[str,object]:
     return({"assets":assets,"fleet_public_key":public_key,"source_commit":commit})
 
 
+def recovery_network_for_node(node: str) -> dict[str,str]:
+    output = command([sys.executable,str(ROOT / "scripts" / "ds4_spark_uplink.py"),"plan","--node-id",node])
+    plan = json.loads(output)
+    interface = ipaddress.ip_interface(str(plan["management_cidr"]))
+    if interface.version != 4:
+        raise BrickproofError(f"management address for {node} is not IPv4")
+    return({
+        "address":str(interface.ip),
+        "gateway":str(plan["management_gateway"]),
+        "interface":str(plan["wired_interface"]),
+        "netmask":str(interface.network.netmask),
+        "node_id":str(plan["node_id"]),
+    })
+
+
 def ssh(host: str,*argv: str,input_bytes: bytes | None = None,timeout: int = 120,check: bool = True) -> subprocess.CompletedProcess[bytes]:
     return(run(["ssh","-T","-o","BatchMode=yes","-o","ConnectTimeout=8",host,*argv],input_bytes=input_bytes,timeout=timeout,check=check))
 
@@ -569,7 +655,9 @@ def stage_remote(host: str,payload: dict[str,object]) -> None:
 
 
 def remote_action(host: str,action: str,payload: dict[str,object]) -> dict[str,object]:
-    stage_remote(host,payload)
+    node_payload = dict(payload)
+    node_payload["recovery_network"] = recovery_network_for_node(host)
+    stage_remote(host,node_payload)
     try:
         result = ssh(host,"sudo","-n","python3",REMOTE_SCRIPT,f"--remote-{action}",REMOTE_PAYLOAD,timeout=1200)
         document = json.loads(result.stdout.decode("utf-8"))
