@@ -23,6 +23,7 @@ DEFAULT_SERVER = "spark0"
 DEFAULT_INTERFACE = "enP7s7"
 DEFAULT_SERVER_IP = "192.168.50.128"
 DEFAULT_ROOT_DEVICE = "/dev/nvme0n1p2"
+DEFAULT_RECOVERY_IDENTITY = Path.home() / ".ssh" / "sparkpipe_fleet_root"
 DEFAULT_PROBE_NODES = ("spark0","spark2","spark3","spark4","spark5","spark6","spark7")
 REMOTE_STAGE = "/tmp/ds4_parallel_pxe_rescue.py"
 INSTALLED_SCRIPT = Path("/usr/local/sbin/ds4-parallel-pxe-rescue")
@@ -40,6 +41,67 @@ GRUB_SOURCE = Path("/usr/lib/grub/arm64-efi-signed/grubnetaa64.efi.signed")
 MOK_SOURCE = Path("/usr/lib/shim/mmaa64.efi")
 GRUB_CONFIG_NAMES = ("grub.cfg","grub/grub.cfg")
 EFFECTIVE_GRUB_CONFIG = STATE_DIR / "grub" / "grub.cfg"
+RECOVERY_KEY_SOURCE = Path("/etc/ds4-pxe-rescue/recovery_key.pub")
+RECOVERY_LOCAL_BOTTOM_SOURCE = Path("/etc/ds4-pxe-rescue/ds4-recovery-key")
+CONFIG_FORMAT = "ds4-parallel-pxe-rescue-v2"
+MANIFEST_FORMAT = "ds4-parallel-pxe-rescue-manifest-v2"
+RECOVERY_INITRAMFS_HOOK = """#!/bin/sh
+PREREQ=""
+
+prereqs()
+{
+    echo "$PREREQ"
+}
+
+case "$1" in
+prereqs)
+    prereqs
+    exit 0
+    ;;
+esac
+
+mkdir -p "${DESTDIR}/etc/ds4-rescue" "${DESTDIR}/scripts/local-bottom"
+cp /etc/ds4-pxe-rescue/recovery_key.pub "${DESTDIR}/etc/ds4-rescue/recovery_key.pub"
+cp /etc/ds4-pxe-rescue/ds4-recovery-key "${DESTDIR}/scripts/local-bottom/ds4-recovery-key"
+chmod 0600 "${DESTDIR}/etc/ds4-rescue/recovery_key.pub"
+chmod 0755 "${DESTDIR}/scripts/local-bottom/ds4-recovery-key"
+"""
+RECOVERY_LOCAL_BOTTOM = """#!/bin/sh
+PREREQ=""
+
+prereqs()
+{
+    echo "$PREREQ"
+}
+
+case "$1" in
+prereqs)
+    prereqs
+    exit 0
+    ;;
+esac
+
+key_file=/etc/ds4-rescue/recovery_key.pub
+target=/root/root/.ssh/authorized_keys
+if [ ! -f "$key_file" ] || [ ! -d /root ]; then
+    exit 0
+fi
+mount -o remount,rw /root
+mkdir -p /root/root/.ssh
+chmod 0700 /root/root/.ssh
+key="$(cat "$key_file")"
+if [ -f "$target" ] && grep -Fqx "$key" "$target"; then
+    exit 0
+fi
+temporary="${target}.ds4-rescue.$$"
+cat "$key_file" > "$temporary"
+printf '\n' >> "$temporary"
+if [ -f "$target" ]; then
+    cat "$target" >> "$temporary"
+fi
+chmod 0600 "$temporary"
+mv "$temporary" "$target"
+"""
 
 
 class PxeRescueError(RuntimeError):
@@ -139,12 +201,20 @@ def validate_root_device(root_device: str) -> str:
     return(root_device)
 
 
+def validate_recovery_public_key(public_key: str) -> str:
+    key = public_key.strip()
+    if re.fullmatch(r"ssh-ed25519 [A-Za-z0-9+/]+={0,3}(?: [^\r\n]+)?",key) is None:
+        raise PxeRescueError("invalid fleet recovery public key")
+    return(key)
+
+
 def validated_config(payload: dict[str,object]) -> dict[str,str]:
-    if payload.get("format") != "ds4-parallel-pxe-rescue-v1":
+    if payload.get("format") != CONFIG_FORMAT:
         raise PxeRescueError("unsupported PXE rescue config format")
     return({
-        "format":"ds4-parallel-pxe-rescue-v1",
+        "format":CONFIG_FORMAT,
         "interface":validate_interface(str(payload.get("interface",""))),
+        "recovery_public_key":validate_recovery_public_key(str(payload.get("recovery_public_key",""))),
         "root_device":validate_root_device(str(payload.get("root_device",""))),
         "server_ip":validate_server_ip(str(payload.get("server_ip",""))),
         "source_commit":str(payload.get("source_commit","unknown")),
@@ -175,7 +245,7 @@ def grub_config(config: dict[str,str]) -> str:
 set default=0
 
 menuentry 'DS4 Spark login rescue' {{
-    linux /vmlinuz root={root_device} ro fsck.mode=skip fsck.repair=no systemd.mask=ds4-switched-fabric.service systemd.mask=ds4-direct-pair-fabric.service systemd.unit=multi-user.target console=tty0 console=ttyS0,921600 ip=:::::{interface}:dhcp
+    linux /vmlinuz root={root_device} rw fsck.mode=skip fsck.repair=no systemd.mask=ds4-switched-fabric.service systemd.mask=ds4-direct-pair-fabric.service systemd.unit=multi-user.target console=tty0 console=ttyS0,921600 ip=:::::{interface}:dhcp
     initrd /initrd.img
 }}
 """)
@@ -243,14 +313,39 @@ def resolved_boot_assets() -> dict[str,Path]:
     return(sources)
 
 
+def recovery_public_key(identity: Path) -> str:
+    if not identity.is_file():
+        raise PxeRescueError(f"missing recovery identity: {identity}")
+    return(validate_recovery_public_key(command(["ssh-keygen","-y","-f",str(identity)])))
+
+
+def install_rescue_initrd(config: dict[str,str],target: Path) -> bool:
+    kernel_release = command(["uname","-r"])
+    atomic_write(RECOVERY_KEY_SOURCE,config["recovery_public_key"] + "\n",0o600)
+    atomic_write(RECOVERY_LOCAL_BOTTOM_SOURCE,RECOVERY_LOCAL_BOTTOM,0o755)
+    with tempfile.TemporaryDirectory(prefix="ds4-pxe-initramfs.") as directory:
+        work = Path(directory)
+        config_dir = work / "config"
+        shutil.copytree("/etc/initramfs-tools",config_dir,symlinks=True)
+        atomic_write(config_dir / "hooks" / "ds4-recovery-key",RECOVERY_INITRAMFS_HOOK,0o755)
+        output = work / "initrd.img"
+        run(["mkinitramfs","-d",str(config_dir),"-o",str(output),kernel_release],timeout=600)
+        listing = command(["lsinitramfs",str(output)],timeout=180)
+        for name in ("etc/ds4-rescue/recovery_key.pub","scripts/local-bottom/ds4-recovery-key"):
+            if name not in listing.splitlines():
+                raise PxeRescueError(f"generated rescue initramfs is missing {name}")
+        return(atomic_copy(output,target,0o644))
+
+
 def build_manifest(config: dict[str,str],sources: dict[str,Path]) -> dict[str,object]:
     files = {}
     for name,source in sources.items():
         target = STATE_DIR / name
+        source_name = f"generated:mkinitramfs:{os.uname().release}" if name == "initrd.img" else str(source)
         files[name] = {
             "bytes":target.stat().st_size,
             "sha256":sha256_file(target),
-            "source":str(source),
+            "source":source_name,
         }
     for name in ("dnsmasq.conf",*GRUB_CONFIG_NAMES):
         target = STATE_DIR / name
@@ -258,7 +353,7 @@ def build_manifest(config: dict[str,str],sources: dict[str,Path]) -> dict[str,ob
     return({
         "config":config,
         "files":files,
-        "format":"ds4-parallel-pxe-rescue-manifest-v1",
+        "format":MANIFEST_FORMAT,
         "generated_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),
     })
 
@@ -268,7 +363,7 @@ def remote_install(config: dict[str,str]) -> dict[str,object]:
     config = validated_config(config)
     if not interface_has_address(config["interface"],config["server_ip"]):
         raise PxeRescueError(f"{config['server_ip']} is not assigned to {config['interface']}")
-    for executable in ("dnsmasq","nft","systemctl"):
+    for executable in ("dnsmasq","nft","systemctl","mkinitramfs","lsinitramfs"):
         if shutil.which(executable) is None:
             raise PxeRescueError(f"required executable is missing: {executable}")
     sources = resolved_boot_assets()
@@ -278,8 +373,12 @@ def remote_install(config: dict[str,str]) -> dict[str,object]:
     if atomic_write(CONFIG_PATH,json.dumps(config,indent=2,sort_keys=True) + "\n",0o600):
         changed.append(str(CONFIG_PATH))
     for name,source in sources.items():
+        if name == "initrd.img":
+            continue
         if atomic_copy(source,STATE_DIR / name,0o644):
             changed.append(str(STATE_DIR / name))
+    if install_rescue_initrd(config,STATE_DIR / "initrd.img"):
+        changed.append(str(STATE_DIR / "initrd.img"))
     if atomic_write(STATE_DIR / "dnsmasq.conf",dnsmasq_config(config),0o644):
         changed.append(str(STATE_DIR / "dnsmasq.conf"))
     for name in GRUB_CONFIG_NAMES:
@@ -409,7 +508,7 @@ def verify_manifest() -> list[str]:
         manifest = json.loads((STATE_DIR / "manifest.json").read_text(encoding="utf-8"))
     except (OSError,json.JSONDecodeError) as error:
         return([f"manifest:{error}"])
-    if manifest.get("format") != "ds4-parallel-pxe-rescue-manifest-v1":
+    if manifest.get("format") != MANIFEST_FORMAT:
         failures.append("manifest-format")
     files = manifest.get("files")
     if not isinstance(files,dict):
@@ -440,6 +539,13 @@ def remote_status(require_active: bool = False) -> dict[str,object]:
         failures.append("identity-restricted-dnsmasq")
     if f"option:client-arch,{ARM64_UEFI_ARCH}" not in dnsmasq:
         failures.append("arm64-match")
+    recovery_key = RECOVERY_KEY_SOURCE.read_text(encoding="utf-8").strip() if RECOVERY_KEY_SOURCE.is_file() else ""
+    if recovery_key != config["recovery_public_key"]:
+        failures.append("recovery-public-key")
+    initrd_listing = command(["lsinitramfs",str(STATE_DIR / "initrd.img")],timeout=180,check=False)
+    for name in ("etc/ds4-rescue/recovery_key.pub","scripts/local-bottom/ds4-recovery-key"):
+        if name not in initrd_listing.splitlines():
+            failures.append(f"initrd:{name}")
     for token in (
         f"root={config['root_device']}",
         "systemd.mask=ds4-switched-fabric.service",
@@ -574,8 +680,9 @@ def controller_action(args: argparse.Namespace) -> int:
     if args.action == "deploy":
         commit = stage_controller(args.server,args.source_ref)
         config = {
-            "format":"ds4-parallel-pxe-rescue-v1",
+            "format":CONFIG_FORMAT,
             "interface":args.interface,
+            "recovery_public_key":recovery_public_key(args.recovery_identity),
             "root_device":args.root_device,
             "server_ip":args.server_ip,
             "source_commit":commit,
@@ -618,6 +725,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--interface",default=DEFAULT_INTERFACE)
     parser.add_argument("--server-ip",default=DEFAULT_SERVER_IP)
     parser.add_argument("--root-device",default=DEFAULT_ROOT_DEVICE)
+    parser.add_argument("--recovery-identity",type=Path,default=DEFAULT_RECOVERY_IDENTITY)
     parser.add_argument("--source-ref",default="HEAD")
     parser.add_argument("--nodes",default=",".join(DEFAULT_PROBE_NODES))
     parser.add_argument("--jobs",type=int,default=len(DEFAULT_PROBE_NODES))

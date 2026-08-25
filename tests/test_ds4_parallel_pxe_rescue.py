@@ -12,8 +12,9 @@ SPEC.loader.exec_module(MODULE)
 
 class ParallelPxeRescueTest(unittest.TestCase):
     CONFIG = {
-        "format":"ds4-parallel-pxe-rescue-v1",
+        "format":"ds4-parallel-pxe-rescue-v2",
         "interface":"enP7s7",
+        "recovery_public_key":"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA test",
         "root_device":"/dev/nvme0n1p2",
         "server_ip":"192.168.50.128",
         "source_commit":"abc123",
@@ -32,6 +33,7 @@ class ParallelPxeRescueTest(unittest.TestCase):
         self.assertIn("root=/dev/nvme0n1p2",result)
         self.assertIn("ip=:::::enP7s7:dhcp",result)
         self.assertIn("systemd.unit=multi-user.target",result)
+        self.assertIn("root=/dev/nvme0n1p2 rw",result)
         self.assertIn("systemd.mask=ds4-switched-fabric.service",result)
         self.assertIn("systemd.mask=ds4-direct-pair-fabric.service",result)
         self.assertNotIn("ds4_spark_brickproof",result)
@@ -53,6 +55,7 @@ class ParallelPxeRescueTest(unittest.TestCase):
     def test_config_validation_rejects_bad_inputs(self) -> None:
         for field,value in (
             ("interface","enP7s7;reboot"),
+            ("recovery_public_key","not-a-key"),
             ("server_ip","not-an-ip"),
             ("root_device","../../etc/passwd"),
         ):
@@ -60,6 +63,12 @@ class ParallelPxeRescueTest(unittest.TestCase):
             payload[field] = value
             with self.assertRaises(MODULE.PxeRescueError):
                 MODULE.validated_config(payload)
+
+    def test_rescue_initramfs_repairs_root_key_before_switch_root(self) -> None:
+        self.assertIn("scripts/local-bottom/ds4-recovery-key",MODULE.RECOVERY_INITRAMFS_HOOK)
+        self.assertIn("/root/root/.ssh/authorized_keys",MODULE.RECOVERY_LOCAL_BOTTOM)
+        self.assertIn("mount -o remount,rw /root",MODULE.RECOVERY_LOCAL_BOTTOM)
+        self.assertIn('cat "$key_file" > "$temporary"',MODULE.RECOVERY_LOCAL_BOTTOM)
 
     def test_invalid_drop_handle_is_found(self) -> None:
         rules = [
