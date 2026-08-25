@@ -28,6 +28,8 @@ DEFAULT_RECOVERY_IDENTITY = Path.home() / ".ssh" / "sparkpipe_fleet_root"
 REMOTE_SCRIPT = "/tmp/ds4-spark-brickproof.py"
 REMOTE_PAYLOAD = "/tmp/ds4-spark-brickproof.json"
 SWAP_FILES = (("/swap.img",16), ("/swap-extra-16g.img",16), ("/swap-extra-32g.img",32))
+REQUIRED_KERNEL_MODULES = ("sch_fq_codel",)
+KERNEL_MODULES_LOAD = "".join(f"{module}\n" for module in REQUIRED_KERNEL_MODULES)
 ASSET_SOURCES = {
     "/etc/systemd/system/sparkpipe_model_residentd.service": ("tools/devcycle/sparkpipe_model_residentd.service",0o644),
     "/usr/local/bin/sparkpipe_fsck_health.sh": ("tools/devcycle/sparkpipe_fsck_health.sh",0o755),
@@ -273,10 +275,20 @@ def package_installed(name: str) -> bool:
     return(result.returncode == 0 and b"install ok installed" in result.stdout)
 
 
+def required_packages(kernel_release: str) -> tuple[str,...]:
+    return("earlyoom","dropbear-initramfs","efibootmgr",f"linux-modules-{kernel_release}")
+
+
 def install_packages() -> None:
-    missing = [name for name in ("earlyoom","dropbear-initramfs","efibootmgr") if not package_installed(name)]
+    missing = [name for name in required_packages(os.uname().release) if not package_installed(name)]
     if missing:
         run(["apt-get","install","-y",*missing],timeout=600)
+
+
+def install_required_kernel_modules() -> None:
+    atomic_write(Path("/etc/modules-load.d/90-ds4-network.conf"),KERNEL_MODULES_LOAD,0o644)
+    for module in REQUIRED_KERNEL_MODULES:
+        run(["modprobe",module])
 
 
 def ensure_swap_file(path_text: str,size_gib: int) -> None:
@@ -454,6 +466,7 @@ def remote_apply(payload_path: Path) -> dict[str,object]:
     if memory_current >= 108 * 1024 * 1024 * 1024:
         raise BrickproofError(f"user-1000.slice already uses {memory_current} bytes; refusing a 108G cap")
     install_packages()
+    install_required_kernel_modules()
     ensure_swap()
     install_assets(payload)
     atomic_write(Path("/etc/systemd/system/user-1000.slice.d/20-ds4-brickproof.conf"),USER_SLICE,0o644)
@@ -499,6 +512,7 @@ def remote_audit(payload_path: Path) -> dict[str,object]:
     public_key = str(payload["fleet_public_key"])
     failures = []
     observations: dict[str,object] = {}
+    required_module_state: dict[str,object] = {}
     swaps = Path("/proc/swaps").read_text()
     swap_bytes = sum(int(line.split()[2]) * 1024 for line in swaps.splitlines()[1:] if len(line.split()) >= 3)
     observations["swap_bytes"] = swap_bytes
@@ -506,6 +520,25 @@ def remote_audit(payload_path: Path) -> dict[str,object]:
         failures.append("swap<63GiB")
     observations["swappiness"] = command(["sysctl","-n","vm.swappiness"],check=False)
     observations["panic"] = command(["sysctl","-n","kernel.panic"],check=False)
+    kernel_modules_package = f"linux-modules-{os.uname().release}"
+    observations["kernel_modules_package"] = package_installed(kernel_modules_package)
+    if not observations["kernel_modules_package"]:
+        failures.append(f"missing-package:{kernel_modules_package}")
+    modules_load = read_optional(Path("/etc/modules-load.d/90-ds4-network.conf"))
+    if modules_load != KERNEL_MODULES_LOAD:
+        failures.append("kernel-modules-load-config")
+    for module in REQUIRED_KERNEL_MODULES:
+        available = command(["modinfo","-F","filename",module],check=False)
+        loaded = (Path("/sys/module") / module).is_dir()
+        required_module_state[module] = {"available":available,"loaded":loaded}
+        if not available:
+            failures.append(f"kernel-module-unavailable:{module}")
+        if not loaded:
+            failures.append(f"kernel-module-not-loaded:{module}")
+    observations["required_kernel_modules"] = required_module_state
+    observations["default_qdisc"] = command(["sysctl","-n","net.core.default_qdisc"],check=False)
+    if observations["default_qdisc"] != "fq_codel":
+        failures.append(f"default-qdisc:{observations['default_qdisc']}")
     observations["earlyoom_process"] = command(["pgrep","-af","earlyoom"],check=False)
     if "-m 7 -s 25 -r 5" not in str(observations["earlyoom_process"]):
         failures.append("earlyoom-runtime-args")

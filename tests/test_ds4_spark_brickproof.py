@@ -152,6 +152,18 @@ Boot0002* ubuntu HD(1,GPT,def)
         self.assertIn('run(["update-initramfs","-u"],timeout=600)',source)
         self.assertIn('line.endswith("/.ssh/authorized_keys")',source)
 
+    def test_running_kernel_modules_are_a_required_package(self) -> None:
+        self.assertEqual(MODULE.required_packages("6.17.0-test"),(
+            "earlyoom",
+            "dropbear-initramfs",
+            "efibootmgr",
+            "linux-modules-6.17.0-test",
+        ))
+
+    def test_network_kernel_modules_have_one_canonical_load_list(self) -> None:
+        self.assertEqual(MODULE.REQUIRED_KERNEL_MODULES,("sch_fq_codel",))
+        self.assertEqual(MODULE.KERNEL_MODULES_LOAD,"sch_fq_codel\n")
+
     def test_persistent_unit_links_only_returns_dependency_links(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
