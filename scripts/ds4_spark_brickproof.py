@@ -274,6 +274,7 @@ def enable_policy_services() -> None:
     run(["systemctl","enable","--now","ds4-switched-fabric.timer"])
     run(["systemctl","enable","--now","ds4-direct-pair-fabric.timer"])
     run(["systemctl","disable","sparkpipe_model_residentd.service"],check=False)
+    run(["systemctl","reset-failed","sparkpipe_model_residentd.service"],check=False)
     run(["systemctl","enable","--now","ds4-optional-storage.timer"])
     run(["systemctl","set-default","multi-user.target"])
     run(["systemctl","set-property","--runtime","user-1000.slice","MemoryHigh=100G","MemoryMax=108G","MemorySwapMax=0"])
