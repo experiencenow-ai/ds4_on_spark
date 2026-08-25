@@ -167,13 +167,43 @@ def merge_public_key(text: str,public_key: str) -> str:
     return("\n".join(lines) + "\n")
 
 
+def parse_efi_boot_entries(text: str) -> tuple[list[str],dict[str,str]]:
+    order_match = re.search(r"^BootOrder:\s*(.*)$",text,re.MULTILINE)
+    if order_match is None:
+        raise BrickproofError("efibootmgr output has no BootOrder")
+    order = [item.strip().upper() for item in order_match.group(1).split(",") if item.strip()]
+    entries = {}
+    for match in re.finditer(r"^Boot([0-9A-Fa-f]{4})\*?\s+([^\r\n]+)$",text,re.MULTILINE):
+        entries[match.group(1).upper()] = match.group(2).strip()
+    if not order or any(item not in entries for item in order):
+        raise BrickproofError("efibootmgr BootOrder references a missing entry")
+    return((order,entries))
+
+
+def linux_efi_boot_entry(entries: dict[str,str]) -> str:
+    candidates = []
+    for entry,label in entries.items():
+        normalized = label.strip().casefold()
+        if any(normalized == name or normalized.startswith(f"{name} ") or normalized.startswith(f"{name}\t") for name in ("ubuntu","dgx os")):
+            candidates.append(entry)
+    if len(candidates) != 1:
+        raise BrickproofError(f"expected one Linux EFI boot entry, found {len(candidates)}")
+    return(candidates[0])
+
+
+def desired_efi_boot_order(text: str) -> list[str]:
+    order,entries = parse_efi_boot_entries(text)
+    linux_entry = linux_efi_boot_entry(entries)
+    return([linux_entry,*[entry for entry in order if entry != linux_entry]])
+
+
 def package_installed(name: str) -> bool:
     result = run(["dpkg-query","-W","-f=${Status}",name],check=False)
     return(result.returncode == 0 and b"install ok installed" in result.stdout)
 
 
 def install_packages() -> None:
-    missing = [name for name in ("earlyoom","dropbear-initramfs") if not package_installed(name)]
+    missing = [name for name in ("earlyoom","dropbear-initramfs","efibootmgr") if not package_installed(name)]
     if missing:
         run(["apt-get","install","-y",*missing],timeout=600)
 
@@ -260,6 +290,19 @@ def install_grub_policy() -> bool:
     return(changed)
 
 
+def install_efi_boot_order() -> bool:
+    before = command(["efibootmgr","-v"])
+    order,_ = parse_efi_boot_entries(before)
+    desired = desired_efi_boot_order(before)
+    if order == desired:
+        return(False)
+    run(["efibootmgr","-o",",".join(desired)])
+    after = command(["efibootmgr","-v"])
+    if desired_efi_boot_order(after) != desired or parse_efi_boot_entries(after)[0] != desired:
+        raise BrickproofError("EFI boot order verification failed")
+    return(True)
+
+
 def enable_policy_services() -> None:
     run(["systemctl","daemon-reload"])
     run(["sysctl","--system"],timeout=180)
@@ -344,11 +387,12 @@ def remote_apply(payload_path: Path) -> dict[str,object]:
             legacy_timeout.unlink()
     keys_changed = install_recovery_keys(str(payload["fleet_public_key"]))
     grub_changed = install_grub_policy()
+    efi_boot_order_changed = install_efi_boot_order()
     if keys_changed:
         run(["update-initramfs","-u"],timeout=600)
     decouple_optional_boot_work()
     enable_policy_services()
-    return({"grub_changed":grub_changed,"keys_changed":keys_changed,"memory_current_before":memory_current,"source_commit":payload["source_commit"]})
+    return({"efi_boot_order_changed":efi_boot_order_changed,"grub_changed":grub_changed,"keys_changed":keys_changed,"memory_current_before":memory_current,"source_commit":payload["source_commit"]})
 
 
 def read_optional(path: Path) -> str:
@@ -448,6 +492,14 @@ def remote_audit(payload_path: Path) -> dict[str,object]:
         failures.append("grub-missing:serial")
     if Path("/etc/grub.d/40_ds4_fastboot").exists():
         failures.append("legacy-fastboot-entry")
+    efi_boot = command(["efibootmgr","-v"],check=False)
+    observations["efi_boot"] = efi_boot
+    try:
+        efi_order,efi_entries = parse_efi_boot_entries(efi_boot)
+        if efi_order[0] != linux_efi_boot_entry(efi_entries):
+            failures.append("efi-linux-not-first")
+    except BrickproofError as error:
+        failures.append(f"efi-boot:{error}")
     listeners = command(["ss","-ltn"],check=False)
     if not re.search(r"(?:\*|0\.0\.0\.0):2222\b",listeners):
         failures.append("emergency-port-not-listening")
