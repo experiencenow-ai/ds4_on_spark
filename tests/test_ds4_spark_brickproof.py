@@ -152,6 +152,17 @@ Boot0002* ubuntu HD(1,GPT,def)
         self.assertIn('run(["update-initramfs","-u"],timeout=600)',source)
         self.assertIn('line.endswith("/.ssh/authorized_keys")',source)
 
+    def test_persistent_unit_links_only_returns_dependency_links(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            unit = root / "ds4-test.service"
+            unit.write_text("[Service]\nExecStart=/bin/true\n")
+            wants = root / "multi-user.target.wants"
+            wants.mkdir()
+            link = wants / unit.name
+            link.symlink_to(unit)
+            self.assertEqual(MODULE.persistent_unit_links(unit.name,root),[link])
+
 
 if __name__ == "__main__":
     unittest.main()

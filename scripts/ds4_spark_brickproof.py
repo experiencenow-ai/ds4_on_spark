@@ -368,6 +368,19 @@ def install_efi_boot_order() -> bool:
     return(True)
 
 
+def persistent_unit_links(unit: str,root: Path = Path("/etc/systemd/system")) -> list[Path]:
+    return(sorted(
+        path for path in root.rglob(unit)
+        if path.is_symlink() and path.parent.name.endswith((".wants",".requires"))
+    ))
+
+
+def disable_persistent_unit(unit: str) -> None:
+    run(["systemctl","disable",unit],check=False)
+    for path in persistent_unit_links(unit):
+        path.unlink()
+
+
 def enable_policy_services() -> None:
     run(["systemctl","daemon-reload"])
     run(["sysctl","--system"],timeout=180)
@@ -375,14 +388,14 @@ def enable_policy_services() -> None:
     run(["systemctl","restart","earlyoom.service"])
     run(["systemctl","enable","ssh-emergency.service"])
     run(["systemctl","restart","ssh-emergency.service"])
-    run(["systemctl","disable","sparkpipe-fsck-health.service"],check=False)
+    disable_persistent_unit("sparkpipe-fsck-health.service")
     run(["systemctl","enable","--now","sparkpipe-fsck-health.timer"])
     run(["systemctl","enable","serial-getty@ttyS0.service"])
-    run(["systemctl","disable","ds4-switched-fabric.service"],check=False)
-    run(["systemctl","disable","ds4-direct-pair-fabric.service"],check=False)
+    disable_persistent_unit("ds4-switched-fabric.service")
+    disable_persistent_unit("ds4-direct-pair-fabric.service")
     run(["systemctl","enable","--now","ds4-switched-fabric.timer"])
     run(["systemctl","enable","--now","ds4-direct-pair-fabric.timer"])
-    run(["systemctl","disable","sparkpipe_model_residentd.service"],check=False)
+    disable_persistent_unit("sparkpipe_model_residentd.service")
     run(["systemctl","reset-failed","sparkpipe_model_residentd.service"],check=False)
     run(["systemctl","enable","--now","ds4-optional-storage.timer"])
     run(["systemctl","set-default","multi-user.target"])
@@ -504,10 +517,14 @@ def remote_audit(payload_path: Path) -> dict[str,object]:
     runtime_masks = {token.split("=",1)[1] for token in cmdline_tokens if token.startswith("systemd.mask=")}
     for unit in ("ds4-switched-fabric.service","ds4-direct-pair-fabric.service","sparkpipe-fsck-health.service","sparkpipe_model_residentd.service"):
         state = is_enabled(unit)
+        links = [str(path) for path in persistent_unit_links(unit)]
         observations[f"{unit}.enabled"] = state
+        observations[f"{unit}.persistent_links"] = links
         rescue_masked = state == "masked-runtime" and unit in runtime_masks
         if state not in ("disabled","static") and not rescue_masked:
             failures.append(f"boot-critical-link:{unit}={state}")
+        if links:
+            failures.append(f"boot-critical-links:{unit}")
     for unit in ("rbdmap.service","nvmf-autoconnect.service","open-iscsi.service","iscsid.service","srp_daemon.service","cloud-init.service","cloud-init-local.service","cloud-config.service","cloud-final.service","pollinate.service","nvidia-spark-run-apt-upgrade-once.service","systemd-networkd-wait-online.service"):
         state = is_enabled(unit)
         observations[f"{unit}.enabled"] = state
