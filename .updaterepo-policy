@@ -1,0 +1,1 @@
+UPDATEREPO_VALIDATE_COMMANDS+=("python3 -m unittest discover -s tests -p 'test_*.py'")
