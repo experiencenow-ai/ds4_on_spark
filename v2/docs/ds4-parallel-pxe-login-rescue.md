@@ -23,6 +23,7 @@ Run from a clean, committed checkout:
 python3 scripts/ds4_parallel_pxe_rescue.py deploy --server spark0
 python3 scripts/ds4_parallel_pxe_rescue.py start --server spark0
 python3 scripts/ds4_parallel_pxe_rescue.py status --server spark0 --require-active
+python3 scripts/ds4_parallel_pxe_rescue.py probe --server spark0
 ```
 
 The service is deliberately not enabled at server boot. Multiple Sparks may be
@@ -46,6 +47,7 @@ python3 scripts/ds4_parallel_pxe_rescue.py stop --server spark0
 ```
 
 Every controller action writes a JSON receipt under the local temporary
-directory. `status --require-active` fails if the signed assets differ from the
+directory. `probe` concurrently fetches and hashes `grub.cfg` through TFTP from
+the surviving Sparks. `status --require-active` fails if the signed assets differ from the
 manifest, DHCP/TFTP listeners are absent, the temporary firewall rule is absent,
 or the service is unexpectedly enabled persistently.

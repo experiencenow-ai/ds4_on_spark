@@ -67,6 +67,11 @@ class ParallelPxeRescueTest(unittest.TestCase):
         ]
         self.assertEqual(MODULE.invalid_drop_handle(rules),7)
 
+    def test_probe_node_parser_rejects_an_empty_set(self) -> None:
+        self.assertEqual(MODULE.parse_nodes("spark0, spark2"),("spark0","spark2"))
+        with self.assertRaises(MODULE.PxeRescueError):
+            MODULE.parse_nodes(" , ")
+
     def test_legacy_exact_dhcp_rule_is_detected(self) -> None:
         rule = {"handle":9,"expr":[
             {"match":{"left":{"meta":{"key":"iifname"}},"right":"enP7s7"}},

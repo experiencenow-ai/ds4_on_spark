@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import datetime
 import hashlib
 import ipaddress
@@ -22,6 +23,7 @@ DEFAULT_SERVER = "spark0"
 DEFAULT_INTERFACE = "enP7s7"
 DEFAULT_SERVER_IP = "192.168.50.128"
 DEFAULT_ROOT_DEVICE = "/dev/nvme0n1p2"
+DEFAULT_PROBE_NODES = ("spark0","spark2","spark3","spark4","spark5","spark6","spark7")
 REMOTE_STAGE = "/tmp/ds4_parallel_pxe_rescue.py"
 INSTALLED_SCRIPT = Path("/usr/local/sbin/ds4-parallel-pxe-rescue")
 CONFIG_PATH = Path("/etc/ds4-pxe-rescue/config.json")
@@ -509,6 +511,51 @@ def remote_json(server: str,*argv: str,timeout: int = 120) -> dict[str,object]:
     return(document)
 
 
+def parse_nodes(value: str) -> tuple[str,...]:
+    nodes = tuple(item.strip() for item in value.split(",") if item.strip())
+    if not nodes:
+        raise PxeRescueError("at least one probe node is required")
+    return(nodes)
+
+
+def probe_client(node: str,server_ip: str,expected_sha256: str) -> dict[str,object]:
+    result = ssh(node,"curl","--silent","--show-error",f"tftp://{server_ip}/grub.cfg",timeout=30)
+    actual_sha256 = hashlib.sha256(result.stdout).hexdigest()
+    return({
+        "bytes":len(result.stdout),
+        "expected_sha256":expected_sha256,
+        "node":node,
+        "sha256":actual_sha256,
+        "status":"PASS" if actual_sha256 == expected_sha256 else "FAIL",
+    })
+
+
+def parallel_probe(server: str,nodes: tuple[str,...],jobs: int) -> dict[str,object]:
+    status = remote_json(server,"--remote-status","--require-active")
+    if status.get("failures"):
+        raise PxeRescueError(f"PXE server audit failed: {status['failures']}")
+    config = status.get("config")
+    if not isinstance(config,dict):
+        raise PxeRescueError("PXE server status has no config")
+    validated = validated_config(config)
+    expected_sha256 = hashlib.sha256(grub_config(validated).encode("utf-8")).hexdigest()
+    documents = []
+    failures = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(max(jobs,1),len(nodes))) as executor:
+        futures = {executor.submit(probe_client,node,validated["server_ip"],expected_sha256):node for node in nodes}
+        for future in concurrent.futures.as_completed(futures):
+            node = futures[future]
+            try:
+                document = future.result()
+            except (PxeRescueError,subprocess.TimeoutExpired,OSError) as error:
+                document = {"node":node,"status":"FAIL","error":str(error)}
+            documents.append(document)
+            if document["status"] != "PASS":
+                failures.append(node)
+    documents.sort(key=lambda item:str(item["node"]))
+    return({"failures":failures,"nodes":documents,"server":status})
+
+
 def write_receipt(action: str,server: str,document: dict[str,object]) -> Path:
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     path = Path(tempfile.gettempdir()) / f"ds4_parallel_pxe_rescue_{action}_{timestamp}.json"
@@ -536,6 +583,8 @@ def controller_action(args: argparse.Namespace) -> int:
     elif args.action == "stop":
         ssh(args.server,"sudo","-n","systemctl","stop",SERVICE_NAME)
         document = remote_json(args.server,"--remote-status")
+    elif args.action == "probe":
+        document = parallel_probe(args.server,parse_nodes(args.nodes),args.jobs)
     else:
         remote_args = ["--remote-status"]
         if args.require_active:
@@ -557,12 +606,14 @@ def parse_remote_install(path_text: str) -> dict[str,str]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action",nargs="?",choices=("deploy","start","stop","status"),default="status")
+    parser.add_argument("action",nargs="?",choices=("deploy","start","stop","status","probe"),default="status")
     parser.add_argument("--server",default=DEFAULT_SERVER)
     parser.add_argument("--interface",default=DEFAULT_INTERFACE)
     parser.add_argument("--server-ip",default=DEFAULT_SERVER_IP)
     parser.add_argument("--root-device",default=DEFAULT_ROOT_DEVICE)
     parser.add_argument("--source-ref",default="HEAD")
+    parser.add_argument("--nodes",default=",".join(DEFAULT_PROBE_NODES))
+    parser.add_argument("--jobs",type=int,default=len(DEFAULT_PROBE_NODES))
     parser.add_argument("--require-active",action="store_true")
     parser.add_argument("--remote-install",help=argparse.SUPPRESS)
     parser.add_argument("--remote-preflight",action="store_true",help=argparse.SUPPRESS)
