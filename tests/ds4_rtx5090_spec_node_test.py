@@ -28,6 +28,10 @@ class SpecNodeProfileTest(unittest.TestCase):
         self.assertIsNone(profile["spark_rank"])
         self.assertEqual(profile["runtime"]["state"],"infrastructure_only")
         self.assertEqual(profile["runtime"]["transport"],"not_implemented")
+        self.assertEqual(profile["management"]["wired"]["route_metric"],100)
+        self.assertEqual(profile["management"]["wifi"]["route_metric"],300)
+        self.assertEqual(profile["storage"]["drafters_path"],"/srv/drafters")
+        self.assertEqual(len(profile["hostname_aliases"]["spark_nodes"]),16)
 
     def test_private_link_is_isolated_point_to_point(self) -> None:
         profile = MODULE.load_profile(PROFILE)
@@ -64,6 +68,9 @@ class SpecNodeProfileTest(unittest.TestCase):
             "NVIDIA GeForce RTX 5090, 595.84",
             "Dual MIT/GPL",
             "SecureBoot enabled",
+            "eno2 192.168.50.4\ndefault dev eno2 metric 100\ndefault dev wlp133s0f0 metric 300",
+            "SSID: ASUS_40\nwlp133s0f0 192.168.50.68",
+            "/srv/drafters ext4\n653G\nspec:spec",
             "10.10.250.2/30\n1000",
             "enabled\nactive",
             "rtx5090",

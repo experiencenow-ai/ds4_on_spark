@@ -61,12 +61,19 @@ def validate_profile(profile: dict[str,object]) -> None:
     rtx = _mapping(private_link,"rtx5090")
     sparkf = _mapping(private_link,"sparkf")
     runtime = _mapping(profile,"runtime")
+    management = _mapping(profile,"management")
+    wired = _mapping(management,"wired")
+    wifi = _mapping(management,"wifi")
+    storage = _mapping(profile,"storage")
+    aliases = _mapping(profile,"hostname_aliases")
     values = (
         (profile,"hostname"),(operator,"user"),(operator,"management_host"),
         (operator,"tailscale_host"),(recovery,"user"),(rtx,"interface"),
         (sparkf,"interface"),(sparkf,"ssh_target"),(sparkf,"ssh_bastion"),
     )
     for payload,key in values:
+        _string(payload,key)
+    for payload,key in ((wired,"interface"),(wired,"address_mode"),(wifi,"interface"),(wifi,"ssid"),(wifi,"address_mode"),(storage,"drafters_path"),(storage,"filesystem"),(aliases,"lan_address"),(aliases,"sparkf_address")):
         _string(payload,key)
     rtx_interface = ipaddress.ip_interface(_string(rtx,"address"))
     sparkf_interface = ipaddress.ip_interface(_string(sparkf,"address"))
@@ -82,6 +89,21 @@ def validate_profile(profile: dict[str,object]) -> None:
         raise SpecNodeError("profile must not claim an unverified speculation runtime")
     if runtime.get("transport") != "not_implemented":
         raise SpecNodeError("profile must expose the missing remote transport")
+    if wired.get("address_mode") != "dhcp" or wifi.get("address_mode") != "dhcp":
+        raise SpecNodeError("management interfaces must use DHCP")
+    if wired.get("route_metric") != 100 or wifi.get("route_metric") != 300:
+        raise SpecNodeError("management route metrics must prefer wired Ethernet")
+    if storage.get("drafters_path") != "/srv/drafters" or storage.get("filesystem") != "ext4":
+        raise SpecNodeError("drafter storage contract changed")
+    if not isinstance(storage.get("minimum_available_gib"),int):
+        raise SpecNodeError("invalid drafter storage capacity gate")
+    if aliases.get("lan_address") != _string(operator,"management_host"):
+        raise SpecNodeError("LAN hostname alias must match the management host")
+    if aliases.get("sparkf_address") != str(rtx_interface.ip):
+        raise SpecNodeError("sparkf hostname alias must use the private link")
+    nodes = aliases.get("spark_nodes")
+    if not isinstance(nodes,list) or len(nodes) != 16 or any(not isinstance(node,str) for node in nodes):
+        raise SpecNodeError("hostname alias inventory must cover spark0 through sparkf")
 
 
 def render_netplan(profile: dict[str,object]) -> str:
@@ -196,6 +218,10 @@ def verify_live(profile: dict[str,object]) -> dict[str,str]:
     rtx = _mapping(private_link,"rtx5090")
     sparkf = _mapping(private_link,"sparkf")
     recovery = _mapping(profile,"recovery_ssh")
+    management = _mapping(profile,"management")
+    wired = _mapping(management,"wired")
+    wifi = _mapping(management,"wifi")
+    storage = _mapping(profile,"storage")
     hostname = _string(profile,"hostname")
     management_host = _string(operator,"management_host")
     user = _string(operator,"user")
@@ -211,6 +237,9 @@ def verify_live(profile: dict[str,object]) -> dict[str,str]:
         "rtx_gpu": _ssh(target,"nvidia-smi --query-gpu=name,driver_version --format=csv,noheader"),
         "rtx_driver_license": _ssh(target,"modinfo -F license nvidia"),
         "rtx_secure_boot": _ssh(target,"mokutil --sb-state"),
+        "rtx_management": _ssh(target,f"ip -4 -o address show dev {_string(wired,'interface')}; ip -4 route show default"),
+        "rtx_wifi": _ssh(target,f"iw dev {_string(wifi,'interface')} link; ip -4 -o address show dev {_string(wifi,'interface')}"),
+        "rtx_storage": _ssh(target,f"findmnt -T {_string(storage,'drafters_path')} -n -o TARGET,FSTYPE; df -BG --output=avail {_string(storage,'drafters_path')} | tail -n 1; stat -c %U:%G {_string(storage,'drafters_path')}"),
         "rtx_link": _ssh(target,f"ip -4 -o address show dev {rtx_if}; cat /sys/class/net/{rtx_if}/speed"),
         "rtx_tailscale": _ssh(target,"systemctl is-enabled tailscaled; systemctl is-active tailscaled"),
         "tailscale_ssh": _ssh(
@@ -235,6 +264,12 @@ def verify_live(profile: dict[str,object]) -> dict[str,str]:
     _require_contains(results,"rtx_gpu",(_text(_mapping(profile,"gpu"),"model"),))
     _require_contains(results,"rtx_driver_license",("Dual MIT/GPL",))
     _require_contains(results,"rtx_secure_boot",("SecureBoot enabled",))
+    _require_contains(results,"rtx_management",(_string(wired,"interface"),f"metric {wired['route_metric']}",_string(wifi,"interface"),f"metric {wifi['route_metric']}"))
+    _require_contains(results,"rtx_wifi",(f"SSID: {_string(wifi,'ssid')}",_string(wifi,"interface")))
+    _require_contains(results,"rtx_storage",(_string(storage,"drafters_path"),_string(storage,"filesystem"),"spec:spec"))
+    available = [line.strip() for line in results["rtx_storage"].splitlines() if line.strip().endswith("G")]
+    if len(available) != 1 or int(available[0][:-1]) < storage["minimum_available_gib"]:
+        raise SpecNodeError("drafter storage below the configured capacity gate")
     _require_contains(results,"rtx_link",(_string(rtx,"address").split("/",1)[0],"10000"))
     _require_contains(results,"sparkf_link",(_string(sparkf,"address").split("/",1)[0],"10000"))
     _require_contains(results,"rtx_tailscale",("enabled","active"))

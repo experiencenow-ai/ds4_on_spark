@@ -9,13 +9,41 @@
     "management_host": "192.168.50.4",
     "tailscale_host": "rtx5090.tail176b71.ts.net"
   },
+  "management": {
+    "wired": {
+      "interface": "eno2",
+      "address_mode": "dhcp",
+      "route_metric": 100
+    },
+    "wifi": {
+      "interface": "wlp133s0f0",
+      "ssid": "ASUS_40",
+      "address_mode": "dhcp",
+      "route_metric": 300
+    }
+  },
   "recovery_ssh": {
     "user": "root",
     "port": 2222
   },
   "gpu": {
     "model": "NVIDIA GeForce RTX 5090",
-    "driver_flavor": "open"
+    "driver_flavor": "open",
+    "compute_capability": "12.0"
+  },
+  "storage": {
+    "drafters_path": "/srv/drafters",
+    "filesystem": "ext4",
+    "minimum_available_gib": 600
+  },
+  "hostname_aliases": {
+    "lan_address": "192.168.50.4",
+    "sparkf_address": "10.10.250.2",
+    "spark_nodes": [
+      "spark0", "spark1", "spark2", "spark3", "spark4", "spark5",
+      "spark6", "spark7", "spark8", "spark9", "sparka", "sparkb",
+      "sparkc", "sparkd", "sparke", "sparkf"
+    ]
   },
   "private_link": {
     "mtu": 9000,
