@@ -45,6 +45,13 @@ rsync -a source/ sparkc:/tmp/source/
 These callers automatically use the selected channel because all three use
 OpenSSH configuration.
 
+`sparkf` is a special case: its former 10 GbE management port is now the
+private RTX 5090 speculation link. Its profile has `direct_enabled: false`,
+so both `ssh sparkf` and the compatibility alias `ssh sparkf-10g` skip the
+dead `10.20.0.25` path. They try `10.10.100.25` through a ring bastion, then
+the Wi-Fi 7 emergency tunnel. `sparkf-200g` and `sparkf-wifi` remain explicit
+forced-route aliases.
+
 Use explicit aliases only to diagnose a channel:
 
 ```bash

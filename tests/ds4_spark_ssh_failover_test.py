@@ -36,10 +36,11 @@ class SparkSshFailoverTest(unittest.TestCase):
         self.profile = proxy.load_profile(PROFILE)
         self.node = self.profile.nodes["spark2"]
 
-    def test_profile_covers_all_thirteen_nodes(self) -> None:
+    def test_profile_covers_all_sixteen_nodes(self) -> None:
         expected = {
             "spark0","spark1","spark2","spark3","spark4","spark5","spark6",
-            "spark7","spark8","spark9","sparka","sparkb","sparkc",
+            "spark7","spark8","spark9","sparka","sparkb","sparkc","sparkd",
+            "sparke","sparkf",
         }
         self.assertEqual(set(self.profile.nodes),expected)
         self.assertEqual(self.profile.ring_bastions,("spark8","spark9"))
@@ -63,6 +64,17 @@ class SparkSshFailoverTest(unittest.TestCase):
         self.assertEqual(attempts,[])
         opened.assert_called_once_with(self.profile,self.node,22)
         process_opened.assert_not_called()
+
+    def test_sparkf_skips_removed_management_link(self) -> None:
+        node = self.profile.nodes["sparkf"]
+        ring = proxy.OpenChannel("200g","spark8",b"SSH-2.0-test\r\n")
+        with mock.patch.object(proxy,"_open_tcp_channel") as direct:
+            with mock.patch.object(proxy,"_open_process_channel",return_value=ring) as opened:
+                channel,attempts = proxy.open_channel(self.profile,node,"auto",22)
+        self.assertIs(channel,ring)
+        self.assertEqual(attempts,[])
+        direct.assert_not_called()
+        self.assertIn("10.10.100.25:22",opened.call_args.args[0])
 
     def test_auto_uses_ring_after_direct_failure(self) -> None:
         ring = proxy.OpenChannel("200g","spark8",b"SSH-2.0-test\r\n")
@@ -145,6 +157,9 @@ class SparkSshFailoverTest(unittest.TestCase):
         self.assertIn("--node spark2 --port %p --route 200g",text)
         self.assertIn("Host spark2-wifi\n",text)
         self.assertIn("Host spark2-emergency\n",text)
+        self.assertIn("Host sparkf\n",text)
+        sparkf_10g = text.split("Host sparkf-10g\n",1)[1].split("\n\n",1)[0]
+        self.assertIn("--node sparkf --port %p --route auto",sparkf_10g)
 
     def test_managed_block_replacement_preserves_unrelated_config(self) -> None:
         old = "\n".join([

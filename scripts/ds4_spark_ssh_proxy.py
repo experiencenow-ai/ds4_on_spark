@@ -42,6 +42,7 @@ class NodeRoute:
     management_ip: str
     fabric_ip: str
     wifi_hosts: tuple[str,...]
+    direct_enabled: bool
 
 
 @dataclass(frozen=True)
@@ -107,12 +108,16 @@ def _parse_node(value: object, index: int) -> NodeRoute:
     if not isinstance(wifi_value,list):
         raise RouteFailure(f"nodes[{index}].wifi_hosts must be an array")
     wifi_hosts = tuple(_required_text(item,f"nodes[{index}].wifi_hosts") for item in wifi_value)
+    direct_enabled = value.get("direct_enabled",True)
+    if not isinstance(direct_enabled,bool):
+        raise RouteFailure(f"nodes[{index}].direct_enabled must be boolean")
     return(NodeRoute(
         node_id=_required_text(value.get("node_id"),f"nodes[{index}].node_id"),
         user=_required_text(value.get("user"),f"nodes[{index}].user"),
         management_ip=_validate_ip(value.get("management_ip"),f"nodes[{index}].management_ip"),
         fabric_ip=_validate_ip(value.get("fabric_ip"),f"nodes[{index}].fabric_ip"),
         wifi_hosts=wifi_hosts,
+        direct_enabled=direct_enabled,
     ))
 
 
@@ -325,7 +330,7 @@ def open_channel(
 ) -> tuple[OpenChannel,list[str]]:
     attempts = []
     factories = []
-    if route in ("auto","10g"):
+    if route in ("auto","10g") and node.direct_enabled:
         factories.append(lambda: _open_tcp_channel(profile,node,port))
     if route in ("auto","200g"):
         factories.extend(_ring_channels(profile,node,port))

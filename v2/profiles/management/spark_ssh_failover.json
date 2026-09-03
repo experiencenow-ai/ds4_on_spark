@@ -108,6 +108,28 @@
       "management_ip": "10.20.0.22",
       "fabric_ip": "10.10.100.22",
       "wifi_hosts": ["fe80::b5c8:69b7:189d:95da%en1", "sparkc.local"]
+    },
+    {
+      "node_id": "sparkd",
+      "user": "sparkd",
+      "management_ip": "10.20.0.23",
+      "fabric_ip": "10.10.100.23",
+      "wifi_hosts": []
+    },
+    {
+      "node_id": "sparke",
+      "user": "sparke",
+      "management_ip": "10.20.0.24",
+      "fabric_ip": "10.10.100.24",
+      "wifi_hosts": []
+    },
+    {
+      "node_id": "sparkf",
+      "user": "sparkf",
+      "management_ip": "10.20.0.25",
+      "fabric_ip": "10.10.100.25",
+      "wifi_hosts": ["192.168.50.143"],
+      "direct_enabled": false
     }
   ]
 }

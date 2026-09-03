@@ -1,0 +1,37 @@
+{
+  "format": "ds4-auxiliary-node-v1",
+  "node_id": "spec0",
+  "hostname": "rtx5090",
+  "role": "speculation",
+  "spark_rank": null,
+  "operator": {
+    "user": "spec",
+    "management_host": "192.168.50.4",
+    "tailscale_host": "rtx5090.tail176b71.ts.net"
+  },
+  "recovery_ssh": {
+    "user": "root",
+    "port": 2222
+  },
+  "gpu": {
+    "model": "NVIDIA GeForce RTX 5090",
+    "driver_flavor": "open"
+  },
+  "private_link": {
+    "mtu": 9000,
+    "rtx5090": {
+      "interface": "eno1",
+      "address": "10.10.250.2/30"
+    },
+    "sparkf": {
+      "interface": "enP7s7",
+      "address": "10.10.250.1/30",
+      "ssh_target": "sparkf@10.10.100.25",
+      "ssh_bastion": "spark0"
+    }
+  },
+  "runtime": {
+    "state": "infrastructure_only",
+    "transport": "not_implemented"
+  }
+}
