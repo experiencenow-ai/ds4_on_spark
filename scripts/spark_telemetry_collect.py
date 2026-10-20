@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
+import io
 import os
 import shlex
 import subprocess
@@ -27,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--tail-lines", type=int, default=17280)
     p.add_argument("--loop-interval", type=float, default=0.0)
     p.add_argument("--ssh-timeout", type=float, default=8.0)
+    p.add_argument("--ssh-config", default="", help="Optional SSH config for auxiliary telemetry hosts")
     p.add_argument("--stale-ok-seconds", type=float, default=300.0)
     p.add_argument("--ds4-api-url", default=os.environ.get("DS4_API_URL",telemetry.DEFAULT_DS4_API_URL))
     p.add_argument("--ds4-api-timeout", type=float, default=1.5)
@@ -60,11 +62,12 @@ def ssh_options(timeout: float, control_dir: str = "", control_persist: int = 0)
     return(opts)
 
 
-def fetch_node(node: str, remote_dir: str, timeout: float, lines: int, target: str | None = None, control_dir: str = "", control_persist: int = 0) -> Tuple[str,str,str]:
+def fetch_node(node: str, remote_dir: str, timeout: float, lines: int, target: str | None = None, control_dir: str = "", control_persist: int = 0, ssh_config: str = "") -> Tuple[str,str,str]:
     target = target or node
     remote_path = shlex.quote(telemetry.node_csv_path(remote_dir))
     cmd = [
         "ssh",
+        *(["-F",ssh_config] if ssh_config else []),
         *ssh_options(timeout,control_dir,control_persist),
         target,
         "if [ -r %s ]; then head -n 1 %s; tail -n %d %s; else exit 1; fi" % (remote_path,remote_path,lines,remote_path),
@@ -104,6 +107,20 @@ def row_unix_ts(row: Dict[str,str]) -> float:
         return(dt.datetime.fromisoformat(row.get("iso_ts","").replace("Z","+00:00")).timestamp())
     except Exception:
         return(0.0)
+
+
+def labelled_csv(text: str, node: str) -> str:
+    """Use the inventory label, not a migrated machine's old Unix account name."""
+    rows = read_rows(text)
+    if not rows:
+        return(text)
+    output = io.StringIO()
+    writer = csv.DictWriter(output,fieldnames=list(rows[0]))
+    writer.writeheader()
+    for row in rows:
+        row["node"] = node
+        writer.writerow(row)
+    return(output.getvalue())
 
 
 def read_cached_rows(path: str, max_age_s: float) -> List[Dict[str,str]]:
@@ -355,10 +372,10 @@ def collect_once(args: argparse.Namespace) -> Dict[str,object]:
     fetched: List[Tuple[str,str,str]] = []
     if workers <= 1:
         for node,target in targets:
-            fetched.append(fetch_node(node,args.remote_dir,args.ssh_timeout,args.tail_lines,target,args.ssh_control_dir,args.ssh_control_persist))
+            fetched.append(fetch_node(node,args.remote_dir,args.ssh_timeout,args.tail_lines,target,args.ssh_control_dir,args.ssh_control_persist,getattr(args,"ssh_config","")))
     else:
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = [pool.submit(fetch_node,node,args.remote_dir,args.ssh_timeout,args.tail_lines,target,args.ssh_control_dir,args.ssh_control_persist) for node,target in targets]
+            futures = [pool.submit(fetch_node,node,args.remote_dir,args.ssh_timeout,args.tail_lines,target,args.ssh_control_dir,args.ssh_control_persist,getattr(args,"ssh_config","")) for node,target in targets]
             for future in as_completed(futures):
                 fetched.append(future.result())
     for name,text,error in fetched:
@@ -372,6 +389,7 @@ def collect_once(args: argparse.Namespace) -> Dict[str,object]:
                 errors[name] = error
                 all_rows[name] = []
             continue
+        text = labelled_csv(text,name)
         telemetry.write_text_atomic(os.path.join(raw_dir,name + ".csv"),text)
         all_rows[name] = read_rows(text)
     queue = telemetry.read_ds4_api_queue(args.ds4_api_url,args.ds4_api_timeout)

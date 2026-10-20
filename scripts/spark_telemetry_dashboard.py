@@ -187,7 +187,7 @@ def display_cpu_pct(value: Any) -> float:
 
 
 def valid_node_name(node: str) -> bool:
-    return(node.startswith("spark") and all(ch.isalnum() or ch in "-_" for ch in node))
+    return((node.startswith("spark") or node in ("lenovo7","lenovo8","lenovo9")) and all(ch.isalnum() or ch in "-_" for ch in node))
 
 
 def reset_node_error_streaks() -> None:
